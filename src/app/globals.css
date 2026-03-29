@@ -1,0 +1,231 @@
+@import "tailwindcss";
+
+:root {
+  --background: #FDF6EF;
+  --foreground: #2C3E50;
+  --font-playful: "Comic Sans MS", "Chalkboard", "Chalkboard SE", cursive;
+  --kidsa-orange-50: #fff7ed;
+  --kidsa-orange-100: #ffedd5;
+  --kidsa-orange-200: #fed7aa;
+  --kidsa-orange-300: #fdba74;
+  --kidsa-orange-400: #fb923c;
+  --kidsa-oragne-500: #f39f5f;
+  --kidsa-orange-600: #e87115;
+  --kidsa-yellow-400: #facc15;
+  --kidsa-yellow-500: #eab308;
+  --kidsa-blue-400: #60a5fa;
+  --kidsa-blue-500: #3b82f6;
+  --gen-mumins-100: #ede9fe;
+  --gen-mumins-500: #6B5B95;
+  --gen-mumins-600: #5b4d85;
+  --kidsa-text-500: #64748b;
+  --kidsa-text-600: #475569;
+  --kidsa-text-700: #334155;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-source-sans-3), var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-playfair), Georgia, serif;
+  --font-heading: var(--font-quicksand);
+  --color-kidsa-orange-50: var(--kidsa-orange-50);
+  --color-kidsa-orange-100: var(--kidsa-orange-100);
+  --color-kidsa-orange-200: var(--kidsa-orange-200);
+  --color-kidsa-orange-300: var(--kidsa-orange-300);
+  --color-kidsa-orange-400: var(--kidsa-orange-400);
+  --color-kidsa-oragne-500: var(--kidsa-oragne-500);
+  --color-kidsa-orange-600: var(--kidsa-orange-600);
+  --color-kidsa-yellow-400: var(--kidsa-yellow-400);
+  --color-kidsa-yellow-500: var(--kidsa-yellow-500);
+  --color-kidsa-blue-400: var(--kidsa-blue-400);
+  --color-kidsa-blue-500: var(--kidsa-blue-500);
+  --color-gen-mumins-100: var(--gen-mumins-100);
+  --color-gen-mumins-500: var(--gen-mumins-500);
+  --color-gen-mumins-600: var(--gen-mumins-600);
+  --color-kidsa-text-500: var(--kidsa-text-500);
+  --color-kidsa-text-600: var(--kidsa-text-600);
+  --color-kidsa-text-700: var(--kidsa-text-700);
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes float-reverse {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(10px); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-8px) rotate(2deg); }
+}
+
+@keyframes float-horizontal {
+  0%, 100% { transform: translateX(10px); }
+  50% { transform: translateX(-10px); }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slide-in-from-top {
+  from {
+    opacity: 0;
+    transform: translateY(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes sway {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(6deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+  75% {
+    transform: rotate(-6deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+.animate-sway {
+  animation: sway 4s ease-in-out infinite;
+}
+@keyframes sway-reverse {
+  0% {
+    transform: rotate(0deg);
+  }
+  25% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(0deg);
+  }
+  75% {
+    transform: rotate(6deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+.animate-sway-reverse {
+  animation: sway-reverse 4s ease-in-out infinite;
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-float-reverse {
+  animation: float-reverse 3.5s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 4s ease-in-out infinite;
+}
+
+.animate-float-horizontal {
+  animation: float-horizontal 4s ease-in-out infinite;
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+.animate-slide-in-from-top {
+  animation: slide-in-from-top 0.7s ease-out forwards;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+.section-container {
+  @apply max-w-[1920px] mx-auto px-4 md:px-8 lg:px-12;
+}
+
+/* Playful font for logo (live site: Comic Sans / Chalkboard) */
+.font-playful {
+  font-family: var(--font-playful);
+}
+
+/* Quicksand for banner/section titles */
+.font-heading {
+  font-family: var(--font-quicksand), var(--font-sans);
+}
+
+/* TopBar: wavy pattern from header-top-shape.png (live site) */
+.topbar-bg {
+  background-image: url("/images/header-top-shape.png");
+  background-position: top center;
+  background-repeat: no-repeat;
+  min-height: 92px;
+}
+
+/* theme-btn: Enroll Now + Gen-Mu'mins Programme (live site styles, unified size) */
+.theme-btn {
+  box-sizing: border-box;
+  text-decoration: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  vertical-align: middle;
+  border: none;
+  outline: none;
+  background-color: var(--kidsa-oragne-500);
+  color: white;
+  padding: 22px 40px;
+  transition: all 0.4s ease-in-out;
+  letter-spacing: 0;
+  border-radius: 22px;
+  position: relative;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1;
+  z-index: 9;
+  font-size: 16px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+}
+.theme-btn:hover {
+  background-color: var(--kidsa-orange-600);
+}
+.theme-btn--outline {
+  background-color: transparent;
+  color: var(--kidsa-oragne-500);
+  border: 2px solid var(--kidsa-oragne-500);
+}
+.theme-btn--outline:hover {
+  background-color: var(--kidsa-orange-50);
+}
