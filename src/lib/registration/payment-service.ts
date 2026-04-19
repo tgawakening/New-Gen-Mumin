@@ -31,12 +31,16 @@ export async function createCheckoutDraft(
       throw new Error("Registration draft has no billable items.");
     }
 
+    if (!registration.parentProfileId) {
+      throw new Error("Parent profile is required before checkout.");
+    }
+
     let order = await tx.order.findFirst({ where: { registrationId } });
 
     if (!order) {
       order = await tx.order.create({
         data: {
-          parentId: registration.parentProfileId ?? (() => { throw new Error("Parent profile is required before checkout."); })(),
+          parentId: registration.parentProfileId,
           registrationId,
           orderNumber: createOrderNumber(),
           gateway: payload.gateway,
@@ -61,6 +65,11 @@ export async function createCheckoutDraft(
           },
         });
       }
+    } else if (order.gateway !== payload.gateway) {
+      order = await tx.order.update({
+        where: { id: order.id },
+        data: { gateway: payload.gateway },
+      });
     }
 
     const payment = await tx.paymentTransaction.create({
@@ -90,6 +99,10 @@ export async function createCheckoutDraft(
       amount: payment.amount,
       currency: payment.currency,
       status: payment.status,
+      nextStep:
+        payload.gateway === "BANK_TRANSFER"
+          ? "Upload proof for manual verification."
+          : `Continue ${payload.gateway.toLowerCase()} payment handoff.`,
     };
   });
 }

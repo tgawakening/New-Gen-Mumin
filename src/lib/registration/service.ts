@@ -26,6 +26,59 @@ function calculateDiscount(studentIndex: number, amount: number) {
   return Math.round(amount * 0.5);
 }
 
+async function ensureParentProfile(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  payload: RegistrationPayload,
+) {
+  const existingUser = await tx.user.findUnique({
+    where: { email: payload.parentEmail },
+    include: { parentProfile: true },
+  });
+
+  if (existingUser?.parentProfile) {
+    return existingUser.parentProfile;
+  }
+
+  if (existingUser) {
+    return tx.parentProfile.create({
+      data: {
+        userId: existingUser.id,
+        billingCountryCode: payload.selectedCountryCode,
+        billingCountryName: payload.selectedCountryName,
+        preferredCurrency: resolveCurrency(payload.selectedCountryCode),
+      },
+    });
+  }
+
+  const createdUser = await tx.user.create({
+    data: {
+      email: payload.parentEmail,
+      role: "PARENT",
+      status: "ACTIVE",
+      firstName: payload.parentFirstName,
+      lastName: payload.parentLastName,
+      phoneCountryCode: payload.phoneCountryCode,
+      phoneNumber: payload.phoneNumber,
+      parentProfile: {
+        create: {
+          billingCountryCode: payload.selectedCountryCode,
+          billingCountryName: payload.selectedCountryName,
+          preferredCurrency: resolveCurrency(payload.selectedCountryCode),
+        },
+      },
+    },
+    include: {
+      parentProfile: true,
+    },
+  });
+
+  if (!createdUser.parentProfile) {
+    throw new Error("Unable to create the parent profile for this registration.");
+  }
+
+  return createdUser.parentProfile;
+}
+
 export async function getRegistrationOptions() {
   const countries = REGISTRATION_COUNTRIES;
 
@@ -86,9 +139,11 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
   return db.$transaction(async (tx) => {
     let subtotalAmount = 0;
     let discountAmount = 0;
+    const parentProfile = await ensureParentProfile(tx, payload);
 
     const registration = await tx.registration.create({
       data: {
+        parentProfileId: parentProfile.id,
         status: "DRAFT",
         parentEmail: payload.parentEmail,
         parentFirstName: payload.parentFirstName,
