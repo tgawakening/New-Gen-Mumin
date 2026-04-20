@@ -15,6 +15,7 @@ type Offer = {
 type Props = {
   offers: Offer[];
   countries: readonly { code: string; name: string; currency: string }[];
+  autoOpen?: boolean;
 };
 
 type ChildForm = {
@@ -129,8 +130,8 @@ function offerCopy(offer: Offer) {
   return offer.description ?? "Monthly live programme enrolment.";
 }
 
-export function RegistrationForm({ offers }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
+export function RegistrationForm({ offers, autoOpen = false }: Props) {
+  const [isOpen, setIsOpen] = useState(autoOpen);
   const [guardianFullName, setGuardianFullName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("GB");
@@ -153,6 +154,12 @@ export function RegistrationForm({ offers }: Props) {
 
   const selectedPhoneCountry = PHONE_COUNTRIES.find((country) => country.code === selectedCountryCode) ?? PHONE_COUNTRIES[0];
   const offerMap = useMemo(() => new Map(offers.map((offer) => [offer.slug, offer])), [offers]);
+
+  useEffect(() => {
+    if (autoOpen) {
+      setIsOpen(true);
+    }
+  }, [autoOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -359,7 +366,7 @@ export function RegistrationForm({ offers }: Props) {
       </button>
       {isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#142033]/55 px-3 py-6 backdrop-blur-sm sm:px-6">
-          <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_28px_110px_rgba(20,32,51,0.28)]">
+          <div className="relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_28px_110px_rgba(20,32,51,0.28)]">
             <div className="flex items-start justify-between border-b border-[#efe7d8] px-5 py-4 sm:px-7">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Gen-Mumins</p>
@@ -370,8 +377,8 @@ export function RegistrationForm({ offers }: Props) {
               </button>
             </div>
 
-            <form className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1.2fr)_380px]" onSubmit={handleSubmit}>
-              <div className="min-h-0 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
+            <form className="grid gap-0 lg:grid-cols-[minmax(0,1.2fr)_380px]" onSubmit={handleSubmit}>
+              <div className="px-5 py-5 sm:px-7 sm:py-6">
                 <div className="space-y-7">
                   <section className="space-y-4 rounded-[1.5rem] border border-[#efe7d8] bg-[#fffdf9] p-4 sm:p-5">
                     <h3 className="text-lg font-semibold text-[#22304a]">Parent / Guardian information</h3>
@@ -572,4 +579,6 @@ export function RegistrationForm({ offers }: Props) {
     </>
   );
 }
+
+
 

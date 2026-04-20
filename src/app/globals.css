@@ -1,4 +1,4 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 :root {
   --background: #FDF6EF;
@@ -228,4 +228,13 @@ body {
 }
 .theme-btn--outline:hover {
   background-color: var(--kidsa-orange-50);
+}
+
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
 }
