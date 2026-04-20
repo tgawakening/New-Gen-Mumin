@@ -1,6 +1,9 @@
-import { randomUUID } from "node:crypto";
+﻿import { randomUUID } from "node:crypto";
 
 import { db } from "@/lib/db";
+import { getManualBankDetails } from "@/lib/payments/config";
+import { createPayPalSubscription } from "@/lib/payments/paypal";
+import { createStripeCheckoutSession } from "@/lib/payments/stripe";
 import type { RegistrationCheckoutPayload } from "@/lib/registration/payment-schema";
 
 function createOrderNumber() {
@@ -15,6 +18,11 @@ export async function createCheckoutDraft(
     const registration = await tx.registration.findUnique({
       where: { id: registrationId },
       include: {
+        parentProfile: {
+          include: {
+            user: true,
+          },
+        },
         items: {
           include: {
             offer: true,
@@ -31,11 +39,16 @@ export async function createCheckoutDraft(
       throw new Error("Registration draft has no billable items.");
     }
 
-    if (!registration.parentProfileId) {
+    if (!registration.parentProfileId || !registration.parentProfile) {
       throw new Error("Parent profile is required before checkout.");
     }
 
-    let order = await tx.order.findFirst({ where: { registrationId } });
+    let order = await tx.order.findFirst({
+      where: { registrationId },
+      include: {
+        items: true,
+      },
+    });
 
     if (!order) {
       order = await tx.order.create({
@@ -49,6 +62,9 @@ export async function createCheckoutDraft(
           discountAmount: registration.discountAmount,
           totalAmount: registration.totalAmount,
           status: "INITIATED",
+        },
+        include: {
+          items: true,
         },
       });
 
@@ -65,10 +81,16 @@ export async function createCheckoutDraft(
           },
         });
       }
+
+      order = await tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { items: true },
+      });
     } else if (order.gateway !== payload.gateway) {
       order = await tx.order.update({
         where: { id: order.id },
         data: { gateway: payload.gateway },
+        include: { items: true },
       });
     }
 
@@ -76,11 +98,108 @@ export async function createCheckoutDraft(
       data: {
         orderId: order.id,
         gateway: payload.gateway,
-        status: payload.gateway === "BANK_TRANSFER" ? "UNDER_REVIEW" : "INITIATED",
+        status: payload.gateway === "BANK_TRANSFER" ? "UNDER_REVIEW" : "PENDING",
         amount: registration.totalAmount,
         currency: registration.selectedCurrency,
       },
     });
+
+    let checkoutUrl: string | null = null;
+    let providerReference: string | null = null;
+    let manualInstructions: ReturnType<typeof getManualBankDetails> | null = null;
+
+    if (payload.gateway === "STRIPE") {
+      const session = await createStripeCheckoutSession({
+        orderId: order.id,
+        paymentId: payment.id,
+        registrationId,
+        customerEmail: registration.parentEmail,
+        currency: registration.selectedCurrency,
+        orderNumber: order.orderNumber,
+        lineItems: order.items.map((item) => ({
+          description: item.description,
+          amount: item.unitAmount,
+        })),
+      });
+
+      checkoutUrl = session.url ?? null;
+      providerReference = session.id;
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          providerOrderId: session.id,
+          providerReference: session.subscription?.toString() ?? null,
+          metadata: {
+            provider: "stripe",
+            checkoutSessionId: session.id,
+            checkoutUrl: session.url,
+          },
+        },
+      });
+
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: session.id,
+          providerReference: session.subscription?.toString() ?? null,
+          rawPayload: {
+            checkoutSessionId: session.id,
+            checkoutUrl: session.url,
+          },
+        },
+      });
+    } else if (payload.gateway === "PAYPAL") {
+      const paypal = await createPayPalSubscription({
+        orderId: order.id,
+        paymentId: payment.id,
+        orderNumber: order.orderNumber,
+        customerEmail: registration.parentEmail,
+        customerName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
+        currency: registration.selectedCurrency,
+        amount: registration.totalAmount,
+      });
+
+      checkoutUrl = paypal.approvalUrl;
+      providerReference = paypal.subscriptionId;
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          providerOrderId: paypal.subscriptionId,
+          providerReference: paypal.planId,
+          metadata: {
+            provider: "paypal",
+            subscriptionId: paypal.subscriptionId,
+            planId: paypal.planId,
+            productId: paypal.productId,
+          },
+        },
+      });
+
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: paypal.subscriptionId,
+          providerReference: paypal.planId,
+          rawPayload: {
+            approvalUrl: paypal.approvalUrl,
+            productId: paypal.productId,
+            planId: paypal.planId,
+          },
+        },
+      });
+    } else if (payload.gateway === "BANK_TRANSFER") {
+      manualInstructions = getManualBankDetails();
+    } else if (payload.gateway === "NAYAPAY") {
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          status: "REQUIRES_ACTION",
+          failureReason: "NayaPay credentials are not configured yet.",
+        },
+      });
+    }
 
     await tx.registration.update({
       where: { id: registrationId },
@@ -99,10 +218,86 @@ export async function createCheckoutDraft(
       amount: payment.amount,
       currency: payment.currency,
       status: payment.status,
+      providerReference,
+      checkoutUrl,
+      manualInstructions,
       nextStep:
         payload.gateway === "BANK_TRANSFER"
-          ? "Upload proof for manual verification."
-          : `Continue ${payload.gateway.toLowerCase()} payment handoff.`,
+          ? "Submit the transfer proof for manual verification."
+          : payload.gateway === "NAYAPAY"
+            ? "NayaPay configuration is still pending."
+            : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
     };
   });
 }
+
+export async function submitManualPaymentProof(
+  paymentId: string,
+  payload: {
+    senderName: string;
+    senderNumber: string;
+    referenceKey: string;
+    screenshotUrl?: string;
+    notes?: string;
+  },
+) {
+  const payment = await db.paymentTransaction.findUnique({
+    where: { id: paymentId },
+    include: {
+      order: true,
+    },
+  });
+
+  if (!payment || payment.gateway !== "BANK_TRANSFER") {
+    throw new Error("Manual bank transfer payment not found.");
+  }
+
+  const submission = await db.manualPaymentSubmission.upsert({
+    where: { paymentTransactionId: paymentId },
+    update: {
+      senderName: payload.senderName,
+      senderNumber: payload.senderNumber,
+      referenceKey: payload.referenceKey,
+      screenshotUrl: payload.screenshotUrl || null,
+      notes: payload.notes || null,
+      submittedAt: new Date(),
+    },
+    create: {
+      paymentTransactionId: paymentId,
+      method: "BANK_TRANSFER",
+      senderName: payload.senderName,
+      senderNumber: payload.senderNumber,
+      referenceKey: payload.referenceKey,
+      screenshotUrl: payload.screenshotUrl || null,
+      notes: payload.notes || null,
+    },
+  });
+
+  await db.paymentTransaction.update({
+    where: { id: paymentId },
+    data: {
+      status: "UNDER_REVIEW",
+      providerReference: payload.referenceKey,
+    },
+  });
+
+  await db.order.update({
+    where: { id: payment.orderId },
+    data: {
+      status: "UNDER_REVIEW",
+      providerReference: payload.referenceKey,
+    },
+  });
+
+  if (payment.order.registrationId) {
+    await db.registration.update({
+      where: { id: payment.order.registrationId },
+      data: {
+        status: "PAYMENT_REVIEW",
+      },
+    });
+  }
+
+  return submission;
+}
+

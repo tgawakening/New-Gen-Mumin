@@ -1,4 +1,4 @@
-import { RegistrationForm } from "@/components/registration/RegistrationForm";
+﻿import { RegistrationForm } from "@/components/registration/RegistrationForm";
 import { getRegistrationOptions } from "@/lib/registration/service";
 
 export default async function RegistrationPage() {
@@ -48,3 +48,4 @@ export default async function RegistrationPage() {
     </div>
   );
 }
+

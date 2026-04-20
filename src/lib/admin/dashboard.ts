@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+﻿import { db } from "@/lib/db";
 
 export async function getAdminDashboardData() {
   const [
@@ -78,3 +78,4 @@ export async function getAdminDashboardData() {
     scholarshipQueue,
   };
 }
+

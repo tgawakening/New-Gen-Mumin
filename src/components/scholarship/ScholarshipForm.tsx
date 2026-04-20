@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 
@@ -151,3 +151,4 @@ export function ScholarshipForm({ offers }: ScholarshipFormProps) {
     </form>
   );
 }
+

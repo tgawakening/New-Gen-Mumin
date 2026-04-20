@@ -1,36 +1,102 @@
-
+﻿
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 
-type Offer = { slug: string; title: string; description: string | null; kind: "SINGLE" | "PAIR" | "BUNDLE"; basePriceGbp: number; basePricePkr: number | null; };
-type Country = { code: string; name: string; currency: string; };
-type Props = { offers: Offer[]; countries: readonly Country[] };
-type ChildForm = { fullName: string; age: string; gender: string; selectedOfferSlugs: string[] };
-type DraftResponse = { registrationId: string; totalAmount: number; currency: string; studentCount: number; itemCount: number; status: string };
-type CheckoutResponse = { orderId: string; paymentId: string; orderNumber: string; gateway: string; amount: number; currency: string; status: string; nextStep: string };
+type Offer = {
+  slug: string;
+  title: string;
+  description: string | null;
+  kind: "SINGLE" | "PAIR" | "BUNDLE";
+  basePriceGbp: number;
+  basePricePkr: number | null;
+};
+
+type Props = {
+  offers: Offer[];
+  countries: readonly { code: string; name: string; currency: string }[];
+};
+
+type ChildForm = {
+  fullName: string;
+  age: string;
+  gender: string;
+  selectedOfferSlugs: string[];
+};
+
+type DraftResponse = {
+  registrationId: string;
+  totalAmount: number;
+  currency: string;
+  studentCount: number;
+  itemCount: number;
+  status: string;
+};
+
+type ManualInstructions = {
+  accountName: string;
+  bankName: string;
+  accountNumber: string;
+  iban?: string;
+  swiftCode?: string;
+  sortCode?: string;
+  branchAddress?: string;
+  whatsapp?: string;
+  instructions: string[];
+};
+
+type CheckoutResponse = {
+  orderId: string;
+  paymentId: string;
+  orderNumber: string;
+  gateway: string;
+  amount: number;
+  currency: string;
+  status: string;
+  nextStep: string;
+  checkoutUrl?: string | null;
+  providerReference?: string | null;
+  manualInstructions?: ManualInstructions | null;
+};
+
 type PaymentValue = "STRIPE" | "PAYPAL" | "BANK_TRANSFER" | "NAYAPAY";
-type PhoneCountry = { code: string; name: string; flag: string; dialCode: string; currency: string; gbpRate: number };
-type PriceBreakdown = { displayCurrency: string; displayAmount: number; convertedAmount: number; discountPercent: number; discountedGbp: number; usesRegionalPricing: boolean };
+
+type PhoneCountry = {
+  code: string;
+  name: string;
+  flag: string;
+  dialCode: string;
+  currency: string;
+  gbpRate: number;
+};
+
+type PriceBreakdown = {
+  displayCurrency: string;
+  displayAmount: number;
+  convertedAmount: number;
+  discountPercent: number;
+  discountedGbp: number;
+  usesRegionalPricing: boolean;
+};
 
 const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: string }> = [
-  { value: "STRIPE", label: "Card / Pay by link", description: "Use Stripe for cards now, with payment link support in the same flow." },
-  { value: "PAYPAL", label: "PayPal", description: "Useful for parents who prefer wallet checkout in GBP or USD." },
-  { value: "BANK_TRANSFER", label: "Manual bank transfer", description: "Creates a manual review payment flow similar to the Seerah style transfer path." },
-  { value: "NAYAPAY", label: "NayaPay", description: "Useful for local South Asian payment handling and trustee verification." },
+  { value: "STRIPE", label: "Card / Pay by link", description: "Stripe subscription checkout for cards and hosted payment links." },
+  { value: "PAYPAL", label: "PayPal", description: "PayPal monthly subscription approval for wallet-based recurring payments." },
+  { value: "BANK_TRANSFER", label: "Manual bank transfer", description: "Create the order, show bank details, and submit proof for manual verification." },
+  { value: "NAYAPAY", label: "NayaPay", description: "Will stay in review mode until NayaPay credentials are provided." },
 ];
 
 const PHONE_COUNTRIES: PhoneCountry[] = [
-  { code: "GB", name: "United Kingdom", flag: "????", dialCode: "+44", currency: "GBP", gbpRate: 1 },
-  { code: "PK", name: "Pakistan", flag: "????", dialCode: "+92", currency: "PKR", gbpRate: 350 },
-  { code: "IN", name: "India", flag: "????", dialCode: "+91", currency: "INR", gbpRate: 104 },
-  { code: "BD", name: "Bangladesh", flag: "????", dialCode: "+880", currency: "BDT", gbpRate: 149 },
-  { code: "AF", name: "Afghanistan", flag: "????", dialCode: "+93", currency: "AFN", gbpRate: 97 },
-  { code: "AE", name: "United Arab Emirates", flag: "????", dialCode: "+971", currency: "AED", gbpRate: 4.68 },
-  { code: "SA", name: "Saudi Arabia", flag: "????", dialCode: "+966", currency: "SAR", gbpRate: 4.77 },
-  { code: "US", name: "United States", flag: "????", dialCode: "+1", currency: "USD", gbpRate: 1.27 },
-  { code: "CA", name: "Canada", flag: "????", dialCode: "+1", currency: "CAD", gbpRate: 1.72 },
-  { code: "AU", name: "Australia", flag: "????", dialCode: "+61", currency: "AUD", gbpRate: 1.96 },
+  { code: "GB", name: "United Kingdom", flag: "🇬🇧", dialCode: "+44", currency: "GBP", gbpRate: 1 },
+  { code: "PK", name: "Pakistan", flag: "🇵🇰", dialCode: "+92", currency: "PKR", gbpRate: 350 },
+  { code: "IN", name: "India", flag: "🇮🇳", dialCode: "+91", currency: "INR", gbpRate: 104 },
+  { code: "BD", name: "Bangladesh", flag: "🇧🇩", dialCode: "+880", currency: "BDT", gbpRate: 149 },
+  { code: "AF", name: "Afghanistan", flag: "🇦🇫", dialCode: "+93", currency: "AFN", gbpRate: 97 },
+  { code: "AE", name: "United Arab Emirates", flag: "🇦🇪", dialCode: "+971", currency: "AED", gbpRate: 4.68 },
+  { code: "SA", name: "Saudi Arabia", flag: "🇸🇦", dialCode: "+966", currency: "SAR", gbpRate: 4.77 },
+  { code: "US", name: "United States", flag: "🇺🇸", dialCode: "+1", currency: "USD", gbpRate: 1.27 },
+  { code: "CA", name: "Canada", flag: "🇨🇦", dialCode: "+1", currency: "CAD", gbpRate: 1.72 },
+  { code: "AU", name: "Australia", flag: "🇦🇺", dialCode: "+61", currency: "AUD", gbpRate: 1.96 },
 ];
 
 const emptyChild = (): ChildForm => ({ fullName: "", age: "", gender: "", selectedOfferSlugs: [] });
@@ -73,7 +139,14 @@ export function RegistrationForm({ offers }: Props) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [children, setChildren] = useState<ChildForm[]>([emptyChild()]);
   const [selectedGateway, setSelectedGateway] = useState<PaymentValue>("STRIPE");
+  const [senderName, setSenderName] = useState("");
+  const [senderNumber, setSenderNumber] = useState("");
+  const [referenceKey, setReferenceKey] = useState("");
+  const [screenshotUrl, setScreenshotUrl] = useState("");
+  const [manualNotes, setManualNotes] = useState("");
+  const [manualProofMessage, setManualProofMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmittingProof, setIsSubmittingProof] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftResponse | null>(null);
   const [success, setSuccess] = useState<CheckoutResponse | null>(null);
@@ -85,8 +158,16 @@ export function RegistrationForm({ offers }: Props) {
     if (!isOpen) return;
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previous; };
+    return () => {
+      document.body.style.overflow = previous;
+    };
   }, [isOpen]);
+
+  useEffect(() => {
+    if (success?.checkoutUrl && (success.gateway === "STRIPE" || success.gateway === "PAYPAL")) {
+      window.location.assign(success.checkoutUrl);
+    }
+  }, [success]);
 
   const isFormReadyForPayment = useMemo(() => {
     if (!guardianFullName.trim() || !parentEmail.trim() || !phoneNumber.trim() || password.length < 8 || confirmPassword.length < 8) return false;
@@ -116,8 +197,13 @@ export function RegistrationForm({ offers }: Props) {
     setChildren((current) => current.map((child, currentIndex) => (currentIndex === index ? { ...child, ...patch } : child)));
   }
 
-  function addChild() { setChildren((current) => [...current, emptyChild()]); }
-  function removeChild(index: number) { setChildren((current) => (current.length === 1 ? current : current.filter((_, currentIndex) => currentIndex !== index))); }
+  function addChild() {
+    setChildren((current) => [...current, emptyChild()]);
+  }
+
+  function removeChild(index: number) {
+    setChildren((current) => (current.length === 1 ? current : current.filter((_, currentIndex) => currentIndex !== index)));
+  }
 
   function isOfferDisabled(child: ChildForm, offer: Offer) {
     const isSelected = child.selectedOfferSlugs.includes(offer.slug);
@@ -147,23 +233,38 @@ export function RegistrationForm({ offers }: Props) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
+    setManualProofMessage(null);
     setIsSubmitting(true);
+
     if (password !== confirmPassword) {
       setError("Password and confirm password must match.");
       setIsSubmitting(false);
       return;
     }
+
     try {
       const { firstName, lastName } = splitName(guardianFullName);
       const signupResponse = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email: parentEmail, password, phoneCountryCode: selectedPhoneCountry.dialCode, phoneNumber, billingCountryCode: selectedPhoneCountry.code, billingCountryName: selectedPhoneCountry.name }),
+        body: JSON.stringify({
+          firstName,
+          lastName,
+          email: parentEmail,
+          password,
+          phoneCountryCode: selectedPhoneCountry.dialCode,
+          phoneNumber,
+          billingCountryCode: selectedPhoneCountry.code,
+          billingCountryName: selectedPhoneCountry.name,
+        }),
       });
+
       if (!signupResponse.ok) {
         const signupPayload = (await signupResponse.json()) as { error?: string };
         const message = signupPayload.error ?? "Unable to create account.";
-        if (!message.toLowerCase().includes("already") && !message.toLowerCase().includes("exist")) throw new Error(message);
+        if (!message.toLowerCase().includes("already") && !message.toLowerCase().includes("exist")) {
+          throw new Error(message);
+        }
       }
 
       const registrationResponse = await fetch("/api/registration", {
@@ -181,12 +282,22 @@ export function RegistrationForm({ offers }: Props) {
           notes: "",
           students: children.map((child) => {
             const childName = splitName(child.fullName);
-            return { firstName: childName.firstName, lastName: childName.lastName, age: Number(child.age), gender: child.gender, selectedOfferSlugs: child.selectedOfferSlugs, notes: "" };
+            return {
+              firstName: childName.firstName,
+              lastName: childName.lastName,
+              age: Number(child.age),
+              gender: child.gender,
+              selectedOfferSlugs: child.selectedOfferSlugs,
+              notes: "",
+            };
           }),
         }),
       });
+
       const registrationPayload = (await registrationResponse.json()) as DraftResponse & { error?: string };
-      if (!registrationResponse.ok) throw new Error(registrationPayload.error ?? "Unable to create registration draft.");
+      if (!registrationResponse.ok) {
+        throw new Error(registrationPayload.error ?? "Unable to create registration draft.");
+      }
       setDraft(registrationPayload);
 
       const checkoutResponse = await fetch(`/api/registration/${registrationPayload.registrationId}/checkout`, {
@@ -194,8 +305,12 @@ export function RegistrationForm({ offers }: Props) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ gateway: selectedGateway }),
       });
+
       const checkoutPayload = (await checkoutResponse.json()) as CheckoutResponse & { error?: string };
-      if (!checkoutResponse.ok) throw new Error(checkoutPayload.error ?? "Unable to create checkout draft.");
+      if (!checkoutResponse.ok) {
+        throw new Error(checkoutPayload.error ?? "Unable to create checkout draft.");
+      }
+
       setSuccess(checkoutPayload);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to complete registration.");
@@ -204,9 +319,44 @@ export function RegistrationForm({ offers }: Props) {
     }
   }
 
+  async function handleManualProofSubmit() {
+    if (!success?.paymentId) return;
+
+    setError(null);
+    setManualProofMessage(null);
+    setIsSubmittingProof(true);
+
+    try {
+      const response = await fetch(`/api/payments/manual/${success.paymentId}/proof`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderName,
+          senderNumber,
+          referenceKey,
+          screenshotUrl,
+          notes: manualNotes,
+        }),
+      });
+
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to submit manual payment proof.");
+      }
+
+      setManualProofMessage("Payment proof submitted successfully. The admin team can now review and confirm your transfer.");
+    } catch (submitError) {
+      setError(submitError instanceof Error ? submitError.message : "Unable to submit manual proof.");
+    } finally {
+      setIsSubmittingProof(false);
+    }
+  }
+
   return (
     <>
-      <button type="button" onClick={() => setIsOpen(true)} className="inline-flex rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235]">Enroll now</button>
+      <button type="button" onClick={() => setIsOpen(true)} className="inline-flex rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235]">
+        Enroll now
+      </button>
       {isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#142033]/55 px-3 py-6 backdrop-blur-sm sm:px-6">
           <div className="relative flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_28px_110px_rgba(20,32,51,0.28)]">
@@ -215,7 +365,9 @@ export function RegistrationForm({ offers }: Props) {
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Gen-Mumins</p>
                 <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Complete your registration</h2>
               </div>
-              <button type="button" onClick={() => setIsOpen(false)} className="rounded-full border border-[#e7dcc9] px-3 py-2 text-sm font-semibold text-[#5f6b7a] transition hover:bg-[#f8f2e7]">Close</button>
+              <button type="button" onClick={() => setIsOpen(false)} className="rounded-full border border-[#e7dcc9] px-3 py-2 text-sm font-semibold text-[#5f6b7a] transition hover:bg-[#f8f2e7]">
+                Close
+              </button>
             </div>
 
             <form className="grid min-h-0 flex-1 gap-0 lg:grid-cols-[minmax(0,1.2fr)_380px]" onSubmit={handleSubmit}>
@@ -234,9 +386,11 @@ export function RegistrationForm({ offers }: Props) {
                       </div>
                       <div>
                         <label className="mb-2 block text-sm font-medium text-[#405166]">Phone number</label>
-                        <div className="grid grid-cols-[155px_minmax(0,1fr)] gap-3">
+                        <div className="grid grid-cols-[170px_minmax(0,1fr)] gap-3">
                           <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d9deea] px-3 py-3 text-sm outline-none transition focus:border-[#3a7a5e]">
-                            {PHONE_COUNTRIES.map((country) => <option key={country.code} value={country.code}>{country.flag} {country.dialCode}</option>)}
+                            {PHONE_COUNTRIES.map((country) => (
+                              <option key={country.code} value={country.code}>{country.flag} {country.dialCode}</option>
+                            ))}
                           </select>
                           <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Phone number" required />
                         </div>
@@ -256,7 +410,9 @@ export function RegistrationForm({ offers }: Props) {
                   <section className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
                       <h3 className="text-lg font-semibold text-[#22304a]">Child information</h3>
-                      <button type="button" onClick={addChild} className="rounded-full border border-[#22304a] px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#22304a] hover:text-white">Add child</button>
+                      <button type="button" onClick={addChild} className="rounded-full border border-[#22304a] px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#22304a] hover:text-white">
+                        Add child
+                      </button>
                     </div>
 
                     {children.map((child, index) => (
@@ -313,7 +469,6 @@ export function RegistrationForm({ offers }: Props) {
                   </section>
                 </div>
               </div>
-
               <aside className="border-t border-[#efe7d8] bg-[#fbfaf7] px-5 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-6">
                 <div className="space-y-5">
                   <div>
@@ -367,14 +522,47 @@ export function RegistrationForm({ offers }: Props) {
                         </label>
                       ))}
                     </div>
-                    {selectedGateway === "BANK_TRANSFER" ? <div className="rounded-2xl bg-[#fff7eb] px-4 py-4 text-sm leading-7 text-[#7a5b2b]">Manual bank transfer will create your order first. After that, payment proof and transfer reference can be submitted for admin verification.</div> : null}
                   </div>
 
                   {draft ? <div className="rounded-2xl border border-[#ece7de] bg-white px-4 py-4 text-sm text-[#5f6b7a]"><p className="font-semibold text-[#22304a]">Draft saved</p><p className="mt-1">Registration ID: {draft.registrationId}</p></div> : null}
-                  {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-4 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">Next step: {success.nextStep}</p></div> : null}
+                  {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-4 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, use the payment button again.</p> : null}</div> : null}
                   {error ? <div className="rounded-2xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-4 text-sm text-[#a23c3c]">{error}</div> : null}
 
-                  <button type="submit" disabled={isSubmitting} className="w-full rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:cursor-not-allowed disabled:opacity-60">{isSubmitting ? "Submitting..." : "Complete enrollment"}</button>
+                  {selectedGateway === "BANK_TRANSFER" && success?.manualInstructions ? (
+                    <div className="space-y-4 rounded-[1.5rem] border border-[#f2dcc0] bg-[#fff7eb] px-4 py-4">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#b07b2d]">Manual bank transfer</p>
+                        <h4 className="mt-2 text-base font-semibold text-[#22304a]">Transfer details</h4>
+                      </div>
+                      <div className="space-y-2 text-sm text-[#6c5a39]">
+                        <p><span className="font-semibold">Bank:</span> {success.manualInstructions.bankName}</p>
+                        <p><span className="font-semibold">Account name:</span> {success.manualInstructions.accountName}</p>
+                        <p><span className="font-semibold">Account number:</span> {success.manualInstructions.accountNumber}</p>
+                        {success.manualInstructions.sortCode ? <p><span className="font-semibold">Sort code:</span> {success.manualInstructions.sortCode}</p> : null}
+                        {success.manualInstructions.iban ? <p><span className="font-semibold">IBAN:</span> {success.manualInstructions.iban}</p> : null}
+                        {success.manualInstructions.swiftCode ? <p><span className="font-semibold">SWIFT:</span> {success.manualInstructions.swiftCode}</p> : null}
+                        {success.manualInstructions.branchAddress ? <p><span className="font-semibold">Branch:</span> {success.manualInstructions.branchAddress}</p> : null}
+                        {success.manualInstructions.whatsapp ? <p><span className="font-semibold">Support WhatsApp:</span> {success.manualInstructions.whatsapp}</p> : null}
+                      </div>
+                      <div className="space-y-2 text-sm text-[#6c5a39]">
+                        {success.manualInstructions.instructions.map((instruction, index) => <p key={index}>{index + 1}. {instruction}</p>)}
+                      </div>
+                      <div className="space-y-3 rounded-2xl bg-white px-4 py-4">
+                        <p className="text-sm font-semibold text-[#22304a]">Submit payment proof</p>
+                        <input value={senderName} onChange={(event) => setSenderName(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Sender name" />
+                        <input value={senderNumber} onChange={(event) => setSenderNumber(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Sender number / account" />
+                        <input value={referenceKey} onChange={(event) => setReferenceKey(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Bank transfer reference" />
+                        <input value={screenshotUrl} onChange={(event) => setScreenshotUrl(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Proof screenshot URL" />
+                        <textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="min-h-24 w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Optional notes for admin review" />
+                        {manualProofMessage ? <div className="rounded-2xl bg-[#effaf3] px-4 py-3 text-sm text-[#2f6b4b]">{manualProofMessage}</div> : null}
+                        <button type="button" onClick={handleManualProofSubmit} disabled={isSubmittingProof} className="w-full rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmittingProof ? "Submitting proof..." : "Submit transfer proof"}</button>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <button type="submit" disabled={isSubmitting} className="w-full rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:cursor-not-allowed disabled:opacity-60">
+                    {isSubmitting ? "Submitting..." : success?.checkoutUrl ? "Retry payment handoff" : "Complete enrollment"}
+                  </button>
                 </div>
               </aside>
             </form>
@@ -384,3 +572,4 @@ export function RegistrationForm({ offers }: Props) {
     </>
   );
 }
+

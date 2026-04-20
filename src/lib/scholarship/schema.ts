@@ -1,4 +1,4 @@
-import { z } from "zod";
+﻿import { z } from "zod";
 
 export const scholarshipPayloadSchema = z.object({
   parentName: z.string().trim().min(2),
@@ -21,3 +21,4 @@ export const scholarshipReviewSchema = z.object({
 
 export type ScholarshipPayload = z.infer<typeof scholarshipPayloadSchema>;
 export type ScholarshipReviewPayload = z.infer<typeof scholarshipReviewSchema>;
+

@@ -1,4 +1,4 @@
-import { randomUUID } from "crypto";
+﻿import { randomUUID } from "crypto";
 
 import { db } from "@/lib/db";
 
@@ -88,3 +88,4 @@ export async function reviewScholarshipApplication(
     },
   });
 }
+

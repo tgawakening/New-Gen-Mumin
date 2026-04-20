@@ -1,4 +1,4 @@
-import { ScholarshipForm } from "@/components/scholarship/ScholarshipForm";
+﻿import { ScholarshipForm } from "@/components/scholarship/ScholarshipForm";
 import { getRegistrationOptions } from "@/lib/registration/service";
 
 export default async function ScholarshipRegistrationPage() {
@@ -24,3 +24,4 @@ export default async function ScholarshipRegistrationPage() {
     </div>
   );
 }
+

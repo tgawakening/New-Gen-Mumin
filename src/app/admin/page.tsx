@@ -1,3 +1,5 @@
+ï»¿export const dynamic = "force-dynamic";
+
 import { getAdminDashboardData } from "@/lib/admin/dashboard";
 
 function badgeClasses(status: string) {
@@ -47,7 +49,7 @@ export default async function AdminDashboardPage() {
           <div className="rounded-[1.5rem] bg-white p-5 shadow-sm"><p className="text-sm text-[#6d7785]">Active enrollments</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.activeEnrollments}</p></div>
           <div className="rounded-[1.5rem] bg-white p-5 shadow-sm"><p className="text-sm text-[#6d7785]">Pending registrations</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.pendingRegistrations}</p></div>
           <div className="rounded-[1.5rem] bg-white p-5 shadow-sm"><p className="text-sm text-[#6d7785]">Unread messages</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.unreadMessages}</p></div>
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm"><p className="text-sm text-[#6d7785]">Revenue (GBP)</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">£{metrics.revenueGbp}</p></div>
+          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm"><p className="text-sm text-[#6d7785]">Revenue (GBP)</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">Â£{metrics.revenueGbp}</p></div>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.3fr_0.95fr]">
@@ -65,7 +67,7 @@ export default async function AdminDashboardPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="font-semibold text-[#22304a]">{registration.parentFirstName} {registration.parentLastName}</p>
-                      <p className="mt-1 text-sm text-[#6d7785]">{registration.parentEmail} · {registration.selectedCountryName ?? "Country pending"}</p>
+                      <p className="mt-1 text-sm text-[#6d7785]">{registration.parentEmail} Â· {registration.selectedCountryName ?? "Country pending"}</p>
                     </div>
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(registration.status)}`}>{registration.status.replace(/_/g, " ")}</span>
                   </div>
@@ -99,8 +101,8 @@ export default async function AdminDashboardPage() {
                       <p className="font-semibold text-[#22304a]">{payment.order?.orderNumber ?? "Order pending"}</p>
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(payment.status)}`}>{payment.status.replace(/_/g, " ")}</span>
                     </div>
-                    <p className="mt-2 text-sm text-[#6d7785]">{payment.gateway} · {payment.currency} {payment.amount}</p>
-                    <p className="mt-1 text-sm text-[#6d7785]">{payment.order?.parent.user.firstName} {payment.order?.parent.user.lastName} · {payment.order?.parent.user.email}</p>
+                    <p className="mt-2 text-sm text-[#6d7785]">{payment.gateway} Â· {payment.currency} {payment.amount}</p>
+                    <p className="mt-1 text-sm text-[#6d7785]">{payment.order?.parent.user.firstName} {payment.order?.parent.user.lastName} Â· {payment.order?.parent.user.email}</p>
                   </div>
                 ))}
               </div>
@@ -117,8 +119,8 @@ export default async function AdminDashboardPage() {
                       <p className="font-semibold text-[#22304a]">{application.parentName}</p>
                       <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(application.status)}`}>{application.status}</span>
                     </div>
-                    <p className="mt-2 text-sm text-[#6d7785]">{application.parentEmail} · {application.parentWhatsapp ?? "No WhatsApp"}</p>
-                    <p className="mt-1 text-sm text-[#6d7785]">Requested {application.requestedPercent}% · {application.offer?.title ?? "General support"}</p>
+                    <p className="mt-2 text-sm text-[#6d7785]">{application.parentEmail} Â· {application.parentWhatsapp ?? "No WhatsApp"}</p>
+                    <p className="mt-1 text-sm text-[#6d7785]">Requested {application.requestedPercent}% Â· {application.offer?.title ?? "General support"}</p>
                     <p className="mt-3 text-sm leading-6 text-[#556274]">{application.reasonForSupport ?? "No reason submitted."}</p>
                   </div>
                 ))}
@@ -130,3 +132,5 @@ export default async function AdminDashboardPage() {
     </div>
   );
 }
+
+
