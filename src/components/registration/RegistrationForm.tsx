@@ -128,15 +128,14 @@ function originalPriceGbp(offer: Offer) {
   return null;
 }
 
-function offerBadge(offer: Offer) {
-  if (offer.kind === "BUNDLE") return "Featured";
-  if (offer.kind === "PAIR") return "Pair";
-  return "Single";
-}
-
 function offerSummary(offer: Offer) {
   if (offer.kind === "BUNDLE") return "Includes all 4 programmes";
   return null;
+}
+
+function offerLabel(offer: Offer) {
+  if (offer.kind === "BUNDLE") return `${offer.title} - includes all 4 programmes`;
+  return offer.title;
 }
 
 function sectionCard(children: React.ReactNode, extraClassName = "") {
@@ -183,6 +182,16 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
   useEffect(() => {
     if (autoOpen) setIsOpen(true);
   }, [autoOpen]);
+
+  useEffect(() => {
+    const bundleOffer = orderedOffers.find((offer) => offer.kind === "BUNDLE");
+    if (!bundleOffer) return;
+    setChildren((current) =>
+      current.map((child) =>
+        child.selectedOfferSlugs.length === 0 ? { ...child, selectedOfferSlugs: [bundleOffer.slug] } : child,
+      ),
+    );
+  }, [orderedOffers]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -238,12 +247,11 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
     setChildren((current) => (current.length === 1 ? current : current.filter((_, currentIndex) => currentIndex !== index)));
   }
 
-  function toggleOffer(index: number, offer: Offer) {
+  function selectOffer(index: number, offerSlug: string) {
     setChildren((current) =>
       current.map((child, currentIndex) => {
         if (currentIndex !== index) return child;
-        const isSelected = child.selectedOfferSlugs[0] === offer.slug;
-        return { ...child, selectedOfferSlugs: isSelected ? [] : [offer.slug] };
+        return { ...child, selectedOfferSlugs: offerSlug ? [offerSlug] : [] };
       }),
     );
   }
@@ -364,14 +372,12 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       </button>
 
       {isOpen ? (
-        <div className="fixed inset-0 z-[320] overflow-y-auto bg-[#1b2d46]/68 px-4 py-6 backdrop-blur-[3px] sm:px-6 sm:py-10">
-          <div className="mx-auto flex min-h-full w-full max-w-[1180px] items-center justify-center">
-            <div className="w-full overflow-hidden rounded-[30px] border border-[#eedecb] bg-[#fffaf4] shadow-[0_40px_120px_rgba(16,32,52,0.35)]">
-              <div className="flex items-start justify-between gap-5 border-b border-[#efdfcd] bg-[linear-gradient(135deg,#fff5e8_0%,#fffaf4_50%,#f7ede0_100%)] px-5 py-5 sm:px-7">
-                <div className="max-w-2xl">
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#c27a2c]">Gen-Mumins registration</p>
-                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#22304a] sm:text-[2rem]">Enroll your family in one smooth popup.</h2>
-                  <p className="mt-2 max-w-xl text-sm leading-7 text-[#657284]">Complete guardian details, add children, choose one programme path per child, and finish payment from one wider Gen-Mumins modal.</p>
+        <div className="fixed inset-0 z-[320] overflow-hidden bg-[rgba(27,45,70,0.28)] px-4 py-6 backdrop-blur-[2px] sm:px-6 sm:py-10">
+          <div className="mx-auto flex h-full w-full max-w-[1240px] items-center justify-center">
+            <div className="w-full overflow-hidden rounded-[30px] border border-[#eedecb] bg-[#fffaf4] shadow-[0_30px_90px_rgba(24,33,48,0.22)]">
+              <div className="flex items-center justify-between gap-5 border-b border-[#efdfcd] bg-[linear-gradient(135deg,#fff5e8_0%,#fffaf4_50%,#f7ede0_100%)] px-5 py-4 sm:px-7">
+                <div className="inline-flex rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(243,159,95,0.24)]">
+                  Enroll now
                 </div>
                 <button
                   type="button"
@@ -383,31 +389,31 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="max-h-[calc(100vh-7rem)] overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_360px] lg:items-start">
+              <form onSubmit={handleSubmit} className="max-h-[calc(100vh-8rem)] overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.8fr)_340px] lg:items-start">
                   <div className="space-y-5">
                     {sectionCard(
                       <>
-                        <h3 className="text-lg font-semibold text-[#22304a]">Parent / Guardian information</h3>
+                        <h3 className="text-left text-lg font-semibold text-[#22304a]">Parent / Guardian information</h3>
                         <div className="mt-4 grid gap-4 md:grid-cols-2">
                           <div className="md:col-span-2">
-                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Full name*</label>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Full name*</label>
                             <input value={guardianFullName} onChange={(event) => setGuardianFullName(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter full name" required />
                           </div>
                           <div className="md:col-span-2">
-                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Email address*</label>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Email address*</label>
                             <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
                           </div>
                           <div>
-                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Create password*</label>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Create password*</label>
                             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Minimum 8 characters" required />
                           </div>
                           <div>
-                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Confirm password*</label>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Confirm password*</label>
                             <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Re-enter password" required />
                           </div>
                           <div className="md:col-span-2">
-                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
                             <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)]">
                               <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-sm outline-none focus:border-[#f39f5f]">
                                 {PHONE_COUNTRIES.map((country) => (
@@ -424,8 +430,8 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                     <section className="space-y-4">
                       <div className="flex items-center justify-between gap-4">
                         <div>
-                          <h3 className="text-lg font-semibold text-[#22304a]">Child information</h3>
-                          <p className="mt-1 text-sm text-[#657284]">Select one programme path for each child. The full bundle is featured first.</p>
+                          <h3 className="text-left text-lg font-semibold text-[#22304a]">Child information</h3>
+                          <p className="mt-1 text-sm text-[#657284]">Select one programme path for each child. 50% auto-discount applies from the second child onward.</p>
                         </div>
                         <button type="button" onClick={addChild} className="cursor-pointer rounded-full bg-[#fff0dd] px-4 py-2 text-sm font-semibold text-[#b1692a] transition hover:bg-[#ffe2bf]">Add child</button>
                       </div>
@@ -439,15 +445,15 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
 
                           <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.4fr)_120px_150px]">
                             <div>
-                              <label className="mb-2 block text-sm font-medium text-[#38506a]">Child full name</label>
+                              <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Child full name</label>
                               <input value={child.fullName} onChange={(event) => updateChild(index, { fullName: event.target.value })} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter child full name" required />
                             </div>
                             <div>
-                              <label className="mb-2 block text-sm font-medium text-[#38506a]">Age</label>
+                              <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Age</label>
                               <input type="number" min="4" max="18" value={child.age} onChange={(event) => updateChild(index, { age: event.target.value })} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" required />
                             </div>
                             <div>
-                              <label className="mb-2 block text-sm font-medium text-[#38506a]">Gender</label>
+                              <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Gender</label>
                               <select value={child.gender} onChange={(event) => updateChild(index, { gender: event.target.value })} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" required>
                                 <option value="">Select</option>
                                 <option value="Boy">Boy</option>
@@ -457,42 +463,41 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                           </div>
 
                           <div className="mt-5 space-y-3">
-                            <label className="block text-sm font-medium text-[#38506a]">Programme selection</label>
-                            <div className="grid gap-3">
-                              {orderedOffers.map((offer) => {
-                                const selected = child.selectedOfferSlugs[0] === offer.slug;
-                                const price = getRegionalPrice(offer, selectedPhoneCountry);
-                                const originalGbp = originalPriceGbp(offer);
-                                return (
-                                  <button
-                                    key={offer.slug}
-                                    type="button"
-                                    onClick={() => toggleOffer(index, offer)}
-                                    className={`cursor-pointer rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[#f3a25d] bg-[#fff1df]" : "border-[#ebdccb] bg-white hover:border-[#f0b074]"}`}
-                                  >
-                                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                                      <div className="max-w-[70%]">
-                                        <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${offer.kind === "BUNDLE" ? "bg-[#22304a] text-white" : "bg-[#fff4e8] text-[#b1692a]"}`}>
-                                          {offerBadge(offer)}
-                                        </span>
-                                        <p className="mt-3 text-lg font-semibold text-[#22304a]">{offer.title}</p>
-                                        {offerSummary(offer) ? <p className="mt-1 text-sm text-[#657284]">{offerSummary(offer)}</p> : null}
-                                      </div>
-                                      <div className="rounded-[20px] bg-[#fffaf4] px-4 py-3 text-right md:min-w-[170px]">
-                                        {originalGbp ? <p className="text-sm font-medium text-[#9a8b7d] line-through">{formatMoney(originalGbp, "GBP")}</p> : null}
-                                        <p className="mt-1 text-2xl font-semibold text-[#22304a]">{formatMoney(price.displayAmount, price.displayCurrency)}</p>
-                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8f7c69]">/per month</p>
-                                        {price.usesRegionalPricing ? (
-                                          <p className="mt-2 text-xs font-medium text-[#c27a2c]">
-                                            {price.discountPercent}% off ({formatMoney(price.discountedGbp, "GBP")})
-                                          </p>
-                                        ) : null}
-                                      </div>
+                            <label className="block text-left text-sm font-medium text-[#38506a]">Programme selection</label>
+                            <select
+                              value={child.selectedOfferSlugs[0] ?? ""}
+                              onChange={(event) => selectOffer(index, event.target.value)}
+                              className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]"
+                              required
+                            >
+                              {orderedOffers.map((offer) => (
+                                <option key={offer.slug} value={offer.slug}>
+                                  {offerLabel(offer)}
+                                </option>
+                              ))}
+                            </select>
+                            {(() => {
+                              const selectedOffer = offerMap.get(child.selectedOfferSlugs[0] ?? "");
+                              if (!selectedOffer) return null;
+                              const price = getRegionalPrice(selectedOffer, selectedPhoneCountry);
+                              const originalGbp = originalPriceGbp(selectedOffer);
+                              return (
+                                <div className="rounded-[22px] border border-[#ebdccb] bg-white px-4 py-4">
+                                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                    <div className="max-w-[70%]">
+                                      <p className="text-lg font-semibold text-[#22304a]">{selectedOffer.title}</p>
+                                      {offerSummary(selectedOffer) ? <p className="mt-1 text-sm text-[#657284]">{offerSummary(selectedOffer)}</p> : null}
                                     </div>
-                                  </button>
-                                );
-                              })}
-                            </div>
+                                    <div className="rounded-[20px] bg-[#fffaf4] px-4 py-3 text-right md:min-w-[170px]">
+                                      {originalGbp ? <p className="text-sm font-medium text-[#9a8b7d] line-through">{formatMoney(originalGbp, "GBP")}</p> : null}
+                                      <p className="mt-1 text-2xl font-semibold text-[#22304a]">{formatMoney(price.displayAmount, price.displayCurrency)}</p>
+                                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8f7c69]">/per month</p>
+                                      {price.usesRegionalPricing ? <p className="mt-2 text-xs font-medium text-[#c27a2c]">{price.discountPercent}% off ({formatMoney(price.discountedGbp, "GBP")})</p> : null}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         </div>
                       ))}
@@ -510,20 +515,28 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                           {summary.lines.length === 0 ? (
                             <div className="rounded-2xl border border-dashed border-[#ebdccb] bg-white px-4 py-4 text-sm text-[#6d7785]">Choose programmes on the left to unlock the full summary and payment options.</div>
                           ) : (
-                            summary.lines.map((line, index) => (
-                              <div key={`${line.offerTitle}-${index}`} className="rounded-2xl border border-[#efe2d2] bg-white px-4 py-3">
-                                <div className="flex items-start justify-between gap-3">
-                                  <div>
-                                    <p className="font-semibold text-[#22304a]">{line.offerTitle}</p>
-                                    <p className="mt-1 text-sm text-[#6d7785]">{line.childLabel}</p>
-                                  </div>
-                                  <div className="text-right text-sm">
-                                    <p className="font-semibold text-[#22304a]">{formatMoney(line.price.displayAmount, line.price.displayCurrency)}</p>
-                                    {line.multiChildDiscount > 0 ? <p className="mt-1 font-medium text-[#c27a2c]">- {formatMoney(line.multiChildDiscount, line.price.displayCurrency)}</p> : null}
+                            <>
+                              {children.length > 1 ? (
+                                <div className="rounded-2xl border border-[#f6d8b3] bg-[#fff7ea] px-4 py-3 text-sm text-[#9b6328]">
+                                  50% auto-discount is applied from the second child onward.
+                                </div>
+                              ) : null}
+                              {summary.lines.map((line, index) => (
+                                <div key={`${line.offerTitle}-${index}`} className="rounded-2xl border border-[#efe2d2] bg-white px-4 py-3">
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                      <p className="font-semibold text-[#22304a]">{line.offerTitle}</p>
+                                      <p className="mt-1 text-sm text-[#6d7785]">{line.childLabel}</p>
+                                      {line.multiChildDiscount > 0 ? <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#c27a2c]">Second child 50% auto-discount</p> : null}
+                                    </div>
+                                    <div className="text-right text-sm">
+                                      <p className="font-semibold text-[#22304a]">{formatMoney(line.price.displayAmount, line.price.displayCurrency)}</p>
+                                      {line.multiChildDiscount > 0 ? <p className="mt-1 font-medium text-[#c27a2c]">- {formatMoney(line.multiChildDiscount, line.price.displayCurrency)}</p> : null}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
-                            ))
+                              ))}
+                            </>
                           )}
                         </div>
                         <div className="mt-4 rounded-[22px] bg-[#22304a] px-4 py-4 text-white">
