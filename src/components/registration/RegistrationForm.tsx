@@ -123,10 +123,20 @@ function getRegionalPrice(offer: Offer, phoneCountry: PhoneCountry): PriceBreakd
   return { displayCurrency: phoneCountry.currency, displayAmount, convertedAmount, discountPercent, discountedGbp: Number((displayAmount / phoneCountry.gbpRate).toFixed(1)), usesRegionalPricing: true };
 }
 
-function offerCopy(offer: Offer) {
-  if (offer.kind === "BUNDLE") return "Includes all four Gen-Mumins programmes in one bundle.";
-  if (offer.kind === "PAIR") return "Arabic language and Quranic Tajweed taught together as one paired pathway.";
-  return offer.description ?? "Monthly live programme enrolment.";
+function originalPriceGbp(offer: Offer) {
+  if (offer.kind === "BUNDLE") return 150;
+  return null;
+}
+
+function offerBadge(offer: Offer) {
+  if (offer.kind === "BUNDLE") return "Featured";
+  if (offer.kind === "PAIR") return "Pair";
+  return "Single";
+}
+
+function offerSummary(offer: Offer) {
+  if (offer.kind === "BUNDLE") return "Includes all 4 programmes";
+  return null;
 }
 
 function sectionCard(children: React.ReactNode, extraClassName = "") {
@@ -161,6 +171,14 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
 
   const selectedPhoneCountry = PHONE_COUNTRIES.find((country) => country.code === selectedCountryCode) ?? PHONE_COUNTRIES[0];
   const offerMap = useMemo(() => new Map(offers.map((offer) => [offer.slug, offer])), [offers]);
+  const orderedOffers = useMemo(() => {
+    const kindRank = { BUNDLE: 0, PAIR: 1, SINGLE: 2 };
+    return [...offers].sort((left, right) => {
+      const rankDifference = kindRank[left.kind] - kindRank[right.kind];
+      if (rankDifference !== 0) return rankDifference;
+      return left.basePriceGbp - right.basePriceGbp || left.title.localeCompare(right.title);
+    });
+  }, [offers]);
 
   useEffect(() => {
     if (autoOpen) setIsOpen(true);
@@ -220,29 +238,12 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
     setChildren((current) => (current.length === 1 ? current : current.filter((_, currentIndex) => currentIndex !== index)));
   }
 
-  function isOfferDisabled(child: ChildForm, offer: Offer) {
-    const isSelected = child.selectedOfferSlugs.includes(offer.slug);
-    if (isSelected) return false;
-    const selectedOffers = child.selectedOfferSlugs.map((slug) => offerMap.get(slug)).filter(Boolean) as Offer[];
-    const hasBundle = selectedOffers.some((entry) => entry.kind === "BUNDLE");
-    const nonBundleCount = selectedOffers.filter((entry) => entry.kind !== "BUNDLE").length;
-    if (offer.kind === "BUNDLE") return nonBundleCount > 0;
-    if (hasBundle) return true;
-    return nonBundleCount >= 2;
-  }
-
   function toggleOffer(index: number, offer: Offer) {
     setChildren((current) =>
       current.map((child, currentIndex) => {
         if (currentIndex !== index) return child;
-        const isSelected = child.selectedOfferSlugs.includes(offer.slug);
-        if (isSelected) return { ...child, selectedOfferSlugs: child.selectedOfferSlugs.filter((slug) => slug !== offer.slug) };
-        if (offer.kind === "BUNDLE") return { ...child, selectedOfferSlugs: [offer.slug] };
-        const selectedOffers = child.selectedOfferSlugs.map((slug) => offerMap.get(slug)).filter(Boolean) as Offer[];
-        const hasBundle = selectedOffers.some((entry) => entry.kind === "BUNDLE");
-        const nonBundleCount = selectedOffers.filter((entry) => entry.kind !== "BUNDLE").length;
-        if (hasBundle || nonBundleCount >= 2) return child;
-        return { ...child, selectedOfferSlugs: [...child.selectedOfferSlugs, offer.slug] };
+        const isSelected = child.selectedOfferSlugs[0] === offer.slug;
+        return { ...child, selectedOfferSlugs: isSelected ? [] : [offer.slug] };
       }),
     );
   }
@@ -370,7 +371,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                 <div className="max-w-2xl">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#c27a2c]">Gen-Mumins registration</p>
                   <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#22304a] sm:text-[2rem]">Enroll your family in one smooth popup.</h2>
-                  <p className="mt-2 max-w-xl text-sm leading-7 text-[#657284]">Complete guardian details, add children, select programmes, and finish payment from one wider Gen-Mumins modal.</p>
+                  <p className="mt-2 max-w-xl text-sm leading-7 text-[#657284]">Complete guardian details, add children, choose one programme path per child, and finish payment from one wider Gen-Mumins modal.</p>
                 </div>
                 <button
                   type="button"
@@ -424,7 +425,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                       <div className="flex items-center justify-between gap-4">
                         <div>
                           <h3 className="text-lg font-semibold text-[#22304a]">Child information</h3>
-                          <p className="mt-1 text-sm text-[#657284]">Each child can choose up to two non-bundle programmes or the full Gen-Mumins bundle.</p>
+                          <p className="mt-1 text-sm text-[#657284]">Select one programme path for each child. The full bundle is featured first.</p>
                         </div>
                         <button type="button" onClick={addChild} className="cursor-pointer rounded-full bg-[#fff0dd] px-4 py-2 text-sm font-semibold text-[#b1692a] transition hover:bg-[#ffe2bf]">Add child</button>
                       </div>
@@ -457,29 +458,36 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
 
                           <div className="mt-5 space-y-3">
                             <label className="block text-sm font-medium text-[#38506a]">Programme selection</label>
-                            <div className="grid gap-3 xl:grid-cols-2">
-                              {offers.map((offer) => {
-                                const selected = child.selectedOfferSlugs.includes(offer.slug);
-                                const disabled = isOfferDisabled(child, offer);
+                            <div className="grid gap-3">
+                              {orderedOffers.map((offer) => {
+                                const selected = child.selectedOfferSlugs[0] === offer.slug;
                                 const price = getRegionalPrice(offer, selectedPhoneCountry);
+                                const originalGbp = originalPriceGbp(offer);
                                 return (
                                   <button
                                     key={offer.slug}
                                     type="button"
-                                    disabled={disabled}
                                     onClick={() => toggleOffer(index, offer)}
-                                    className={`cursor-pointer rounded-[20px] border px-4 py-4 text-left transition ${selected ? "border-[#f3a25d] bg-[#fff1df]" : disabled ? "border-[#efe6da] bg-[#f8f4ee] opacity-55" : "border-[#ebdccb] bg-white hover:border-[#f0b074]"}`}
+                                    className={`cursor-pointer rounded-[22px] border px-4 py-4 text-left transition ${selected ? "border-[#f3a25d] bg-[#fff1df]" : "border-[#ebdccb] bg-white hover:border-[#f0b074]"}`}
                                   >
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div>
-                                        <p className="text-base font-semibold text-[#22304a]">{offer.title}</p>
-                                        <p className="mt-2 text-sm leading-6 text-[#5f6b7a]">{offerCopy(offer)}</p>
+                                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                                      <div className="max-w-[70%]">
+                                        <span className={`inline-flex rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] ${offer.kind === "BUNDLE" ? "bg-[#22304a] text-white" : "bg-[#fff4e8] text-[#b1692a]"}`}>
+                                          {offerBadge(offer)}
+                                        </span>
+                                        <p className="mt-3 text-lg font-semibold text-[#22304a]">{offer.title}</p>
+                                        {offerSummary(offer) ? <p className="mt-1 text-sm text-[#657284]">{offerSummary(offer)}</p> : null}
                                       </div>
-                                      <span className="rounded-full border border-[#f0ddc7] bg-[#fffaf4] px-3 py-1 text-xs font-semibold text-[#8b5a2b]">{selected ? "Selected" : "Select"}</span>
-                                    </div>
-                                    <div className="mt-4 rounded-2xl bg-[#fffaf4] px-3 py-3">
-                                      <p className="text-sm font-semibold text-[#22304a]">{formatMoney(price.displayAmount, price.displayCurrency)}{price.usesRegionalPricing ? <span className="ml-2 text-xs font-medium text-[#697789]">({formatMoney(price.discountedGbp, "GBP")})</span> : null}</p>
-                                      {price.usesRegionalPricing ? <p className="mt-1 text-xs font-semibold text-[#c27a2c]">{price.discountPercent}% regional discount applied</p> : null}
+                                      <div className="rounded-[20px] bg-[#fffaf4] px-4 py-3 text-right md:min-w-[170px]">
+                                        {originalGbp ? <p className="text-sm font-medium text-[#9a8b7d] line-through">{formatMoney(originalGbp, "GBP")}</p> : null}
+                                        <p className="mt-1 text-2xl font-semibold text-[#22304a]">{formatMoney(price.displayAmount, price.displayCurrency)}</p>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8f7c69]">/per month</p>
+                                        {price.usesRegionalPricing ? (
+                                          <p className="mt-2 text-xs font-medium text-[#c27a2c]">
+                                            {price.discountPercent}% off ({formatMoney(price.discountedGbp, "GBP")})
+                                          </p>
+                                        ) : null}
+                                      </div>
                                     </div>
                                   </button>
                                 );
