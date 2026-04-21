@@ -366,7 +366,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       </button>
       {isOpen ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#142033]/55 px-3 py-6 backdrop-blur-sm sm:px-6">
-          <div className="relative mx-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_28px_110px_rgba(20,32,51,0.28)]">
+          <div className="relative my-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_28px_110px_rgba(20,32,51,0.28)]">
             <div className="flex items-start justify-between border-b border-[#efe7d8] px-5 py-4 sm:px-7">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Gen-Mumins</p>
@@ -377,7 +377,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
               </button>
             </div>
 
-            <form className="grid gap-0 lg:grid-cols-[minmax(0,1.2fr)_380px]" onSubmit={handleSubmit}>
+            <form className="grid gap-0 xl:grid-cols-[minmax(0,1.15fr)_380px]" onSubmit={handleSubmit}>
               <div className="px-5 py-5 sm:px-7 sm:py-6">
                 <div className="space-y-7">
                   <section className="space-y-4 rounded-[1.5rem] border border-[#efe7d8] bg-[#fffdf9] p-4 sm:p-5">
@@ -428,8 +428,8 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                           <h4 className="text-base font-semibold text-[#22304a]">Child {index + 1}</h4>
                           {children.length > 1 ? <button type="button" onClick={() => removeChild(index)} className="text-sm font-semibold text-[#b65656]">Remove</button> : null}
                         </div>
-                        <div className="grid gap-4 md:grid-cols-[minmax(0,1.4fr)_120px_140px]">
-                          <div>
+                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.45fr)_120px_140px]">
+                          <div className="sm:col-span-2 xl:col-span-1">
                             <label className="mb-2 block text-sm font-medium text-[#405166]">Child full name</label>
                             <input value={child.fullName} onChange={(event) => updateChild(index, { fullName: event.target.value })} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Enter child full name" required />
                           </div>
@@ -579,6 +579,9 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
     </>
   );
 }
+
+
+
 
 
 
