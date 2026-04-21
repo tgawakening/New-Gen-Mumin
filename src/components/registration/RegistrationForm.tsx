@@ -83,7 +83,7 @@ type PriceBreakdown = {
 const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: string }> = [
   { value: "STRIPE", label: "Card / Pay by link", description: "Stripe subscription checkout for cards and hosted payment links." },
   { value: "PAYPAL", label: "PayPal", description: "PayPal monthly subscription approval for wallet-based recurring payments." },
-  { value: "BANK_TRANSFER", label: "Manual bank transfer", description: "Create the order, show bank details, and submit proof for manual verification." },
+  { value: "BANK_TRANSFER", label: "Manual bank transfer", description: "Transfer manually and then submit proof for admin review." },
   { value: "NAYAPAY", label: "NayaPay", description: "Will stay in review mode until NayaPay credentials are provided." },
 ];
 
@@ -156,9 +156,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
   const offerMap = useMemo(() => new Map(offers.map((offer) => [offer.slug, offer])), [offers]);
 
   useEffect(() => {
-    if (autoOpen) {
-      setIsOpen(true);
-    }
+    if (autoOpen) setIsOpen(true);
   }, [autoOpen]);
 
   useEffect(() => {
@@ -269,9 +267,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       if (!signupResponse.ok) {
         const signupPayload = (await signupResponse.json()) as { error?: string };
         const message = signupPayload.error ?? "Unable to create account.";
-        if (!message.toLowerCase().includes("already") && !message.toLowerCase().includes("exist")) {
-          throw new Error(message);
-        }
+        if (!message.toLowerCase().includes("already") && !message.toLowerCase().includes("exist")) throw new Error(message);
       }
 
       const registrationResponse = await fetch("/api/registration", {
@@ -302,9 +298,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       });
 
       const registrationPayload = (await registrationResponse.json()) as DraftResponse & { error?: string };
-      if (!registrationResponse.ok) {
-        throw new Error(registrationPayload.error ?? "Unable to create registration draft.");
-      }
+      if (!registrationResponse.ok) throw new Error(registrationPayload.error ?? "Unable to create registration draft.");
       setDraft(registrationPayload);
 
       const checkoutResponse = await fetch(`/api/registration/${registrationPayload.registrationId}/checkout`, {
@@ -314,10 +308,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       });
 
       const checkoutPayload = (await checkoutResponse.json()) as CheckoutResponse & { error?: string };
-      if (!checkoutResponse.ok) {
-        throw new Error(checkoutPayload.error ?? "Unable to create checkout draft.");
-      }
-
+      if (!checkoutResponse.ok) throw new Error(checkoutPayload.error ?? "Unable to create checkout draft.");
       setSuccess(checkoutPayload);
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to complete registration.");
@@ -328,7 +319,6 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
 
   async function handleManualProofSubmit() {
     if (!success?.paymentId) return;
-
     setError(null);
     setManualProofMessage(null);
     setIsSubmittingProof(true);
@@ -337,20 +327,10 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       const response = await fetch(`/api/payments/manual/${success.paymentId}/proof`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          senderName,
-          senderNumber,
-          referenceKey,
-          screenshotUrl,
-          notes: manualNotes,
-        }),
+        body: JSON.stringify({ senderName, senderNumber, referenceKey, screenshotUrl, notes: manualNotes }),
       });
-
       const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to submit manual payment proof.");
-      }
-
+      if (!response.ok) throw new Error(payload.error ?? "Unable to submit manual payment proof.");
       setManualProofMessage("Payment proof submitted successfully. The admin team can now review and confirm your transfer.");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to submit manual proof.");
@@ -361,100 +341,103 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
 
   return (
     <>
-      <button type="button" onClick={() => setIsOpen(true)} className="inline-flex rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235]">
+      <button type="button" onClick={() => setIsOpen(true)} className="inline-flex cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235]">
         Enroll now
       </button>
-      {isOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#142033]/55 px-3 py-6 backdrop-blur-sm sm:px-6">
-          <div className="relative my-auto flex w-full max-w-6xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-[0_28px_110px_rgba(20,32,51,0.28)]">
-            <div className="flex items-start justify-between border-b border-[#efe7d8] px-5 py-4 sm:px-7">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Gen-Mumins</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Complete your registration</h2>
-              </div>
-              <button type="button" onClick={() => setIsOpen(false)} className="rounded-full border border-[#e7dcc9] px-3 py-2 text-sm font-semibold text-[#5f6b7a] transition hover:bg-[#f8f2e7]">
-                Close
-              </button>
-            </div>
 
-            <form className="grid gap-0 xl:grid-cols-[minmax(0,1.15fr)_380px]" onSubmit={handleSubmit}>
-              <div className="px-5 py-5 sm:px-7 sm:py-6">
-                <div className="space-y-7">
-                  <section className="space-y-4 rounded-[1.5rem] border border-[#efe7d8] bg-[#fffdf9] p-4 sm:p-5">
-                    <h3 className="text-lg font-semibold text-[#22304a]">Parent / Guardian information</h3>
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <div className="md:col-span-2">
-                        <label className="mb-2 block text-sm font-medium text-[#405166]">Parent / Guardian full name</label>
-                        <input value={guardianFullName} onChange={(event) => setGuardianFullName(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Enter full name" required />
+      {isOpen ? (
+        <div className="fixed inset-0 z-[220] bg-[#0f1b2d]/78 backdrop-blur-sm">
+          <div className="flex min-h-screen items-center justify-center px-4 py-6">
+            <div className="w-full max-w-[680px] overflow-hidden rounded-[18px] border border-[#6ba4d0] bg-white shadow-[0_32px_120px_rgba(7,16,35,0.5)]">
+              <div className="flex items-start justify-between gap-4 bg-[#2a76aa] px-5 py-4 text-white">
+                <div>
+                  <h2 className="text-2xl font-semibold">Enroll Now</h2>
+                  <p className="mt-1 text-sm text-white/85">Gen-Mumins registration</p>
+                </div>
+                <button type="button" onClick={() => setIsOpen(false)} className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-white/45 text-xl leading-none text-white transition hover:bg-white/10">
+                  ×
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmit} className="max-h-[78vh] overflow-y-auto bg-[#f8fafc] px-4 py-4 sm:px-5 sm:py-5">
+                <div className="space-y-5">
+                  <section className="rounded-[16px] border border-[#d4e2ef] bg-white p-4">
+                    <h3 className="text-base font-semibold text-[#22304a]">Parent / Guardian information</h3>
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <label className="mb-2 block text-sm font-medium text-[#38506a]">Full name*</label>
+                        <input value={guardianFullName} onChange={(event) => setGuardianFullName(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Enter full name" required />
                       </div>
                       <div>
-                        <label className="mb-2 block text-sm font-medium text-[#405166]">Email address</label>
-                        <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Enter email address" required />
+                        <label className="mb-2 block text-sm font-medium text-[#38506a]">Email address*</label>
+                        <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Enter email address" required />
+                      </div>
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-[#38506a]">Create password*</label>
+                          <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Minimum 8 characters" required />
+                        </div>
+                        <div>
+                          <label className="mb-2 block text-sm font-medium text-[#38506a]">Confirm password*</label>
+                          <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Re-enter password" required />
+                        </div>
                       </div>
                       <div>
-                        <label className="mb-2 block text-sm font-medium text-[#405166]">Phone number</label>
+                        <label className="mb-2 block text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
                         <div className="grid grid-cols-[170px_minmax(0,1fr)] gap-3">
-                          <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d9deea] px-3 py-3 text-sm outline-none transition focus:border-[#3a7a5e]">
+                          <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-3 py-3 text-sm outline-none focus:border-[#2a76aa]">
                             {PHONE_COUNTRIES.map((country) => (
-                              <option key={country.code} value={country.code}>{country.flag} {country.dialCode}</option>
+                              <option key={country.code} value={country.code}>{country.flag} {country.name} ({country.dialCode})</option>
                             ))}
                           </select>
-                          <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Phone number" required />
+                          <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Phone number" required />
                         </div>
-                        <p className="mt-2 text-xs text-[#6d7785]">{selectedPhoneCountry.flag} {selectedPhoneCountry.name} {selectedPhoneCountry.dialCode}</p>
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-[#405166]">Password</label>
-                        <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Minimum 8 characters" required />
-                      </div>
-                      <div>
-                        <label className="mb-2 block text-sm font-medium text-[#405166]">Confirm password</label>
-                        <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Re-enter password" required />
                       </div>
                     </div>
                   </section>
-
                   <section className="space-y-4">
                     <div className="flex items-center justify-between gap-4">
-                      <h3 className="text-lg font-semibold text-[#22304a]">Child information</h3>
-                      <button type="button" onClick={addChild} className="rounded-full border border-[#22304a] px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#22304a] hover:text-white">
+                      <h3 className="text-base font-semibold text-[#22304a]">Child information</h3>
+                      <button type="button" onClick={addChild} className="cursor-pointer rounded-full bg-[#edf4fb] px-4 py-2 text-sm font-semibold text-[#2a76aa] transition hover:bg-[#dceafa]">
                         Add child
                       </button>
                     </div>
 
                     {children.map((child, index) => (
-                      <div key={index} className="space-y-4 rounded-[1.5rem] border border-[#efe7d8] bg-white p-4 sm:p-5">
+                      <div key={index} className="rounded-[16px] border border-[#d4e2ef] bg-white p-4">
                         <div className="flex items-center justify-between gap-4">
                           <h4 className="text-base font-semibold text-[#22304a]">Child {index + 1}</h4>
-                          {children.length > 1 ? <button type="button" onClick={() => removeChild(index)} className="text-sm font-semibold text-[#b65656]">Remove</button> : null}
+                          {children.length > 1 ? <button type="button" onClick={() => removeChild(index)} className="cursor-pointer text-sm font-semibold text-[#c45555]">Remove</button> : null}
                         </div>
-                        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,1.45fr)_120px_140px]">
-                          <div className="sm:col-span-2 xl:col-span-1">
-                            <label className="mb-2 block text-sm font-medium text-[#405166]">Child full name</label>
-                            <input value={child.fullName} onChange={(event) => updateChild(index, { fullName: event.target.value })} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" placeholder="Enter child full name" required />
+
+                        <div className="mt-4 grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_110px_140px]">
+                          <div className="sm:col-span-3 lg:col-span-1">
+                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Child full name</label>
+                            <input value={child.fullName} onChange={(event) => updateChild(index, { fullName: event.target.value })} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Enter child full name" required />
                           </div>
                           <div>
-                            <label className="mb-2 block text-sm font-medium text-[#405166]">Age</label>
-                            <input type="number" min="4" max="18" value={child.age} onChange={(event) => updateChild(index, { age: event.target.value })} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" required />
+                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Age</label>
+                            <input type="number" min="4" max="18" value={child.age} onChange={(event) => updateChild(index, { age: event.target.value })} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" required />
                           </div>
                           <div>
-                            <label className="mb-2 block text-sm font-medium text-[#405166]">Gender</label>
-                            <select value={child.gender} onChange={(event) => updateChild(index, { gender: event.target.value })} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm outline-none transition focus:border-[#3a7a5e]" required>
+                            <label className="mb-2 block text-sm font-medium text-[#38506a]">Gender</label>
+                            <select value={child.gender} onChange={(event) => updateChild(index, { gender: event.target.value })} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" required>
                               <option value="">Select</option>
                               <option value="Boy">Boy</option>
                               <option value="Girl">Girl</option>
                             </select>
                           </div>
                         </div>
-                        <div className="space-y-3">
-                          <label className="block text-sm font-medium text-[#405166]">Programme selection</label>
-                          <div className="grid gap-3 md:grid-cols-2">
+
+                        <div className="mt-5 space-y-3">
+                          <label className="block text-sm font-medium text-[#38506a]">Programme selection</label>
+                          <div className="grid gap-3 sm:grid-cols-2">
                             {offers.map((offer) => {
                               const selected = child.selectedOfferSlugs.includes(offer.slug);
                               const disabled = isOfferDisabled(child, offer);
                               const price = getRegionalPrice(offer, selectedPhoneCountry);
                               return (
-                                <button key={offer.slug} type="button" disabled={disabled} onClick={() => toggleOffer(index, offer)} className={`rounded-[1.4rem] border px-4 py-4 text-left transition ${selected ? "border-[#3a7a5e] bg-[#eff8f2]" : disabled ? "border-[#ece7de] bg-[#f5f2ed] opacity-55" : "border-[#e4ded2] bg-[#fffdf9] hover:border-[#c8d9cf]"}`}>
+                                <button key={offer.slug} type="button" disabled={disabled} onClick={() => toggleOffer(index, offer)} className={`cursor-pointer rounded-[16px] border px-4 py-4 text-left transition ${selected ? "border-[#62a6d4] bg-[#eef7fe]" : disabled ? "border-[#e7edf4] bg-[#f4f7fb] opacity-55" : "border-[#d7e3ef] bg-[#fbfdff] hover:border-[#a8c7de]"}`}>
                                   <div className="flex items-start justify-between gap-3">
                                     <div>
                                       <p className="text-base font-semibold text-[#22304a]">{offer.title}</p>
@@ -462,9 +445,9 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                                     </div>
                                     <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a] shadow-sm">{selected ? "Selected" : "Select"}</span>
                                   </div>
-                                  <div className="mt-4 rounded-2xl bg-white/80 px-3 py-3">
+                                  <div className="mt-4 rounded-xl bg-white px-3 py-3">
                                     <p className="text-sm font-semibold text-[#22304a]">{formatMoney(price.displayAmount, price.displayCurrency)}{price.usesRegionalPricing ? <span className="ml-2 text-xs font-medium text-[#5f6b7a]">({formatMoney(price.discountedGbp, "GBP")})</span> : null}</p>
-                                    {price.usesRegionalPricing ? <p className="mt-1 text-xs font-semibold text-[#3a7a5e]">{price.discountPercent}% regional discount applied</p> : null}
+                                    {price.usesRegionalPricing ? <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{price.discountPercent}% regional discount applied</p> : null}
                                   </div>
                                 </button>
                               );
@@ -474,51 +457,46 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                       </div>
                     ))}
                   </section>
-                </div>
-              </div>
-              <aside className="border-t border-[#efe7d8] bg-[#fbfaf7] px-5 py-5 lg:border-l lg:border-t-0 lg:px-6 lg:py-6">
-                <div className="space-y-5">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Order summary</p>
-                    <h3 className="mt-2 text-xl font-semibold text-[#22304a]">Live total</h3>
-                  </div>
 
-                  <div className="space-y-3">
-                    {summary.lines.length === 0 ? (
-                      <div className="rounded-2xl border border-dashed border-[#d8d3c8] bg-white px-4 py-4 text-sm text-[#6d7785]">Choose a programme to start the summary.</div>
-                    ) : (
-                      summary.lines.map((line, index) => (
-                        <div key={`${line.offerTitle}-${index}`} className="rounded-2xl border border-[#ece7de] bg-white px-4 py-4">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <p className="font-semibold text-[#22304a]">{line.offerTitle}</p>
-                              <p className="mt-1 text-sm text-[#6d7785]">{line.childLabel}</p>
-                            </div>
-                            <div className="text-right text-sm">
-                              <p className="font-semibold text-[#22304a]">{formatMoney(line.price.displayAmount, line.price.displayCurrency)}</p>
-                              {line.multiChildDiscount > 0 ? <p className="mt-1 font-medium text-[#3a7a5e]">- {formatMoney(line.multiChildDiscount, line.price.displayCurrency)}</p> : null}
+                  <section className="rounded-[16px] border border-[#d4e2ef] bg-white p-4">
+                    <div className="flex items-center justify-between gap-3 border-b border-[#e5edf5] pb-3">
+                      <h3 className="text-base font-semibold text-[#22304a]">Order summary</h3>
+                      <span className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Total {formatMoney(summary.total, summary.currency)}</span>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {summary.lines.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-[#d8e2ec] bg-[#fbfdff] px-4 py-4 text-sm text-[#6d7785]">Choose a programme to start the summary.</div>
+                      ) : (
+                        summary.lines.map((line, index) => (
+                          <div key={`${line.offerTitle}-${index}`} className="rounded-xl border border-[#e3ebf3] bg-[#fbfdff] px-4 py-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <p className="font-semibold text-[#22304a]">{line.offerTitle}</p>
+                                <p className="mt-1 text-sm text-[#6d7785]">{line.childLabel}</p>
+                              </div>
+                              <div className="text-right text-sm">
+                                <p className="font-semibold text-[#22304a]">{formatMoney(line.price.displayAmount, line.price.displayCurrency)}</p>
+                                {line.multiChildDiscount > 0 ? <p className="mt-1 font-medium text-[#2a76aa]">- {formatMoney(line.multiChildDiscount, line.price.displayCurrency)}</p> : null}
+                              </div>
                             </div>
                           </div>
-                          {line.price.usesRegionalPricing ? <p className="mt-3 text-xs font-medium text-[#6d7785]">Compared with {formatMoney(line.price.convertedAmount, line.price.displayCurrency)}, this child is receiving a {line.price.discountPercent}% regional saving.</p> : null}
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <div className="rounded-[1.5rem] bg-[#22304a] px-4 py-4 text-white">
-                    <div className="flex items-center justify-between text-sm text-white/80"><span>Subtotal</span><span>{formatMoney(summary.subtotal, summary.currency)}</span></div>
-                    <div className="mt-2 flex items-center justify-between text-sm text-[#96dfb7]"><span>Discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
-                    <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold"><span>Total</span><span>{formatMoney(summary.total, summary.currency)}</span></div>
-                  </div>
-
-                  <div className={`space-y-3 rounded-[1.5rem] border px-4 py-4 ${isFormReadyForPayment ? "border-[#dce8e2] bg-white" : "border-[#ece7de] bg-[#f4f1ea]"}`}>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Payment method</p>
-                      <h4 className="mt-2 text-base font-semibold text-[#22304a]">Choose how you want to pay</h4>
+                        ))
+                      )}
                     </div>
-                    <div className="space-y-2">
+
+                    <div className="mt-4 rounded-xl bg-[#22304a] px-4 py-4 text-white">
+                      <div className="flex items-center justify-between text-sm text-white/80"><span>Subtotal</span><span>{formatMoney(summary.subtotal, summary.currency)}</span></div>
+                      <div className="mt-2 flex items-center justify-between text-sm text-[#9ce0f4]"><span>Discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
+                      <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold"><span>Total</span><span>{formatMoney(summary.total, summary.currency)}</span></div>
+                    </div>
+                  </section>
+
+                  <section className="rounded-[16px] border border-[#d4e2ef] bg-white p-4">
+                    <h3 className="text-base font-semibold text-[#22304a]">Payment method</h3>
+                    <div className="mt-4 space-y-3">
                       {PAYMENT_METHODS.map((method) => (
-                        <label key={method.value} className={`block rounded-2xl border px-3 py-3 transition ${selectedGateway === method.value ? "border-[#3a7a5e] bg-[#eff8f2]" : "border-[#ece7de] bg-white"} ${isFormReadyForPayment ? "opacity-100" : "opacity-55"}`}>
+                        <label key={method.value} className={`block cursor-pointer rounded-xl border px-4 py-3 transition ${selectedGateway === method.value ? "border-[#62a6d4] bg-[#eef7fe]" : "border-[#d7e3ef] bg-[#fbfdff]"} ${isFormReadyForPayment ? "opacity-100" : "opacity-55"}`}>
                           <div className="flex items-start gap-3">
                             <input type="radio" name="gateway" checked={selectedGateway === method.value} onChange={() => setSelectedGateway(method.value)} disabled={!isFormReadyForPayment} className="mt-1" />
                             <div>
@@ -529,19 +507,15 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                         </label>
                       ))}
                     </div>
-                  </div>
-
-                  {draft ? <div className="rounded-2xl border border-[#ece7de] bg-white px-4 py-4 text-sm text-[#5f6b7a]"><p className="font-semibold text-[#22304a]">Draft saved</p><p className="mt-1">Registration ID: {draft.registrationId}</p></div> : null}
-                  {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-4 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, use the payment button again.</p> : null}</div> : null}
-                  {error ? <div className="rounded-2xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-4 text-sm text-[#a23c3c]">{error}</div> : null}
+                  </section>
+                  {draft ? <div className="rounded-xl border border-[#d7e4ef] bg-[#fbfdff] px-4 py-3 text-sm text-[#5f6b7a]"><p className="font-semibold text-[#22304a]">Draft saved</p><p className="mt-1">Registration ID: {draft.registrationId}</p></div> : null}
+                  {success ? <div className="rounded-xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, click the submit button again.</p> : null}</div> : null}
+                  {error ? <div className="rounded-xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-3 text-sm text-[#a23c3c]">{error}</div> : null}
 
                   {selectedGateway === "BANK_TRANSFER" && success?.manualInstructions ? (
-                    <div className="space-y-4 rounded-[1.5rem] border border-[#f2dcc0] bg-[#fff7eb] px-4 py-4">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#b07b2d]">Manual bank transfer</p>
-                        <h4 className="mt-2 text-base font-semibold text-[#22304a]">Transfer details</h4>
-                      </div>
-                      <div className="space-y-2 text-sm text-[#6c5a39]">
+                    <section className="rounded-[16px] border border-[#efd9b9] bg-[#fff8ed] p-4">
+                      <h3 className="text-base font-semibold text-[#22304a]">Manual bank transfer</h3>
+                      <div className="mt-3 space-y-2 text-sm text-[#6c5a39]">
                         <p><span className="font-semibold">Bank:</span> {success.manualInstructions.bankName}</p>
                         <p><span className="font-semibold">Account name:</span> {success.manualInstructions.accountName}</p>
                         <p><span className="font-semibold">Account number:</span> {success.manualInstructions.accountNumber}</p>
@@ -551,37 +525,31 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                         {success.manualInstructions.branchAddress ? <p><span className="font-semibold">Branch:</span> {success.manualInstructions.branchAddress}</p> : null}
                         {success.manualInstructions.whatsapp ? <p><span className="font-semibold">Support WhatsApp:</span> {success.manualInstructions.whatsapp}</p> : null}
                       </div>
-                      <div className="space-y-2 text-sm text-[#6c5a39]">
+                      <div className="mt-3 space-y-2 text-sm text-[#6c5a39]">
                         {success.manualInstructions.instructions.map((instruction, index) => <p key={index}>{index + 1}. {instruction}</p>)}
                       </div>
-                      <div className="space-y-3 rounded-2xl bg-white px-4 py-4">
+                      <div className="mt-4 space-y-3 rounded-xl bg-white p-4">
                         <p className="text-sm font-semibold text-[#22304a]">Submit payment proof</p>
-                        <input value={senderName} onChange={(event) => setSenderName(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Sender name" />
-                        <input value={senderNumber} onChange={(event) => setSenderNumber(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Sender number / account" />
-                        <input value={referenceKey} onChange={(event) => setReferenceKey(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Bank transfer reference" />
-                        <input value={screenshotUrl} onChange={(event) => setScreenshotUrl(event.target.value)} className="w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Proof screenshot URL" />
-                        <textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="min-h-24 w-full rounded-2xl border border-[#d9deea] px-4 py-3 text-sm" placeholder="Optional notes for admin review" />
-                        {manualProofMessage ? <div className="rounded-2xl bg-[#effaf3] px-4 py-3 text-sm text-[#2f6b4b]">{manualProofMessage}</div> : null}
-                        <button type="button" onClick={handleManualProofSubmit} disabled={isSubmittingProof} className="w-full rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmittingProof ? "Submitting proof..." : "Submit transfer proof"}</button>
+                        <input value={senderName} onChange={(event) => setSenderName(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Sender name" />
+                        <input value={senderNumber} onChange={(event) => setSenderNumber(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Sender number / account" />
+                        <input value={referenceKey} onChange={(event) => setReferenceKey(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Bank transfer reference" />
+                        <input value={screenshotUrl} onChange={(event) => setScreenshotUrl(event.target.value)} className="w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Proof screenshot URL" />
+                        <textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="min-h-24 w-full rounded-xl border border-[#b6cde2] bg-[#f8fbff] px-4 py-3 text-sm outline-none focus:border-[#2a76aa]" placeholder="Optional notes for admin review" />
+                        {manualProofMessage ? <div className="rounded-xl bg-[#effaf3] px-4 py-3 text-sm text-[#2f6b4b]">{manualProofMessage}</div> : null}
+                        <button type="button" onClick={handleManualProofSubmit} disabled={isSubmittingProof} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmittingProof ? "Submitting proof..." : "Submit transfer proof"}</button>
                       </div>
-                    </div>
+                    </section>
                   ) : null}
 
-                  <button type="submit" disabled={isSubmitting} className="w-full rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:cursor-not-allowed disabled:opacity-60">
+                  <button type="submit" disabled={isSubmitting} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:cursor-not-allowed disabled:opacity-60">
                     {isSubmitting ? "Submitting..." : success?.checkoutUrl ? "Retry payment handoff" : "Complete enrollment"}
                   </button>
                 </div>
-              </aside>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       ) : null}
     </>
   );
 }
-
-
-
-
-
-
