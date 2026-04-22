@@ -88,6 +88,21 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
 
 export const SOUTH_ASIA_COUNTRY_CODES = new Set(["PK", "IN", "BD", "AF"]);
 
+export const REGIONAL_PRICE_OVERRIDES: Record<
+  string,
+  Partial<Record<(typeof DEFAULT_OFFERS)[number]["slug"], number>>
+> = {
+  US: {
+    "full-bundle": 80,
+  },
+  AE: {
+    "full-bundle": 200,
+  },
+  SA: {
+    "full-bundle": 200,
+  },
+};
+
 export const REGISTRATION_COUNTRIES = [
   { code: "GB", name: "United Kingdom", currency: "GBP" },
   { code: "PK", name: "Pakistan", currency: "PKR" },
@@ -104,5 +119,31 @@ export function resolveCurrency(countryCode?: string | null) {
     return "GBP";
   }
 
-  return SOUTH_ASIA_COUNTRY_CODES.has(countryCode.toUpperCase()) ? "PKR" : "GBP";
+  const normalizedCountryCode = countryCode.toUpperCase();
+  const country = REGISTRATION_COUNTRIES.find((entry) => entry.code === normalizedCountryCode);
+  if (country) {
+    return country.currency;
+  }
+
+  return SOUTH_ASIA_COUNTRY_CODES.has(normalizedCountryCode) ? "PKR" : "GBP";
+}
+
+export function resolveOfferAmount(
+  offer: { slug: string; basePriceGbp: number; basePricePkr: number | null },
+  countryCode?: string | null,
+  currency?: string | null,
+) {
+  const normalizedCountryCode = countryCode?.toUpperCase() ?? "";
+  const resolvedCurrency = currency ?? resolveCurrency(normalizedCountryCode);
+  const countryOverride = REGIONAL_PRICE_OVERRIDES[normalizedCountryCode]?.[offer.slug];
+
+  if (typeof countryOverride === "number") {
+    return countryOverride;
+  }
+
+  if (resolvedCurrency === "PKR") {
+    return offer.basePricePkr ?? offer.basePriceGbp;
+  }
+
+  return offer.basePriceGbp;
 }

@@ -35,15 +35,17 @@ type DraftResponse = {
 };
 
 type ManualInstructions = {
-  accountName: string;
-  bankName: string;
-  accountNumber: string;
-  iban?: string;
-  swiftCode?: string;
-  sortCode?: string;
-  branchAddress?: string;
   whatsapp?: string;
   instructions: string[];
+  channels: Array<{
+    id: "BANK_TRANSFER" | "JAZZCASH";
+    title: string;
+    badge: string;
+    fields: Array<{
+      label: string;
+      value: string;
+    }>;
+  }>;
 };
 
 type CheckoutResponse = {
@@ -60,7 +62,7 @@ type CheckoutResponse = {
   manualInstructions?: ManualInstructions | null;
 };
 
-type PaymentValue = "STRIPE" | "PAYPAL" | "BANK_TRANSFER" | "NAYAPAY";
+type PaymentValue = "STRIPE" | "PAYPAL" | "BANK_TRANSFER";
 
 type PhoneCountry = {
   code: string;
@@ -83,8 +85,7 @@ type PriceBreakdown = {
 const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: string }> = [
   { value: "STRIPE", label: "Card / Pay by link", description: "Stripe subscription checkout for cards and hosted payment links." },
   { value: "PAYPAL", label: "PayPal", description: "PayPal monthly subscription approval for wallet-based recurring payments." },
-  { value: "BANK_TRANSFER", label: "Manual bank transfer", description: "Transfer manually and then submit proof for admin review." },
-  { value: "NAYAPAY", label: "NayaPay", description: "Will stay in review mode until NayaPay credentials are provided." },
+  { value: "BANK_TRANSFER", label: "Manual payment", description: "Use Bank Transfer or JazzCash and then submit proof for review." },
 ];
 
 const DIAL_CODES: Record<string, string> = {
@@ -148,6 +149,18 @@ const GBP_RATES: Record<string, number> = {
   DKK: 8.8,
 };
 
+const REGIONAL_PRICE_OVERRIDES: Record<string, Partial<Record<string, number>>> = {
+  US: {
+    "full-bundle": 80,
+  },
+  AE: {
+    "full-bundle": 200,
+  },
+  SA: {
+    "full-bundle": 200,
+  },
+};
+
 const emptyChild = (): ChildForm => ({ fullName: "", age: "", gender: "", selectedOfferSlugs: [] });
 
 function splitName(fullName: string) {
@@ -167,6 +180,20 @@ function flagFromCountryCode(code: string) {
 }
 
 function getRegionalPrice(offer: Offer, phoneCountry: PhoneCountry): PriceBreakdown {
+  const explicitOverride = REGIONAL_PRICE_OVERRIDES[phoneCountry.code]?.[offer.slug];
+  if (typeof explicitOverride === "number") {
+    const convertedAmount = Math.round(offer.basePriceGbp * phoneCountry.gbpRate);
+    const discountPercent = Math.max(0, Math.round((1 - explicitOverride / convertedAmount) * 100));
+    return {
+      displayCurrency: phoneCountry.currency,
+      displayAmount: explicitOverride,
+      convertedAmount,
+      discountPercent,
+      discountedGbp: Number((explicitOverride / phoneCountry.gbpRate).toFixed(1)),
+      usesRegionalPricing: explicitOverride !== convertedAmount,
+    };
+  }
+
   const convertedAmount = Math.round(offer.basePriceGbp * phoneCountry.gbpRate);
   const southAsia = new Set(["PK", "IN", "BD", "AF"]);
   if (!southAsia.has(phoneCountry.code) || !offer.basePricePkr) {
@@ -201,6 +228,11 @@ function sectionCard(children: React.ReactNode, extraClassName = "") {
   );
 }
 
+async function copyToClipboard(value: string) {
+  if (typeof navigator === "undefined" || !navigator.clipboard) return;
+  await navigator.clipboard.writeText(value);
+}
+
 export function RegistrationForm({ offers, countries, autoOpen = false }: Props) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(autoOpen);
@@ -212,10 +244,10 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [confirmPassword, setConfirmPassword] = useState("");
   const [children, setChildren] = useState<ChildForm[]>([emptyChild()]);
   const [selectedGateway, setSelectedGateway] = useState<PaymentValue>("STRIPE");
+  const [manualMethod, setManualMethod] = useState<"BANK_TRANSFER" | "JAZZCASH">("BANK_TRANSFER");
   const [senderName, setSenderName] = useState("");
   const [senderNumber, setSenderNumber] = useState("");
   const [referenceKey, setReferenceKey] = useState("");
-  const [screenshotUrl, setScreenshotUrl] = useState("");
   const [manualNotes, setManualNotes] = useState("");
   const [manualProofMessage, setManualProofMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -422,7 +454,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       const response = await fetch(`/api/payments/manual/${success.paymentId}/proof`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ senderName, senderNumber, referenceKey, screenshotUrl, notes: manualNotes }),
+        body: JSON.stringify({ senderName, senderNumber, referenceKey, manualMethod, notes: manualNotes }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Unable to submit manual payment proof.");
@@ -655,26 +687,57 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                     {selectedGateway === "BANK_TRANSFER" && success?.manualInstructions ? (
                       sectionCard(
                         <>
-                          <h3 className="text-lg font-semibold text-[#22304a]">Manual bank transfer</h3>
-                          <div className="mt-3 space-y-2 text-sm text-[#6c5a39]">
-                            <p><span className="font-semibold">Bank:</span> {success.manualInstructions.bankName}</p>
-                            <p><span className="font-semibold">Account name:</span> {success.manualInstructions.accountName}</p>
-                            <p><span className="font-semibold">Account number:</span> {success.manualInstructions.accountNumber}</p>
-                            {success.manualInstructions.sortCode ? <p><span className="font-semibold">Sort code:</span> {success.manualInstructions.sortCode}</p> : null}
-                            {success.manualInstructions.iban ? <p><span className="font-semibold">IBAN:</span> {success.manualInstructions.iban}</p> : null}
-                            {success.manualInstructions.swiftCode ? <p><span className="font-semibold">SWIFT:</span> {success.manualInstructions.swiftCode}</p> : null}
-                            {success.manualInstructions.branchAddress ? <p><span className="font-semibold">Branch:</span> {success.manualInstructions.branchAddress}</p> : null}
-                            {success.manualInstructions.whatsapp ? <p><span className="font-semibold">Support WhatsApp:</span> {success.manualInstructions.whatsapp}</p> : null}
+                          <h3 className="text-lg font-semibold text-[#22304a]">Manual payment</h3>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {success.manualInstructions.channels.map((channel) => (
+                              <button
+                                key={channel.id}
+                                type="button"
+                                onClick={() => setManualMethod(channel.id)}
+                                className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${manualMethod === channel.id ? "border-[#2a76aa] bg-[#eaf5ff] text-[#22304a]" : "border-[#d7e5f2] bg-white text-[#38506a]"}`}
+                              >
+                                {channel.title}
+                              </button>
+                            ))}
                           </div>
-                          <div className="mt-3 space-y-2 text-sm text-[#6c5a39]">
-                            {success.manualInstructions.instructions.map((instruction, index) => <p key={index}>{index + 1}. {instruction}</p>)}
-                          </div>
+                          {(() => {
+                            const activeChannel = success.manualInstructions.channels.find((channel) => channel.id === manualMethod) ?? success.manualInstructions.channels[0];
+                            return (
+                              <>
+                                <div className="mt-3 rounded-2xl border border-[#cfe1f5] bg-[#eef6ff] px-4 py-3 text-sm leading-6 text-[#38506a]">
+                                  {success.manualInstructions.instructions.map((instruction, index) => (
+                                    <p key={index}>{instruction}</p>
+                                  ))}
+                                </div>
+                                <div className="mt-3 rounded-2xl border border-[#d7e5f2] bg-white px-4 py-4">
+                                  <p className="text-sm font-semibold text-[#22304a]">{activeChannel.badge}</p>
+                                  <div className="mt-3 space-y-3 text-sm text-[#38506a]">
+                                    {activeChannel.fields.map((field) => (
+                                      <div key={field.label} className="flex items-center justify-between gap-3">
+                                        <div>
+                                          <p className="text-xs font-semibold uppercase tracking-[0.1em] text-[#66758a]">{field.label}</p>
+                                          <p className="mt-1 font-medium text-[#22304a]">{field.value}</p>
+                                        </div>
+                                        <button type="button" onClick={() => copyToClipboard(field.value)} className="rounded-lg border border-[#cfe1f5] bg-[#f5fbff] px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                          Copy
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
+                          {success.manualInstructions.whatsapp ? (
+                            <div className="mt-3 rounded-2xl border border-[#f0d8b0] bg-[#fff5e4] px-4 py-3 text-sm text-[#8d5b22]">
+                              Got stuck in payment? Contact our support team on {success.manualInstructions.whatsapp}.
+                            </div>
+                          ) : null}
                           <div className="mt-4 space-y-3 rounded-2xl bg-white p-4">
                             <p className="text-sm font-semibold text-[#22304a]">Submit payment proof</p>
                             <input value={senderName} onChange={(event) => setSenderName(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Sender name" />
                             <input value={senderNumber} onChange={(event) => setSenderNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Sender number / account" />
-                            <input value={referenceKey} onChange={(event) => setReferenceKey(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Bank transfer reference" />
-                            <input value={screenshotUrl} onChange={(event) => setScreenshotUrl(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Proof screenshot URL" />
+                            <input value={referenceKey} onChange={(event) => setReferenceKey(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Transaction / reference ID" />
                             <textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="min-h-24 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Optional notes for admin review" />
                             {manualProofMessage ? <div className="rounded-2xl bg-[#effaf3] px-4 py-3 text-sm text-[#2f6b4b]">{manualProofMessage}</div> : null}
                             <button type="button" onClick={handleManualProofSubmit} disabled={isSubmittingProof} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmittingProof ? "Submitting proof..." : "Submit transfer proof"}</button>

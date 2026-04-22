@@ -3,6 +3,7 @@ import {
   DEFAULT_OFFERS,
   REGISTRATION_COUNTRIES,
   resolveCurrency,
+  resolveOfferAmount,
 } from "@/lib/registration/catalog";
 import type { RegistrationPayload } from "@/lib/registration/schema";
 
@@ -179,8 +180,11 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
           continue;
         }
 
-        const baseAmount =
-          currency === "PKR" ? offer.basePricePkr ?? offer.basePriceGbp : offer.basePriceGbp;
+        const baseAmount = resolveOfferAmount(
+          offer,
+          payload.selectedCountryCode,
+          currency,
+        );
         const itemDiscount = calculateDiscount(studentIndex, baseAmount);
         const finalAmount = baseAmount - itemDiscount;
 
