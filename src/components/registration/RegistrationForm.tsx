@@ -87,18 +87,66 @@ const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: 
   { value: "NAYAPAY", label: "NayaPay", description: "Will stay in review mode until NayaPay credentials are provided." },
 ];
 
-const PHONE_COUNTRIES: PhoneCountry[] = [
-  { code: "GB", name: "United Kingdom", flag: "🇬🇧", dialCode: "+44", currency: "GBP", gbpRate: 1 },
-  { code: "PK", name: "Pakistan", flag: "🇵🇰", dialCode: "+92", currency: "PKR", gbpRate: 350 },
-  { code: "IN", name: "India", flag: "🇮🇳", dialCode: "+91", currency: "INR", gbpRate: 104 },
-  { code: "BD", name: "Bangladesh", flag: "🇧🇩", dialCode: "+880", currency: "BDT", gbpRate: 149 },
-  { code: "AF", name: "Afghanistan", flag: "🇦🇫", dialCode: "+93", currency: "AFN", gbpRate: 97 },
-  { code: "AE", name: "United Arab Emirates", flag: "🇦🇪", dialCode: "+971", currency: "AED", gbpRate: 4.68 },
-  { code: "SA", name: "Saudi Arabia", flag: "🇸🇦", dialCode: "+966", currency: "SAR", gbpRate: 4.77 },
-  { code: "US", name: "United States", flag: "🇺🇸", dialCode: "+1", currency: "USD", gbpRate: 1.27 },
-  { code: "CA", name: "Canada", flag: "🇨🇦", dialCode: "+1", currency: "CAD", gbpRate: 1.72 },
-  { code: "AU", name: "Australia", flag: "🇦🇺", dialCode: "+61", currency: "AUD", gbpRate: 1.96 },
-];
+const DIAL_CODES: Record<string, string> = {
+  GB: "+44",
+  PK: "+92",
+  IN: "+91",
+  BD: "+880",
+  AF: "+93",
+  AE: "+971",
+  SA: "+966",
+  US: "+1",
+  CA: "+1",
+  AU: "+61",
+  NZ: "+64",
+  ZA: "+27",
+  IE: "+353",
+  FR: "+33",
+  DE: "+49",
+  IT: "+39",
+  ES: "+34",
+  NL: "+31",
+  BE: "+32",
+  SE: "+46",
+  NO: "+47",
+  DK: "+45",
+  CH: "+41",
+  AT: "+43",
+  TR: "+90",
+  QA: "+974",
+  KW: "+965",
+  BH: "+973",
+  OM: "+968",
+  MY: "+60",
+  SG: "+65",
+};
+
+const GBP_RATES: Record<string, number> = {
+  GBP: 1,
+  PKR: 350,
+  INR: 104,
+  BDT: 149,
+  AFN: 97,
+  AED: 4.68,
+  SAR: 4.77,
+  USD: 1.27,
+  CAD: 1.72,
+  AUD: 1.96,
+  EUR: 1.17,
+  TRY: 51,
+  ZAR: 24,
+  QAR: 4.63,
+  KWD: 0.39,
+  BHD: 0.48,
+  OMR: 0.49,
+  MYR: 5.98,
+  SGD: 1.72,
+  NZD: 2.1,
+  CHF: 1.1,
+  NOK: 13.6,
+  SEK: 13.2,
+  DKK: 8.8,
+};
 
 const emptyChild = (): ChildForm => ({ fullName: "", age: "", gender: "", selectedOfferSlugs: [] });
 
@@ -110,6 +158,12 @@ function splitName(fullName: string) {
 
 function formatMoney(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", { style: "currency", currency, maximumFractionDigits: 0 }).format(amount);
+}
+
+function flagFromCountryCode(code: string) {
+  return code
+    .toUpperCase()
+    .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
 }
 
 function getRegionalPrice(offer: Offer, phoneCountry: PhoneCountry): PriceBreakdown {
@@ -147,7 +201,7 @@ function sectionCard(children: React.ReactNode, extraClassName = "") {
   );
 }
 
-export function RegistrationForm({ offers, autoOpen = false }: Props) {
+export function RegistrationForm({ offers, countries, autoOpen = false }: Props) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(autoOpen);
   const [guardianFullName, setGuardianFullName] = useState("");
@@ -170,7 +224,20 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
   const [draft, setDraft] = useState<DraftResponse | null>(null);
   const [success, setSuccess] = useState<CheckoutResponse | null>(null);
 
-  const selectedPhoneCountry = PHONE_COUNTRIES.find((country) => country.code === selectedCountryCode) ?? PHONE_COUNTRIES[0];
+  const phoneCountries = useMemo<PhoneCountry[]>(
+    () =>
+      countries.map((country) => ({
+        code: country.code,
+        name: country.name,
+        flag: flagFromCountryCode(country.code),
+        dialCode: DIAL_CODES[country.code] ?? "",
+        currency: country.currency,
+        gbpRate: GBP_RATES[country.currency] ?? 1,
+      })),
+    [countries],
+  );
+
+  const selectedPhoneCountry = phoneCountries.find((country) => country.code === selectedCountryCode) ?? phoneCountries[0];
   const offerMap = useMemo(() => new Map(offers.map((offer) => [offer.slug, offer])), [offers]);
   const orderedOffers = useMemo(() => {
     const kindRank = { BUNDLE: 0, PAIR: 1, SINGLE: 2 };
@@ -379,9 +446,9 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
 
       {mounted && isOpen
         ? createPortal(
-        <div className="fixed inset-0 z-[400] overflow-hidden bg-[rgba(28,38,55,0.42)] px-4 py-6 backdrop-blur-[4px] sm:px-6 sm:py-10">
-          <div className="mx-auto flex h-full w-full max-w-[1140px] items-center justify-center">
-            <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-[26px] border border-[#ead9c5] bg-[#fffaf5] shadow-[0_32px_90px_rgba(16,28,43,0.28)]">
+        <div className="fixed inset-0 z-[400] overflow-hidden bg-[rgba(15,23,42,0.62)] px-4 py-6 backdrop-blur-[5px] sm:px-6 sm:py-10">
+          <div className="mx-auto flex h-full w-full max-w-[1020px] items-center justify-center">
+            <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-[24px] border border-[#ead9c5] bg-[#fffaf5] shadow-[0_34px_94px_rgba(8,15,30,0.34)]">
               <div className="flex items-center justify-between gap-5 border-b border-[#efdfcd] bg-[linear-gradient(135deg,#fff1df_0%,#fff7ee_55%,#fff3e4_100%)] px-5 py-4 sm:px-6">
                 <div className="inline-flex rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(243,159,95,0.22)]">
                   Gen-Mumins registration
@@ -397,17 +464,17 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
               </div>
 
               <form onSubmit={handleSubmit} className="overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.95fr)_320px] lg:items-start">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_300px] lg:items-start">
                   <div className="space-y-5">
                     {sectionCard(
                       <>
                         <h3 className="text-left text-lg font-semibold text-[#22304a]">Parent / Guardian information</h3>
                         <div className="mt-4 grid gap-4 md:grid-cols-2">
-                          <div className="md:col-span-2">
+                          <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Full name*</label>
                             <input value={guardianFullName} onChange={(event) => setGuardianFullName(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter full name" required />
                           </div>
-                          <div className="md:col-span-2">
+                          <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Email address*</label>
                             <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
                           </div>
@@ -418,13 +485,18 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Confirm password*</label>
                             <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Re-enter password" required />
+                            {confirmPassword ? (
+                              <p className={`mt-2 text-xs font-medium ${password === confirmPassword ? "text-[#2f6b4b]" : "text-[#b24c4c]"}`}>
+                                {password === confirmPassword ? "Passwords match." : "Passwords do not match."}
+                              </p>
+                            ) : null}
                           </div>
                           <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
-                            <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,1fr)]">
+                            <div className="grid gap-3 sm:grid-cols-[200px_minmax(0,280px)]">
                               <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-sm outline-none focus:border-[#f39f5f]">
-                                {PHONE_COUNTRIES.map((country) => (
-                                  <option key={country.code} value={country.code}>{country.flag} {country.name} ({country.dialCode})</option>
+                                {phoneCountries.map((country) => (
+                                  <option key={country.code} value={country.code}>{country.flag} {country.name} {country.dialCode ? `(${country.dialCode})` : ""}</option>
                                 ))}
                               </select>
                               <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
@@ -450,7 +522,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                             {children.length > 1 ? <button type="button" onClick={() => removeChild(index)} className="cursor-pointer text-sm font-semibold text-[#c45555]">Remove</button> : null}
                           </div>
 
-                          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.4fr)_120px_150px]">
+                          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.1fr)_110px_140px]">
                             <div>
                               <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Child full name</label>
                               <input value={child.fullName} onChange={(event) => updateChild(index, { fullName: event.target.value })} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter child full name" required />
