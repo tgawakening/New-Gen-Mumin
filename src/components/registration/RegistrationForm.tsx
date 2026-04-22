@@ -464,7 +464,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
               </div>
 
               <form onSubmit={handleSubmit} className="overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.55fr)_300px] lg:items-start">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.38fr)_360px] lg:items-start">
                   <div className="space-y-5">
                     {sectionCard(
                       <>
@@ -493,7 +493,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           </div>
                           <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
-                            <div className="grid gap-3 sm:grid-cols-[200px_minmax(0,280px)]">
+                            <div className="grid gap-3 sm:grid-cols-[185px_minmax(0,235px)]">
                               <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-sm outline-none focus:border-[#f39f5f]">
                                 {phoneCountries.map((country) => (
                                   <option key={country.code} value={country.code}>{country.flag} {country.name} {country.dialCode ? `(${country.dialCode})` : ""}</option>
@@ -522,7 +522,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             {children.length > 1 ? <button type="button" onClick={() => removeChild(index)} className="cursor-pointer text-sm font-semibold text-[#c45555]">Remove</button> : null}
                           </div>
 
-                          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.1fr)_110px_140px]">
+                          <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,0.95fr)_100px_130px]">
                             <div>
                               <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Child full name</label>
                               <input value={child.fullName} onChange={(event) => updateChild(index, { fullName: event.target.value })} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter child full name" required />
