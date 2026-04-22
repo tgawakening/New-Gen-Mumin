@@ -529,10 +529,6 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
                           </div>
                           <div>
-                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">City*</label>
-                            <input value={parentCity} onChange={(event) => setParentCity(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="City you are in" required />
-                          </div>
-                          <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Create password*</label>
                             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Minimum 8 characters" required />
                           </div>
@@ -545,7 +541,11 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               </p>
                             ) : null}
                           </div>
-                          <div className="md:col-span-2">
+                          <div>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">City*</label>
+                            <input value={parentCity} onChange={(event) => setParentCity(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="City you are in" required />
+                          </div>
+                          <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
                             <div className="grid gap-3 sm:grid-cols-[185px_minmax(0,235px)]">
                               <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-sm outline-none focus:border-[#f39f5f]">
@@ -555,33 +555,6 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               </select>
                               <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
                             </div>
-                          </div>
-                          <div>
-                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Prior knowledge of Arabic</label>
-                            <select value={priorArabicKnowledge} onChange={(event) => setPriorArabicKnowledge(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]">
-                              <option value="NONE">None</option>
-                              <option value="BEGINNER">Beginner</option>
-                              <option value="INTERMEDIATE">Intermediate</option>
-                              <option value="ADVANCED">Advanced</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">How they heard about Gen M*</label>
-                            <select value={heardAboutGenM} onChange={(event) => setHeardAboutGenM(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" required>
-                              <option value="">Select an option</option>
-                              <option value="Friends and family">Friends and family</option>
-                              <option value="Introductory session">Introductory session</option>
-                              <option value="Youthlink">Youthlink</option>
-                              <option value="School of Islam">School of Islam</option>
-                              <option value="TGA community">TGA community</option>
-                            </select>
-                          </div>
-                          <div className="md:col-span-2">
-                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">What they hope to get from it</label>
-                            <textarea value={hopesFromProgram} onChange={(event) => setHopesFromProgram(event.target.value)} maxLength={400} className="min-h-24 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Maximum 50 words" />
-                            <p className={`mt-2 text-xs ${hopesFromProgram.trim().split(/\s+/).filter(Boolean).length <= 50 ? "text-[#657284]" : "text-[#b24c4c]"}`}>
-                              {hopesFromProgram.trim() ? `${hopesFromProgram.trim().split(/\s+/).filter(Boolean).length}/50 words` : "Maximum 50 words"}
-                            </p>
                           </div>
                         </div>
                       </>,
@@ -662,6 +635,41 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                         </div>
                       ))}
                     </section>
+
+                    {sectionCard(
+                      <>
+                        <h3 className="text-left text-lg font-semibold text-[#22304a]">A little more about your family</h3>
+                        <div className="mt-4 grid gap-4 md:grid-cols-2">
+                          <div>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Prior knowledge of Arabic</label>
+                            <select value={priorArabicKnowledge} onChange={(event) => setPriorArabicKnowledge(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]">
+                              <option value="NONE">None</option>
+                              <option value="BEGINNER">Beginner</option>
+                              <option value="INTERMEDIATE">Intermediate</option>
+                              <option value="ADVANCED">Advanced</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">How they heard about Gen M*</label>
+                            <select value={heardAboutGenM} onChange={(event) => setHeardAboutGenM(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" required>
+                              <option value="">Select an option</option>
+                              <option value="Friends and family">Friends and family</option>
+                              <option value="Introductory session">Introductory session</option>
+                              <option value="Youthlink">Youthlink</option>
+                              <option value="School of Islam">School of Islam</option>
+                              <option value="TGA community">TGA community</option>
+                            </select>
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">What they hope to get from it</label>
+                            <textarea value={hopesFromProgram} onChange={(event) => setHopesFromProgram(event.target.value)} maxLength={400} className="min-h-24 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Maximum 50 words" />
+                            <p className={`mt-2 text-xs ${hopesFromProgram.trim().split(/\s+/).filter(Boolean).length <= 50 ? "text-[#657284]" : "text-[#b24c4c]"}`}>
+                              {hopesFromProgram.trim() ? `${hopesFromProgram.trim().split(/\s+/).filter(Boolean).length}/50 words` : "Maximum 50 words"}
+                            </p>
+                          </div>
+                        </div>
+                      </>,
+                    )}
                   </div>
 
                   <aside className="space-y-5">
