@@ -372,12 +372,12 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       </button>
 
       {isOpen ? (
-        <div className="fixed inset-0 z-[320] overflow-hidden bg-[rgba(27,45,70,0.28)] px-4 py-6 backdrop-blur-[2px] sm:px-6 sm:py-10">
-          <div className="mx-auto flex h-full w-full max-w-[1240px] items-center justify-center">
-            <div className="w-full overflow-hidden rounded-[30px] border border-[#eedecb] bg-[#fffaf4] shadow-[0_30px_90px_rgba(24,33,48,0.22)]">
-              <div className="flex items-center justify-between gap-5 border-b border-[#efdfcd] bg-[linear-gradient(135deg,#fff5e8_0%,#fffaf4_50%,#f7ede0_100%)] px-5 py-4 sm:px-7">
-                <div className="inline-flex rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(243,159,95,0.24)]">
-                  Enroll now
+        <div className="fixed inset-0 z-[400] overflow-hidden bg-[rgba(28,38,55,0.42)] px-4 py-6 backdrop-blur-[4px] sm:px-6 sm:py-10">
+          <div className="mx-auto flex h-full w-full max-w-[1140px] items-center justify-center">
+            <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-[26px] border border-[#ead9c5] bg-[#fffaf5] shadow-[0_32px_90px_rgba(16,28,43,0.28)]">
+              <div className="flex items-center justify-between gap-5 border-b border-[#efdfcd] bg-[linear-gradient(135deg,#fff1df_0%,#fff7ee_55%,#fff3e4_100%)] px-5 py-4 sm:px-6">
+                <div className="inline-flex rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(243,159,95,0.22)]">
+                  Gen-Mumins registration
                 </div>
                 <button
                   type="button"
@@ -389,8 +389,8 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="max-h-[calc(100vh-8rem)] overflow-y-auto px-4 py-4 sm:px-6 sm:py-6 lg:px-7 lg:py-7">
-                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.8fr)_340px] lg:items-start">
+              <form onSubmit={handleSubmit} className="overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+                <div className="grid gap-5 lg:grid-cols-[minmax(0,1.95fr)_320px] lg:items-start">
                   <div className="space-y-5">
                     {sectionCard(
                       <>
@@ -504,7 +504,7 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
                     </section>
                   </div>
 
-                  <aside className="space-y-5 lg:sticky lg:top-0">
+                  <aside className="space-y-5">
                     {sectionCard(
                       <>
                         <div className="flex items-center justify-between gap-3 border-b border-[#f0e2d2] pb-3">
