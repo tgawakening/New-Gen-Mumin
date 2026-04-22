@@ -1,7 +1,7 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { db } from "@/lib/db";
-import { getManualBankDetails } from "@/lib/payments/config";
+import { getManualPaymentDetails } from "@/lib/payments/config";
 import { createPayPalSubscription } from "@/lib/payments/paypal";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
 import type { RegistrationCheckoutPayload } from "@/lib/registration/payment-schema";
@@ -106,7 +106,7 @@ export async function createCheckoutDraft(
 
     let checkoutUrl: string | null = null;
     let providerReference: string | null = null;
-    let manualInstructions: ReturnType<typeof getManualBankDetails> | null = null;
+    let manualInstructions: ReturnType<typeof getManualPaymentDetails> | null = null;
 
     if (payload.gateway === "STRIPE") {
       const session = await createStripeCheckoutSession({
@@ -190,15 +190,7 @@ export async function createCheckoutDraft(
         },
       });
     } else if (payload.gateway === "BANK_TRANSFER") {
-      manualInstructions = getManualBankDetails();
-    } else if (payload.gateway === "NAYAPAY") {
-      await tx.paymentTransaction.update({
-        where: { id: payment.id },
-        data: {
-          status: "REQUIRES_ACTION",
-          failureReason: "NayaPay credentials are not configured yet.",
-        },
-      });
+      manualInstructions = getManualPaymentDetails();
     }
 
     await tx.registration.update({
@@ -223,10 +215,8 @@ export async function createCheckoutDraft(
       manualInstructions,
       nextStep:
         payload.gateway === "BANK_TRANSFER"
-          ? "Submit the transfer proof for manual verification."
-          : payload.gateway === "NAYAPAY"
-            ? "NayaPay configuration is still pending."
-            : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
+          ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
+          : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
     };
   });
 }
@@ -237,7 +227,7 @@ export async function submitManualPaymentProof(
     senderName: string;
     senderNumber: string;
     referenceKey: string;
-    screenshotUrl?: string;
+    manualMethod?: string;
     notes?: string;
   },
 ) {
@@ -249,8 +239,12 @@ export async function submitManualPaymentProof(
   });
 
   if (!payment || payment.gateway !== "BANK_TRANSFER") {
-    throw new Error("Manual bank transfer payment not found.");
+    throw new Error("Manual payment record not found.");
   }
+
+  const notes = [payload.manualMethod ? `Manual method: ${payload.manualMethod}` : null, payload.notes || null]
+    .filter(Boolean)
+    .join("\n");
 
   const submission = await db.manualPaymentSubmission.upsert({
     where: { paymentTransactionId: paymentId },
@@ -258,8 +252,8 @@ export async function submitManualPaymentProof(
       senderName: payload.senderName,
       senderNumber: payload.senderNumber,
       referenceKey: payload.referenceKey,
-      screenshotUrl: payload.screenshotUrl || null,
-      notes: payload.notes || null,
+      screenshotUrl: null,
+      notes: notes || null,
       submittedAt: new Date(),
     },
     create: {
@@ -268,8 +262,8 @@ export async function submitManualPaymentProof(
       senderName: payload.senderName,
       senderNumber: payload.senderNumber,
       referenceKey: payload.referenceKey,
-      screenshotUrl: payload.screenshotUrl || null,
-      notes: payload.notes || null,
+      screenshotUrl: null,
+      notes: notes || null,
     },
   });
 
@@ -278,6 +272,9 @@ export async function submitManualPaymentProof(
     data: {
       status: "UNDER_REVIEW",
       providerReference: payload.referenceKey,
+      rawPayload: {
+        manualMethod: payload.manualMethod ?? "BANK_TRANSFER",
+      },
     },
   });
 
@@ -300,4 +297,3 @@ export async function submitManualPaymentProof(
 
   return submission;
 }
-
