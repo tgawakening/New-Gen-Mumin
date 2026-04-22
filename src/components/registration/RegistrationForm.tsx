@@ -238,10 +238,14 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [isOpen, setIsOpen] = useState(autoOpen);
   const [guardianFullName, setGuardianFullName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
+  const [parentCity, setParentCity] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("GB");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [priorArabicKnowledge, setPriorArabicKnowledge] = useState("NONE");
+  const [heardAboutGenM, setHeardAboutGenM] = useState("");
+  const [hopesFromProgram, setHopesFromProgram] = useState("");
   const [children, setChildren] = useState<ChildForm[]>([emptyChild()]);
   const [selectedGateway, setSelectedGateway] = useState<PaymentValue>("STRIPE");
   const [manualMethod, setManualMethod] = useState<"BANK_TRANSFER" | "JAZZCASH">("BANK_TRANSFER");
@@ -317,10 +321,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   }, [success]);
 
   const isFormReadyForPayment = useMemo(() => {
-    if (!guardianFullName.trim() || !parentEmail.trim() || !phoneNumber.trim() || password.length < 8 || confirmPassword.length < 8) return false;
+    if (!guardianFullName.trim() || !parentEmail.trim() || !parentCity.trim() || !phoneNumber.trim() || password.length < 8 || confirmPassword.length < 8) return false;
     if (password !== confirmPassword) return false;
+    if (!heardAboutGenM.trim()) return false;
+    if (hopesFromProgram.trim().split(/\s+/).filter(Boolean).length > 50) return false;
     return children.every((child) => child.fullName.trim() && child.age.trim() && child.gender.trim() && child.selectedOfferSlugs.length > 0);
-  }, [children, confirmPassword, guardianFullName, parentEmail, password, phoneNumber]);
+  }, [children, confirmPassword, guardianFullName, heardAboutGenM, hopesFromProgram, parentCity, parentEmail, password, phoneNumber]);
 
   const summary = useMemo(() => {
     const lines: Array<{ childLabel: string; offerTitle: string; price: PriceBreakdown; multiChildDiscount: number }> = [];
@@ -374,8 +380,20 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       return;
     }
 
+    if (hopesFromProgram.trim().split(/\s+/).filter(Boolean).length > 50) {
+      setError("What they hope to get from Gen-M must stay within 50 words.");
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const { firstName, lastName } = splitName(guardianFullName);
+      const registrationNotes = [
+        `City: ${parentCity}`,
+        `Prior knowledge of Arabic: ${priorArabicKnowledge}`,
+        `How they heard about Gen M: ${heardAboutGenM}`,
+        `What they hope to get from it: ${hopesFromProgram.trim()}`,
+      ].join("\n");
       const signupResponse = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -409,7 +427,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
           whatsappNumber: "",
           selectedCountryCode: selectedPhoneCountry.code,
           selectedCountryName: selectedPhoneCountry.name,
-          notes: "",
+          notes: registrationNotes,
           students: children.map((child) => {
             const childName = splitName(child.fullName);
             return {
@@ -511,6 +529,10 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
                           </div>
                           <div>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">City*</label>
+                            <input value={parentCity} onChange={(event) => setParentCity(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="City you are in" required />
+                          </div>
+                          <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Create password*</label>
                             <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Minimum 8 characters" required />
                           </div>
@@ -533,6 +555,33 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               </select>
                               <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
                             </div>
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Prior knowledge of Arabic</label>
+                            <select value={priorArabicKnowledge} onChange={(event) => setPriorArabicKnowledge(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]">
+                              <option value="NONE">None</option>
+                              <option value="BEGINNER">Beginner</option>
+                              <option value="INTERMEDIATE">Intermediate</option>
+                              <option value="ADVANCED">Advanced</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">How they heard about Gen M*</label>
+                            <select value={heardAboutGenM} onChange={(event) => setHeardAboutGenM(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" required>
+                              <option value="">Select an option</option>
+                              <option value="Friends and family">Friends and family</option>
+                              <option value="Introductory session">Introductory session</option>
+                              <option value="Youthlink">Youthlink</option>
+                              <option value="School of Islam">School of Islam</option>
+                              <option value="TGA community">TGA community</option>
+                            </select>
+                          </div>
+                          <div className="md:col-span-2">
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">What they hope to get from it</label>
+                            <textarea value={hopesFromProgram} onChange={(event) => setHopesFromProgram(event.target.value)} maxLength={400} className="min-h-24 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Maximum 50 words" />
+                            <p className={`mt-2 text-xs ${hopesFromProgram.trim().split(/\s+/).filter(Boolean).length <= 50 ? "text-[#657284]" : "text-[#b24c4c]"}`}>
+                              {hopesFromProgram.trim() ? `${hopesFromProgram.trim().split(/\s+/).filter(Boolean).length}/50 words` : "Maximum 50 words"}
+                            </p>
                           </div>
                         </div>
                       </>,

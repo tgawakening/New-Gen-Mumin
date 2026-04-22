@@ -18,7 +18,7 @@ export const registrationPayloadSchema = z.object({
   whatsappNumber: z.string().trim().optional().or(z.literal("")),
   selectedCountryCode: z.string().trim().min(2).max(2),
   selectedCountryName: z.string().trim().min(2),
-  notes: z.string().trim().max(500).optional().or(z.literal("")),
+  notes: z.string().trim().max(1200).optional().or(z.literal("")),
   students: z.array(registrationStudentSchema).min(1).max(6),
 });
 
