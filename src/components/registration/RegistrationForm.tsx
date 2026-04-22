@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 type Offer = {
   slug: string;
@@ -147,6 +148,7 @@ function sectionCard(children: React.ReactNode, extraClassName = "") {
 }
 
 export function RegistrationForm({ offers, autoOpen = false }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(autoOpen);
   const [guardianFullName, setGuardianFullName] = useState("");
   const [parentEmail, setParentEmail] = useState("");
@@ -178,6 +180,10 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
       return left.basePriceGbp - right.basePriceGbp || left.title.localeCompare(right.title);
     });
   }, [offers]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (autoOpen) setIsOpen(true);
@@ -371,7 +377,8 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
         Enroll now
       </button>
 
-      {isOpen ? (
+      {mounted && isOpen
+        ? createPortal(
         <div className="fixed inset-0 z-[400] overflow-hidden bg-[rgba(28,38,55,0.42)] px-4 py-6 backdrop-blur-[4px] sm:px-6 sm:py-10">
           <div className="mx-auto flex h-full w-full max-w-[1140px] items-center justify-center">
             <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-[26px] border border-[#ead9c5] bg-[#fffaf5] shadow-[0_32px_90px_rgba(16,28,43,0.28)]">
@@ -613,7 +620,10 @@ export function RegistrationForm({ offers, autoOpen = false }: Props) {
             </div>
           </div>
         </div>
-      ) : null}
+          ,
+          document.body,
+        )
+        : null}
     </>
   );
 }
