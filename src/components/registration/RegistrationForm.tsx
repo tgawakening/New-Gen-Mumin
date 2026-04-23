@@ -541,11 +541,11 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               </p>
                             ) : null}
                           </div>
-                          <div>
+                          <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">City*</label>
                             <input value={parentCity} onChange={(event) => setParentCity(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="City you are in" required />
                           </div>
-                          <div>
+                          <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
                             <div className="grid gap-3 sm:grid-cols-[185px_minmax(0,235px)]">
                               <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-sm outline-none focus:border-[#f39f5f]">
