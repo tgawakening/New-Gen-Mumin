@@ -1,4 +1,12 @@
-﻿import { db } from "@/lib/db";
+import { db } from "@/lib/db";
+
+function extractNoteValue(notes: string | null | undefined, label: string) {
+  if (!notes) return null;
+  const line = notes
+    .split("\n")
+    .find((entry) => entry.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return line ? line.split(":").slice(1).join(":").trim() : null;
+}
 
 export async function getAdminDashboardData() {
   const [
@@ -79,3 +87,23 @@ export async function getAdminDashboardData() {
   };
 }
 
+export async function getExternalAdminOverview() {
+  const data = await getAdminDashboardData();
+
+  return {
+    metrics: data.metrics,
+    recentRegistrations: data.recentRegistrations.map((registration) => ({
+      id: registration.id,
+      parentName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
+      parentEmail: registration.parentEmail,
+      status: registration.status,
+      currency: registration.selectedCurrency,
+      totalAmount: registration.totalAmount,
+      studentCount: registration.students.length,
+      createdAt: registration.createdAt,
+      country: registration.selectedCountryName,
+      source: extractNoteValue(registration.notes, "Source"),
+      referrer: extractNoteValue(registration.notes, "Referrer"),
+    })),
+  };
+}

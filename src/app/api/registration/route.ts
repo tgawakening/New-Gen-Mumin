@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import {
+  sendAdminNewEnrollmentEmail,
+  sendEnrollmentConfirmationEmail,
+} from "@/lib/email/notifications";
 import { createRegistrationDraft } from "@/lib/registration/service";
 import { registrationPayloadSchema } from "@/lib/registration/schema";
 
@@ -7,6 +11,26 @@ export async function POST(request: Request) {
   try {
     const payload = registrationPayloadSchema.parse(await request.json());
     const registration = await createRegistrationDraft(payload);
+
+    await Promise.all([
+      sendEnrollmentConfirmationEmail({
+        toEmail: registration.parentEmail,
+        parentName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
+        registrationId: registration.id,
+        totalAmount: registration.totalAmount,
+        currency: registration.selectedCurrency,
+        studentCount: registration.students.length,
+      }),
+      sendAdminNewEnrollmentEmail({
+        parentName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
+        parentEmail: registration.parentEmail,
+        registrationId: registration.id,
+        totalAmount: registration.totalAmount,
+        currency: registration.selectedCurrency,
+        studentCount: registration.students.length,
+        country: registration.selectedCountryName ?? "Not provided",
+      }),
+    ]);
 
     return NextResponse.json({
       registrationId: registration.id,

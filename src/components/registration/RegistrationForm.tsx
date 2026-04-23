@@ -246,6 +246,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [priorArabicKnowledge, setPriorArabicKnowledge] = useState("NONE");
   const [heardAboutGenM, setHeardAboutGenM] = useState("");
   const [hopesFromProgram, setHopesFromProgram] = useState("");
+  const [sourceTag, setSourceTag] = useState("");
+  const [referrerUrl, setReferrerUrl] = useState("");
   const [children, setChildren] = useState<ChildForm[]>([emptyChild()]);
   const [selectedGateway, setSelectedGateway] = useState<PaymentValue>("STRIPE");
   const [manualMethod, setManualMethod] = useState<"BANK_TRANSFER" | "JAZZCASH">("BANK_TRANSFER");
@@ -291,6 +293,19 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   useEffect(() => {
     if (autoOpen) setIsOpen(true);
   }, [autoOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const source = params.get("source");
+    const referrer = document.referrer;
+
+    if (source) setSourceTag(source);
+    if (referrer) setReferrerUrl(referrer);
+    if (!source && referrer.includes("tga-awakening.com")) {
+      setSourceTag("tga-projects-gen-mumin");
+    }
+  }, []);
 
   useEffect(() => {
     const bundleOffer = orderedOffers.find((offer) => offer.kind === "BUNDLE");
@@ -393,6 +408,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         `Prior knowledge of Arabic: ${priorArabicKnowledge}`,
         `How they heard about Gen M: ${heardAboutGenM}`,
         `What they hope to get from it: ${hopesFromProgram.trim()}`,
+        sourceTag ? `Source: ${sourceTag}` : "",
+        referrerUrl ? `Referrer: ${referrerUrl}` : "",
       ].join("\n");
       const signupResponse = await fetch("/api/auth/signup", {
         method: "POST",
