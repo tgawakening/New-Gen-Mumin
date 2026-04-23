@@ -1,0 +1,906 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  PARENT
+  STUDENT
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  SUSPENDED
+}
+
+enum ProgramStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum OfferKind {
+  SINGLE
+  PAIR
+  BUNDLE
+}
+
+enum RegistrationStatus {
+  DRAFT
+  SUBMITTED
+  PENDING_PAYMENT
+  PAYMENT_REVIEW
+  PAID
+  CONVERTED
+  CANCELLED
+  EXPIRED
+}
+
+enum EnrollmentStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum QuizType {
+  PRE_LESSON
+  POST_LESSON
+}
+
+enum QuestionType {
+  MCQ
+  MULTIPLE_SELECT
+  TRUE_FALSE
+  SHORT_ANSWER
+  FILL_IN_BLANK
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  REVIEWED
+}
+
+enum GradeLevel {
+  EXCELLENT
+  GOOD
+  SATISFACTORY
+  NEEDS_IMPROVEMENT
+}
+
+enum PaymentGateway {
+  STRIPE
+  PAYPAL
+  NAYAPAY
+  BANK_TRANSFER
+  SCHOLARSHIP
+  FREE
+}
+
+enum PaymentStatus {
+  INITIATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  UNDER_REVIEW
+  REQUIRES_ACTION
+  REFUNDED
+}
+
+enum SubscriptionStatus {
+  INCOMPLETE
+  ACTIVE
+  PAST_DUE
+  PAUSED
+  CANCELLED
+}
+
+enum ScholarshipStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MessageStatus {
+  NEW
+  READ
+  REPLIED
+  ARCHIVED
+}
+
+enum ReminderType {
+  PAYMENT
+  RENEWAL
+}
+
+model User {
+  id               String      @id @default(cuid())
+  email            String      @unique
+  passwordHash     String?
+  role             UserRole
+  status           UserStatus  @default(INVITED)
+  firstName        String
+  lastName         String
+  phoneCountryCode String?
+  phoneNumber      String?
+  timezone         String?     @default("Europe/London")
+  avatarUrl        String?
+  emailVerifiedAt  DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  parentProfile     ParentProfile?
+  studentProfile    StudentProfile?
+  teacherProfile    TeacherProfile?
+  adminProfile      AdminProfile?
+  sessions          Session[]
+  programsCreated   Program[]              @relation("ProgramCreatedBy")
+  schedulesCreated  ClassSchedule[]        @relation("ScheduleCreatedBy")
+  lessonLogs        LessonLog[]
+  attendancesMarked AttendanceRecord[]     @relation("AttendanceMarkedBy")
+  quizAttempts      QuizAttempt[]
+  assignmentReviews AssignmentSubmission[] @relation("AssignmentReviewedBy")
+  journalReviews    JournalEntry[]         @relation("JournalReviewedBy")
+  notifications     Notification[]
+  emailLogs         EmailLog[]
+}
+
+model ParentProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  billingCountryCode String?
+  billingCountryName String?
+  preferredCurrency  String?  @default("GBP")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  students      ParentStudent[]
+  registrations Registration[]
+  enrollments   Enrollment[]
+  orders        Order[]
+}
+
+model ParentStudent {
+  id        String   @id @default(cuid())
+  parentId  String
+  studentId String
+  relation  String?
+  createdAt DateTime @default(now())
+
+  parent  ParentProfile  @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, studentId])
+}
+
+model StudentProfile {
+  id                     String   @id @default(cuid())
+  userId                 String   @unique
+  displayName            String?
+  dateOfBirth            DateTime?
+  age                    Int?
+  countryCode            String?
+  countryName            String?
+  currentGrade           String?
+  learningNotes          String?
+  onboardingCompleted    Boolean  @default(false)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parents                 ParentStudent[]
+  registrationStudents    RegistrationStudent[]
+  enrollments             Enrollment[]
+  attendances             AttendanceRecord[]
+  quizAttempts            QuizAttempt[]
+  assignments             AssignmentSubmission[]
+  journalEntries          JournalEntry[]
+  progressReports         ProgressReport[]
+  scholarshipApplications ScholarshipApplication[]
+}
+
+model TeacherProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  bio         String?
+  specialties Json?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programAssignments TeacherProgram[]
+  classSchedules     ClassSchedule[]
+}
+
+model TeacherProgram {
+  id        String   @id @default(cuid())
+  teacherId String
+  programId String
+  createdAt DateTime @default(now())
+
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  program Program        @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, programId])
+}
+
+model AdminProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  sessionToken String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model Program {
+  id               String        @id @default(cuid())
+  slug             String        @unique
+  title            String
+  shortDescription String?
+  description      String?
+  monthlyPriceGbp  Int
+  monthlyPricePkr  Int?
+  status           ProgramStatus @default(DRAFT)
+  isBundle         Boolean       @default(false)
+  sortOrder        Int           @default(0)
+  createdByUserId  String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  createdBy          User?            @relation("ProgramCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  offerPrograms      OfferProgram[]
+  teacherAssignments TeacherProgram[]
+  schedules          ClassSchedule[]
+  enrollments        Enrollment[]
+  quizzes            Quiz[]
+  assignments        Assignment[]
+  progressReports    ProgressReport[]
+}
+
+model Offer {
+  id                      String   @id @default(cuid())
+  slug                    String   @unique
+  title                   String
+  description             String?
+  kind                    OfferKind
+  billingInterval         String   @default("MONTHLY")
+  basePriceGbp            Int
+  basePricePkr            Int?
+  isActive                Boolean  @default(true)
+  sortOrder               Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  programs                OfferProgram[]
+  pricingRules            PricingRule[]
+  coupons                 Coupon[]
+  scholarshipApplications ScholarshipApplication[]
+  registrationItems       RegistrationItem[]
+  orderItems              OrderItem[]
+}
+
+model OfferProgram {
+  id        String   @id @default(cuid())
+  offerId   String
+  programId String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  offer   Offer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  program Program @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, programId])
+}
+
+model PricingRule {
+  id               String   @id @default(cuid())
+  offerId          String
+  countryCode      String?
+  countryName      String?
+  currency         String
+  amount           Int
+  compareAtAmount  Int?
+  isDefault        Boolean  @default(false)
+  isSouthAsiaPrice Boolean  @default(false)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+
+  @@index([offerId, currency, countryCode])
+}
+
+model Coupon {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  offerId         String?
+  discountPercent Int?     @db.SmallInt
+  discountAmount  Int?
+  currency        String?
+  maxRedemptions  Int?
+  redemptionCount Int      @default(0)
+  startsAt        DateTime?
+  endsAt          DateTime?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  offer         Offer?         @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  registrations Registration[]
+
+  @@index([offerId, isActive])
+}
+
+model AcademicTerm {
+  id        String   @id @default(cuid())
+  title     String
+  startDate DateTime
+  endDate   DateTime
+  isActive  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  schedules ClassSchedule[]
+}
+
+model ClassSchedule {
+  id                String   @id @default(cuid())
+  programId         String
+  teacherId         String
+  termId            String?
+  createdByUserId   String?
+  title             String
+  timezone          String   @default("Europe/London")
+  weekday           Int
+  startTime         String
+  endTime           String
+  meetingProvider   String?
+  meetingUrl        String?
+  meetingId         String?
+  recurringSeriesId String?
+  startsOn          DateTime?
+  endsOn            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  program     Program          @relation(fields: [programId], references: [id], onDelete: Cascade)
+  teacher     TeacherProfile   @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  term        AcademicTerm?    @relation(fields: [termId], references: [id], onDelete: SetNull)
+  createdBy   User?            @relation("ScheduleCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  attendances AttendanceRecord[]
+  lessonLogs  LessonLog[]
+}
+
+model Registration {
+  id                  String             @id @default(cuid())
+  parentProfileId     String?
+  scholarshipId       String?
+  couponId            String?
+  status              RegistrationStatus @default(DRAFT)
+  parentEmail         String
+  parentFirstName     String
+  parentLastName      String
+  phoneCountryCode    String?
+  phoneNumber         String?
+  whatsappNumber      String?
+  selectedCountryCode String?
+  selectedCountryName String?
+  selectedCurrency    String             @default("GBP")
+  paymentGateway      PaymentGateway?
+  subtotalAmount      Int                @default(0)
+  discountAmount      Int                @default(0)
+  totalAmount         Int                @default(0)
+  pricingSnapshot     Json?
+  notes               String?
+  submittedAt         DateTime?
+  convertedAt         DateTime?
+  expiresAt           DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  parentProfile ParentProfile?          @relation(fields: [parentProfileId], references: [id], onDelete: SetNull)
+  scholarship   ScholarshipApplication? @relation(fields: [scholarshipId], references: [id], onDelete: SetNull)
+  coupon        Coupon?                 @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  students      RegistrationStudent[]
+  items         RegistrationItem[]
+  order         Order?
+  reminders     ReminderLog[]
+
+  @@index([parentEmail, status])
+  @@index([parentProfileId, createdAt])
+}
+
+model RegistrationStudent {
+  id                   String   @id @default(cuid())
+  registrationId       String
+  studentProfileId     String?
+  firstName            String
+  lastName             String?
+  displayName          String?
+  dateOfBirth          DateTime?
+  age                  Int?
+  gender               String?
+  countryCode          String?
+  countryName          String?
+  timezone             String?  @default("Europe/London")
+  needsArabicPlacement Boolean  @default(false)
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  registration   Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile? @relation(fields: [studentProfileId], references: [id], onDelete: SetNull)
+  items          RegistrationItem[]
+
+  @@index([registrationId, createdAt])
+}
+
+model RegistrationItem {
+  id                    String   @id @default(cuid())
+  registrationId        String
+  registrationStudentId String
+  offerId               String
+  scholarshipPercent    Int?     @db.SmallInt
+  baseAmount            Int
+  discountAmount        Int      @default(0)
+  finalAmount           Int
+  currency              String
+  pricingSnapshot       Json?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  registration        Registration        @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  registrationStudent RegistrationStudent @relation(fields: [registrationStudentId], references: [id], onDelete: Cascade)
+  offer               Offer               @relation(fields: [offerId], references: [id], onDelete: Restrict)
+  enrollments         Enrollment[]
+  orderItems          OrderItem[]
+
+  @@index([registrationId, registrationStudentId])
+}
+
+model Enrollment {
+  id                   String           @id @default(cuid())
+  studentId            String
+  parentId             String
+  programId            String
+  registrationItemId   String?          @unique
+  status               EnrollmentStatus @default(PENDING)
+  scholarshipPercent   Int?             @db.SmallInt
+  startedAt            DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  student               StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent                ParentProfile     @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  program               Program           @relation(fields: [programId], references: [id], onDelete: Restrict)
+  registrationItem      RegistrationItem? @relation(fields: [registrationItemId], references: [id], onDelete: SetNull)
+  orderItems            OrderItem[]
+  attendanceRecords     AttendanceRecord[]
+  assignmentSubmissions AssignmentSubmission[]
+  journalEntries        JournalEntry[]
+
+  @@unique([studentId, programId])
+  @@index([parentId, status])
+}
+
+model AttendanceRecord {
+  id             String   @id @default(cuid())
+  enrollmentId   String
+  studentId      String
+  scheduleId     String?
+  lessonDate     DateTime
+  status         AttendanceStatus
+  note           String?
+  markedByUserId String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  enrollment Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  schedule   ClassSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  markedBy   User?          @relation("AttendanceMarkedBy", fields: [markedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([studentId, lessonDate])
+}
+
+model LessonLog {
+  id            String   @id @default(cuid())
+  scheduleId    String
+  teacherUserId String
+  lessonDate    DateTime
+  topic         String
+  summary       String
+  homework      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  schedule ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  teacher  User          @relation(fields: [teacherUserId], references: [id], onDelete: Restrict)
+}
+
+model Quiz {
+  id               String   @id @default(cuid())
+  programId        String
+  title            String
+  description      String?
+  type             QuizType
+  isPublished      Boolean  @default(false)
+  timeLimitSeconds Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  program   Program        @relation(fields: [programId], references: [id], onDelete: Cascade)
+  questions QuizQuestion[]
+  attempts  QuizAttempt[]
+}
+
+model QuizQuestion {
+  id        String   @id @default(cuid())
+  quizId    String
+  prompt    String
+  type      QuestionType
+  points    Int      @default(1)
+  sortOrder Int      @default(0)
+  answerKey Json?
+  meta      Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+}
+
+model QuizAttempt {
+  id            String   @id @default(cuid())
+  quizId        String
+  studentId     String
+  teacherUserId String?
+  attemptNumber Int      @default(1)
+  startedAt     DateTime @default(now())
+  submittedAt   DateTime?
+  autoScore     Int?
+  manualScore   Int?
+  feedback      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  quiz    Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher User?          @relation(fields: [teacherUserId], references: [id], onDelete: SetNull)
+  answers QuizAnswer[]
+
+  @@index([studentId, submittedAt])
+}
+
+model QuizAnswer {
+  id           String   @id @default(cuid())
+  attemptId    String
+  questionId   String
+  answer       Json
+  isCorrect    Boolean?
+  earnedPoints Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attempt QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+}
+
+model Assignment {
+  id           String   @id @default(cuid())
+  programId    String
+  title        String
+  instructions String?
+  dueDate      DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  program     Program                @relation(fields: [programId], references: [id], onDelete: Cascade)
+  submissions AssignmentSubmission[]
+}
+
+model AssignmentSubmission {
+  id               String           @id @default(cuid())
+  assignmentId     String
+  enrollmentId     String
+  studentId        String
+  status           SubmissionStatus @default(DRAFT)
+  submissionText   String?
+  attachmentUrl    String?
+  grade            GradeLevel?
+  score            Int?
+  reviewedByUserId String?
+  feedback         String?
+  submittedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  assignment Assignment     @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  enrollment Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reviewedBy User?          @relation("AssignmentReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+}
+
+model JournalEntry {
+  id               String           @id @default(cuid())
+  enrollmentId     String
+  studentId        String
+  title            String
+  reflection       String
+  practiceMinutes  Int              @default(0)
+  selfRating       GradeLevel?
+  teacherFeedback  String?
+  reviewedByUserId String?
+  status           SubmissionStatus @default(SUBMITTED)
+  submittedAt      DateTime         @default(now())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  enrollment Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  reviewedBy User?          @relation("JournalReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+}
+
+model ProgressReport {
+  id            String   @id @default(cuid())
+  studentId     String
+  programId     String
+  reportPeriod  String
+  attendancePct Int?
+  grade         GradeLevel?
+  strengths     String?
+  nextSteps     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  program Program        @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, programId, reportPeriod])
+}
+
+model Order {
+  id                String        @id @default(cuid())
+  parentId          String
+  registrationId    String?       @unique
+  orderNumber       String        @unique
+  gateway           PaymentGateway
+  currency          String
+  subtotalAmount    Int
+  discountAmount    Int           @default(0)
+  totalAmount       Int
+  status            PaymentStatus @default(INITIATED)
+  providerOrderId   String?       @unique
+  providerReference String?
+  paidAt            DateTime?
+  metadata          Json?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  parent       ParentProfile       @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  registration Registration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  items        OrderItem[]
+  payments     PaymentTransaction[]
+  reminders    ReminderLog[]
+}
+
+model OrderItem {
+  id                 String   @id @default(cuid())
+  orderId            String
+  enrollmentId       String?
+  registrationItemId String?
+  offerId            String?
+  description        String
+  unitAmount         Int
+  quantity           Int      @default(1)
+  totalAmount        Int
+  createdAt          DateTime @default(now())
+
+  order            Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  enrollment       Enrollment?       @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  registrationItem RegistrationItem? @relation(fields: [registrationItemId], references: [id], onDelete: SetNull)
+  offer            Offer?            @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  subscription     Subscription?
+}
+
+model PaymentTransaction {
+  id                String        @id @default(cuid())
+  orderId           String
+  gateway           PaymentGateway
+  status            PaymentStatus @default(INITIATED)
+  amount            Int
+  currency          String
+  providerOrderId   String?       @unique
+  providerPaymentId String?       @unique
+  providerReference String?
+  verificationToken String?
+  rawPayload        Json?
+  failureReason     String?
+  paidAt            DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  order            Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  manualSubmission ManualPaymentSubmission?
+  webhookEvents    GatewayWebhookEvent[]
+
+  @@index([orderId, status])
+}
+
+model ManualPaymentSubmission {
+  id                   String         @id @default(cuid())
+  paymentTransactionId String         @unique
+  method               PaymentGateway
+  senderName           String
+  senderNumber         String
+  referenceKey         String
+  screenshotUrl        String?
+  notes                String?
+  submittedAt          DateTime       @default(now())
+  reviewedAt           DateTime?
+  reviewNote           String?
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  paymentTransaction PaymentTransaction @relation(fields: [paymentTransactionId], references: [id], onDelete: Cascade)
+}
+
+model GatewayWebhookEvent {
+  id                   String        @id @default(cuid())
+  paymentTransactionId String?
+  gateway              PaymentGateway
+  eventType            String
+  eventId              String?
+  status               PaymentStatus?
+  payload              Json
+  receivedAt           DateTime      @default(now())
+  processedAt          DateTime?
+
+  paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([gateway, eventType, receivedAt])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  orderItemId            String             @unique
+  gateway                PaymentGateway
+  status                 SubscriptionStatus @default(INCOMPLETE)
+  providerSubscriptionId String?            @unique
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  cancelledAt            DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+}
+
+model ScholarshipApplication {
+  id                String            @id @default(cuid())
+  studentId         String?
+  offerId           String?
+  parentEmail       String
+  parentName        String
+  parentWhatsapp    String?
+  childAge          Int?
+  childCountry      String?
+  householdSize     Int?
+  monthlyIncome     String?
+  reasonForSupport  String?
+  supportingDetails String?
+  notes             String?
+  requestedPercent  Int               @db.SmallInt
+  status            ScholarshipStatus @default(PENDING)
+  reviewNote        String?
+  approvalToken     String?           @unique
+  tokenExpiresAt    DateTime?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  student       StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  offer         Offer?          @relation(fields: [offerId], references: [id], onDelete: SetNull)
+  registrations Registration[]
+
+  @@index([parentEmail, status])
+}
+
+model ContactMessage {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  subject   String?
+  message   String
+  status    MessageStatus @default(NEW)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model ReminderLog {
+  id             String       @id @default(cuid())
+  registrationId String?
+  orderId        String?
+  type           ReminderType
+  toEmail        String
+  subject        String
+  bodyPreview    String?
+  scheduledFor   DateTime?
+  sentAt         DateTime?
+  createdAt      DateTime     @default(now())
+
+  registration Registration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  order        Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([type, scheduledFor])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+model EmailLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  toEmail    String
+  template   String
+  subject    String
+  status     String
+  providerId String?
+  error      String?
+  payload    Json?
+  sentAt     DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, template])
+}

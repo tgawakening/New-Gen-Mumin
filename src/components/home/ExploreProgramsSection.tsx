@@ -147,6 +147,7 @@ export function ExploreProgramsSection({ id }: { id: string }) {
           <div className="mx-auto flex max-w-sm flex-col items-center gap-14 px-4 sm:max-w-md sm:gap-16 lg:hidden">
             {data.map((item) => (
               <MobileProgramCard
+                key={item.href}
                 href={item.href}
                 title={item.title}
                 desc={item.desc}
@@ -160,7 +161,7 @@ export function ExploreProgramsSection({ id }: { id: string }) {
           <div className="mx-auto hidden w-full lg:grid lg:grid-cols-4 lg:gap-x-2 lg:px-1 xl:gap-x-4 xl:px-2">
             {data.map((item , index) => (
               index % 2 === 0 ? (
-                <div className="flex min-h-[360px] flex-col items-center justify-center lg:min-h-[380px] xl:min-h-[400px]">
+                <div key={item.href} className="flex min-h-[360px] flex-col items-center justify-center lg:min-h-[380px] xl:min-h-[400px]">
                   <Link
                     href={item.href}
                     className="flex flex-col items-center gap-4 transition-opacity hover:opacity-90 lg:translate-y-2 xl:translate-y-3"
@@ -172,7 +173,7 @@ export function ExploreProgramsSection({ id }: { id: string }) {
                     </Link>
                   </div>
                 ) : (
-                  <div className="flex min-h-[360px] flex-col items-center justify-center lg:min-h-[380px] xl:min-h-[400px]">
+                  <div key={item.href} className="flex min-h-[360px] flex-col items-center justify-center lg:min-h-[380px] xl:min-h-[400px]">
                     <Link
                       href={item.href}
                       className="flex flex-col items-center gap-4 transition-opacity hover:opacity-90 lg:translate-y-2 xl:translate-y-3"

@@ -1,0 +1,299 @@
+import { randomUUID } from "node:crypto";
+
+import { db } from "@/lib/db";
+import { getManualPaymentDetails } from "@/lib/payments/config";
+import { createPayPalSubscription } from "@/lib/payments/paypal";
+import { createStripeCheckoutSession } from "@/lib/payments/stripe";
+import type { RegistrationCheckoutPayload } from "@/lib/registration/payment-schema";
+
+function createOrderNumber() {
+  return `GM-${Date.now()}-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+export async function createCheckoutDraft(
+  registrationId: string,
+  payload: RegistrationCheckoutPayload,
+) {
+  return db.$transaction(async (tx) => {
+    const registration = await tx.registration.findUnique({
+      where: { id: registrationId },
+      include: {
+        parentProfile: {
+          include: {
+            user: true,
+          },
+        },
+        items: {
+          include: {
+            offer: true,
+          },
+        },
+      },
+    });
+
+    if (!registration) {
+      throw new Error("Registration draft not found.");
+    }
+
+    if (registration.items.length === 0) {
+      throw new Error("Registration draft has no billable items.");
+    }
+
+    if (!registration.parentProfileId || !registration.parentProfile) {
+      throw new Error("Parent profile is required before checkout.");
+    }
+
+    let order = await tx.order.findFirst({
+      where: { registrationId },
+      include: {
+        items: true,
+      },
+    });
+
+    if (!order) {
+      order = await tx.order.create({
+        data: {
+          parentId: registration.parentProfileId,
+          registrationId,
+          orderNumber: createOrderNumber(),
+          gateway: payload.gateway,
+          currency: registration.selectedCurrency,
+          subtotalAmount: registration.subtotalAmount,
+          discountAmount: registration.discountAmount,
+          totalAmount: registration.totalAmount,
+          status: "INITIATED",
+        },
+        include: {
+          items: true,
+        },
+      });
+
+      for (const item of registration.items) {
+        await tx.orderItem.create({
+          data: {
+            orderId: order.id,
+            registrationItemId: item.id,
+            offerId: item.offerId,
+            description: item.offer.title,
+            unitAmount: item.finalAmount,
+            quantity: 1,
+            totalAmount: item.finalAmount,
+          },
+        });
+      }
+
+      order = await tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        include: { items: true },
+      });
+    } else if (order.gateway !== payload.gateway) {
+      order = await tx.order.update({
+        where: { id: order.id },
+        data: { gateway: payload.gateway },
+        include: { items: true },
+      });
+    }
+
+    const payment = await tx.paymentTransaction.create({
+      data: {
+        orderId: order.id,
+        gateway: payload.gateway,
+        status: payload.gateway === "BANK_TRANSFER" ? "UNDER_REVIEW" : "PENDING",
+        amount: registration.totalAmount,
+        currency: registration.selectedCurrency,
+      },
+    });
+
+    let checkoutUrl: string | null = null;
+    let providerReference: string | null = null;
+    let manualInstructions: ReturnType<typeof getManualPaymentDetails> | null = null;
+
+    if (payload.gateway === "STRIPE") {
+      const session = await createStripeCheckoutSession({
+        orderId: order.id,
+        paymentId: payment.id,
+        registrationId,
+        customerEmail: registration.parentEmail,
+        currency: registration.selectedCurrency,
+        orderNumber: order.orderNumber,
+        lineItems: order.items.map((item) => ({
+          description: item.description,
+          amount: item.unitAmount,
+        })),
+      });
+
+      checkoutUrl = session.url ?? null;
+      providerReference = session.id;
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          providerOrderId: session.id,
+          providerReference: session.subscription?.toString() ?? null,
+          metadata: {
+            provider: "stripe",
+            checkoutSessionId: session.id,
+            checkoutUrl: session.url,
+          },
+        },
+      });
+
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: session.id,
+          providerReference: session.subscription?.toString() ?? null,
+          rawPayload: {
+            checkoutSessionId: session.id,
+            checkoutUrl: session.url,
+          },
+        },
+      });
+    } else if (payload.gateway === "PAYPAL") {
+      const paypal = await createPayPalSubscription({
+        orderId: order.id,
+        paymentId: payment.id,
+        orderNumber: order.orderNumber,
+        customerEmail: registration.parentEmail,
+        customerName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
+        currency: registration.selectedCurrency,
+        amount: registration.totalAmount,
+      });
+
+      checkoutUrl = paypal.approvalUrl;
+      providerReference = paypal.subscriptionId;
+
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          providerOrderId: paypal.subscriptionId,
+          providerReference: paypal.planId,
+          metadata: {
+            provider: "paypal",
+            subscriptionId: paypal.subscriptionId,
+            planId: paypal.planId,
+            productId: paypal.productId,
+          },
+        },
+      });
+
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          providerOrderId: paypal.subscriptionId,
+          providerReference: paypal.planId,
+          rawPayload: {
+            approvalUrl: paypal.approvalUrl,
+            productId: paypal.productId,
+            planId: paypal.planId,
+          },
+        },
+      });
+    } else if (payload.gateway === "BANK_TRANSFER") {
+      manualInstructions = getManualPaymentDetails();
+    }
+
+    await tx.registration.update({
+      where: { id: registrationId },
+      data: {
+        paymentGateway: payload.gateway,
+        status: payload.gateway === "BANK_TRANSFER" ? "PAYMENT_REVIEW" : "PENDING_PAYMENT",
+        submittedAt: registration.submittedAt ?? new Date(),
+      },
+    });
+
+    return {
+      orderId: order.id,
+      paymentId: payment.id,
+      orderNumber: order.orderNumber,
+      gateway: payment.gateway,
+      amount: payment.amount,
+      currency: payment.currency,
+      status: payment.status,
+      providerReference,
+      checkoutUrl,
+      manualInstructions,
+      nextStep:
+        payload.gateway === "BANK_TRANSFER"
+          ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
+          : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
+    };
+  });
+}
+
+export async function submitManualPaymentProof(
+  paymentId: string,
+  payload: {
+    senderName: string;
+    senderNumber: string;
+    referenceKey: string;
+    manualMethod?: string;
+    notes?: string;
+  },
+) {
+  const payment = await db.paymentTransaction.findUnique({
+    where: { id: paymentId },
+    include: {
+      order: true,
+    },
+  });
+
+  if (!payment || payment.gateway !== "BANK_TRANSFER") {
+    throw new Error("Manual payment record not found.");
+  }
+
+  const notes = [payload.manualMethod ? `Manual method: ${payload.manualMethod}` : null, payload.notes || null]
+    .filter(Boolean)
+    .join("\n");
+
+  const submission = await db.manualPaymentSubmission.upsert({
+    where: { paymentTransactionId: paymentId },
+    update: {
+      senderName: payload.senderName,
+      senderNumber: payload.senderNumber,
+      referenceKey: payload.referenceKey,
+      screenshotUrl: null,
+      notes: notes || null,
+      submittedAt: new Date(),
+    },
+    create: {
+      paymentTransactionId: paymentId,
+      method: "BANK_TRANSFER",
+      senderName: payload.senderName,
+      senderNumber: payload.senderNumber,
+      referenceKey: payload.referenceKey,
+      screenshotUrl: null,
+      notes: notes || null,
+    },
+  });
+
+  await db.paymentTransaction.update({
+    where: { id: paymentId },
+    data: {
+      status: "UNDER_REVIEW",
+      providerReference: payload.referenceKey,
+      rawPayload: {
+        manualMethod: payload.manualMethod ?? "BANK_TRANSFER",
+      },
+    },
+  });
+
+  await db.order.update({
+    where: { id: payment.orderId },
+    data: {
+      status: "UNDER_REVIEW",
+      providerReference: payload.referenceKey,
+    },
+  });
+
+  if (payment.order.registrationId) {
+    await db.registration.update({
+      where: { id: payment.order.registrationId },
+      data: {
+        status: "PAYMENT_REVIEW",
+      },
+    });
+  }
+
+  return submission;
+}
