@@ -143,3 +143,104 @@ export async function sendScholarshipAdminNotificationEmail(input: {
     ],
   );
 }
+
+export async function sendScholarshipApprovedEmail(input: {
+  toEmail: string;
+  parentName: string;
+  approvedPercent: number;
+  reviewNote: string;
+  approvalToken: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: emailTemplateCatalog.scholarshipApproved.heading,
+    template: "scholarshipApproved",
+    html: renderGenMuminsEmailTemplate({
+      heading: emailTemplateCatalog.scholarshipApproved.heading,
+      preview: emailTemplateCatalog.scholarshipApproved.preview,
+      intro: `Assalamu alaikum ${input.parentName}, your scholarship request has been approved.`,
+      sections: [
+        { label: "Approved support", value: `${input.approvedPercent}%` },
+        { label: "Review note", value: input.reviewNote },
+        { label: "Approval token", value: input.approvalToken },
+      ],
+      callToAction: { label: "Open registration", href: resolveHref("/registration") },
+    }),
+  });
+}
+
+export async function sendScholarshipRejectedEmail(input: {
+  toEmail: string;
+  parentName: string;
+  reviewNote: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: emailTemplateCatalog.scholarshipRejected.heading,
+    template: "scholarshipRejected",
+    html: renderGenMuminsEmailTemplate({
+      heading: emailTemplateCatalog.scholarshipRejected.heading,
+      preview: emailTemplateCatalog.scholarshipRejected.preview,
+      intro: `Assalamu alaikum ${input.parentName}, your scholarship application has now been reviewed.`,
+      sections: [{ label: "Review note", value: input.reviewNote }],
+      callToAction: { label: "View scholarship page", href: resolveHref("/scholarship-registration") },
+    }),
+  });
+}
+
+export async function sendManualPaymentSubmittedEmail(input: {
+  orderNumber: string;
+  parentName: string;
+  parentEmail: string;
+  method: string;
+  referenceKey: string;
+}) {
+  await sendAdminFacingEmail(
+    "manualPaymentSubmitted",
+    "Manual payment proof submitted",
+    "A new manual payment proof is waiting for admin review.",
+    [
+      { label: "Order", value: input.orderNumber },
+      { label: "Parent", value: `${input.parentName} (${input.parentEmail})` },
+      { label: "Method", value: input.method },
+      { label: "Reference", value: input.referenceKey },
+    ],
+  );
+}
+
+export async function sendContactAcknowledgementEmail(input: {
+  toEmail: string;
+  name: string;
+  subject: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: emailTemplateCatalog.contactAcknowledgement.heading,
+    template: "contactAcknowledgement",
+    html: renderGenMuminsEmailTemplate({
+      heading: emailTemplateCatalog.contactAcknowledgement.heading,
+      preview: emailTemplateCatalog.contactAcknowledgement.preview,
+      intro: `Jazakum Allahu khayran ${input.name}, we have received your message and the Gen-Mumins team will review it shortly.`,
+      sections: [{ label: "Subject", value: input.subject }],
+      callToAction: { label: "Visit Gen-Mumins", href: resolveHref("/") },
+    }),
+  });
+}
+
+export async function sendAdminContactNotificationEmail(input: {
+  name: string;
+  email: string;
+  subject: string;
+  message: string;
+}) {
+  await sendAdminFacingEmail(
+    "adminContactMessage",
+    "New contact message received",
+    "A new contact form message needs review.",
+    [
+      { label: "From", value: `${input.name} (${input.email})` },
+      { label: "Subject", value: input.subject },
+      { label: "Message", value: input.message },
+    ],
+  );
+}

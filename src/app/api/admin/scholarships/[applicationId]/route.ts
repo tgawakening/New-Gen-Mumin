@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 
+import {
+  sendScholarshipApprovedEmail,
+  sendScholarshipRejectedEmail,
+} from "@/lib/email/notifications";
 import { reviewScholarshipApplication } from "@/lib/scholarship/service";
 import { scholarshipReviewSchema } from "@/lib/scholarship/schema";
 
@@ -11,6 +15,24 @@ export async function PATCH(
     const { applicationId } = await context.params;
     const payload = scholarshipReviewSchema.parse(await request.json());
     const application = await reviewScholarshipApplication(applicationId, payload);
+
+    if (application.status === "APPROVED" && application.approvalToken) {
+      await sendScholarshipApprovedEmail({
+        toEmail: application.parentEmail,
+        parentName: application.parentName,
+        approvedPercent: application.requestedPercent,
+        reviewNote: application.reviewNote ?? "Approved for support.",
+        approvalToken: application.approvalToken,
+      });
+    }
+
+    if (application.status === "REJECTED") {
+      await sendScholarshipRejectedEmail({
+        toEmail: application.parentEmail,
+        parentName: application.parentName,
+        reviewNote: application.reviewNote ?? "Thank you for applying.",
+      });
+    }
 
     return NextResponse.json({
       applicationId: application.id,

@@ -1,7 +1,9 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
+import { sendManualPaymentSubmittedEmail } from "@/lib/email/notifications";
 import { submitManualPaymentProof } from "@/lib/registration/payment-service";
 import { manualPaymentProofSchema } from "@/lib/registration/payment-schema";
+import { db } from "@/lib/db";
 
 export async function POST(
   request: Request,
@@ -11,6 +13,31 @@ export async function POST(
     const { paymentId } = await context.params;
     const payload = manualPaymentProofSchema.parse(await request.json());
     const submission = await submitManualPaymentProof(paymentId, payload);
+
+    const transaction = await db.paymentTransaction.findUnique({
+      where: { id: paymentId },
+      include: {
+        order: {
+          include: {
+            parent: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (transaction?.order) {
+      await sendManualPaymentSubmittedEmail({
+        orderNumber: transaction.order.orderNumber,
+        parentName: `${transaction.order.parent.user.firstName} ${transaction.order.parent.user.lastName}`.trim(),
+        parentEmail: transaction.order.parent.user.email,
+        method: payload.manualMethod ?? "BANK_TRANSFER",
+        referenceKey: submission.referenceKey,
+      });
+    }
 
     return NextResponse.json({
       submissionId: submission.id,
@@ -22,4 +49,3 @@ export async function POST(
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-
