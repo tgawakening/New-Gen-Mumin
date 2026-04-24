@@ -68,6 +68,7 @@ type PhoneCountry = {
   code: string;
   name: string;
   flag: string;
+  flagImageUrl: string;
   dialCode: string;
   currency: string;
   gbpRate: number;
@@ -87,6 +88,35 @@ const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: 
   { value: "PAYPAL", label: "PayPal", description: "PayPal monthly subscription approval for wallet-based recurring payments." },
   { value: "BANK_TRANSFER", label: "Manual payment", description: "Use Bank Transfer or JazzCash and then submit proof for review." },
 ];
+
+const MANUAL_PAYMENT_PREVIEW: ManualInstructions = {
+  whatsapp: "03181602388",
+  instructions: [
+    "Use your platform reference in the payment note.",
+    "After payment, send your screenshot to WhatsApp support on 03181602388 so your payment can be confirmed from the backend.",
+  ],
+  channels: [
+    {
+      id: "BANK_TRANSFER",
+      title: "Bank Transfer",
+      badge: "[BANK] Meezan Bank",
+      fields: [
+        { label: "Account Title", value: "AREEJ FATIMA" },
+        { label: "Account Number", value: "98900114432111" },
+        { label: "IBAN", value: "PK96MEZN0098900114432111" },
+      ],
+    },
+    {
+      id: "JAZZCASH",
+      title: "JazzCash",
+      badge: "[JAZZ] JazzCash",
+      fields: [
+        { label: "Account Name", value: "Areej Fatima" },
+        { label: "Mobile Number", value: "03244517741" },
+      ],
+    },
+  ],
+};
 
 const DIAL_CODES: Record<string, string> = {
   GB: "+44",
@@ -177,6 +207,10 @@ function flagFromCountryCode(code: string) {
   return code
     .toUpperCase()
     .replace(/./g, (char) => String.fromCodePoint(127397 + char.charCodeAt(0)));
+}
+
+function flagImageUrl(code: string) {
+  return `https://flagcdn.com/24x18/${code.toLowerCase()}.png`;
 }
 
 function getRegionalPrice(offer: Offer, phoneCountry: PhoneCountry): PriceBreakdown {
@@ -296,6 +330,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [parentEmail, setParentEmail] = useState("");
   const [parentCity, setParentCity] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("GB");
+  const [isCountryMenuOpen, setIsCountryMenuOpen] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -324,6 +359,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         code: country.code,
         name: country.name,
         flag: flagFromCountryCode(country.code),
+        flagImageUrl: flagImageUrl(country.code),
         dialCode: DIAL_CODES[country.code] ?? "",
         currency: country.currency,
         gbpRate: GBP_RATES[country.currency] ?? 1,
@@ -417,6 +453,20 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     });
     return { currency: selectedPhoneCountry.currency, subtotal, discount, total: subtotal - discount, lines };
   }, [children, offerMap, selectedPhoneCountry]);
+
+  const isPakistan = selectedPhoneCountry.code === "PK";
+  const paypalEligible = summary.lines.length === 1;
+  const availablePaymentMethods = PAYMENT_METHODS.filter((method) => {
+    if (method.value === "BANK_TRANSFER") return isPakistan;
+    if (method.value === "PAYPAL") return paypalEligible;
+    return true;
+  });
+
+  useEffect(() => {
+    if (!availablePaymentMethods.some((method) => method.value === selectedGateway)) {
+      setSelectedGateway(availablePaymentMethods[0]?.value ?? "STRIPE");
+    }
+  }, [availablePaymentMethods, selectedGateway]);
 
   function updateChild(index: number, patch: Partial<ChildForm>) {
     setChildren((current) => current.map((child, currentIndex) => (currentIndex === index ? { ...child, ...patch } : child)));
@@ -646,12 +696,40 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           </div>
                           <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
-                            <div className="grid gap-3 sm:grid-cols-[185px_minmax(0,235px)]">
-                              <select value={selectedCountryCode} onChange={(event) => setSelectedCountryCode(event.target.value)} className="rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-sm outline-none focus:border-[#f39f5f]">
-                                {phoneCountries.map((country) => (
-                                  <option key={country.code} value={country.code}>{country.flag} {country.name} {country.dialCode ? `(${country.dialCode})` : ""}</option>
-                                ))}
-                              </select>
+                            <div className="grid gap-3 sm:grid-cols-[220px_minmax(0,220px)]">
+                              <div className="relative">
+                                <button
+                                  type="button"
+                                  onClick={() => setIsCountryMenuOpen((current) => !current)}
+                                  className="flex w-full cursor-pointer items-center justify-between rounded-2xl border border-[#d8c3ac] bg-white px-3 py-3 text-left text-sm outline-none transition focus:border-[#f39f5f]"
+                                >
+                                  <span className="flex min-w-0 items-center gap-3">
+                                    <img src={selectedPhoneCountry.flagImageUrl} alt={`${selectedPhoneCountry.name} flag`} className="h-[18px] w-6 rounded-[3px] object-cover shadow-sm" />
+                                    <span className="truncate text-[#22304a]">{selectedPhoneCountry.name}</span>
+                                    <span className="shrink-0 text-[#6d7785]">{selectedPhoneCountry.dialCode}</span>
+                                  </span>
+                                  <span className="text-[#8b5a2b]">{isCountryMenuOpen ? "▲" : "▼"}</span>
+                                </button>
+                                {isCountryMenuOpen ? (
+                                  <div className="absolute z-20 mt-2 max-h-64 w-full overflow-y-auto rounded-2xl border border-[#ead8c3] bg-white p-2 shadow-[0_18px_40px_rgba(34,48,74,0.16)]">
+                                    {phoneCountries.map((country) => (
+                                      <button
+                                        key={country.code}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedCountryCode(country.code);
+                                          setIsCountryMenuOpen(false);
+                                        }}
+                                        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-left text-sm text-[#22304a] transition hover:bg-[#fff4e7]"
+                                      >
+                                        <img src={country.flagImageUrl} alt={`${country.name} flag`} className="h-[18px] w-6 rounded-[3px] object-cover shadow-sm" />
+                                        <span className="flex-1 truncate">{country.name}</span>
+                                        <span className="text-[#6d7785]">{country.dialCode}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
                               <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
                             </div>
                           </div>
@@ -821,7 +899,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isFormReadyForPayment ? "bg-[#ecf8f0] text-[#2f6b4b]" : "bg-[#f2f4f7] text-[#7a8698]"}`}>{isFormReadyForPayment ? "Active" : "Complete form first"}</span>
                         </div>
                         <div className="mt-4 space-y-3">
-                          {PAYMENT_METHODS.map((method) => (
+                          {availablePaymentMethods.map((method) => (
                             <label key={method.value} className={`block cursor-pointer rounded-2xl border px-4 py-3 transition ${selectedGateway === method.value ? "border-[#f3a25d] bg-[#fff1df]" : "border-[#ebdccb] bg-white"} ${isFormReadyForPayment ? "opacity-100" : "opacity-55"}`}>
                               <div className="flex items-start gap-3">
                                 <input type="radio" name="gateway" checked={selectedGateway === method.value} onChange={() => setSelectedGateway(method.value)} disabled={!isFormReadyForPayment} className="mt-1" />
@@ -832,6 +910,16 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               </div>
                             </label>
                           ))}
+                          {!paypalEligible ? (
+                            <div className="rounded-2xl border border-[#f6d8b3] bg-[#fff7ea] px-4 py-3 text-sm text-[#9b6328]">
+                              PayPal subscriptions are available for one programme selection at a time. For multi-child or discounted combinations, please use Stripe.
+                            </div>
+                          ) : null}
+                          {!isPakistan ? (
+                            <div className="rounded-2xl border border-[#e4ebf3] bg-[#f8fbff] px-4 py-3 text-sm text-[#5d6c81]">
+                              Manual Bank Transfer and JazzCash are available only when Pakistan is selected as the country.
+                            </div>
+                          ) : null}
                         </div>
                       </>,
                     )}
@@ -840,12 +928,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                     {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p><p className="mt-2 text-xs">Your browser can save this password for future logins after account creation.</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, click the submit button again.</p> : null}</div> : null}
                     {error ? <div className="rounded-2xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-3 text-sm text-[#a23c3c]">{error}</div> : null}
 
-                    {selectedGateway === "BANK_TRANSFER" && success?.manualInstructions ? (
+                    {selectedGateway === "BANK_TRANSFER" ? (
                       sectionCard(
                         <>
                           <h3 className="text-lg font-semibold text-[#22304a]">Manual payment</h3>
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {success.manualInstructions.channels.map((channel) => (
+                            {(success?.manualInstructions ?? MANUAL_PAYMENT_PREVIEW).channels.map((channel) => (
                               <button
                                 key={channel.id}
                                 type="button"
@@ -857,11 +945,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             ))}
                           </div>
                           {(() => {
-                            const activeChannel = success.manualInstructions.channels.find((channel) => channel.id === manualMethod) ?? success.manualInstructions.channels[0];
+                            const instructions = success?.manualInstructions ?? MANUAL_PAYMENT_PREVIEW;
+                            const activeChannel = instructions.channels.find((channel) => channel.id === manualMethod) ?? instructions.channels[0];
                             return (
                               <>
                                 <div className="mt-3 rounded-2xl border border-[#cfe1f5] bg-[#eef6ff] px-4 py-3 text-sm leading-6 text-[#38506a]">
-                                  {success.manualInstructions.instructions.map((instruction, index) => (
+                                  {instructions.instructions.map((instruction, index) => (
                                     <p key={index}>{instruction}</p>
                                   ))}
                                 </div>
@@ -884,9 +973,9 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               </>
                             );
                           })()}
-                          {success.manualInstructions.whatsapp ? (
+                          {(success?.manualInstructions ?? MANUAL_PAYMENT_PREVIEW).whatsapp ? (
                             <div className="mt-3 rounded-2xl border border-[#f0d8b0] bg-[#fff5e4] px-4 py-3 text-sm text-[#8d5b22]">
-                              Got stuck in payment? Contact our support team on {success.manualInstructions.whatsapp}.
+                              Got stuck in payment? Contact our support team on {(success?.manualInstructions ?? MANUAL_PAYMENT_PREVIEW).whatsapp}.
                             </div>
                           ) : null}
                           <div className="mt-4 space-y-3 rounded-2xl bg-white p-4">
@@ -896,7 +985,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             <input value={referenceKey} onChange={(event) => setReferenceKey(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Transaction / reference ID" />
                             <textarea value={manualNotes} onChange={(event) => setManualNotes(event.target.value)} className="min-h-24 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Optional notes for admin review" />
                             {manualProofMessage ? <div className="rounded-2xl bg-[#effaf3] px-4 py-3 text-sm text-[#2f6b4b]">{manualProofMessage}</div> : null}
-                            <button type="button" onClick={handleManualProofSubmit} disabled={isSubmittingProof} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmittingProof ? "Submitting proof..." : "Submit transfer proof"}</button>
+                            <button type="button" onClick={handleManualProofSubmit} disabled={isSubmittingProof || !success?.paymentId} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmittingProof ? "Submitting proof..." : success?.paymentId ? "Submit transfer proof" : "Create the order first to submit proof"}</button>
                           </div>
                         </>,
                       )

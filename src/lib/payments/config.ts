@@ -42,10 +42,53 @@ export function getPayPalClientSecret() {
   return required("PAYPAL_CLIENT_SECRET");
 }
 
+export function getPayPalProductId() {
+  return required("PAYPAL_PRODUCT_ID");
+}
+
 export function getPayPalBaseUrl() {
   return process.env.PAYPAL_ENVIRONMENT === "LIVE"
     ? "https://api-m.paypal.com"
     : "https://api-m.sandbox.paypal.com";
+}
+
+type PayPalPlanLookupInput = {
+  offerSlug: string;
+  currency: string;
+  countryCode: string;
+};
+
+export function getPayPalPlanId(input: PayPalPlanLookupInput) {
+  const normalizedCurrency = input.currency.toUpperCase();
+  const normalizedCountry = input.countryCode.toUpperCase();
+
+  if (normalizedCurrency === "GBP") {
+    if (input.offerSlug === "full-bundle") return required("PAYPAL_PLAN_GBP_BUNDLE");
+    if (input.offerSlug === "arabic-tajweed-pair") return required("PAYPAL_PLAN_GBP_PAIR");
+    if (input.offerSlug === "seerah-single") return required("PAYPAL_PLAN_GBP_SEERAH");
+    if (input.offerSlug === "life-lessons-single") return required("PAYPAL_PLAN_GBP_LIFE_LESSONS");
+  }
+
+  if (normalizedCurrency === "USD" && input.offerSlug === "full-bundle") {
+    return required("PAYPAL_PLAN_USD_BUNDLE");
+  }
+
+  if (normalizedCurrency === "AED" && input.offerSlug === "full-bundle") {
+    return required("PAYPAL_PLAN_AED_BUNDLE");
+  }
+
+  if (normalizedCurrency === "SAR" && input.offerSlug === "full-bundle") {
+    return required("PAYPAL_PLAN_SAR_BUNDLE");
+  }
+
+  if (normalizedCurrency === "PKR" || normalizedCountry === "PK" || normalizedCountry === "IN" || normalizedCountry === "BD" || normalizedCountry === "AF") {
+    if (input.offerSlug === "full-bundle") return required("PAYPAL_PLAN_PKR_BUNDLE");
+    if (input.offerSlug === "arabic-tajweed-pair") return required("PAYPAL_PLAN_PKR_PAIR");
+    if (input.offerSlug === "seerah-single") return required("PAYPAL_PLAN_PKR_SEERAH");
+    if (input.offerSlug === "life-lessons-single") return required("PAYPAL_PLAN_PKR_LIFE_LESSONS");
+  }
+
+  throw new Error("No PayPal subscription plan is configured for this programme and country combination.");
 }
 
 export function getManualPaymentDetails(): ManualPaymentDetails {

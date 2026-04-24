@@ -108,6 +108,10 @@ export async function createCheckoutDraft(
     let providerReference: string | null = null;
     let manualInstructions: ReturnType<typeof getManualPaymentDetails> | null = null;
 
+    if (payload.gateway === "BANK_TRANSFER" && registration.selectedCountryCode !== "PK") {
+      throw new Error("Manual payment is available only for registrations from Pakistan.");
+    }
+
     if (payload.gateway === "STRIPE") {
       const session = await createStripeCheckoutSession({
         orderId: order.id,
@@ -150,6 +154,10 @@ export async function createCheckoutDraft(
         },
       });
     } else if (payload.gateway === "PAYPAL") {
+      if (registration.items.length !== 1) {
+        throw new Error("PayPal subscriptions are available for single programme selections only. Please use Stripe for discounted or multi-child enrollments.");
+      }
+
       const paypal = await createPayPalSubscription({
         orderId: order.id,
         paymentId: payment.id,
@@ -157,7 +165,8 @@ export async function createCheckoutDraft(
         customerEmail: registration.parentEmail,
         customerName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
         currency: registration.selectedCurrency,
-        amount: registration.totalAmount,
+        offerSlug: registration.items[0].offer.slug,
+        countryCode: registration.selectedCountryCode ?? "",
       });
 
       checkoutUrl = paypal.approvalUrl;

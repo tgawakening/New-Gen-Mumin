@@ -1,6 +1,13 @@
-﻿import { randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
-import { getAppUrl, getPayPalBaseUrl, getPayPalClientId, getPayPalClientSecret } from "./config";
+import {
+  getAppUrl,
+  getPayPalBaseUrl,
+  getPayPalClientId,
+  getPayPalClientSecret,
+  getPayPalPlanId,
+  getPayPalProductId,
+} from "./config";
 
 type PayPalInput = {
   orderId: string;
@@ -9,7 +16,8 @@ type PayPalInput = {
   customerEmail: string;
   customerName: string;
   currency: string;
-  amount: number;
+  offerSlug: string;
+  countryCode: string;
 };
 
 async function getAccessToken() {
@@ -56,40 +64,11 @@ async function paypalRequest<T>(path: string, accessToken: string, body: unknown
 
 export async function createPayPalSubscription(input: PayPalInput) {
   const accessToken = await getAccessToken();
-  const product = await paypalRequest<{ id: string }>("/v1/catalogs/products", accessToken, {
-    name: `Gen-Mumins ${input.orderNumber}`,
-    description: `Monthly Gen-Mumins subscription for order ${input.orderNumber}`,
-    type: "SERVICE",
-    category: "SOFTWARE",
-  });
-
-  const plan = await paypalRequest<{ id: string }>("/v1/billing/plans", accessToken, {
-    product_id: product.id,
-    name: `Plan ${input.orderNumber}`,
-    description: `Monthly recurring subscription for order ${input.orderNumber}`,
-    status: "ACTIVE",
-    billing_cycles: [
-      {
-        frequency: {
-          interval_unit: "MONTH",
-          interval_count: 1,
-        },
-        tenure_type: "REGULAR",
-        sequence: 1,
-        total_cycles: 0,
-        pricing_scheme: {
-          fixed_price: {
-            currency_code: input.currency,
-            value: input.amount.toFixed(2),
-          },
-        },
-      },
-    ],
-    payment_preferences: {
-      auto_bill_outstanding: true,
-      setup_fee_failure_action: "CONTINUE",
-      payment_failure_threshold: 3,
-    },
+  const productId = getPayPalProductId();
+  const planId = getPayPalPlanId({
+    offerSlug: input.offerSlug,
+    currency: input.currency,
+    countryCode: input.countryCode,
   });
 
   const appUrl = getAppUrl();
@@ -98,7 +77,7 @@ export async function createPayPalSubscription(input: PayPalInput) {
     status: string;
     links?: Array<{ href: string; rel: string; method: string }>;
   }>("/v1/billing/subscriptions", accessToken, {
-    plan_id: plan.id,
+    plan_id: planId,
     custom_id: input.orderId,
     subscriber: {
       name: {
@@ -124,8 +103,8 @@ export async function createPayPalSubscription(input: PayPalInput) {
 
   return {
     subscriptionId: subscription.id,
-    planId: plan.id,
-    productId: product.id,
+    planId,
+    productId,
     approvalUrl,
     status: subscription.status,
   };
@@ -146,4 +125,3 @@ export async function getPayPalSubscription(subscriptionId: string) {
 
   return response.json();
 }
-
