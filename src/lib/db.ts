@@ -36,11 +36,21 @@ if (normalizedDatabaseUrl && normalizedDatabaseUrl !== process.env.DATABASE_URL)
 
 const { PrismaClient } = require("@prisma/client") as typeof import("@prisma/client");
 
+const prismaClientConfig: ConstructorParameters<typeof PrismaClient>[0] = {
+  log: process.env.APP_ENV === "development" ? ["warn", "error"] : ["error"],
+};
+
+if (normalizedDatabaseUrl) {
+  prismaClientConfig.datasources = {
+    db: {
+      url: normalizedDatabaseUrl,
+    },
+  };
+}
+
 export const db =
   global.__genMuminsPrisma ??
-  new PrismaClient({
-    log: process.env.APP_ENV === "development" ? ["warn", "error"] : ["error"],
-  });
+  new PrismaClient(prismaClientConfig);
 
 if (process.env.NODE_ENV !== "production") {
   global.__genMuminsPrisma = db;
