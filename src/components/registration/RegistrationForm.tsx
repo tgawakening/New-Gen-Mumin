@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { Eye, EyeOff } from "lucide-react";
 
 type Offer = {
   slug: string;
@@ -334,6 +335,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [phoneNumber, setPhoneNumber] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [priorArabicKnowledge, setPriorArabicKnowledge] = useState("NONE");
   const [heardAboutGenM, setHeardAboutGenM] = useState("");
   const [hopesFromProgram, setHopesFromProgram] = useState("");
@@ -487,13 +490,6 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         return { ...child, selectedOfferSlugs: offerSlug ? [offerSlug] : [] };
       }),
     );
-  }
-
-  function handleSuggestPassword() {
-    const generated = generateStrongPassword();
-    setPassword(generated);
-    setConfirmPassword(generated);
-    setError(null);
   }
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -666,20 +662,53 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             <input name="email" autoComplete="email" type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
                           </div>
                           <div>
-                            <div className="mb-2 flex items-center justify-between gap-3">
-                              <label className="block text-left text-sm font-medium text-[#38506a]">Create password*</label>
-                              <button type="button" onClick={handleSuggestPassword} className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-[#2a76aa]">
-                                Suggest strong password
+                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Create password*</label>
+                            <div className="relative">
+                              <input
+                                name="new-password"
+                                autoComplete="new-password"
+                                type={showPassword ? "text" : "password"}
+                                value={password}
+                                onChange={(event) => setPassword(event.target.value)}
+                                className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 pr-12 text-sm outline-none focus:border-[#f39f5f]"
+                                placeholder="Minimum 8 characters"
+                                required
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowPassword((current) => !current)}
+                                className="absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center text-[#6f7f92]"
+                                aria-label={showPassword ? "Hide password" : "Show password"}
+                              >
+                                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                               </button>
                             </div>
-                            <input name="new-password" autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="At least 8 characters" required />
                             <p className={`mt-2 text-xs font-medium ${passwordStrength.tone}`}>
                               {passwordStrength.message}
                             </p>
                           </div>
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Confirm password*</label>
-                            <input name="confirm-password" autoComplete="new-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Re-enter password" required />
+                            <div className="relative">
+                              <input
+                                name="confirm-password"
+                                autoComplete="new-password"
+                                type={showConfirmPassword ? "text" : "password"}
+                                value={confirmPassword}
+                                onChange={(event) => setConfirmPassword(event.target.value)}
+                                className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 pr-12 text-sm outline-none focus:border-[#f39f5f]"
+                                placeholder="Re-enter password"
+                                required
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowConfirmPassword((current) => !current)}
+                                className="absolute inset-y-0 right-0 flex w-12 cursor-pointer items-center justify-center text-[#6f7f92]"
+                                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                              >
+                                {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                              </button>
+                            </div>
                             {confirmPassword ? (
                               <p className={`mt-2 text-xs font-medium ${password === confirmPassword && password.length >= 8 ? "text-[#2f6b4b]" : "text-[#b24c4c]"}`}>
                                 {password === confirmPassword

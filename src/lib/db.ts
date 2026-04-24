@@ -8,7 +8,10 @@ declare global {
 function normalizeDatabaseUrl(value?: string) {
   if (!value) return value;
 
-  let normalized = value.trim();
+  let normalized = value
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u200B-\u200D\u2060]/g, "")
+    .trim();
   if (
     (normalized.startsWith("\"") && normalized.endsWith("\"")) ||
     (normalized.startsWith("'") && normalized.endsWith("'"))
@@ -16,9 +19,9 @@ function normalizeDatabaseUrl(value?: string) {
     normalized = normalized.slice(1, -1).trim();
   }
 
-  const mysqlIndex = normalized.indexOf("mysql://");
-  if (mysqlIndex > 0) {
-    normalized = normalized.slice(mysqlIndex);
+  const mysqlMatch = normalized.match(/mysql:\/\/[^\s"'`]+/i);
+  if (mysqlMatch) {
+    normalized = mysqlMatch[0];
   }
 
   return normalized;
