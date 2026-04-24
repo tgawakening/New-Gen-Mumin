@@ -1,8 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import type { PrismaClient as PrismaClientType } from "@prisma/client";
 
 declare global {
   // eslint-disable-next-line no-var
-  var __genMuminsPrisma: PrismaClient | undefined;
+  var __genMuminsPrisma: PrismaClientType | undefined;
 }
 
 function normalizeDatabaseUrl(value?: string) {
@@ -24,6 +24,8 @@ function normalizeDatabaseUrl(value?: string) {
     normalized = mysqlMatch[0];
   }
 
+  normalized = normalized.replace(/ssl-mode=REQUIRED/gi, "sslaccept=accept_invalid_certs");
+
   return normalized;
 }
 
@@ -31,6 +33,8 @@ const normalizedDatabaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 if (normalizedDatabaseUrl && normalizedDatabaseUrl !== process.env.DATABASE_URL) {
   process.env.DATABASE_URL = normalizedDatabaseUrl;
 }
+
+const { PrismaClient } = require("@prisma/client") as typeof import("@prisma/client");
 
 export const db =
   global.__genMuminsPrisma ??
