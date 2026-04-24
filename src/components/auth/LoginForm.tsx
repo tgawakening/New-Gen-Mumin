@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export function LoginForm() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
@@ -28,7 +30,9 @@ export function LoginForm() {
         throw new Error(payload.error ?? "Unable to log in.");
       }
 
-      setMessage("Login successful. Parent dashboard session created.");
+      setMessage("Login successful. Opening your dashboard...");
+      router.push(payload.dashboardHome ?? "/parent");
+      router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to log in.");
     } finally {

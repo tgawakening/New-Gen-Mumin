@@ -3,7 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Menu, ChevronDown, ArrowRight, Plus, Minus, X, Mail, Phone } from "lucide-react";
 import { PROGRAMS, PROGRAMS_LABEL, NAV, SITE } from "@/lib/config";
 import { SOCIAL_LINKS } from "@/components/TopBar";
@@ -13,8 +13,30 @@ export function Header() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [programsOpen, setProgramsOpen] = useState(false);
+  const [dashboardHref, setDashboardHref] = useState<string | null>(null);
 
   const isHome = pathname === "/";
+  const dashboardLabel = dashboardHref ? "Your Dashboard" : "Enroll Now";
+  const dashboardTarget = dashboardHref ?? "/registration";
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetch("/api/auth/session", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((payload) => {
+        if (!isMounted) return;
+        setDashboardHref(payload.authenticated ? payload.dashboardHome : null);
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setDashboardHref(null);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <header className="bg-[#FDF6EF] sticky top-0 z-50">
@@ -63,8 +85,8 @@ export function Header() {
                 </Link>
               );
             })}
-            <Link href="/#pricing" className="theme-btn ml-2">
-              <span>Enroll Now</span>
+            <Link href={dashboardTarget} className="theme-btn ml-2 cursor-pointer">
+              <span>{dashboardLabel}</span>
               <ArrowRight className="h-4 w-4" aria-hidden />
             </Link>
           </div>
@@ -76,6 +98,7 @@ export function Header() {
             navLinks={NAV.filter((l) => l.href !== "/")}
             onClose={() => setMobileMenuOpen(false)}
             pathname={pathname}
+            dashboardHref={dashboardHref}
           />
         )}
       </nav>
@@ -203,11 +226,13 @@ function MobileMenu({
   navLinks,
   onClose,
   pathname,
+  dashboardHref,
 }: {
   programs: readonly { href: string; label: string }[];
   navLinks: readonly { href: string; label: string }[];
   onClose: () => void;
   pathname: string;
+  dashboardHref: string | null;
 }) {
   const [programsOpen, setProgramsOpen] = useState(true);
 
@@ -332,11 +357,11 @@ function MobileMenu({
             {/* Enroll button */}
             <div className="mt-6">
               <Link
-                href="/pricing"
+                href={dashboardHref ?? "/registration"}
                 onClick={onClose}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#F97316] px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-[#EA580C] transition-colors"
+                className="inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-[#F97316] px-6 py-3 text-sm font-semibold text-white shadow-md hover:bg-[#EA580C] transition-colors"
               >
-                <span>Enroll your Child</span>
+                <span>{dashboardHref ? "Open your dashboard" : "Enroll your Child"}</span>
                 <ArrowRight className="h-4 w-4" aria-hidden />
               </Link>
             </div>

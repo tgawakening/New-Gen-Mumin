@@ -244,3 +244,27 @@ export async function sendAdminContactNotificationEmail(input: {
     ],
   );
 }
+
+export async function sendDashboardUnlockedEmail(input: {
+  toEmail: string;
+  parentName: string;
+  dashboardUrl: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: emailTemplateCatalog.dashboardUnlocked.heading,
+    template: "dashboardUnlocked",
+    html: renderGenMuminsEmailTemplate({
+      heading: emailTemplateCatalog.dashboardUnlocked.heading,
+      preview: emailTemplateCatalog.dashboardUnlocked.preview,
+      intro: `Assalamu alaikum ${input.parentName}, your payment has been confirmed and the Gen-Mumins dashboard is now unlocked.`,
+      sections: [
+        {
+          label: "Next step",
+          value: "Log in to review your children, courses, attendance, schedule, and payment status.",
+        },
+      ],
+      callToAction: { label: "Open your dashboard", href: resolveHref(input.dashboardUrl) },
+    }),
+  });
+}

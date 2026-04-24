@@ -1,6 +1,8 @@
 ﻿import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { sendDashboardUnlockedEmail } from "@/lib/email/notifications";
+import { activateOrderEnrollments } from "@/lib/enrollment/access";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
   if (value === undefined) return undefined;
@@ -14,7 +16,7 @@ export async function markOrderPaid(
     providerPaymentId?: string | null;
     providerReference?: string | null;
     rawPayload?: unknown;
-    gateway?: "STRIPE" | "PAYPAL";
+    gateway?: "STRIPE" | "PAYPAL" | "BANK_TRANSFER";
     subscriptionId?: string | null;
   },
 ) {
@@ -88,6 +90,16 @@ export async function markOrderPaid(
         providerSubscriptionId: details.subscriptionId,
         currentPeriodStart: new Date(),
       },
+    });
+  }
+
+  await activateOrderEnrollments(order.id);
+
+  if (order.registration) {
+    await sendDashboardUnlockedEmail({
+      toEmail: order.registration.parentEmail,
+      parentName: `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim(),
+      dashboardUrl: "/parent",
     });
   }
 }

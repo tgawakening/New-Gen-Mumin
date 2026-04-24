@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { db } from "@/lib/db";
+import { provisionRegistrationAccess } from "@/lib/enrollment/access";
 import { getManualPaymentDetails } from "@/lib/payments/config";
 import { createPayPalSubscription } from "@/lib/payments/paypal";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
@@ -42,6 +43,8 @@ export async function createCheckoutDraft(
     if (!registration.parentProfileId || !registration.parentProfile) {
       throw new Error("Parent profile is required before checkout.");
     }
+
+    await provisionRegistrationAccess(tx, registrationId, "PENDING");
 
     let order = await tx.order.findFirst({
       where: { registrationId },

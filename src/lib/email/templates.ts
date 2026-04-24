@@ -112,4 +112,8 @@ export const emailTemplateCatalog = {
     heading: "We received your message",
     preview: "Your Gen-Mumins contact enquiry is safely with the team.",
   },
+  dashboardUnlocked: {
+    heading: "Dashboard unlocked",
+    preview: "Your Gen-Mumins learning dashboard is now ready.",
+  },
 } as const;
