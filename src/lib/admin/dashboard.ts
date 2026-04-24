@@ -15,9 +15,15 @@ export async function getAdminDashboardData() {
     pendingRegistrations,
     unreadMessages,
     paidRevenue,
+    activePrograms,
+    activeTeachers,
     recentRegistrations,
+    recentOrders,
     paymentReviewQueue,
     scholarshipQueue,
+    latestStudents,
+    contactInbox,
+    programsSnapshot,
   ] = await Promise.all([
     db.studentProfile.count(),
     db.enrollment.count({ where: { status: "ACTIVE" } }),
@@ -31,6 +37,8 @@ export async function getAdminDashboardData() {
       where: { status: "SUCCEEDED" },
       _sum: { totalAmount: true },
     }),
+    db.program.count({ where: { status: "PUBLISHED" } }),
+    db.teacherProfile.count({ where: { isActive: true } }),
     db.registration.findMany({
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -38,6 +46,18 @@ export async function getAdminDashboardData() {
         students: true,
         items: { include: { offer: true } },
         order: true,
+      },
+    }),
+    db.order.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 8,
+      include: {
+        parent: {
+          include: {
+            user: true,
+          },
+        },
+        payments: true,
       },
     }),
     db.paymentTransaction.findMany({
@@ -71,6 +91,45 @@ export async function getAdminDashboardData() {
         offer: { select: { title: true } },
       },
     }),
+    db.studentProfile.findMany({
+      take: 8,
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: true,
+        parents: {
+          include: {
+            parent: {
+              include: {
+                user: true,
+              },
+            },
+          },
+        },
+        enrollments: {
+          where: { status: "ACTIVE" },
+          include: {
+            program: true,
+          },
+        },
+      },
+    }),
+    db.contactMessage.findMany({
+      take: 8,
+      orderBy: { createdAt: "desc" },
+    }),
+    db.program.findMany({
+      take: 8,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
+      include: {
+        _count: {
+          select: {
+            schedules: true,
+            enrollments: true,
+            quizzes: true,
+          },
+        },
+      },
+    }),
   ]);
 
   return {
@@ -80,10 +139,16 @@ export async function getAdminDashboardData() {
       pendingRegistrations,
       unreadMessages,
       revenueGbp: paidRevenue._sum.totalAmount ?? 0,
+      activePrograms,
+      activeTeachers,
     },
     recentRegistrations,
+    recentOrders,
     paymentReviewQueue,
     scholarshipQueue,
+    latestStudents,
+    contactInbox,
+    programsSnapshot,
   };
 }
 

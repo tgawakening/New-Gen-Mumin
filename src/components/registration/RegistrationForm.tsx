@@ -228,6 +228,62 @@ function sectionCard(children: React.ReactNode, extraClassName = "") {
   );
 }
 
+function getPasswordStrength(password: string) {
+  if (!password) {
+    return {
+      tone: "text-[#657284]",
+      message: "Use at least 8 characters. A mix of letters, numbers, and symbols makes it stronger.",
+    };
+  }
+
+  if (password.length < 8) {
+    return {
+      tone: "text-[#b24c4c]",
+      message: "Password must contain at least 8 characters.",
+    };
+  }
+
+  const checks = [
+    /[a-z]/.test(password),
+    /[A-Z]/.test(password),
+    /\d/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ].filter(Boolean).length;
+
+  if (checks >= 3) {
+    return {
+      tone: "text-[#2f6b4b]",
+      message: "Strong password. Keep using a mix of letters, numbers, and symbols.",
+    };
+  }
+
+  return {
+    tone: "text-[#8a6326]",
+    message: "Password is valid, but adding numbers, capitals, or symbols will make it stronger.",
+  };
+}
+
+function generateStrongPassword() {
+  const lowers = "abcdefghjkmnpqrstuvwxyz";
+  const uppers = "ABCDEFGHJKMNPQRSTUVWXYZ";
+  const numbers = "23456789";
+  const symbols = "!@#$%&*?";
+  const all = `${lowers}${uppers}${numbers}${symbols}`;
+
+  const required = [
+    lowers[Math.floor(Math.random() * lowers.length)],
+    uppers[Math.floor(Math.random() * uppers.length)],
+    numbers[Math.floor(Math.random() * numbers.length)],
+    symbols[Math.floor(Math.random() * symbols.length)],
+  ];
+
+  while (required.length < 12) {
+    required.push(all[Math.floor(Math.random() * all.length)]);
+  }
+
+  return required.sort(() => Math.random() - 0.5).join("");
+}
+
 async function copyToClipboard(value: string) {
   if (typeof navigator === "undefined" || !navigator.clipboard) return;
   await navigator.clipboard.writeText(value);
@@ -276,6 +332,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   );
 
   const selectedPhoneCountry = phoneCountries.find((country) => country.code === selectedCountryCode) ?? phoneCountries[0];
+  const passwordStrength = getPasswordStrength(password);
   const offerMap = useMemo(() => new Map(offers.map((offer) => [offer.slug, offer])), [offers]);
   const orderedOffers = useMemo(() => {
     const kindRank = { BUNDLE: 0, PAIR: 1, SINGLE: 2 };
@@ -382,12 +439,25 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     );
   }
 
+  function handleSuggestPassword() {
+    const generated = generateStrongPassword();
+    setPassword(generated);
+    setConfirmPassword(generated);
+    setError(null);
+  }
+
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSuccess(null);
     setManualProofMessage(null);
     setIsSubmitting(true);
+
+    if (password.length < 8) {
+      setError("Password must contain at least 8 characters.");
+      setIsSubmitting(false);
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Password and confirm password must match.");
@@ -530,7 +600,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                 </button>
               </div>
 
-              <form onSubmit={handleSubmit} className="overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
+              <form onSubmit={handleSubmit} autoComplete="on" className="overflow-y-auto px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6">
                 <div className="grid gap-5 lg:grid-cols-[minmax(0,1.38fr)_360px] lg:items-start">
                   <div className="space-y-5">
                     {sectionCard(
@@ -539,28 +609,40 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                         <div className="mt-4 grid gap-4 md:grid-cols-2">
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Full name*</label>
-                            <input value={guardianFullName} onChange={(event) => setGuardianFullName(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter full name" required />
+                            <input name="name" autoComplete="name" value={guardianFullName} onChange={(event) => setGuardianFullName(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter full name" required />
                           </div>
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Email address*</label>
-                            <input type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
+                            <input name="email" autoComplete="email" type="email" value={parentEmail} onChange={(event) => setParentEmail(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Enter email address" required />
                           </div>
                           <div>
-                            <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Create password*</label>
-                            <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Minimum 8 characters" required />
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <label className="block text-left text-sm font-medium text-[#38506a]">Create password*</label>
+                              <button type="button" onClick={handleSuggestPassword} className="cursor-pointer text-xs font-semibold uppercase tracking-[0.12em] text-[#2a76aa]">
+                                Suggest strong password
+                              </button>
+                            </div>
+                            <input name="new-password" autoComplete="new-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="At least 8 characters" required />
+                            <p className={`mt-2 text-xs font-medium ${passwordStrength.tone}`}>
+                              {passwordStrength.message}
+                            </p>
                           </div>
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Confirm password*</label>
-                            <input type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Re-enter password" required />
+                            <input name="confirm-password" autoComplete="new-password" type="password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Re-enter password" required />
                             {confirmPassword ? (
-                              <p className={`mt-2 text-xs font-medium ${password === confirmPassword ? "text-[#2f6b4b]" : "text-[#b24c4c]"}`}>
-                                {password === confirmPassword ? "Passwords match." : "Passwords do not match."}
+                              <p className={`mt-2 text-xs font-medium ${password === confirmPassword && password.length >= 8 ? "text-[#2f6b4b]" : "text-[#b24c4c]"}`}>
+                                {password === confirmPassword
+                                  ? password.length >= 8
+                                    ? "Passwords match."
+                                    : "Password still needs at least 8 characters."
+                                  : "Passwords do not match."}
                               </p>
                             ) : null}
                           </div>
                           <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">City*</label>
-                            <input value={parentCity} onChange={(event) => setParentCity(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="City you are in" required />
+                            <input name="address-level2" autoComplete="address-level2" value={parentCity} onChange={(event) => setParentCity(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="City you are in" required />
                           </div>
                           <div className="md:col-span-2">
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Phone / WhatsApp number*</label>
@@ -755,7 +837,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                     )}
 
                     {draft ? <div className="rounded-2xl border border-[#ead8c3] bg-[#fffaf4] px-4 py-3 text-sm text-[#5f6b7a]"><p className="font-semibold text-[#22304a]">Draft saved</p><p className="mt-1">Registration ID: {draft.registrationId}</p></div> : null}
-                    {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, click the submit button again.</p> : null}</div> : null}
+                    {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p><p className="mt-2 text-xs">Your browser can save this password for future logins after account creation.</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, click the submit button again.</p> : null}</div> : null}
                     {error ? <div className="rounded-2xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-3 text-sm text-[#a23c3c]">{error}</div> : null}
 
                     {selectedGateway === "BANK_TRANSFER" && success?.manualInstructions ? (
