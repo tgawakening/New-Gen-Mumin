@@ -69,13 +69,17 @@ export async function sendEnrollmentConfirmationEmail(input: {
     html: renderGenMuminsEmailTemplate({
       heading: emailTemplateCatalog.enrollmentConfirmation.heading,
       preview: emailTemplateCatalog.enrollmentConfirmation.preview,
-      intro: `Jazakum Allahu khayran ${input.parentName}, your enrollment has been received and is now in progress.`,
+      intro: `Assalamu alaikum ${input.parentName}, your registration draft has been saved. Complete your payment now to confirm your child's enrollment.`,
       sections: [
         { label: "Registration ID", value: input.registrationId },
         { label: "Students", value: `${input.studentCount}` },
         { label: "Amount", value: `${input.currency} ${input.totalAmount}` },
+        { label: "Status", value: "Payment pending" },
       ],
-      callToAction: { label: "Review registration", href: resolveHref("/registration") },
+      callToAction: {
+        label: "Complete pending payment",
+        href: resolveHref(`/registration/pending/${input.registrationId}`),
+      },
     }),
   });
 }

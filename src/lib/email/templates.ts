@@ -77,8 +77,8 @@ export function renderGenMuminsEmailTemplate(input: EmailTemplateInput) {
 
 export const emailTemplateCatalog = {
   enrollmentConfirmation: {
-    heading: "Enrollment confirmation",
-    preview: "Your Gen-Mumins enrollment has been received.",
+    heading: "Your payment is pending",
+    preview: "Complete your payment to confirm your Gen-Mumins enrollment.",
   },
   adminNewEnrollment: {
     heading: "New enrollment received",
