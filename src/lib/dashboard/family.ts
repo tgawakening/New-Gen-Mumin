@@ -1,8 +1,79 @@
 import "server-only";
 
-import { PaymentStatus, UserRole } from "@prisma/client";
+import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
+
+type ChildCourseSummary = {
+  id: string;
+  title: string;
+  status: string;
+  startedAt: Date | null;
+  meetingCount: number;
+};
+
+type ChildScheduleSummary = {
+  id: string;
+  title: string;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  meetingUrl: string | null;
+  teacherName: string | null;
+  provider: string | null;
+};
+
+type ChildQuizSummary = {
+  id: string;
+  title: string;
+  type: string;
+  questionCount: number;
+  totalPoints: number;
+  timeLimitSeconds: number | null;
+  bestScore: number | null;
+  latestScore: number | null;
+  latestSubmittedAt: Date | null;
+  attempts: Array<{
+    id: string;
+    attemptNumber: number;
+    score: number | null;
+    submittedAt: Date | null;
+    feedback: string | null;
+  }>;
+};
+
+type ChildAssignmentSummary = {
+  id: string;
+  title: string;
+  dueDate: Date | null;
+  status: SubmissionStatus | "NOT_STARTED";
+  grade: string | null;
+  score: number | null;
+  feedback: string | null;
+  submittedAt: Date | null;
+};
+
+type ChildProgressSummary = {
+  id: string;
+  programTitle: string;
+  reportPeriod: string;
+  attendancePct: number | null;
+  grade: string | null;
+  strengths: string | null;
+  nextSteps: string | null;
+};
+
+type ChildJournalSummary = {
+  id: string;
+  title: string;
+  reflection: string;
+  practiceMinutes: number;
+  selfRating: string | null;
+  teacherFeedback: string | null;
+  status: SubmissionStatus;
+  submittedAt: Date;
+};
 
 type ChildSummary = {
   id: string;
@@ -11,21 +82,34 @@ type ChildSummary = {
   accessLocked: boolean;
   attendanceRate: number;
   attendanceBreakdown: Array<{ label: string; value: number }>;
-  courses: Array<{ id: string; title: string; status: string }>;
-  nextClass: {
-    title: string;
-    weekday: number;
-    startTime: string;
-    meetingUrl: string | null;
-    teacherName: string | null;
-  } | null;
-  quizzes: Array<{ title: string; submittedAt: Date | null; score: number | null; type: string }>;
-  progress: Array<{ programTitle: string; grade: string | null; attendancePct: number | null }>;
-  journals: Array<{ title: string; submittedAt: Date; practiceMinutes: number; selfRating: string | null }>;
+  courses: ChildCourseSummary[];
+  schedule: ChildScheduleSummary[];
+  nextClass: ChildScheduleSummary | null;
+  quizzes: ChildQuizSummary[];
+  assignments: ChildAssignmentSummary[];
+  progress: ChildProgressSummary[];
+  journals: ChildJournalSummary[];
+  profile: {
+    displayName: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string | null;
+    timezone: string | null;
+    countryName: string | null;
+    age: number | null;
+    currentGrade: string | null;
+  };
 };
 
 export type ParentDashboardData = {
   parentName: string;
+  parentProfile: {
+    email: string;
+    phone: string | null;
+    billingCountryName: string | null;
+    preferredCurrency: string | null;
+  };
   accessLocked: boolean;
   accessStateLabel: string;
   pendingReason: string | null;
@@ -61,20 +145,17 @@ function resolvePendingReason(orderStatus?: PaymentStatus | null, gateway?: stri
   }
 
   if (orderStatus === "PENDING" || orderStatus === "INITIATED") {
-    return "Finish the subscription checkout to unlock classes, quizzes, and schedule access.";
+    return "Finish the subscription checkout to unlock classes, quizzes, assignments, and schedule access.";
   }
 
   if (orderStatus === "REQUIRES_ACTION") {
-    return "Your payment needs another action before the dashboard can unlock.";
+    return "Your payment needs one more action before the dashboard can unlock.";
   }
 
   return "Your enrollment is being prepared. Please check back shortly.";
 }
 
-function computeAttendanceBreakdown(
-  attendances: Array<{ status: string }>,
-  totalEnrollments: number,
-) {
+function computeAttendanceBreakdown(attendances: Array<{ status: string }>, totalEnrollments: number) {
   const breakdown = {
     PRESENT: 0,
     ABSENT: 0,
@@ -102,30 +183,110 @@ function computeAttendanceBreakdown(
   };
 }
 
-function getWeekdayLabel(weekday: number) {
-  return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][weekday] ?? "Class";
+function buildTeacherName(
+  teacher?: { user?: { firstName: string; lastName: string } | null } | null,
+) {
+  if (!teacher?.user) {
+    return null;
+  }
+
+  return `${teacher.user.firstName} ${teacher.user.lastName}`.trim();
 }
 
-function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
-  const allAttendances = child.attendances;
-  const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
-    allAttendances,
-    child.enrollments.length,
-  );
-
-  const upcomingSchedules = child.enrollments
-    .flatMap((enrollment: any) =>
+function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
+  return enrollments
+    .flatMap((enrollment) =>
       enrollment.program.schedules.map((schedule: any) => ({
+        id: schedule.id,
         title: enrollment.program.title,
         weekday: schedule.weekday,
         startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        timezone: schedule.timezone,
         meetingUrl: schedule.meetingUrl,
-        teacherName: schedule.teacher?.user
-          ? `${schedule.teacher.user.firstName} ${schedule.teacher.user.lastName}`.trim()
-          : null,
+        teacherName: buildTeacherName(schedule.teacher),
+        provider: schedule.meetingProvider,
       })),
     )
-    .sort((left: any, right: any) => left.weekday - right.weekday);
+    .sort((left, right) => {
+      if (left.weekday !== right.weekday) {
+        return left.weekday - right.weekday;
+      }
+
+      return left.startTime.localeCompare(right.startTime);
+    });
+}
+
+function mapQuizSummaries(quizzes: any[], quizAttempts: any[]) {
+  return quizzes.map((quiz) => {
+    const attempts = quizAttempts
+      .filter((attempt) => attempt.quizId === quiz.id)
+      .sort((left, right) => right.attemptNumber - left.attemptNumber);
+
+    const scores = attempts
+      .map((attempt) => attempt.manualScore ?? attempt.autoScore)
+      .filter((score): score is number => score !== null && score !== undefined);
+
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      type: quiz.type.replace(/_/g, " "),
+      questionCount: quiz.questions.length,
+      totalPoints: quiz.questions.reduce((total: number, question: any) => total + question.points, 0),
+      timeLimitSeconds: quiz.timeLimitSeconds,
+      bestScore: scores.length ? Math.max(...scores) : null,
+      latestScore: attempts[0] ? attempts[0].manualScore ?? attempts[0].autoScore ?? null : null,
+      latestSubmittedAt: attempts[0]?.submittedAt ?? null,
+      attempts: attempts.slice(0, 5).map((attempt) => ({
+        id: attempt.id,
+        attemptNumber: attempt.attemptNumber,
+        score: attempt.manualScore ?? attempt.autoScore ?? null,
+        submittedAt: attempt.submittedAt,
+        feedback: attempt.feedback,
+      })),
+    } satisfies ChildQuizSummary;
+  });
+}
+
+function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
+  const assignments = enrollments.flatMap((enrollment) =>
+    enrollment.program.assignments.map((assignment: any) => {
+      const submission = submissions.find((entry) => entry.assignmentId === assignment.id) ?? null;
+
+      return {
+        id: assignment.id,
+        title: assignment.title,
+        dueDate: assignment.dueDate,
+        status: submission?.status ?? "NOT_STARTED",
+        grade: submission?.grade ?? null,
+        score: submission?.score ?? null,
+        feedback: submission?.feedback ?? null,
+        submittedAt: submission?.submittedAt ?? null,
+      } satisfies ChildAssignmentSummary;
+    }),
+  );
+
+  return assignments.sort((left, right) => {
+    if (left.dueDate && right.dueDate) {
+      return left.dueDate.getTime() - right.dueDate.getTime();
+    }
+
+    if (left.dueDate) return -1;
+    if (right.dueDate) return 1;
+    return left.title.localeCompare(right.title);
+  });
+}
+
+function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
+  const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
+    child.attendances,
+    child.enrollments.length,
+  );
+
+  const schedule = mapScheduleEntries(child.enrollments);
+  const programQuizzes = child.enrollments.flatMap((enrollment: any) => enrollment.program.quizzes);
+  const quizzes = mapQuizSummaries(programQuizzes, child.quizAttempts);
+  const assignments = mapAssignmentSummaries(child.enrollments, child.assignments);
 
   return {
     id: child.id,
@@ -145,26 +306,49 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       id: enrollment.id,
       title: enrollment.program.title,
       status: enrollment.status.replace(/_/g, " "),
+      startedAt: enrollment.startedAt,
+      meetingCount: enrollment.program.schedules.length,
     })),
-    nextClass: upcomingSchedules[0] ?? null,
-    quizzes: child.quizAttempts.slice(0, 4).map((attempt: any) => ({
-      title: attempt.quiz.title,
-      submittedAt: attempt.submittedAt,
-      score:
-        attempt.manualScore ?? attempt.autoScore ?? null,
-      type: attempt.quiz.type.replace(/_/g, " "),
-    })),
-    progress: child.progressReports.slice(0, 4).map((report: any) => ({
+    schedule,
+    nextClass: schedule[0] ?? null,
+    quizzes,
+    assignments,
+    progress: child.progressReports.map((report: any) => ({
+      id: report.id,
       programTitle: report.program.title,
-      grade: report.grade,
+      reportPeriod: report.reportPeriod,
       attendancePct: report.attendancePct,
+      grade: report.grade,
+      strengths: report.strengths,
+      nextSteps: report.nextSteps,
     })),
-    journals: child.journalEntries.slice(0, 3).map((entry: any) => ({
+    journals: child.journalEntries.map((entry: any) => ({
+      id: entry.id,
       title: entry.title,
-      submittedAt: entry.submittedAt,
+      reflection: entry.reflection,
       practiceMinutes: entry.practiceMinutes,
       selfRating: entry.selfRating,
+      teacherFeedback: entry.teacherFeedback,
+      status: entry.status,
+      submittedAt: entry.submittedAt,
     })),
+    profile: {
+      displayName:
+        child.displayName ||
+        `${child.user.firstName} ${child.user.lastName}`.trim() ||
+        child.user.firstName,
+      firstName: child.user.firstName,
+      lastName: child.user.lastName,
+      email: child.user.email,
+      phone:
+        child.user.phoneCountryCode && child.user.phoneNumber
+          ? `${child.user.phoneCountryCode} ${child.user.phoneNumber}`
+          : child.user.phoneNumber ?? null,
+      timezone: child.user.timezone,
+      countryName: child.countryName,
+      age: child.age,
+      currentGrade: child.currentGrade,
+    },
   };
 }
 
@@ -194,7 +378,7 @@ async function getParentProfile(userId: string) {
                   program: {
                     include: {
                       schedules: {
-                        orderBy: { weekday: "asc" },
+                        orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
                         include: {
                           teacher: {
                             include: {
@@ -202,6 +386,17 @@ async function getParentProfile(userId: string) {
                             },
                           },
                         },
+                      },
+                      quizzes: {
+                        where: { isPublished: true },
+                        include: {
+                          questions: {
+                            orderBy: { sortOrder: "asc" },
+                          },
+                        },
+                      },
+                      assignments: {
+                        orderBy: { dueDate: "asc" },
                       },
                     },
                   },
@@ -212,19 +407,23 @@ async function getParentProfile(userId: string) {
                 take: 18,
               },
               quizAttempts: {
-                orderBy: { submittedAt: "desc" },
-                take: 6,
+                orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+                take: 20,
                 include: {
                   quiz: true,
                 },
               },
+              assignments: {
+                orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+                take: 20,
+              },
               journalEntries: {
                 orderBy: { submittedAt: "desc" },
-                take: 4,
+                take: 8,
               },
               progressReports: {
                 orderBy: { updatedAt: "desc" },
-                take: 4,
+                take: 8,
                 include: {
                   program: true,
                 },
@@ -251,16 +450,22 @@ export async function getParentDashboardData(userId: string) {
     ),
   );
 
-  const accessLocked =
-    !hasUnlockedAccess &&
-    (!!latestOrder || parentProfile.students.length > 0);
-
+  const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentProfile.students.length > 0);
   const pendingReason = accessLocked
     ? resolvePendingReason(latestOrder?.status, latestOrder?.gateway ?? null)
     : null;
 
   return {
     parentName: `${parentProfile.user.firstName} ${parentProfile.user.lastName}`.trim(),
+    parentProfile: {
+      email: parentProfile.user.email,
+      phone:
+        parentProfile.user.phoneCountryCode && parentProfile.user.phoneNumber
+          ? `${parentProfile.user.phoneCountryCode} ${parentProfile.user.phoneNumber}`
+          : parentProfile.user.phoneNumber ?? null,
+      billingCountryName: parentProfile.billingCountryName,
+      preferredCurrency: parentProfile.preferredCurrency,
+    },
     accessLocked,
     accessStateLabel: formatAccessState(accessLocked),
     pendingReason,
@@ -273,9 +478,7 @@ export async function getParentDashboardData(userId: string) {
           gateway: latestOrder.gateway,
         }
       : null,
-    children: parentProfile.students.map(({ student }) =>
-      mapChildSummary(student, accessLocked),
-    ),
+    children: parentProfile.students.map(({ student }) => mapChildSummary(student, accessLocked)),
   } satisfies ParentDashboardData;
 }
 
@@ -302,7 +505,7 @@ export async function getStudentDashboardData(userId: string) {
           program: {
             include: {
               schedules: {
-                orderBy: { weekday: "asc" },
+                orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
                 include: {
                   teacher: {
                     include: {
@@ -310,6 +513,17 @@ export async function getStudentDashboardData(userId: string) {
                     },
                   },
                 },
+              },
+              quizzes: {
+                where: { isPublished: true },
+                include: {
+                  questions: {
+                    orderBy: { sortOrder: "asc" },
+                  },
+                },
+              },
+              assignments: {
+                orderBy: { dueDate: "asc" },
               },
             },
           },
@@ -320,17 +534,21 @@ export async function getStudentDashboardData(userId: string) {
         take: 18,
       },
       quizAttempts: {
-        orderBy: { submittedAt: "desc" },
-        take: 6,
+        orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+        take: 20,
         include: { quiz: true },
+      },
+      assignments: {
+        orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+        take: 20,
       },
       journalEntries: {
         orderBy: { submittedAt: "desc" },
-        take: 4,
+        take: 8,
       },
       progressReports: {
         orderBy: { updatedAt: "desc" },
-        take: 4,
+        take: 8,
         include: { program: true },
       },
     },
@@ -345,14 +563,6 @@ export async function getStudentDashboardData(userId: string) {
     ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),
   );
 
-  const child = mapChildSummary(
-    {
-      ...studentProfile,
-      user: studentProfile.user,
-    },
-    accessLocked,
-  );
-
   return {
     studentName:
       studentProfile.displayName ||
@@ -363,7 +573,7 @@ export async function getStudentDashboardData(userId: string) {
     pendingReason: accessLocked
       ? resolvePendingReason(latestOrder?.status, latestOrder?.gateway ?? null)
       : null,
-    child,
+    child: mapChildSummary(studentProfile, accessLocked),
   } satisfies StudentDashboardData;
 }
 
