@@ -35,9 +35,11 @@ const quicksand = Quicksand({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://genmumin.com"),
   title: "Gen-Mumins - Raising Confident Muslim Leaders",
   description:
     "A long-term immersive program teaching Arabic, Seerah, Qur'anic Tajweed, and Life Skills for young Muslims.",
+  applicationName: "Gen-Mumins",
   authors: [{ name: "Global Awakening" }],
   keywords: [
     "Islamic education",
@@ -55,6 +57,28 @@ export const metadata: Metadata = {
     siteName: "Gen-Mumins",
     locale: "en_GB",
     type: "website",
+    images: [
+      {
+        url: "/images/logo.png",
+        width: 512,
+        height: 512,
+        alt: "Gen-Mumins logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "Gen-Mumins - Raising Confident Muslim Leaders",
+    description:
+      "A long-term immersive program teaching Arabic, Seerah, Qur'anic Tajweed, and Life Skills for young Muslims.",
+    images: ["/images/logo.png"],
+  },
+  icons: {
+    icon: [
+      { url: "/images/logo.png", type: "image/png" },
+    ],
+    shortcut: ["/images/logo.png"],
+    apple: [{ url: "/images/logo.png", type: "image/png" }],
   },
 };
 
