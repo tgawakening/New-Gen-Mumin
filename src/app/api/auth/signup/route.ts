@@ -9,11 +9,15 @@ export async function POST(request: Request) {
     const payload = signupPayloadSchema.parse(await request.json());
     const user = await registerParentAccount(payload);
 
-    await sendAccountCreationConfirmationEmail({
-      toEmail: user.email,
-      firstName: user.firstName,
-      loginUrl: "/auth/login",
-    });
+    try {
+      await sendAccountCreationConfirmationEmail({
+        toEmail: user.email,
+        firstName: user.firstName,
+        loginUrl: "/auth/login",
+      });
+    } catch (emailError) {
+      console.error("Account creation email failed", emailError);
+    }
 
     return NextResponse.json({
       userId: user.id,

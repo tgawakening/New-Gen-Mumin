@@ -63,8 +63,12 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
   });
 
   if (!response.ok) {
-    throw new Error("Unable to send email.");
+    return {
+      skipped: false as const,
+      failed: true as const,
+      error: typeof payload?.message === "string" ? payload.message : "Unable to send email.",
+    };
   }
 
-  return { skipped: false as const };
+  return { skipped: false as const, failed: false as const };
 }
