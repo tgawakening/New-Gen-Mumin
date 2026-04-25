@@ -230,6 +230,9 @@ export async function createCheckoutDraft(
           ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
           : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
     };
+  }, {
+    maxWait: 10_000,
+    timeout: 20_000,
   });
 }
 
