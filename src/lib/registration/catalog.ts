@@ -106,13 +106,24 @@ export const REGIONAL_PRICE_OVERRIDES: Record<
 export const REGISTRATION_COUNTRIES = [
   { code: "GB", name: "United Kingdom", currency: "GBP" },
   { code: "PK", name: "Pakistan", currency: "PKR" },
-  { code: "IN", name: "India", currency: "PKR" },
-  { code: "BD", name: "Bangladesh", currency: "PKR" },
-  { code: "AF", name: "Afghanistan", currency: "PKR" },
+  { code: "IN", name: "India", currency: "INR" },
+  { code: "BD", name: "Bangladesh", currency: "BDT" },
+  { code: "AF", name: "Afghanistan", currency: "AFN" },
   { code: "US", name: "United States", currency: "USD" },
   { code: "AE", name: "United Arab Emirates", currency: "AED" },
   { code: "SA", name: "Saudi Arabia", currency: "SAR" },
 ] as const;
+
+const GBP_RATES: Record<string, number> = {
+  GBP: 1,
+  PKR: 350,
+  INR: 104,
+  BDT: 149,
+  AFN: 97,
+  AED: 4.68,
+  SAR: 4.77,
+  USD: 1.27,
+};
 
 export function resolveCurrency(countryCode?: string | null) {
   if (!countryCode) {
@@ -143,6 +154,14 @@ export function resolveOfferAmount(
 
   if (resolvedCurrency === "PKR") {
     return offer.basePricePkr ?? offer.basePriceGbp;
+  }
+
+  if (SOUTH_ASIA_COUNTRY_CODES.has(normalizedCountryCode) && offer.basePricePkr) {
+    const targetRate = GBP_RATES[resolvedCurrency];
+    if (targetRate) {
+      const discountFactor = offer.basePricePkr / (offer.basePriceGbp * GBP_RATES.PKR);
+      return Math.round(offer.basePriceGbp * targetRate * discountFactor);
+    }
   }
 
   return offer.basePriceGbp;
