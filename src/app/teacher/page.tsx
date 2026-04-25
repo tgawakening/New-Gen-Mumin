@@ -1,50 +1,114 @@
-import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import Link from "next/link";
+import { redirect } from "next/navigation";
 
-export default function TeacherDashboardPage() {
+import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
+import { getTeacherNavItems } from "@/lib/teacher/nav";
+import {
+  TeacherDashboardFrame,
+  TeacherInfoList,
+  TeacherMetricGrid,
+  TeacherSection,
+  formatGrade,
+  formatWeekday,
+} from "@/components/dashboard/teacher/TeacherDashboardFrame";
+
+export default async function TeacherDashboardPage() {
+  const session = await getCurrentSession();
+  if (!session) redirect("/auth/login");
+  if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
+
+  const dashboard = await getTeacherDashboardData(session.user.id);
+  if (!dashboard) redirect("/teacher-registration");
+
   return (
-    <DashboardShell
-      role="Teacher"
-      title="Teacher Dashboard"
-      subtitle="Teaching workspace for running live classes, tracking attendance, grading assessments, and supporting student progress."
-      accentLabel="Teaching suite"
-      metrics={[
-        { label: "Assigned classes", value: "6", hint: "Roster and programme-based teaching load." },
-        { label: "Upcoming lessons", value: "3", hint: "Next classes, meeting rooms, and planner items." },
-        { label: "Quizzes to grade", value: "8", hint: "Pending review and manual-marking queue." },
-        { label: "Journal reviews", value: "12", hint: "Practice logs and reflection feedback waiting." },
-      ]}
-      navItems={[
-        { label: "Dashboard", href: "/teacher", badge: "Live" },
-        { label: "Classes", href: "/teacher#classes" },
-        { label: "Attendance", href: "/teacher#attendance" },
-        { label: "Course Builder", href: "/teacher#course-builder", badge: "Start" },
-        { label: "Quizzes", href: "/teacher#quizzes" },
-        { label: "Reports", href: "/teacher#reports" },
-      ]}
-      panels={[
-        {
-          eyebrow: "Teaching flow",
-          title: "Classroom operations panel",
-          description: "The teacher workspace will handle schedules, attendance, lesson logs, grading, and feedback in one consistent interface.",
-          bullets: [
-            "Assigned classes, student roster, and upcoming meeting links",
-            "Attendance marking with history and late/excused options",
-            "Quiz, journal, and assignment review queues",
-          ],
-        },
-        {
-          eyebrow: "Course builder",
-          title: "Lesson content upload foundation",
-          description: "This is where we will grow the teacher content builder so lessons, worksheets, slides, and learning notes can be uploaded by programme.",
-          bullets: [
-            "Create lesson modules by programme and week",
-            "Attach video links, PDFs, worksheets, and homework guidance",
-            "Publish content to student course view with teacher notes",
-          ],
-        },
-      ]}
-      primaryCta={{ label: "Open login", href: "/auth/login" }}
-      secondaryCta={{ label: "View registration", href: "/registration" }}
-    />
+    <TeacherDashboardFrame
+      title={dashboard.teacherName}
+      subtitle="Run live classes, follow student rosters, review assessments, and prepare course delivery from one teaching workspace."
+      navItems={getTeacherNavItems()}
+    >
+      <TeacherMetricGrid
+        metrics={[
+          { label: "Assigned classes", value: String(dashboard.metrics.assignedClasses), hint: "Weekly teaching timetable." },
+          { label: "Students", value: String(dashboard.metrics.students), hint: "Active learners across assigned programmes." },
+          { label: "Quizzes to review", value: String(dashboard.metrics.quizzesToReview), hint: "Pending assessment marking queue." },
+          { label: "Journal reviews", value: String(dashboard.metrics.journalReviews), hint: "Reflection entries awaiting feedback." },
+        ]}
+      />
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.9fr)]">
+        <div className="space-y-6">
+          <TeacherSection
+            eyebrow="Teaching load"
+            title="Upcoming classes"
+            action={
+              <Link href="/teacher/schedule" className="text-sm font-semibold text-[#2a76aa]">
+                Open schedule
+              </Link>
+            }
+          >
+            <TeacherInfoList
+              items={dashboard.classes.slice(0, 6).map(
+                (entry) =>
+                  `${entry.title} • ${formatWeekday(entry.weekday)} • ${entry.startTime}-${entry.endTime} • ${entry.activeEnrollments} active learners`,
+              )}
+              emptyLabel="Assigned classes will appear here after teacher onboarding."
+            />
+          </TeacherSection>
+
+          <TeacherSection
+            eyebrow="Assessment"
+            title="Quiz and journal review queue"
+            action={
+              <Link href="/teacher/quizzes" className="text-sm font-semibold text-[#2a76aa]">
+                Open quizzes
+              </Link>
+            }
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              <TeacherInfoList
+                items={dashboard.quizReviewQueue.slice(0, 6).map(
+                  (entry) =>
+                    `${entry.studentName} • ${entry.quizTitle} • ${entry.score ?? "Pending"} pts`,
+                )}
+                emptyLabel="Submitted quiz attempts will appear here."
+              />
+              <TeacherInfoList
+                items={dashboard.journals.slice(0, 6).map(
+                  (entry) =>
+                    `${entry.studentName} • ${entry.title} • ${entry.practiceMinutes} min • ${formatGrade(entry.selfRating)}`,
+                )}
+                emptyLabel="Journal reviews will appear here."
+              />
+            </div>
+          </TeacherSection>
+        </div>
+
+        <div className="space-y-6">
+          <TeacherSection eyebrow="Course builder" title="Lesson delivery">
+            <TeacherInfoList
+              items={[
+                "Create lesson modules by programme and week",
+                "Attach video links, PDFs, worksheets, and homework guidance",
+                "Publish content to the student course view with teacher notes",
+              ]}
+              emptyLabel="Course builder setup will appear here."
+            />
+          </TeacherSection>
+
+          <TeacherSection eyebrow="Profile" title="Teaching profile">
+            <TeacherInfoList
+              items={[
+                `Email • ${dashboard.profile.email}`,
+                `Phone • ${dashboard.profile.phone ?? "Pending"}`,
+                `Timezone • ${dashboard.profile.timezone ?? "Europe/London"}`,
+                `Specialties • ${dashboard.profile.specialties.length ? dashboard.profile.specialties.join(", ") : "Pending"}`,
+              ]}
+              emptyLabel="Teacher profile details will appear here."
+            />
+          </TeacherSection>
+        </div>
+      </div>
+    </TeacherDashboardFrame>
   );
 }
