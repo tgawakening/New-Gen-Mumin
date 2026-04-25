@@ -1,7 +1,9 @@
 import { z } from "zod";
 
 const envSchema = z.object({
-  DATABASE_URL: z.string().min(1),
+  DATABASE_URL: z.string().min(1).optional(),
+  APP_DATABASE_URL: z.string().min(1).optional(),
+  GEN_MUMIN_DATABASE_URL: z.string().min(1).optional(),
   APP_URL: z.string().url(),
   APP_ENV: z.enum(["development", "staging", "production"]).default("development"),
   AUTH_SESSION_SECRET: z.string().min(16),
@@ -39,6 +41,8 @@ const envSchema = z.object({
 
 export const env = envSchema.safeParse({
   DATABASE_URL: process.env.DATABASE_URL,
+  APP_DATABASE_URL: process.env.APP_DATABASE_URL,
+  GEN_MUMIN_DATABASE_URL: process.env.GEN_MUMIN_DATABASE_URL,
   APP_URL: process.env.APP_URL,
   APP_ENV: process.env.APP_ENV,
   AUTH_SESSION_SECRET: process.env.AUTH_SESSION_SECRET,

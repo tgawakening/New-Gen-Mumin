@@ -29,8 +29,14 @@ function normalizeDatabaseUrl(value?: string) {
   return normalized;
 }
 
-const normalizedDatabaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
-if (normalizedDatabaseUrl && normalizedDatabaseUrl !== process.env.DATABASE_URL) {
+const rawDatabaseUrl =
+  process.env.APP_DATABASE_URL ||
+  process.env.GEN_MUMIN_DATABASE_URL ||
+  process.env.DATABASE_URL;
+
+const normalizedDatabaseUrl = normalizeDatabaseUrl(rawDatabaseUrl);
+if (normalizedDatabaseUrl) {
+  process.env.APP_DATABASE_URL = normalizedDatabaseUrl;
   process.env.DATABASE_URL = normalizedDatabaseUrl;
 }
 
