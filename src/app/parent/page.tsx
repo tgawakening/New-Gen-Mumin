@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { getRegistrationOptions } from "@/lib/registration/service";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -15,7 +17,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string }>;
+  searchParams?: Promise<{ child?: string; addChild?: string }>;
 };
 
 export default async function ParentDashboardPage({ searchParams }: PageProps) {
@@ -23,12 +25,16 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   if (!session) redirect("/auth/login");
   if (session.user.role !== "PARENT") redirect(getDashboardHome(session.user.role));
 
-  const dashboard = await getParentDashboardData(session.user.id);
+  const [dashboard, options] = await Promise.all([
+    getParentDashboardData(session.user.id),
+    getRegistrationOptions(),
+  ]);
   if (!dashboard) redirect("/registration");
 
   const params = searchParams ? await searchParams : undefined;
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
+  const showAddChildModal = params?.addChild === "1";
 
   return (
     <FamilyDashboardFrame
@@ -52,7 +58,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         title="Choose a learner"
         action={
           <Link
-            href="/parent/add-child"
+            href="/parent?addChild=1"
             className="rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
           >
             Add another child
@@ -151,6 +157,21 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           </p>
         </SectionCard>
       )}
+
+      {showAddChildModal ? (
+        <AddChildEnrollmentModal
+          parent={{
+            parentName: dashboard.parentName,
+            parentEmail: dashboard.parentProfile.email,
+            phoneCountryCode: dashboard.parentProfile.phoneCountryCode,
+            phoneNumber: dashboard.parentProfile.phoneNumber,
+            billingCountryCode: dashboard.parentProfile.billingCountryCode,
+            billingCountryName: dashboard.parentProfile.billingCountryName,
+          }}
+          offers={options.offers}
+          countries={options.countries}
+        />
+      ) : null}
     </FamilyDashboardFrame>
   );
 }
