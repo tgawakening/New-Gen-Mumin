@@ -86,3 +86,55 @@ export async function registerTeacherAccount(payload: TeacherSignupPayload) {
 
   return user;
 }
+
+function getAdminDashboardCredentials() {
+  return {
+    email: process.env.ADMIN_DASHBOARD_EMAIL || "tgawakening786@gmail.com",
+    password: process.env.ADMIN_DASHBOARD_PASSWORD || "Raahil1985",
+  };
+}
+
+export async function loginAdminDashboardAccount(payload: LoginPayload) {
+  const adminCredentials = getAdminDashboardCredentials();
+
+  if (
+    payload.email.trim().toLowerCase() !== adminCredentials.email.trim().toLowerCase() ||
+    payload.password !== adminCredentials.password
+  ) {
+    throw new Error("Invalid admin email or password.");
+  }
+
+  let user = await db.user.findUnique({
+    where: { email: adminCredentials.email },
+  });
+
+  if (!user) {
+    user = await db.user.create({
+      data: {
+        email: adminCredentials.email,
+        passwordHash: hashPassword(adminCredentials.password),
+        role: "ADMIN",
+        status: "ACTIVE",
+        firstName: "TGA",
+        lastName: "Admin",
+        adminProfile: {
+          create: {
+            title: "Gen-Mumins Admin",
+          },
+        },
+      },
+    });
+  } else if (user.role !== "ADMIN") {
+    user = await db.user.update({
+      where: { id: user.id },
+      data: {
+        role: "ADMIN",
+        status: "ACTIVE",
+      },
+    });
+  }
+
+  await createSession(user.id);
+
+  return user;
+}

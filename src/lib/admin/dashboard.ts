@@ -8,22 +8,32 @@ function extractNoteValue(notes: string | null | undefined, label: string) {
   return line ? line.split(":").slice(1).join(":").trim() : null;
 }
 
-export async function getAdminDashboardData() {
+export type AdminDashboardFilters = {
+  orderStatus?: string;
+  orderPayment?: string;
+  orderProgram?: string;
+  orderPricing?: string;
+  studentPayment?: string;
+  studentRegistrationStatus?: string;
+  studentProgram?: string;
+  studentPricing?: string;
+};
+
+function hasDiscount(totalDiscount: number) {
+  return totalDiscount > 0;
+}
+
+export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
   const [
     totalStudents,
     activeEnrollments,
     pendingRegistrations,
     unreadMessages,
     paidRevenue,
-    activePrograms,
-    activeTeachers,
     recentRegistrations,
-    recentOrders,
-    paymentReviewQueue,
-    scholarshipQueue,
-    latestStudents,
-    contactInbox,
-    programsSnapshot,
+    orders,
+    students,
+    feeWaiverApplications,
   ] = await Promise.all([
     db.studentProfile.count(),
     db.enrollment.count({ where: { status: "ACTIVE" } }),
@@ -37,8 +47,6 @@ export async function getAdminDashboardData() {
       where: { status: "SUCCEEDED" },
       _sum: { totalAmount: true },
     }),
-    db.program.count({ where: { status: "PUBLISHED" } }),
-    db.teacherProfile.count({ where: { isActive: true } }),
     db.registration.findMany({
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -50,50 +58,43 @@ export async function getAdminDashboardData() {
     }),
     db.order.findMany({
       orderBy: { createdAt: "desc" },
-      take: 8,
+      take: 80,
       include: {
         parent: {
           include: {
             user: true,
           },
         },
-        payments: true,
-      },
-    }),
-    db.paymentTransaction.findMany({
-      where: { status: { in: ["PENDING", "UNDER_REVIEW", "REQUIRES_ACTION"] } },
-      take: 8,
-      orderBy: { createdAt: "desc" },
-      include: {
-        order: {
-          select: {
-            orderNumber: true,
-            parent: {
-              select: {
-                user: {
-                  select: {
-                    firstName: true,
-                    lastName: true,
-                    email: true,
-                  },
-                },
+        registration: {
+          include: {
+            students: true,
+            items: {
+              include: {
+                offer: true,
+              },
+            },
+          },
+        },
+        payments: {
+          include: {
+            manualSubmission: true,
+          },
+        },
+        items: {
+          include: {
+            offer: true,
+            enrollment: {
+              include: {
+                program: true,
               },
             },
           },
         },
       },
     }),
-    db.scholarshipApplication.findMany({
-      where: { status: "PENDING" },
-      take: 8,
-      orderBy: { createdAt: "desc" },
-      include: {
-        offer: { select: { title: true } },
-      },
-    }),
     db.studentProfile.findMany({
-      take: 8,
       orderBy: { createdAt: "desc" },
+      take: 80,
       include: {
         user: true,
         parents: {
@@ -101,36 +102,172 @@ export async function getAdminDashboardData() {
             parent: {
               include: {
                 user: true,
+                orders: {
+                  orderBy: { createdAt: "desc" },
+                  take: 3,
+                },
               },
             },
           },
         },
         enrollments: {
-          where: { status: "ACTIVE" },
           include: {
             program: true,
           },
         },
-      },
-    }),
-    db.contactMessage.findMany({
-      take: 8,
-      orderBy: { createdAt: "desc" },
-    }),
-    db.program.findMany({
-      take: 8,
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "desc" }],
-      include: {
-        _count: {
-          select: {
-            schedules: true,
-            enrollments: true,
-            quizzes: true,
+        registrationStudents: {
+          include: {
+            registration: true,
+            items: {
+              include: {
+                offer: true,
+              },
+            },
           },
         },
       },
     }),
+    db.scholarshipApplication.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      include: {
+        offer: true,
+      },
+    }),
   ]);
+
+  const ordersView = orders.map((order) => {
+    const latestPayment = order.payments[0] ?? null;
+    const programTitles = Array.from(
+      new Set(
+        order.items.flatMap((item) => {
+          if (item.enrollment?.program?.title) return [item.enrollment.program.title];
+          if (item.offer?.title) return [item.offer.title];
+          return [];
+        }),
+      ),
+    );
+
+    return {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      parentName: `${order.parent.user.firstName} ${order.parent.user.lastName}`.trim(),
+      parentEmail: order.parent.user.email,
+      phone: order.parent.user.phoneNumber
+        ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
+        : "Pending",
+      gateway: order.gateway,
+      status: order.status,
+      currency: order.currency,
+      totalAmount: order.totalAmount,
+      discountAmount: order.discountAmount,
+      pricingLabel: hasDiscount(order.discountAmount) ? "Discounted" : "Full",
+      registrationStatus: order.registration?.status ?? "Pending",
+      enrollmentStates: order.items
+        .map((item) => item.enrollment?.status)
+        .filter(
+          (value): value is NonNullable<typeof value> => Boolean(value),
+        ),
+      programTitles,
+      createdAt: order.createdAt,
+      manualSubmission: latestPayment?.manualSubmission ?? null,
+      paymentStatus: latestPayment?.status ?? order.status,
+    };
+  });
+
+  const filteredOrders = ordersView.filter((order) => {
+    if (filters.orderStatus && filters.orderStatus !== "ALL" && order.status !== filters.orderStatus) {
+      return false;
+    }
+    if (filters.orderPayment && filters.orderPayment !== "ALL" && order.gateway !== filters.orderPayment) {
+      return false;
+    }
+    if (
+      filters.orderProgram &&
+      filters.orderProgram !== "ALL" &&
+      !order.programTitles.some((title) => title === filters.orderProgram)
+    ) {
+      return false;
+    }
+    if (filters.orderPricing && filters.orderPricing !== "ALL" && order.pricingLabel !== filters.orderPricing) {
+      return false;
+    }
+    return true;
+  });
+
+  const studentsView = students.map((student) => {
+    const latestOrder = student.parents[0]?.parent.orders[0] ?? null;
+    const latestRegistration = student.registrationStudents[0]?.registration ?? null;
+    const pricingLabel = student.registrationStudents.some((entry) =>
+      entry.items.some((item) => item.discountAmount > 0),
+    )
+      ? "Discounted"
+      : "Full";
+
+    return {
+      id: student.id,
+      userId: student.user.id,
+      name:
+        student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
+      email: student.user.email,
+      phone: student.user.phoneNumber
+        ? `${student.user.phoneCountryCode ?? ""} ${student.user.phoneNumber}`.trim()
+        : "Pending",
+      enrollments: student.enrollments.map((enrollment) => ({
+        id: enrollment.id,
+        programTitle: enrollment.program.title,
+        status: enrollment.status,
+      })),
+      paymentGateway: latestOrder?.gateway ?? "Pending",
+      registrationStatus: latestRegistration?.status ?? "Pending",
+      pricingLabel,
+      parents: student.parents.map((entry) =>
+        `${entry.parent.user.firstName} ${entry.parent.user.lastName}`.trim(),
+      ),
+      createdAt: student.createdAt,
+      age: student.age,
+      countryName: student.countryName,
+    };
+  });
+
+  const filteredStudents = studentsView.filter((student) => {
+    if (
+      filters.studentPayment &&
+      filters.studentPayment !== "ALL" &&
+      student.paymentGateway !== filters.studentPayment
+    ) {
+      return false;
+    }
+    if (
+      filters.studentRegistrationStatus &&
+      filters.studentRegistrationStatus !== "ALL" &&
+      student.registrationStatus !== filters.studentRegistrationStatus
+    ) {
+      return false;
+    }
+    if (
+      filters.studentProgram &&
+      filters.studentProgram !== "ALL" &&
+      !student.enrollments.some((enrollment) => enrollment.programTitle === filters.studentProgram)
+    ) {
+      return false;
+    }
+    if (
+      filters.studentPricing &&
+      filters.studentPricing !== "ALL" &&
+      student.pricingLabel !== filters.studentPricing
+    ) {
+      return false;
+    }
+    return true;
+  });
+
+  const uniqueOrderPrograms = Array.from(
+    new Set(ordersView.flatMap((order) => order.programTitles)),
+  ).sort((a, b) => a.localeCompare(b));
+  const uniqueStudentPrograms = Array.from(
+    new Set(studentsView.flatMap((student) => student.enrollments.map((entry) => entry.programTitle))),
+  ).sort((a, b) => a.localeCompare(b));
 
   return {
     metrics: {
@@ -139,16 +276,15 @@ export async function getAdminDashboardData() {
       pendingRegistrations,
       unreadMessages,
       revenueGbp: paidRevenue._sum.totalAmount ?? 0,
-      activePrograms,
-      activeTeachers,
     },
     recentRegistrations,
-    recentOrders,
-    paymentReviewQueue,
-    scholarshipQueue,
-    latestStudents,
-    contactInbox,
-    programsSnapshot,
+    orders: filteredOrders,
+    students: filteredStudents,
+    feeWaiverApplications,
+    filterOptions: {
+      orderPrograms: uniqueOrderPrograms,
+      studentPrograms: uniqueStudentPrograms,
+    },
   };
 }
 

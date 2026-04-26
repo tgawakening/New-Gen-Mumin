@@ -1,40 +1,34 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 
-import { getAdminDashboardData } from "@/lib/admin/dashboard";
+import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
+import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
+import { getCurrentSession } from "@/lib/auth/session";
+import { db } from "@/lib/db";
+import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/dashboard";
+import { markOrderCancelled, markOrderPaid } from "@/lib/payments/fulfillment";
 
-const ADMIN_MODULES = [
-  {
-    title: "Registrations",
-    href: "/admin/registrations",
-    description: "Track incoming enrollment drafts, child selections, pricing, and conversion status.",
-  },
-  {
-    title: "Orders",
-    href: "/admin/orders",
-    description: "Review gateway state, recurring payment flow, and manual payment follow-ups.",
-  },
-  {
-    title: "Students",
-    href: "/admin/students",
-    description: "See the current student roster, linked parents, and active programme access.",
-  },
-  {
-    title: "Messages",
-    href: "/admin/messages",
-    description: "Manage new contact enquiries and the current inbox response queue.",
-  },
-  {
-    title: "Scholarships",
-    href: "/admin/scholarships",
-    description: "Review support requests, requested discounts, and family context quickly.",
-  },
-  {
-    title: "Programs",
-    href: "/admin/programs",
-    description: "Monitor live programme pricing, enrollments, schedules, and teaching assets.",
-  },
+type PageProps = {
+  searchParams?: Promise<{
+    tab?: string;
+    orderStatus?: string;
+    orderPayment?: string;
+    orderProgram?: string;
+    orderPricing?: string;
+    studentPayment?: string;
+    studentRegistrationStatus?: string;
+    studentProgram?: string;
+    studentPricing?: string;
+  }>;
+};
+
+const TABS = [
+  { key: "home", label: "Home" },
+  { key: "orders", label: "Orders" },
+  { key: "students", label: "Students" },
+  { key: "fee-waivers", label: "Fee Waivers" },
 ] as const;
 
 function badgeClasses(status: string) {
@@ -43,12 +37,14 @@ function badgeClasses(status: string) {
     case "APPROVED":
     case "PAID":
     case "ACTIVE":
+    case "COMPLETED":
       return "bg-[#effaf3] text-[#2f6b4b]";
     case "PENDING":
     case "PENDING_PAYMENT":
     case "UNDER_REVIEW":
     case "PAYMENT_REVIEW":
     case "NEW":
+    case "INITIATED":
       return "bg-[#fff7eb] text-[#8a6326]";
     case "REJECTED":
     case "FAILED":
@@ -64,6 +60,8 @@ function formatDate(value: Date) {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(value);
 }
 
@@ -75,260 +73,433 @@ function formatMoney(amount: number, currency: string) {
   }).format(amount);
 }
 
-export default async function AdminDashboardPage() {
-  const {
-    metrics,
-    recentRegistrations,
-    recentOrders,
-    paymentReviewQueue,
-    scholarshipQueue,
-    latestStudents,
-    contactInbox,
-    programsSnapshot,
-  } = await getAdminDashboardData();
+function tabHref(
+  tab: string,
+  extra: Record<string, string | undefined> = {},
+) {
+  const params = new URLSearchParams();
+  params.set("tab", tab);
+  for (const [key, value] of Object.entries(extra)) {
+    if (value && value !== "ALL") params.set(key, value);
+  }
+  return `/admin?${params.toString()}`;
+}
+
+export default async function AdminDashboardPage({ searchParams }: PageProps) {
+  const session = await getCurrentSession();
+
+  if (!session || session.user.role !== "ADMIN") {
+    return (
+      <div className="min-h-screen bg-[#f3f5f7] py-16">
+        <div className="section-container">
+          <div className="rounded-[32px] border border-[#e1d8cb] bg-white px-8 py-10 shadow-sm">
+            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
+              Gen-Mumins Admin
+            </p>
+            <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">Admin dashboard</h1>
+            <p className="mt-4 max-w-3xl text-base leading-8 text-[#5f6b7a]">
+              A central workspace for registrations, payments, scholarships, inbox activity,
+              students, and programme delivery.
+            </p>
+          </div>
+        </div>
+        <AdminLoginModal />
+      </div>
+    );
+  }
+
+  async function completeOrder(formData: FormData) {
+    "use server";
+
+    const orderId = String(formData.get("orderId") || "");
+    const referenceKey = String(formData.get("referenceKey") || "");
+    if (!orderId) return;
+
+    await markOrderPaid(orderId, {
+      gateway: "BANK_TRANSFER",
+      providerReference: referenceKey || null,
+      rawPayload: {
+        approvedByAdmin: true,
+        approvedAt: new Date().toISOString(),
+      },
+    });
+
+    revalidatePath("/admin");
+    revalidatePath("/parent");
+    revalidatePath("/student");
+  }
+
+  async function cancelOrder(formData: FormData) {
+    "use server";
+    const orderId = String(formData.get("orderId") || "");
+    if (!orderId) return;
+    await markOrderCancelled(orderId);
+    revalidatePath("/admin");
+    revalidatePath("/parent");
+    revalidatePath("/student");
+  }
+
+  async function deleteStudent(formData: FormData) {
+    "use server";
+    const userId = String(formData.get("userId") || "");
+    if (!userId) return;
+    await db.user.delete({ where: { id: userId } });
+    revalidatePath("/admin");
+  }
+
+  const params = searchParams ? await searchParams : {};
+  const activeTab = TABS.some((tab) => tab.key === params?.tab) ? params?.tab! : "home";
+
+  const filters: AdminDashboardFilters = {
+    orderStatus: params?.orderStatus,
+    orderPayment: params?.orderPayment,
+    orderProgram: params?.orderProgram,
+    orderPricing: params?.orderPricing,
+    studentPayment: params?.studentPayment,
+    studentRegistrationStatus: params?.studentRegistrationStatus,
+    studentProgram: params?.studentProgram,
+    studentPricing: params?.studentPricing,
+  };
+
+  const data = await getAdminDashboardData(filters);
 
   return (
-    <div className="min-h-screen bg-[#f7f4eb] py-10">
-      <div className="section-container space-y-8">
-        <div className="rounded-[2rem] bg-[#22304a] px-6 py-8 text-white shadow-[0_24px_60px_rgba(34,48,74,0.22)] sm:px-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#f2c58f]">
-            Gen-Mumins admin
+    <div className="min-h-screen bg-[#edf2f6] py-6">
+      <div className="section-container space-y-5">
+        <div className="rounded-[28px] border border-[#dce4ed] bg-white px-4 py-4 shadow-sm">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+              <div className="rounded-2xl bg-[#0f4d81] px-4 py-3 text-white">
+                <p className="text-lg font-semibold">GM</p>
+              </div>
+              <div>
+                <p className="text-lg font-semibold text-[#22304a]">Gen-Mumins</p>
+                <p className="text-sm text-[#647388]">Admin workspace</p>
+              </div>
+              <div className="flex flex-wrap gap-2 md:ml-6">
+                {TABS.map((tab) => {
+                  const active = activeTab === tab.key;
+                  return (
+                    <Link
+                      key={tab.key}
+                      href={tabHref(tab.key)}
+                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                        active
+                          ? "bg-[#0f4d81] text-white shadow-sm"
+                          : "border border-[#d9e2eb] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
+                      }`}
+                    >
+                      {tab.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href={tabHref(activeTab)}
+                className="rounded-full border border-[#d9c7b1] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#fff7ef]"
+              >
+                Refresh
+              </Link>
+              <div className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm text-[#22304a]">
+                <span className="font-semibold">TGA Admin</span>
+                <span className="ml-2 text-[#67778d]">tgawakening786@gmail.com</span>
+              </div>
+              <AdminLogoutButton />
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6f7d8f]">
+            Operations
           </p>
-          <h1 className="mt-3 text-4xl font-semibold tracking-tight">
-            Operations dashboard
+          <h1 className="mt-2 text-3xl font-semibold text-[#22304a]">
+            {activeTab === "home"
+              ? "Overview"
+              : activeTab === "orders"
+                ? "Orders"
+                : activeTab === "students"
+                  ? "Students"
+                  : "Fee Waivers"}
           </h1>
-          <p className="mt-4 max-w-3xl text-base leading-8 text-white/78">
+          <p className="mt-2 max-w-4xl text-sm leading-7 text-[#617184]">
             A central workspace for registrations, payments, scholarships, inbox activity,
-            students, and programme delivery. This keeps the LMS operations flow together
-            while we continue expanding the deeper teacher and parent tools.
+            students, and programme delivery.
           </p>
         </div>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6d7785]">Total students</p>
-            <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.totalStudents}</p>
-          </div>
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6d7785]">Active enrollments</p>
-            <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.activeEnrollments}</p>
-          </div>
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6d7785]">Pending registrations</p>
-            <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.pendingRegistrations}</p>
-          </div>
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6d7785]">Unread messages</p>
-            <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.unreadMessages}</p>
-          </div>
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6d7785]">Active teachers</p>
-            <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metrics.activeTeachers}</p>
-          </div>
-          <div className="rounded-[1.5rem] bg-white p-5 shadow-sm">
-            <p className="text-sm text-[#6d7785]">Revenue</p>
-            <p className="mt-2 text-3xl font-semibold text-[#22304a]">{formatMoney(metrics.revenueGbp, "GBP")}</p>
-          </div>
-        </section>
+        {activeTab === "home" ? (
+          <div className="space-y-5">
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <MetricCard label="Total Students" value={String(data.metrics.totalStudents)} />
+              <MetricCard label="Active Enrollments" value={String(data.metrics.activeEnrollments)} />
+              <MetricCard label="Pending Registrations" value={String(data.metrics.pendingRegistrations)} />
+              <MetricCard label="Unread Messages" value={String(data.metrics.unreadMessages)} />
+              <MetricCard label="Revenue" value={formatMoney(data.metrics.revenueGbp, "GBP")} />
+            </section>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {ADMIN_MODULES.map((module) => (
-            <Link
-              key={module.href}
-              href={module.href}
-              className="rounded-[1.6rem] border border-[#eadfce] bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(34,48,74,0.08)]"
-            >
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
-                Module
-              </p>
-              <h2 className="mt-3 text-xl font-semibold text-[#22304a]">{module.title}</h2>
-              <p className="mt-3 text-sm leading-7 text-[#5f6b7a]">{module.description}</p>
-              <span className="mt-4 inline-flex text-sm font-semibold text-[#2a76aa]">
-                Open module
-              </span>
-            </Link>
-          ))}
-        </section>
+            <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+              <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+                <h2 className="text-2xl font-semibold text-[#22304a]">Recent registrations</h2>
+                <div className="mt-5 space-y-3">
+                  {data.recentRegistrations.map((registration) => (
+                    <div key={registration.id} className="rounded-[20px] border border-[#e6edf4] px-4 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[#22304a]">
+                            {registration.parentFirstName} {registration.parentLastName}
+                          </p>
+                          <p className="mt-1 text-sm text-[#6d7785]">
+                            {registration.parentEmail} • {registration.selectedCountryName ?? "Country pending"}
+                          </p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(registration.status)}`}>
+                          {registration.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-3 text-sm text-[#617184]">
+                        <span>{registration.students.length} children</span>
+                        <span>{registration.items.length} items</span>
+                        <span>{registration.selectedCurrency} {registration.totalAmount}</span>
+                        <span>{formatDate(registration.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
 
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.95fr]">
-          <div className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-            <div className="mb-5 flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">
-                  Registrations
-                </p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">
-                  Latest incoming enrollments
-                </h2>
-              </div>
-              <Link href="/admin/registrations" className="text-sm font-semibold text-[#2a76aa]">
-                View all
+              <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+                <h2 className="text-2xl font-semibold text-[#22304a]">Recent orders</h2>
+                <div className="mt-5 space-y-3">
+                  {data.orders.slice(0, 8).map((order) => (
+                    <div key={order.id} className="rounded-[20px] border border-[#e6edf4] px-4 py-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="font-semibold text-[#22304a]">{order.orderNumber}</p>
+                          <p className="mt-1 text-sm text-[#6d7785]">{order.parentName}</p>
+                        </div>
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(order.status)}`}>
+                          {order.status.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-3 text-sm text-[#617184]">
+                        <span>{order.gateway}</span>
+                        <span>{formatMoney(order.totalAmount, order.currency)}</span>
+                        <span>{order.pricingLabel}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          </div>
+        ) : null}
+
+        {activeTab === "orders" ? (
+          <section className="space-y-5 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+            <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <input type="hidden" name="tab" value="orders" />
+              <FilterSelect name="orderStatus" defaultValue={params?.orderStatus ?? "ALL"} options={["ALL", "SUCCEEDED", "PENDING", "UNDER_REVIEW", "FAILED"]} />
+              <FilterSelect name="orderPayment" defaultValue={params?.orderPayment ?? "ALL"} options={["ALL", "STRIPE", "PAYPAL", "BANK_TRANSFER"]} />
+              <FilterSelect name="orderProgram" defaultValue={params?.orderProgram ?? "ALL"} options={["ALL", ...data.filterOptions.orderPrograms]} />
+              <FilterSelect name="orderPricing" defaultValue={params?.orderPricing ?? "ALL"} options={["ALL", "Full", "Discounted"]} />
+              <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
+                Apply filters
+              </button>
+            </form>
+
+            <div className="space-y-4">
+              {data.orders.map((order) => (
+                <div key={order.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
+                  <div className="grid gap-4 xl:grid-cols-[1.4fr_0.7fr_0.9fr_0.9fr_0.8fr]">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {order.programTitles.map((title) => (
+                          <span key={title} className="rounded-full bg-[#e6f6ef] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f6b4b]">
+                            {title}
+                          </span>
+                        ))}
+                      </div>
+                      <p className="mt-3 font-semibold text-[#22304a]">{order.parentName}</p>
+                      <p className="mt-1 text-sm text-[#617184]">{order.parentEmail}</p>
+                      <p className="mt-1 text-sm text-[#617184]">{order.phone}</p>
+                      <p className="mt-2 text-sm text-[#22304a]">{order.orderNumber}</p>
+                    </div>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Amount</p>
+                      <p className="mt-2">{formatMoney(order.totalAmount, order.currency)}</p>
+                      <p className="mt-2 text-[#617184]">{order.pricingLabel}</p>
+                    </div>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
+                      <p className="mt-2">{order.gateway}</p>
+                      <p className="mt-1 text-[#617184]">{order.paymentStatus.replace(/_/g, " ")}</p>
+                    </div>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Status</p>
+                      <div className="mt-2 flex flex-col gap-2">
+                        <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(order.status)}`}>
+                          {order.status.replace(/_/g, " ")}
+                        </span>
+                        <span className={`w-fit rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(order.registrationStatus)}`}>
+                          Reg: {order.registrationStatus.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
+                      <form action={completeOrder}>
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input type="hidden" name="referenceKey" value={order.manualSubmission?.referenceKey ?? ""} />
+                        <button className="w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
+                          Complete
+                        </button>
+                      </form>
+                      <form action={cancelOrder}>
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <button className="w-full rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
+                          Cancel
+                        </button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {activeTab === "students" ? (
+          <section className="space-y-5 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+            <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <input type="hidden" name="tab" value="students" />
+              <FilterSelect name="studentPayment" defaultValue={params?.studentPayment ?? "ALL"} options={["ALL", "STRIPE", "PAYPAL", "BANK_TRANSFER", "Pending"]} />
+              <FilterSelect name="studentRegistrationStatus" defaultValue={params?.studentRegistrationStatus ?? "ALL"} options={["ALL", "PAID", "PENDING_PAYMENT", "SUBMITTED", "PAYMENT_REVIEW", "Pending"]} />
+              <FilterSelect name="studentProgram" defaultValue={params?.studentProgram ?? "ALL"} options={["ALL", ...data.filterOptions.studentPrograms]} />
+              <FilterSelect name="studentPricing" defaultValue={params?.studentPricing ?? "ALL"} options={["ALL", "Full", "Discounted"]} />
+              <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
+                Apply filters
+              </button>
+            </form>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/registration"
+                className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
+              >
+                Add student manually
               </Link>
             </div>
 
             <div className="space-y-4">
-              {recentRegistrations.map((registration) => (
-                <div key={registration.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+              {data.students.map((student) => (
+                <div key={student.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
+                  <div className="grid gap-4 xl:grid-cols-[1.35fr_0.8fr_0.8fr_0.75fr_0.8fr]">
                     <div>
-                      <p className="font-semibold text-[#22304a]">
-                        {registration.parentFirstName} {registration.parentLastName}
-                      </p>
-                      <p className="mt-1 text-sm text-[#6d7785]">
-                        {registration.parentEmail} · {registration.selectedCountryName ?? "Country pending"}
-                      </p>
+                      <p className="font-semibold text-[#22304a]">{student.name}</p>
+                      <p className="mt-1 text-sm text-[#617184]">{student.email}</p>
+                      <p className="mt-1 text-sm text-[#617184]">{student.phone}</p>
+                      <p className="mt-2 text-sm text-[#617184]">{student.parents.join(", ") || "No parent linked"}</p>
                     </div>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(registration.status)}`}>
-                      {registration.status.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-3 text-sm text-[#5f6b7a]">
-                    <span>{registration.students.length} child{registration.students.length === 1 ? "" : "ren"}</span>
-                    <span>{registration.items.length} items</span>
-                    <span>{registration.selectedCurrency} {registration.totalAmount}</span>
-                    <span>{formatDate(registration.createdAt)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Payments</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Review queue</h2>
-                </div>
-                <Link href="/admin/orders" className="text-sm font-semibold text-[#2a76aa]">View all</Link>
-              </div>
-              <div className="mt-5 space-y-3">
-                {paymentReviewQueue.length === 0 ? <p className="text-sm text-[#6d7785]">No payments are waiting for review.</p> : null}
-                {paymentReviewQueue.map((payment) => (
-                  <div key={payment.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-[#22304a]">{payment.order?.orderNumber ?? "Order pending"}</p>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(payment.status)}`}>{payment.status.replace(/_/g, " ")}</span>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Programs</p>
+                      <div className="mt-2 flex flex-col gap-2">
+                        {student.enrollments.length ? student.enrollments.map((entry) => (
+                          <span key={entry.id} className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#2a76aa]">
+                            {entry.programTitle}
+                          </span>
+                        )) : <span className="text-[#617184]">No active program</span>}
+                      </div>
                     </div>
-                    <p className="mt-2 text-sm text-[#6d7785]">{payment.gateway} · {payment.currency} {payment.amount}</p>
-                    <p className="mt-1 text-sm text-[#6d7785]">{payment.order?.parent.user.firstName} {payment.order?.parent.user.lastName}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Scholarships</p>
-                  <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Pending applications</h2>
-                </div>
-                <Link href="/admin/scholarships" className="text-sm font-semibold text-[#2a76aa]">View all</Link>
-              </div>
-              <div className="mt-5 space-y-3">
-                {scholarshipQueue.length === 0 ? <p className="text-sm text-[#6d7785]">No scholarship applications are waiting right now.</p> : null}
-                {scholarshipQueue.map((application) => (
-                  <div key={application.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-[#22304a]">{application.parentName}</p>
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(application.status)}`}>{application.status}</span>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
+                      <p className="mt-2">{student.paymentGateway}</p>
+                      <p className="mt-2 text-[#617184]">{student.pricingLabel}</p>
                     </div>
-                    <p className="mt-2 text-sm text-[#6d7785]">{application.parentEmail} · {application.parentWhatsapp ?? "No WhatsApp"}</p>
-                    <p className="mt-1 text-sm text-[#6d7785]">Requested {application.requestedPercent}% · {application.offer?.title ?? "General support"}</p>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Registration</p>
+                      <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(student.registrationStatus)}`}>
+                        {student.registrationStatus.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
+                      <form action={deleteStudent}>
+                        <input type="hidden" name="userId" value={student.userId} />
+                        <button className="w-full rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
+                          Delete
+                        </button>
+                      </form>
+                    </div>
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-3">
-          <div className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Students</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Newest profiles</h2>
-              </div>
-              <Link href="/admin/students" className="text-sm font-semibold text-[#2a76aa]">View all</Link>
-            </div>
-            <div className="mt-5 space-y-3">
-              {latestStudents.map((student) => (
-                <div key={student.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                  <p className="font-semibold text-[#22304a]">{student.displayName || `${student.user.firstName} ${student.user.lastName}`}</p>
-                  <p className="mt-1 text-sm text-[#6d7785]">{student.user.email}</p>
-                  <p className="mt-2 text-sm text-[#6d7785]">{student.enrollments.length} active program{student.enrollments.length === 1 ? "" : "s"}</p>
                 </div>
               ))}
             </div>
-          </div>
+          </section>
+        ) : null}
 
-          <div className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Messages</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Inbox activity</h2>
-              </div>
-              <Link href="/admin/messages" className="text-sm font-semibold text-[#2a76aa]">View all</Link>
-            </div>
-            <div className="mt-5 space-y-3">
-              {contactInbox.map((message) => (
-                <div key={message.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-[#22304a]">{message.name}</p>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(message.status)}`}>{message.status}</span>
+        {activeTab === "fee-waivers" ? (
+          <section className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+            {data.feeWaiverApplications.map((application) => (
+              <div key={application.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-[#22304a]">{application.parentName}</p>
+                    <p className="mt-1 text-sm text-[#617184]">{application.parentEmail}</p>
                   </div>
-                  <p className="mt-1 text-sm text-[#6d7785]">{message.email}</p>
-                  <p className="mt-2 text-sm leading-6 text-[#5f6b7a]">{message.subject || "General enquiry"}</p>
+                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(application.status)}`}>
+                    {application.status}
+                  </span>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Programs</p>
-                <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Live catalog</h2>
-              </div>
-              <Link href="/admin/programs" className="text-sm font-semibold text-[#2a76aa]">View all</Link>
-            </div>
-            <div className="mt-5 space-y-3">
-              {programsSnapshot.map((program) => (
-                <div key={program.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="font-semibold text-[#22304a]">{program.title}</p>
-                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(program.status)}`}>{program.status}</span>
-                  </div>
-                  <p className="mt-2 text-sm text-[#6d7785]">Enrollments: {program._count.enrollments} · Schedules: {program._count.schedules}</p>
+                <div className="mt-4 grid gap-3 md:grid-cols-3 text-sm text-[#22304a]">
+                  <p>Requested: {application.requestedPercent}%</p>
+                  <p>Offer: {application.offer?.title ?? "General support"}</p>
+                  <p>WhatsApp: {application.parentWhatsapp ?? "Pending"}</p>
                 </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="rounded-[1.75rem] bg-white p-6 shadow-sm">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Orders</p>
-              <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Latest successful and pending orders</h2>
-            </div>
-            <Link href="/admin/orders" className="text-sm font-semibold text-[#2a76aa]">View all</Link>
-          </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {recentOrders.map((order) => (
-              <div key={order.id} className="rounded-[1.25rem] border border-[#ece7de] px-4 py-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-[#22304a]">{order.orderNumber}</p>
-                  <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(order.status)}`}>{order.status}</span>
-                </div>
-                <p className="mt-2 text-sm text-[#6d7785]">{order.parent.user.firstName} {order.parent.user.lastName}</p>
-                <p className="mt-1 text-sm text-[#6d7785]">{order.currency} {order.totalAmount}</p>
-                <p className="mt-1 text-sm text-[#6d7785]">{formatDate(order.createdAt)}</p>
+                <p className="mt-3 text-sm leading-7 text-[#617184]">
+                  {application.reasonForSupport ?? "No fee waiver reason added yet."}
+                </p>
               </div>
             ))}
-          </div>
-        </section>
+          </section>
+        ) : null}
       </div>
     </div>
+  );
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[22px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+      <p className="text-sm text-[#6d7785]">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-[#22304a]">{value}</p>
+    </div>
+  );
+}
+
+function FilterSelect({
+  name,
+  defaultValue,
+  options,
+}: {
+  name: string;
+  defaultValue: string;
+  options: string[];
+}) {
+  return (
+    <select
+      name={name}
+      defaultValue={defaultValue}
+      className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a] outline-none"
+    >
+      {options.map((option) => (
+        <option key={option} value={option}>
+          {option === "ALL" ? `All ${name.toLowerCase()}` : option}
+        </option>
+      ))}
+    </select>
   );
 }
