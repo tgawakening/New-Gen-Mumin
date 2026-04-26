@@ -1,8 +1,12 @@
-﻿import { randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 
 import { db } from "@/lib/db";
 
 import type { ScholarshipPayload, ScholarshipReviewPayload } from "./schema";
+
+function compactLines(lines: Array<string | null | undefined>) {
+  return lines.filter((line): line is string => Boolean(line && line.trim())).join("\n");
+}
 
 export async function createScholarshipApplication(payload: ScholarshipPayload) {
   const existingPending = await db.scholarshipApplication.findFirst({
@@ -14,7 +18,7 @@ export async function createScholarshipApplication(payload: ScholarshipPayload) 
   });
 
   if (existingPending) {
-    throw new Error("A pending scholarship application already exists for this email.");
+    throw new Error("A pending fee waiver application already exists for this email.");
   }
 
   let offerId: string | undefined;
@@ -25,11 +29,36 @@ export async function createScholarshipApplication(payload: ScholarshipPayload) 
     });
 
     if (!offer) {
-      throw new Error("Selected offer is not available for scholarship requests.");
+      throw new Error("Selected programme is not available for fee waiver requests.");
     }
 
     offerId = offer.id;
   }
+
+  const supportingDetails = compactLines([
+    `What draws them to Gen-Mumins: ${payload.whatDrawsYou}`,
+    `Expected benefit: ${payload.howItBenefits}`,
+    payload.manualNotes ? `Manual notes: ${payload.manualNotes}` : null,
+  ]);
+
+  const notes = compactLines([
+    `Occupation: ${payload.occupation}`,
+    `Knowledge level: ${payload.knowledgeLevel}`,
+    payload.previousStudy ? `Previous study: ${payload.previousStudy}` : null,
+    payload.currentInvolvement ? `Current involvement: ${payload.currentInvolvement}` : null,
+    `Most interesting topic: ${payload.mostInterestingTopic}`,
+    `Why this topic: ${payload.whyThisTopic}`,
+    `Regular attendance: ${payload.canAttendRegularly}`,
+    `Attended orientation: ${payload.attendedOrientation ? "Yes" : "No"}`,
+    `Contribution preference: ${payload.contributionPreference}`,
+    payload.monthlyContribution ? `Monthly contribution: ${payload.monthlyContribution}` : null,
+    payload.manualSenderName ? `Sender name: ${payload.manualSenderName}` : null,
+    payload.manualSenderNumber ? `Sender number: ${payload.manualSenderNumber}` : null,
+    payload.manualReferenceKey ? `Transfer reference: ${payload.manualReferenceKey}` : null,
+    payload.howHeard ? `How heard about Gen-Mumins: ${payload.howHeard}` : null,
+    `Adab commitment: ${payload.adabCommitment ? "Confirmed" : "Not confirmed"}`,
+    `Financial need confirmed: ${payload.genuineFinancialNeed ? "Confirmed" : "Not confirmed"}`,
+  ]);
 
   return db.scholarshipApplication.create({
     data: {
@@ -38,10 +67,11 @@ export async function createScholarshipApplication(payload: ScholarshipPayload) 
       parentWhatsapp: payload.parentWhatsapp,
       childAge: payload.childAge,
       childCountry: payload.childCountry,
-      householdSize: payload.householdSize,
-      monthlyIncome: payload.monthlyIncome,
+      householdSize: null,
+      monthlyIncome: payload.monthlyContribution || null,
       reasonForSupport: payload.reasonForSupport,
-      supportingDetails: payload.supportingDetails || null,
+      supportingDetails: supportingDetails || null,
+      notes: notes || null,
       requestedPercent: payload.requestedPercent,
       offerId,
       status: "PENDING",
@@ -88,4 +118,3 @@ export async function reviewScholarshipApplication(
     },
   });
 }
-
