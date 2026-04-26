@@ -8,7 +8,6 @@ import {
   FamilyDashboardFrame,
   MetricGrid,
   SectionCard,
-  InfoList,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
@@ -24,13 +23,14 @@ export default async function ParentProfilePage({ searchParams }: PageProps) {
   if (!dashboard) redirect("/registration");
 
   const params = searchParams ? await searchParams : undefined;
-  const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
+  const selectedChild =
+    dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
 
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
       title="Profile"
-      subtitle="Review guardian billing/profile details and the selected learner’s profile information."
+      subtitle="Review guardian billing details and the selected learner profile in a more compact layout."
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
@@ -44,44 +44,89 @@ export default async function ParentProfilePage({ searchParams }: PageProps) {
 
       <MetricGrid
         metrics={[
-          { label: "Parent email", value: dashboard.parentProfile.email, hint: "Primary guardian account email." },
-          { label: "Phone", value: dashboard.parentProfile.phone ?? "Pending", hint: "Guardian contact number." },
-          { label: "Billing country", value: dashboard.parentProfile.billingCountryName ?? "Pending", hint: "Family billing location." },
-          { label: "Preferred currency", value: dashboard.parentProfile.preferredCurrency ?? "GBP", hint: "Current billing currency." },
+          {
+            label: "Parent email",
+            value: dashboard.parentProfile.email,
+            hint: "Primary guardian account email.",
+          },
+          {
+            label: "Phone",
+            value: dashboard.parentProfile.phone ?? "Pending",
+            hint: "Guardian contact number.",
+          },
+          {
+            label: "Billing country",
+            value: dashboard.parentProfile.billingCountryName ?? "Pending",
+            hint: "Family billing location.",
+          },
+          {
+            label: "Preferred currency",
+            value: dashboard.parentProfile.preferredCurrency ?? "GBP",
+            hint: "Current billing currency.",
+          },
         ]}
       />
 
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard eyebrow="Guardian" title="Parent details">
-          <InfoList
+          <CompactDetailGrid
             items={[
-              `Name • ${dashboard.parentName}`,
-              `Email • ${dashboard.parentProfile.email}`,
-              `Phone • ${dashboard.parentProfile.phone ?? "Pending"}`,
-              `Billing country • ${dashboard.parentProfile.billingCountryName ?? "Pending"}`,
-              `Preferred currency • ${dashboard.parentProfile.preferredCurrency ?? "GBP"}`,
+              { label: "Name", value: dashboard.parentName },
+              { label: "Email", value: dashboard.parentProfile.email },
+              { label: "Phone", value: dashboard.parentProfile.phone ?? "Pending" },
+              {
+                label: "Billing country",
+                value: dashboard.parentProfile.billingCountryName ?? "Pending",
+              },
+              {
+                label: "Preferred currency",
+                value: dashboard.parentProfile.preferredCurrency ?? "GBP",
+              },
             ]}
-            emptyLabel="Parent profile details will appear here."
           />
         </SectionCard>
 
         {selectedChild ? (
           <SectionCard eyebrow="Learner" title={`${selectedChild.name}'s details`}>
-            <InfoList
+            <CompactDetailGrid
               items={[
-                `Display name • ${selectedChild.profile.displayName}`,
-                `Email • ${selectedChild.profile.email}`,
-                `Phone • ${selectedChild.profile.phone ?? "Pending"}`,
-                `Timezone • ${selectedChild.profile.timezone ?? "Europe/London"}`,
-                `Country • ${selectedChild.profile.countryName ?? "Pending"}`,
-                `Age • ${selectedChild.profile.age ?? "Pending"}`,
-                `Current grade • ${selectedChild.profile.currentGrade ?? "Pending"}`,
+                { label: "Display name", value: selectedChild.profile.displayName },
+                { label: "Email", value: selectedChild.profile.email },
+                { label: "Phone", value: selectedChild.profile.phone ?? "Pending" },
+                {
+                  label: "Timezone",
+                  value: selectedChild.profile.timezone ?? "Europe/London",
+                },
+                { label: "Country", value: selectedChild.profile.countryName ?? "Pending" },
+                { label: "Age", value: String(selectedChild.profile.age ?? "Pending") },
+                {
+                  label: "Current grade",
+                  value: selectedChild.profile.currentGrade ?? "Pending",
+                },
               ]}
-              emptyLabel="Child profile details will appear here."
             />
           </SectionCard>
         ) : null}
       </div>
     </FamilyDashboardFrame>
+  );
+}
+
+function CompactDetailGrid({
+  items,
+}: {
+  items: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <div className="grid gap-3 md:grid-cols-2">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-2xl bg-[#fbf6ef] px-4 py-4">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#8b7a68]">
+            {item.label}
+          </p>
+          <p className="mt-2 break-words text-sm leading-6 text-[#22304a]">{item.value}</p>
+        </div>
+      ))}
+    </div>
   );
 }

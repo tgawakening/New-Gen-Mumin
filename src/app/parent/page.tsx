@@ -52,7 +52,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         title="Choose a learner"
         action={
           <Link
-            href="/registration"
+            href="/parent/add-child"
             className="rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
           >
             Add another child

@@ -107,6 +107,9 @@ export type ParentDashboardData = {
   parentProfile: {
     email: string;
     phone: string | null;
+    phoneCountryCode: string | null;
+    phoneNumber: string | null;
+    billingCountryCode: string | null;
     billingCountryName: string | null;
     preferredCurrency: string | null;
   };
@@ -463,6 +466,9 @@ export async function getParentDashboardData(userId: string) {
         parentProfile.user.phoneCountryCode && parentProfile.user.phoneNumber
           ? `${parentProfile.user.phoneCountryCode} ${parentProfile.user.phoneNumber}`
           : parentProfile.user.phoneNumber ?? null,
+      phoneCountryCode: parentProfile.user.phoneCountryCode,
+      phoneNumber: parentProfile.user.phoneNumber,
+      billingCountryCode: parentProfile.billingCountryCode,
       billingCountryName: parentProfile.billingCountryName,
       preferredCurrency: parentProfile.preferredCurrency,
     },
