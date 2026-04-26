@@ -45,13 +45,33 @@ type ChildQuizSummary = {
 
 type ChildAssignmentSummary = {
   id: string;
+  programTitle: string;
   title: string;
+  instructions: string | null;
   dueDate: Date | null;
   status: SubmissionStatus | "NOT_STARTED";
   grade: string | null;
   score: number | null;
   feedback: string | null;
   submittedAt: Date | null;
+};
+
+type ChildLessonUpdateSummary = {
+  id: string;
+  programTitle: string;
+  scheduleTitle: string;
+  lessonDate: Date;
+  topic: string;
+  summary: string;
+  homework: string | null;
+  teacherName: string | null;
+};
+
+type ChildBadgeSummary = {
+  id: string;
+  title: string;
+  status: "earned" | "progress";
+  description: string;
 };
 
 type ChildProgressSummary = {
@@ -87,6 +107,8 @@ type ChildSummary = {
   nextClass: ChildScheduleSummary | null;
   quizzes: ChildQuizSummary[];
   assignments: ChildAssignmentSummary[];
+  lessonUpdates: ChildLessonUpdateSummary[];
+  badges: ChildBadgeSummary[];
   progress: ChildProgressSummary[];
   journals: ChildJournalSummary[];
   profile: {
@@ -258,7 +280,9 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
 
       return {
         id: assignment.id,
+        programTitle: enrollment.program.title,
         title: assignment.title,
+        instructions: assignment.instructions ?? null,
         dueDate: assignment.dueDate,
         status: submission?.status ?? "NOT_STARTED",
         grade: submission?.grade ?? null,
@@ -280,6 +304,82 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
   });
 }
 
+function mapLessonUpdates(enrollments: any[]) {
+  return enrollments
+    .flatMap((enrollment) =>
+      enrollment.program.schedules.flatMap((schedule: any) =>
+        (schedule.lessonLogs ?? []).map((log: any) => ({
+          id: log.id,
+          programTitle: enrollment.program.title,
+          scheduleTitle: schedule.title,
+          lessonDate: log.lessonDate,
+          topic: log.topic,
+          summary: log.summary,
+          homework: log.homework ?? null,
+          teacherName: buildTeacherName(schedule.teacher),
+        })),
+      ),
+    )
+    .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
+    .slice(0, 8) satisfies ChildLessonUpdateSummary[];
+}
+
+function buildChildBadges({
+  attendanceRate,
+  quizCount,
+  submittedAssignments,
+  journalCount,
+}: {
+  attendanceRate: number;
+  quizCount: number;
+  submittedAssignments: number;
+  journalCount: number;
+}) {
+  const badges: ChildBadgeSummary[] = [];
+
+  badges.push({
+    id: "attendance",
+    title: attendanceRate >= 90 ? "Attendance Star" : "Attendance Journey",
+    status: attendanceRate >= 90 ? "earned" : "progress",
+    description:
+      attendanceRate >= 90
+        ? "Excellent consistency in joining lessons on time."
+        : `Current attendance is ${attendanceRate}%. Keep showing up and this badge can unlock soon.`,
+  });
+
+  badges.push({
+    id: "tasks",
+    title: submittedAssignments >= 3 ? "Task Champion" : "Task Builder",
+    status: submittedAssignments >= 3 ? "earned" : "progress",
+    description:
+      submittedAssignments >= 3
+        ? "Weekly tasks are being completed consistently."
+        : `${submittedAssignments} task submissions recorded so far. More regular submissions will unlock this badge.`,
+  });
+
+  badges.push({
+    id: "reflection",
+    title: journalCount >= 2 ? "Reflection Gem" : "Reflection Starter",
+    status: journalCount >= 2 ? "earned" : "progress",
+    description:
+      journalCount >= 2
+        ? "Journal reflections are building thoughtful learning habits."
+        : "Journal entries and self-reflection will turn into visible recognition here.",
+  });
+
+  badges.push({
+    id: "assessment",
+    title: quizCount >= 2 ? "Quiz Explorer" : "Quiz Warm-up",
+    status: quizCount >= 2 ? "earned" : "progress",
+    description:
+      quizCount >= 2
+        ? "Assessment activity is active and developing nicely."
+        : "As quizzes and lesson checks are completed, assessment badges will appear here.",
+  });
+
+  return badges;
+}
+
 function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
   const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
     child.attendances,
@@ -290,6 +390,16 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
   const programQuizzes = child.enrollments.flatMap((enrollment: any) => enrollment.program.quizzes);
   const quizzes = mapQuizSummaries(programQuizzes, child.quizAttempts);
   const assignments = mapAssignmentSummaries(child.enrollments, child.assignments);
+  const lessonUpdates = mapLessonUpdates(child.enrollments);
+  const submittedAssignments = assignments.filter((assignment) =>
+    assignment.status === "SUBMITTED" || assignment.status === "REVIEWED",
+  ).length;
+  const badges = buildChildBadges({
+    attendanceRate,
+    quizCount: quizzes.filter((quiz) => quiz.attempts.length > 0).length,
+    submittedAssignments,
+    journalCount: child.journalEntries.length,
+  });
 
   return {
     id: child.id,
@@ -316,6 +426,8 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     nextClass: schedule[0] ?? null,
     quizzes,
     assignments,
+    lessonUpdates,
+    badges,
     progress: child.progressReports.map((report: any) => ({
       id: report.id,
       programTitle: report.program.title,
@@ -387,6 +499,10 @@ async function getParentProfile(userId: string) {
                             include: {
                               user: true,
                             },
+                          },
+                          lessonLogs: {
+                            orderBy: { lessonDate: "desc" },
+                            take: 6,
                           },
                         },
                       },
@@ -517,6 +633,10 @@ export async function getStudentDashboardData(userId: string) {
                     include: {
                       user: true,
                     },
+                  },
+                  lessonLogs: {
+                    orderBy: { lessonDate: "desc" },
+                    take: 6,
                   },
                 },
               },

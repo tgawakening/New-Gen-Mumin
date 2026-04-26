@@ -82,15 +82,41 @@ export default async function TeacherDashboardPage() {
               />
             </div>
           </TeacherSection>
+
+          <TeacherSection
+            eyebrow="Published work"
+            title="Weekly content and assigned tasks"
+            action={
+              <Link href="/teacher/course-builder" className="text-sm font-semibold text-[#2a76aa]">
+                Open builder
+              </Link>
+            }
+          >
+            <div className="grid gap-4 xl:grid-cols-2">
+              <TeacherInfoList
+                items={dashboard.lessonLogs.slice(0, 6).map(
+                  (entry) => `${entry.title} • ${entry.topic} • ${entry.lessonDate.toLocaleDateString("en-GB")}`,
+                )}
+                emptyLabel="Lesson updates you publish will appear here."
+              />
+              <TeacherInfoList
+                items={dashboard.assignments.slice(0, 6).map((task) => {
+                  const due = task.dueDate ? task.dueDate.toLocaleDateString("en-GB") : "No due date";
+                  return `${task.programTitle} • ${task.title} • ${task.submissions} submissions • ${due}`;
+                })}
+                emptyLabel="Published tasks and homework will appear here."
+              />
+            </div>
+          </TeacherSection>
         </div>
 
         <div className="space-y-6">
           <TeacherSection eyebrow="Course builder" title="Lesson delivery">
             <TeacherInfoList
               items={[
-                "Create lesson modules by programme and week",
-                "Attach video links, PDFs, worksheets, and homework guidance",
-                "Publish content to the student course view with teacher notes",
+                "Create weekly lesson updates by class and date",
+                "Attach drive links, PDFs, worksheets, and homework guidance",
+                "Publish tasks so parents and students see them on their dashboards",
               ]}
               emptyLabel="Course builder setup will appear here."
             />

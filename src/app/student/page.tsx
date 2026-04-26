@@ -96,6 +96,27 @@ export default async function StudentDashboardPage() {
             </div>
           </SectionCard>
 
+          <SectionCard eyebrow="Weekly content" title="Teacher updates and today&apos;s tasks">
+            <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
+              <InfoList
+                items={child.lessonUpdates.slice(0, 5).map(
+                  (update) =>
+                    `${update.programTitle} â€¢ ${update.topic} â€¢ ${update.teacherName ?? "Teacher"} â€¢ ${update.summary}`,
+                )}
+                emptyLabel="Your teacher lesson updates will appear here after content is published."
+              />
+              <InfoList
+                items={child.assignments.slice(0, 5).map((assignment) => {
+                  const due = assignment.dueDate
+                    ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
+                    : "No due date set";
+                  return `${assignment.title} â€¢ ${assignment.status.replace(/_/g, " ")} â€¢ ${due}`;
+                })}
+                emptyLabel="Tasks and homework will appear here when your teachers assign them."
+              />
+            </div>
+          </SectionCard>
+
           <SectionCard eyebrow="Reflection" title="Journal and progress">
             <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
               <InfoList
@@ -160,6 +181,16 @@ export default async function StudentDashboardPage() {
                 `Country • ${child.profile.countryName ?? "Pending"}`,
               ]}
               emptyLabel="Profile details will appear here."
+            />
+          </SectionCard>
+
+          <SectionCard eyebrow="Recognition" title="Badges and certificates">
+            <InfoList
+              items={child.badges.map(
+                (badge) =>
+                  `${badge.title} â€¢ ${badge.status === "earned" ? "Earned" : "In progress"} â€¢ ${badge.description}`,
+              )}
+              emptyLabel="Badges, gem-of-the-week, and certificates will appear here as you complete more work."
             />
           </SectionCard>
         </div>

@@ -20,6 +20,7 @@ export type TeacherDashboardData = {
   };
   classes: Array<{
     id: string;
+    programId: string;
     title: string;
     weekday: number;
     startTime: string;
@@ -33,6 +34,7 @@ export type TeacherDashboardData = {
   rosters: Array<{
     programId: string;
     title: string;
+    assignmentCount: number;
     students: Array<{
       id: string;
       name: string;
@@ -72,6 +74,16 @@ export type TeacherDashboardData = {
     lessonDate: Date;
     topic: string;
     summary: string;
+    homework: string | null;
+  }>;
+  assignments: Array<{
+    id: string;
+    programId: string;
+    programTitle: string;
+    title: string;
+    instructions: string | null;
+    dueDate: Date | null;
+    submissions: number;
   }>;
   reports: Array<{
     id: string;
@@ -108,6 +120,11 @@ export async function getTeacherDashboardData(userId: string) {
                   attempts: true,
                 },
               },
+              assignments: {
+                include: {
+                  submissions: true,
+                },
+              },
             },
           },
           lessonLogs: {
@@ -141,6 +158,11 @@ export async function getTeacherDashboardData(userId: string) {
                       },
                     },
                   },
+                },
+              },
+              assignments: {
+                include: {
+                  submissions: true,
                 },
               },
             },
@@ -201,6 +223,7 @@ export async function getTeacherDashboardData(userId: string) {
 
   const classes = teacherProfile.classSchedules.map((schedule) => ({
     id: schedule.id,
+    programId: schedule.program.id,
     title: schedule.title,
     weekday: schedule.weekday,
     startTime: schedule.startTime,
@@ -217,6 +240,7 @@ export async function getTeacherDashboardData(userId: string) {
   const rosterPrograms = teacherProfile.programAssignments.map((assignment) => ({
     programId: assignment.program.id,
     title: assignment.program.title,
+    assignmentCount: assignment.program.assignments.length,
     students: assignment.program.enrollments.map((enrollment) => ({
       id: enrollment.student.id,
       name:
@@ -273,9 +297,32 @@ export async function getTeacherDashboardData(userId: string) {
         lessonDate: log.lessonDate,
         topic: log.topic,
         summary: log.summary,
+        homework: log.homework ?? null,
       })),
     )
     .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
+    .slice(0, 12);
+
+  const assignments = teacherProfile.programAssignments
+    .flatMap((assignment) =>
+      assignment.program.assignments.map((task) => ({
+        id: task.id,
+        programId: assignment.program.id,
+        programTitle: assignment.program.title,
+        title: task.title,
+        instructions: task.instructions ?? null,
+        dueDate: task.dueDate,
+        submissions: task.submissions.length,
+      })),
+    )
+    .sort((left, right) => {
+      if (left.dueDate && right.dueDate) {
+        return left.dueDate.getTime() - right.dueDate.getTime();
+      }
+      if (left.dueDate) return -1;
+      if (right.dueDate) return 1;
+      return left.title.localeCompare(right.title);
+    })
     .slice(0, 12);
 
   const uniqueStudents = new Set(
@@ -321,6 +368,7 @@ export async function getTeacherDashboardData(userId: string) {
       teacherFeedback: entry.teacherFeedback,
     })),
     lessonLogs,
+    assignments,
     reports: reports.map((report) => ({
       id: report.id,
       studentName:
