@@ -944,11 +944,20 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             </>
                           )}
                         </div>
+                        <div className="mt-4">
+                          <label className="block text-sm font-semibold text-[#22304a]">Coupon code</label>
+                          <input
+                            value={couponCode}
+                            onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                            placeholder="Enter coupon code"
+                            className="mt-2 w-full rounded-2xl border border-[#d9c7b0] bg-white px-4 py-3 text-sm text-[#22304a] outline-none transition placeholder:text-[#9ba6b5] focus:border-[#f3a25d] focus:ring-2 focus:ring-[#f8d9b6]"
+                          />
+                        </div>
                         <div className="mt-4 rounded-[22px] bg-[#22304a] px-4 py-4 text-white">
                           <div className="flex items-center justify-between text-sm text-white/80"><span>Subtotal</span><span>{formatMoney(summary.subtotal, summary.currency)}</span></div>
                           <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Multi-child discounts</span><span>- {formatMoney(summary.multiChildDiscount, summary.currency)}</span></div>
                           {summary.couponDiscount > 0 ? (
-                            <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Special support</span><span>- {formatMoney(summary.couponDiscount, summary.currency)}</span></div>
+                            <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Coupon discount</span><span>- {formatMoney(summary.couponDiscount, summary.currency)}</span></div>
                           ) : null}
                           <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Total discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
                           <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold"><span>Total</span><span>{formatMoney(summary.total, summary.currency)}</span></div>
