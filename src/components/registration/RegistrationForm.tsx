@@ -406,9 +406,11 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
     const source = params.get("source");
+    const coupon = params.get("coupon");
     const referrer = document.referrer;
 
     if (source) setSourceTag(source);
+    if (coupon) setCouponCode(coupon.toUpperCase());
     if (referrer) setReferrerUrl(referrer);
     if (!source && referrer.includes("tga-awakening.com")) {
       setSourceTag("tga-projects-gen-mumin");
@@ -942,33 +944,11 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             </>
                           )}
                         </div>
-                        <div className="mt-4 rounded-2xl border border-[#efe2d2] bg-white px-4 py-4">
-                          <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Discount coupon</label>
-                          <input
-                            value={couponCode}
-                            onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
-                            placeholder="Enter coupon code"
-                            className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm uppercase outline-none focus:border-[#f39f5f]"
-                          />
-                          {couponCode.trim() ? (
-                            appliedCoupon ? (
-                              <p className="mt-2 text-xs font-semibold text-[#2f6b4b]">
-                                {appliedCoupon.code} applied for {appliedCoupon.discountPercent}% off the remaining total.
-                              </p>
-                            ) : (
-                              <p className="mt-2 text-xs font-semibold text-[#b24c4c]">
-                                Coupon code not recognised yet.
-                              </p>
-                            )
-                          ) : (
-                            <p className="mt-2 text-xs text-[#657284]">Use codes like GENM25, GENM50, or GENM75.</p>
-                          )}
-                        </div>
                         <div className="mt-4 rounded-[22px] bg-[#22304a] px-4 py-4 text-white">
                           <div className="flex items-center justify-between text-sm text-white/80"><span>Subtotal</span><span>{formatMoney(summary.subtotal, summary.currency)}</span></div>
                           <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Multi-child discounts</span><span>- {formatMoney(summary.multiChildDiscount, summary.currency)}</span></div>
                           {summary.couponDiscount > 0 ? (
-                            <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Coupon {summary.couponCode}</span><span>- {formatMoney(summary.couponDiscount, summary.currency)}</span></div>
+                            <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Special support</span><span>- {formatMoney(summary.couponDiscount, summary.currency)}</span></div>
                           ) : null}
                           <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Total discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
                           <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold"><span>Total</span><span>{formatMoney(summary.total, summary.currency)}</span></div>
