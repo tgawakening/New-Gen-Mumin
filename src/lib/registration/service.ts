@@ -15,6 +15,12 @@ type CatalogOfferRecord = {
   basePricePkr: number | null;
 };
 
+function trimForColumn(value: string | null | undefined, maxLength = 240) {
+  const normalized = value?.trim();
+  if (!normalized) return null;
+  return normalized.length > maxLength ? normalized.slice(0, maxLength) : normalized;
+}
+
 function buildOfferLookup(offers: CatalogOfferRecord[]) {
   return new Map(offers.map((offer) => [offer.slug, offer]));
 }
@@ -155,7 +161,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
         selectedCountryCode: payload.selectedCountryCode,
         selectedCountryName: payload.selectedCountryName,
         selectedCurrency: currency,
-        notes: payload.notes || null,
+        notes: trimForColumn(payload.notes),
       },
     });
 
@@ -169,7 +175,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
           gender: student.gender || null,
           countryCode: payload.selectedCountryCode,
           countryName: payload.selectedCountryName,
-          notes: student.notes || null,
+          notes: trimForColumn(student.notes),
         },
       });
 

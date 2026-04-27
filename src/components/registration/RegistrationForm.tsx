@@ -192,7 +192,12 @@ const REGIONAL_PRICE_OVERRIDES: Record<string, Partial<Record<string, number>>> 
   },
 };
 
-const emptyChild = (): ChildForm => ({ fullName: "", age: "", gender: "", selectedOfferSlugs: [] });
+const emptyChild = (defaultOfferSlug?: string): ChildForm => ({
+  fullName: "",
+  age: "",
+  gender: "",
+  selectedOfferSlugs: defaultOfferSlug ? [defaultOfferSlug] : [],
+});
 
 function splitName(fullName: string) {
   const cleaned = fullName.trim().replace(/\s+/g, " ");
@@ -381,6 +386,9 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       return left.basePriceGbp - right.basePriceGbp || left.title.localeCompare(right.title);
     });
   }, [offers]);
+  const defaultOfferSlug = orderedOffers.find((offer) => offer.kind === "BUNDLE")?.slug
+    ?? orderedOffers[0]?.slug
+    ?? "";
 
   useEffect(() => {
     setMounted(true);
@@ -404,14 +412,14 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   }, []);
 
   useEffect(() => {
-    const bundleOffer = orderedOffers.find((offer) => offer.kind === "BUNDLE");
-    if (!bundleOffer) return;
     setChildren((current) =>
       current.map((child) =>
-        child.selectedOfferSlugs.length === 0 ? { ...child, selectedOfferSlugs: [bundleOffer.slug] } : child,
+        child.selectedOfferSlugs.length === 0 && defaultOfferSlug
+          ? { ...child, selectedOfferSlugs: [defaultOfferSlug] }
+          : child,
       ),
     );
-  }, [orderedOffers]);
+  }, [defaultOfferSlug]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -476,7 +484,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   }
 
   function addChild() {
-    setChildren((current) => [...current, emptyChild()]);
+    setChildren((current) => [...current, emptyChild(defaultOfferSlug)]);
   }
 
   function removeChild(index: number) {
@@ -519,14 +527,17 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
 
     try {
       const { firstName, lastName } = splitName(guardianFullName);
+      const compactGoal = hopesFromProgram.trim().replace(/\s+/g, " ").slice(0, 120);
       const registrationNotes = [
-        `City: ${parentCity}`,
-        `Prior knowledge of Arabic: ${priorArabicKnowledge}`,
-        `How they heard about Gen M: ${heardAboutGenM}`,
-        `What they hope to get from it: ${hopesFromProgram.trim()}`,
-        sourceTag ? `Source: ${sourceTag}` : "",
-        referrerUrl ? `Referrer: ${referrerUrl}` : "",
-      ].join("\n");
+        `City:${parentCity}`,
+        `Arabic:${priorArabicKnowledge}`,
+        `Heard:${heardAboutGenM}`,
+        compactGoal ? `Goal:${compactGoal}` : "",
+        sourceTag ? `Source:${sourceTag}` : "",
+      ]
+        .filter(Boolean)
+        .join(" | ")
+        .slice(0, 240);
       const signupResponse = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -568,7 +579,9 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
               lastName: childName.lastName,
               age: Number(child.age),
               gender: child.gender,
-              selectedOfferSlugs: child.selectedOfferSlugs,
+              selectedOfferSlugs: child.selectedOfferSlugs.length
+                ? child.selectedOfferSlugs
+                : (defaultOfferSlug ? [defaultOfferSlug] : []),
               notes: "",
             };
           }),
