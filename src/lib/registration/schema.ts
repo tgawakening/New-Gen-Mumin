@@ -5,7 +5,15 @@ export const registrationStudentSchema = z.object({
   lastName: z.string().trim().min(1),
   age: z.coerce.number().int().min(4).max(18),
   gender: z.string().trim().optional().or(z.literal("")),
-  selectedOfferSlugs: z.array(z.string().trim().min(1)).min(1),
+  selectedOfferSlugs: z.preprocess(
+    (value) => {
+      if (Array.isArray(value) && value.length === 0) {
+        return ["full-bundle"];
+      }
+      return value;
+    },
+    z.array(z.string().trim().min(1)).min(1),
+  ),
   notes: z.string().trim().max(300).optional().or(z.literal("")),
 });
 
@@ -18,6 +26,7 @@ export const registrationPayloadSchema = z.object({
   whatsappNumber: z.string().trim().optional().or(z.literal("")),
   selectedCountryCode: z.string().trim().min(2).max(2),
   selectedCountryName: z.string().trim().min(2),
+  couponCode: z.string().trim().max(40).optional().or(z.literal("")),
   notes: z.string().trim().max(1200).optional().or(z.literal("")),
   students: z.array(registrationStudentSchema).min(1).max(6),
 });

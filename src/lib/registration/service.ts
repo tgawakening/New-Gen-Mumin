@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import {
   DEFAULT_OFFERS,
+  getDiscountCoupon,
+  orderRegistrationCountries,
   REGISTRATION_COUNTRIES,
   resolveCurrency,
   resolveOfferAmount,
@@ -87,7 +89,7 @@ async function ensureParentProfile(
 }
 
 export async function getRegistrationOptions() {
-  const countries = REGISTRATION_COUNTRIES;
+  const countries = orderRegistrationCountries();
 
   try {
     const offers = await db.offer.findMany({
@@ -136,6 +138,22 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
 
   const offerLookup = buildOfferLookup(offers);
   const missingOffer = requestedOfferSlugs.find((slug) => !offerLookup.has(slug));
+  const fallbackCoupon = getDiscountCoupon(payload.couponCode);
+  const coupon = payload.couponCode
+    ? await db.coupon.findFirst({
+        where: {
+          code: payload.couponCode.trim().toUpperCase(),
+          isActive: true,
+        },
+        select: {
+          id: true,
+          code: true,
+          discountPercent: true,
+          discountAmount: true,
+          currency: true,
+        },
+      })
+    : null;
 
   if (missingOffer) {
     throw new Error(
@@ -145,7 +163,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
 
   return db.$transaction(async (tx) => {
     let subtotalAmount = 0;
-    let discountAmount = 0;
+    let multiChildDiscountAmount = 0;
     const parentProfile = await ensureParentProfile(tx, payload);
 
     const registration = await tx.registration.create({
@@ -195,7 +213,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
         const finalAmount = baseAmount - itemDiscount;
 
         subtotalAmount += baseAmount;
-        discountAmount += itemDiscount;
+        multiChildDiscountAmount += itemDiscount;
 
         await tx.registrationItem.create({
           data: {
@@ -217,9 +235,20 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
       }
     }
 
+    const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
+    const couponPercent = coupon?.discountPercent ?? fallbackCoupon?.discountPercent ?? 0;
+    const couponAmount =
+      coupon?.discountAmount && coupon.currency === currency
+        ? coupon.discountAmount
+        : couponPercent > 0
+          ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
+          : 0;
+    const discountAmount = multiChildDiscountAmount + couponAmount;
+
     const updated = await tx.registration.update({
       where: { id: registration.id },
       data: {
+        couponId: coupon?.id ?? null,
         subtotalAmount,
         discountAmount,
         totalAmount: subtotalAmount - discountAmount,
@@ -227,6 +256,9 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
           currency,
           multiChildDiscountRule: "50% off for second child onwards",
           country: payload.selectedCountryName,
+          couponCode: coupon?.code ?? fallbackCoupon?.code ?? null,
+          couponDiscountPercent: couponPercent || null,
+          couponDiscountAmount: couponAmount || null,
         },
       },
       include: {

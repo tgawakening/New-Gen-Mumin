@@ -103,15 +103,40 @@ export const REGIONAL_PRICE_OVERRIDES: Record<
   },
 };
 
+const PRIORITY_COUNTRY_CODES = ["US", "PK", "GB", "AE", "IN", "BD", "SA"] as const;
+
 export const REGISTRATION_COUNTRIES = [
-  { code: "GB", name: "United Kingdom", currency: "GBP" },
+  { code: "US", name: "United States", currency: "USD" },
   { code: "PK", name: "Pakistan", currency: "PKR" },
+  { code: "GB", name: "United Kingdom", currency: "GBP" },
+  { code: "AE", name: "United Arab Emirates", currency: "AED" },
   { code: "IN", name: "India", currency: "INR" },
   { code: "BD", name: "Bangladesh", currency: "BDT" },
-  { code: "AF", name: "Afghanistan", currency: "AFN" },
-  { code: "US", name: "United States", currency: "USD" },
-  { code: "AE", name: "United Arab Emirates", currency: "AED" },
   { code: "SA", name: "Saudi Arabia", currency: "SAR" },
+  { code: "AF", name: "Afghanistan", currency: "AFN" },
+  { code: "CA", name: "Canada", currency: "CAD" },
+  { code: "AU", name: "Australia", currency: "AUD" },
+  { code: "NZ", name: "New Zealand", currency: "NZD" },
+  { code: "IE", name: "Ireland", currency: "EUR" },
+  { code: "FR", name: "France", currency: "EUR" },
+  { code: "DE", name: "Germany", currency: "EUR" },
+  { code: "IT", name: "Italy", currency: "EUR" },
+  { code: "ES", name: "Spain", currency: "EUR" },
+  { code: "NL", name: "Netherlands", currency: "EUR" },
+  { code: "BE", name: "Belgium", currency: "EUR" },
+  { code: "CH", name: "Switzerland", currency: "CHF" },
+  { code: "SE", name: "Sweden", currency: "SEK" },
+  { code: "NO", name: "Norway", currency: "NOK" },
+  { code: "DK", name: "Denmark", currency: "DKK" },
+  { code: "TR", name: "Turkey", currency: "TRY" },
+  { code: "QA", name: "Qatar", currency: "QAR" },
+  { code: "KW", name: "Kuwait", currency: "KWD" },
+  { code: "BH", name: "Bahrain", currency: "BHD" },
+  { code: "OM", name: "Oman", currency: "OMR" },
+  { code: "MY", name: "Malaysia", currency: "MYR" },
+  { code: "SG", name: "Singapore", currency: "SGD" },
+  { code: "ZA", name: "South Africa", currency: "ZAR" },
+  { code: "JP", name: "Japan", currency: "JPY" },
 ] as const;
 
 const GBP_RATES: Record<string, number> = {
@@ -123,7 +148,52 @@ const GBP_RATES: Record<string, number> = {
   AED: 4.68,
   SAR: 4.77,
   USD: 1.27,
+  CAD: 1.72,
+  AUD: 1.96,
+  NZD: 2.1,
+  EUR: 1.17,
+  TRY: 51,
+  ZAR: 24,
+  QAR: 4.63,
+  KWD: 0.39,
+  BHD: 0.48,
+  OMR: 0.49,
+  MYR: 5.98,
+  SGD: 1.72,
+  CHF: 1.1,
+  NOK: 13.6,
+  SEK: 13.2,
+  DKK: 8.8,
+  JPY: 191,
 };
+
+export const DISCOUNT_COUPONS = {
+  GENM25: { code: "GENM25", discountPercent: 25 },
+  GENM50: { code: "GENM50", discountPercent: 50 },
+  GENM75: { code: "GENM75", discountPercent: 75 },
+} as const;
+
+export function getDiscountCoupon(code?: string | null) {
+  if (!code) return null;
+  const normalized = code.trim().toUpperCase();
+  return Object.values(DISCOUNT_COUPONS).find((coupon) => coupon.code === normalized) ?? null;
+}
+
+export function orderRegistrationCountries() {
+  const priority = PRIORITY_COUNTRY_CODES.map((code) =>
+    REGISTRATION_COUNTRIES.find((country) => country.code === code),
+  ).filter(
+    (
+      country,
+    ): country is (typeof REGISTRATION_COUNTRIES)[number] => Boolean(country),
+  );
+
+  const remaining = REGISTRATION_COUNTRIES.filter(
+    (country) => !PRIORITY_COUNTRY_CODES.includes(country.code as (typeof PRIORITY_COUNTRY_CODES)[number]),
+  ).sort((left, right) => left.name.localeCompare(right.name));
+
+  return [...priority, ...remaining];
+}
 
 export function resolveCurrency(countryCode?: string | null) {
   if (!countryCode) {

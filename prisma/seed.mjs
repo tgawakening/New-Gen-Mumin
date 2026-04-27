@@ -84,6 +84,12 @@ const offers = [
   },
 ];
 
+const coupons = [
+  { code: "GENM25", discountPercent: 25 },
+  { code: "GENM50", discountPercent: 50 },
+  { code: "GENM75", discountPercent: 75 },
+];
+
 async function main() {
   for (const program of programs) {
     await prisma.program.upsert({
@@ -171,7 +177,22 @@ async function main() {
     });
   }
 
-  console.log("Seeded programs, offers, and pricing rules.");
+  for (const coupon of coupons) {
+    await prisma.coupon.upsert({
+      where: { code: coupon.code },
+      update: {
+        discountPercent: coupon.discountPercent,
+        isActive: true,
+      },
+      create: {
+        code: coupon.code,
+        discountPercent: coupon.discountPercent,
+        isActive: true,
+      },
+    });
+  }
+
+  console.log("Seeded programs, offers, pricing rules, and discount coupons.");
 }
 
 main()

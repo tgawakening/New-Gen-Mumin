@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, EyeOff } from "lucide-react";
+import { getDiscountCoupon } from "@/lib/registration/catalog";
 
 type Offer = {
   slug: string;
@@ -132,6 +133,7 @@ const DIAL_CODES: Record<string, string> = {
   AU: "+61",
   NZ: "+64",
   ZA: "+27",
+  JP: "+81",
   IE: "+353",
   FR: "+33",
   DE: "+49",
@@ -345,6 +347,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [priorArabicKnowledge, setPriorArabicKnowledge] = useState("NONE");
   const [heardAboutGenM, setHeardAboutGenM] = useState("");
   const [hopesFromProgram, setHopesFromProgram] = useState("");
+  const [couponCode, setCouponCode] = useState("");
   const [sourceTag, setSourceTag] = useState("");
   const [referrerUrl, setReferrerUrl] = useState("");
   const [children, setChildren] = useState<ChildForm[]>([emptyChild()]);
@@ -389,6 +392,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const defaultOfferSlug = orderedOffers.find((offer) => offer.kind === "BUNDLE")?.slug
     ?? orderedOffers[0]?.slug
     ?? "";
+  const appliedCoupon = useMemo(() => getDiscountCoupon(couponCode), [couponCode]);
 
   useEffect(() => {
     setMounted(true);
@@ -450,23 +454,34 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const summary = useMemo(() => {
     const lines: Array<{ childLabel: string; offerTitle: string; price: PriceBreakdown; multiChildDiscount: number }> = [];
     let subtotal = 0;
-    let discount = 0;
+    let multiChildDiscount = 0;
     children.forEach((child, childIndex) => {
       child.selectedOfferSlugs.forEach((slug) => {
         const offer = offerMap.get(slug);
         if (!offer) return;
         const price = getRegionalPrice(offer, selectedPhoneCountry);
-        const multiChildDiscount = childIndex === 0 ? 0 : Math.round(price.displayAmount * 0.5);
+        const lineMultiChildDiscount = childIndex === 0 ? 0 : Math.round(price.displayAmount * 0.5);
         subtotal += price.displayAmount;
-        discount += multiChildDiscount;
-        lines.push({ childLabel: child.fullName || `Child ${childIndex + 1}`, offerTitle: offer.title, price, multiChildDiscount });
+        multiChildDiscount += lineMultiChildDiscount;
+        lines.push({ childLabel: child.fullName || `Child ${childIndex + 1}`, offerTitle: offer.title, price, multiChildDiscount: lineMultiChildDiscount });
       });
     });
-    return { currency: selectedPhoneCountry.currency, subtotal, discount, total: subtotal - discount, lines };
-  }, [children, offerMap, selectedPhoneCountry]);
+    const couponDiscount =
+      appliedCoupon ? Math.round((subtotal - multiChildDiscount) * (appliedCoupon.discountPercent / 100)) : 0;
+    return {
+      currency: selectedPhoneCountry.currency,
+      subtotal,
+      multiChildDiscount,
+      couponDiscount,
+      discount: multiChildDiscount + couponDiscount,
+      total: subtotal - multiChildDiscount - couponDiscount,
+      couponCode: appliedCoupon?.code ?? null,
+      lines,
+    };
+  }, [appliedCoupon, children, offerMap, selectedPhoneCountry]);
 
   const isPakistan = selectedPhoneCountry.code === "PK";
-  const paypalEligible = summary.lines.length === 1;
+  const paypalEligible = summary.lines.length === 1 && summary.discount === 0;
   const availablePaymentMethods = PAYMENT_METHODS.filter((method) => {
     if (method.value === "BANK_TRANSFER") return isPakistan;
     if (method.value === "PAYPAL") return paypalEligible;
@@ -571,6 +586,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
           whatsappNumber: "",
           selectedCountryCode: selectedPhoneCountry.code,
           selectedCountryName: selectedPhoneCountry.name,
+          couponCode: appliedCoupon?.code ?? "",
           notes: registrationNotes,
           students: children.map((child) => {
             const childName = splitName(child.fullName);
@@ -926,9 +942,35 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             </>
                           )}
                         </div>
+                        <div className="mt-4 rounded-2xl border border-[#efe2d2] bg-white px-4 py-4">
+                          <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Discount coupon</label>
+                          <input
+                            value={couponCode}
+                            onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                            placeholder="Enter coupon code"
+                            className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm uppercase outline-none focus:border-[#f39f5f]"
+                          />
+                          {couponCode.trim() ? (
+                            appliedCoupon ? (
+                              <p className="mt-2 text-xs font-semibold text-[#2f6b4b]">
+                                {appliedCoupon.code} applied for {appliedCoupon.discountPercent}% off the remaining total.
+                              </p>
+                            ) : (
+                              <p className="mt-2 text-xs font-semibold text-[#b24c4c]">
+                                Coupon code not recognised yet.
+                              </p>
+                            )
+                          ) : (
+                            <p className="mt-2 text-xs text-[#657284]">Use codes like GENM25, GENM50, or GENM75.</p>
+                          )}
+                        </div>
                         <div className="mt-4 rounded-[22px] bg-[#22304a] px-4 py-4 text-white">
                           <div className="flex items-center justify-between text-sm text-white/80"><span>Subtotal</span><span>{formatMoney(summary.subtotal, summary.currency)}</span></div>
-                          <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
+                          <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Multi-child discounts</span><span>- {formatMoney(summary.multiChildDiscount, summary.currency)}</span></div>
+                          {summary.couponDiscount > 0 ? (
+                            <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Coupon {summary.couponCode}</span><span>- {formatMoney(summary.couponDiscount, summary.currency)}</span></div>
+                          ) : null}
+                          <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Total discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
                           <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold"><span>Total</span><span>{formatMoney(summary.total, summary.currency)}</span></div>
                         </div>
                       </>,
