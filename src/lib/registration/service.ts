@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import {
   DEFAULT_OFFERS,
+  FULL_BUNDLE_COUPON_OFFER_SLUG,
   getDiscountCoupon,
   orderRegistrationCountries,
   REGISTRATION_COUNTRIES,
@@ -138,11 +139,19 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
 
   const offerLookup = buildOfferLookup(offers);
   const missingOffer = requestedOfferSlugs.find((slug) => !offerLookup.has(slug));
-  const fallbackCoupon = getDiscountCoupon(payload.couponCode);
-  const coupon = payload.couponCode
+  const normalizedCouponCode = payload.couponCode?.trim().toUpperCase() ?? "";
+  const fallbackCoupon = getDiscountCoupon(normalizedCouponCode);
+  const couponEligibleForSelection =
+    payload.students.length > 0 &&
+    payload.students.every(
+      (student) =>
+        student.selectedOfferSlugs.length === 1 &&
+        student.selectedOfferSlugs[0] === FULL_BUNDLE_COUPON_OFFER_SLUG,
+    );
+  const coupon = fallbackCoupon && couponEligibleForSelection
     ? await db.coupon.findFirst({
         where: {
-          code: payload.couponCode.trim().toUpperCase(),
+          code: fallbackCoupon.code,
           isActive: true,
         },
         select: {
@@ -236,7 +245,8 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
     }
 
     const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
-    const couponPercent = coupon?.discountPercent ?? fallbackCoupon?.discountPercent ?? 0;
+    const effectiveFallbackCoupon = couponEligibleForSelection ? fallbackCoupon : null;
+    const couponPercent = coupon?.discountPercent ?? effectiveFallbackCoupon?.discountPercent ?? 0;
     const couponAmount =
       coupon?.discountAmount && coupon.currency === currency
         ? coupon.discountAmount
@@ -248,7 +258,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
     const updated = await tx.registration.update({
       where: { id: registration.id },
       data: {
-        couponId: coupon?.id ?? null,
+        couponId: couponEligibleForSelection ? coupon?.id ?? null : null,
         subtotalAmount,
         discountAmount,
         totalAmount: subtotalAmount - discountAmount,
@@ -256,9 +266,10 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
           currency,
           multiChildDiscountRule: "50% off for second child onwards",
           country: payload.selectedCountryName,
-          couponCode: coupon?.code ?? fallbackCoupon?.code ?? null,
+          couponCode: coupon?.code ?? effectiveFallbackCoupon?.code ?? null,
           couponDiscountPercent: couponPercent || null,
           couponDiscountAmount: couponAmount || null,
+          couponEligibility: couponEligibleForSelection ? "bundle" : "bundle-only",
         },
       },
       include: {

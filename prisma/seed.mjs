@@ -85,9 +85,10 @@ const offers = [
 ];
 
 const coupons = [
-  { code: "GENM25", discountPercent: 25 },
-  { code: "GENM50", discountPercent: 50 },
-  { code: "GENM75", discountPercent: 75 },
+  { code: "GEN25", discountPercent: 25 },
+  { code: "GEN50", discountPercent: 50 },
+  { code: "GEN75", discountPercent: 75 },
+  { code: "Q7N4FULLACCESS", discountPercent: 100 },
 ];
 
 async function main() {

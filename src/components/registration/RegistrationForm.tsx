@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { getDiscountCoupon } from "@/lib/registration/catalog";
+import { FULL_BUNDLE_COUPON_OFFER_SLUG, getDiscountCoupon } from "@/lib/registration/catalog";
 
 type Offer = {
   slug: string;
@@ -392,6 +392,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const defaultOfferSlug = orderedOffers.find((offer) => offer.kind === "BUNDLE")?.slug
     ?? orderedOffers[0]?.slug
     ?? "";
+  const bundleOfferSlug = defaultOfferSlug || FULL_BUNDLE_COUPON_OFFER_SLUG;
   const appliedCoupon = useMemo(() => getDiscountCoupon(couponCode), [couponCode]);
 
   useEffect(() => {
@@ -453,6 +454,18 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     return children.every((child) => child.fullName.trim() && child.age.trim() && child.gender.trim() && child.selectedOfferSlugs.length > 0);
   }, [children, confirmPassword, guardianFullName, heardAboutGenM, hopesFromProgram, parentCity, parentEmail, password, phoneNumber]);
 
+  const couponEligibleForBundle = useMemo(
+    () =>
+      children.length > 0 &&
+      children.every(
+        (child) =>
+          child.selectedOfferSlugs.length === 1 && child.selectedOfferSlugs[0] === bundleOfferSlug,
+      ),
+    [bundleOfferSlug, children],
+  );
+
+  const effectiveCoupon = couponEligibleForBundle ? appliedCoupon : null;
+
   const summary = useMemo(() => {
     const lines: Array<{ childLabel: string; offerTitle: string; price: PriceBreakdown; multiChildDiscount: number }> = [];
     let subtotal = 0;
@@ -469,7 +482,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       });
     });
     const couponDiscount =
-      appliedCoupon ? Math.round((subtotal - multiChildDiscount) * (appliedCoupon.discountPercent / 100)) : 0;
+      effectiveCoupon ? Math.round((subtotal - multiChildDiscount) * (effectiveCoupon.discountPercent / 100)) : 0;
     return {
       currency: selectedPhoneCountry.currency,
       subtotal,
@@ -477,10 +490,36 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       couponDiscount,
       discount: multiChildDiscount + couponDiscount,
       total: subtotal - multiChildDiscount - couponDiscount,
-      couponCode: appliedCoupon?.code ?? null,
+      couponCode: effectiveCoupon?.code ?? null,
+      couponDiscountPercent: effectiveCoupon?.discountPercent ?? 0,
       lines,
     };
-  }, [appliedCoupon, children, offerMap, selectedPhoneCountry]);
+  }, [children, effectiveCoupon, offerMap, selectedPhoneCountry]);
+
+  const couponFeedback = useMemo(() => {
+    if (!couponCode.trim()) {
+      return null;
+    }
+
+    if (!appliedCoupon) {
+      return {
+        tone: "error" as const,
+        message: "This coupon code is not recognised.",
+      };
+    }
+
+    if (!couponEligibleForBundle) {
+      return {
+        tone: "info" as const,
+        message: "Coupon discounts apply only when every child is enrolled in the Gen-Mumins Full Bundle.",
+      };
+    }
+
+    return {
+      tone: "success" as const,
+      message: `${appliedCoupon.discountPercent}% discount applied to this checkout.`,
+    };
+  }, [appliedCoupon, couponCode, couponEligibleForBundle]);
 
   const isPakistan = selectedPhoneCountry.code === "PK";
   const paypalEligible = summary.lines.length === 1 && summary.discount === 0;
@@ -588,7 +627,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
           whatsappNumber: "",
           selectedCountryCode: selectedPhoneCountry.code,
           selectedCountryName: selectedPhoneCountry.name,
-          couponCode: appliedCoupon?.code ?? "",
+          couponCode: effectiveCoupon?.code ?? "",
           notes: registrationNotes,
           students: children.map((child) => {
             const childName = splitName(child.fullName);
@@ -952,12 +991,41 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                             placeholder="Enter coupon code"
                             className="mt-2 w-full rounded-2xl border border-[#d9c7b0] bg-white px-4 py-3 text-sm text-[#22304a] outline-none transition placeholder:text-[#9ba6b5] focus:border-[#f3a25d] focus:ring-2 focus:ring-[#f8d9b6]"
                           />
+                          {couponFeedback ? (
+                            <p
+                              className={`mt-2 rounded-2xl px-4 py-3 text-sm ${
+                                couponFeedback.tone === "success"
+                                  ? "bg-[#edf8ef] text-[#2f6b4b]"
+                                  : couponFeedback.tone === "error"
+                                    ? "bg-[#fff1f1] text-[#b43b3b]"
+                                    : "bg-[#fff7eb] text-[#9b6328]"
+                              }`}
+                            >
+                              {couponFeedback.message}
+                            </p>
+                          ) : null}
+                          <div className="mt-3 rounded-2xl border border-[#f6d8b3] bg-[#fff7ea] px-4 py-3 text-sm leading-6 text-[#9b6328]">
+                            Early bird offer for 3 days: use code <span className="font-semibold">GEN25</span> and get 25% off the Gen-Mumins Full Bundle.
+                          </div>
+                          {!couponEligibleForBundle ? (
+                            <p className="mt-2 text-sm leading-6 text-[#6d7785]">
+                              Discount codes work only for the Gen-Mumins Full Bundle selection for children.
+                            </p>
+                          ) : null}
                         </div>
                         <div className="mt-4 rounded-[22px] bg-[#22304a] px-4 py-4 text-white">
                           <div className="flex items-center justify-between text-sm text-white/80"><span>Subtotal</span><span>{formatMoney(summary.subtotal, summary.currency)}</span></div>
                           <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Multi-child discounts</span><span>- {formatMoney(summary.multiChildDiscount, summary.currency)}</span></div>
                           {summary.couponDiscount > 0 ? (
-                            <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Coupon discount</span><span>- {formatMoney(summary.couponDiscount, summary.currency)}</span></div>
+                            <div className="mt-2 flex items-center justify-between gap-3 text-sm text-[#f8d39f]">
+                              <span className="flex items-center gap-2">
+                                <span>Coupon discount</span>
+                                <span className="rounded-full bg-[#2f6b4b] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
+                                  {summary.couponDiscountPercent}% applied
+                                </span>
+                              </span>
+                              <span>- {formatMoney(summary.couponDiscount, summary.currency)}</span>
+                            </div>
                           ) : null}
                           <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]"><span>Total discounts</span><span>- {formatMoney(summary.discount, summary.currency)}</span></div>
                           <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold"><span>Total</span><span>{formatMoney(summary.total, summary.currency)}</span></div>
