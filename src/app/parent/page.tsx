@@ -48,8 +48,8 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         metrics={[
           { label: "Children", value: String(dashboard.children.length), hint: "Linked learner profiles in your family account." },
           { label: "Access", value: dashboard.accessStateLabel, hint: "Payment status controls learning access." },
-          { label: "Latest order", value: dashboard.latestOrder?.orderNumber ?? "No order yet", hint: dashboard.latestOrder ? `${dashboard.latestOrder.gateway} • ${dashboard.latestOrder.currency} ${dashboard.latestOrder.totalAmount}` : "Create or complete an enrollment to begin." },
-          { label: "Selected child", value: selectedChild?.name ?? "No child yet", hint: selectedChild ? `${selectedChild.courses.length} courses • ${selectedChild.attendanceRate}% attendance` : "Your learners will appear here after registration." },
+          { label: "Latest order", value: dashboard.latestOrder?.orderNumber ?? "No order yet", hint: dashboard.latestOrder ? `${dashboard.latestOrder.gateway} - ${dashboard.latestOrder.currency} ${dashboard.latestOrder.totalAmount}` : "Create or complete an enrollment to begin." },
+          { label: "Selected child", value: selectedChild?.name ?? "No child yet", hint: selectedChild ? `${selectedChild.courses.length} courses - ${selectedChild.attendanceRate}% attendance` : "Your learners will appear here after registration." },
         ]}
       />
 
@@ -59,7 +59,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         action={
           <Link
             href="/parent?addChild=1"
-            className="rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
+            className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
           >
             Add another child
           </Link>
@@ -78,7 +78,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             <SectionCard eyebrow="Courses" title={selectedChild.name}>
               <InfoList
                 items={selectedChild.courses.map(
-                  (course) => `${course.title} • ${course.status} • ${course.meetingCount} weekly slots`,
+                  (course) => `${course.title} - ${course.status} - ${course.meetingCount} weekly slots`,
                 )}
                 emptyLabel="Courses will appear here once enrollment is active."
               />
@@ -88,20 +88,20 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               <div className={`grid gap-4 xl:grid-cols-3 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                 <InfoList
                   items={selectedChild.quizzes.slice(0, 4).map(
-                    (quiz) => `${quiz.title} • ${quiz.type} • ${quiz.latestScore ?? "Pending"} pts`,
+                    (quiz) => `${quiz.title} - ${quiz.type} - ${quiz.latestScore ?? "Pending"} pts`,
                   )}
                   emptyLabel="Published quizzes will appear here."
                 />
                 <InfoList
                   items={selectedChild.assignments.slice(0, 4).map(
                     (assignment) =>
-                      `${assignment.title} • ${assignment.status.replace(/_/g, " ")} • ${assignment.score ?? "Pending"} pts`,
+                      `${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${assignment.score ?? "Pending"} pts`,
                   )}
                   emptyLabel="Assignments will appear here."
                 />
                 <InfoList
                   items={selectedChild.journals.slice(0, 4).map(
-                    (journal) => `${journal.title} • ${journal.practiceMinutes} min • ${formatGrade(journal.selfRating)}`,
+                    (journal) => `${journal.template.weekLabel} - ${journal.practiceMinutes} min - ${formatGrade(journal.selfRating)}`,
                   )}
                   emptyLabel="Journal reflections will appear here."
                 />
@@ -113,7 +113,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                 <InfoList
                   items={selectedChild.lessonUpdates.slice(0, 5).map(
                     (update) =>
-                      `${update.programTitle} â€¢ ${update.topic} â€¢ ${formatWeekday(update.lessonDate.getDay())} â€¢ ${update.teacherName ?? "Teacher update"}`,
+                      `${update.programTitle} - ${update.topic} - ${formatWeekday(update.lessonDate.getDay())} - ${update.teacherName ?? "Teacher update"}`,
                   )}
                   emptyLabel="Teacher lesson updates will appear here once daily content starts being posted."
                 />
@@ -122,9 +122,29 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                     const due = assignment.dueDate
                       ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
                       : "No due date yet";
-                    return `${assignment.programTitle} â€¢ ${assignment.title} â€¢ ${assignment.status.replace(/_/g, " ")} â€¢ ${due}`;
+                    return `${assignment.programTitle} - ${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
                   })}
                   emptyLabel="Weekly tasks and homework will appear here once teachers publish them."
+                />
+              </div>
+            </SectionCard>
+
+            <SectionCard eyebrow="Weekly journal" title="Growth summary">
+              <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+                <InfoList
+                  items={[
+                    `Most consistent trait - ${selectedChild.journalMonthlySummary.mostConsistentTrait}`,
+                    `Strongest skill area - ${selectedChild.journalMonthlySummary.strongestSkillArea}`,
+                    `Arabic fluency trend - ${selectedChild.journalMonthlySummary.arabicFluencyTrend}`,
+                  ]}
+                  emptyLabel="Monthly journal growth will appear here."
+                />
+                <InfoList
+                  items={[
+                    `Leadership score - ${selectedChild.journalMonthlySummary.leadershipDevelopmentScore}/5`,
+                    `Teacher summary - ${selectedChild.journalMonthlySummary.teacherSummary}`,
+                  ]}
+                  emptyLabel="Leadership and teacher summary will appear here."
                 />
               </div>
             </SectionCard>
@@ -136,13 +156,13 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                 <div className={`rounded-[24px] bg-[#22304a] p-5 text-white ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                   <p className="text-lg font-semibold">{selectedChild.nextClass.title}</p>
                   <p className="mt-2 text-sm text-white/80">
-                    {formatWeekday(selectedChild.nextClass.weekday)} • {selectedChild.nextClass.startTime} - {selectedChild.nextClass.endTime}
+                    {formatWeekday(selectedChild.nextClass.weekday)} - {selectedChild.nextClass.startTime} - {selectedChild.nextClass.endTime}
                   </p>
                   <p className="mt-2 text-sm text-white/75">
                     Teacher: {selectedChild.nextClass.teacherName ?? "Assigned soon"}
                   </p>
                   <p className="mt-2 text-sm text-white/75">
-                    {selectedChild.nextClass.provider ?? "Live class"} • {selectedChild.nextClass.timezone}
+                    {selectedChild.nextClass.provider ?? "Live class"} - {selectedChild.nextClass.timezone}
                   </p>
                 </div>
               ) : (
@@ -156,10 +176,10 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               {dashboard.latestOrder ? (
                 <InfoList
                   items={[
-                    `Order • ${dashboard.latestOrder.orderNumber}`,
-                    `Gateway • ${dashboard.latestOrder.gateway}`,
-                    `Status • ${dashboard.latestOrder.status.replace(/_/g, " ")}`,
-                    `Amount • ${dashboard.latestOrder.currency} ${dashboard.latestOrder.totalAmount}`,
+                    `Order - ${dashboard.latestOrder.orderNumber}`,
+                    `Gateway - ${dashboard.latestOrder.gateway}`,
+                    `Status - ${dashboard.latestOrder.status.replace(/_/g, " ")}`,
+                    `Amount - ${dashboard.latestOrder.currency} ${dashboard.latestOrder.totalAmount}`,
                   ]}
                   emptyLabel="Payment details will appear here."
                 />
@@ -174,7 +194,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               <InfoList
                 items={selectedChild.badges.map(
                   (badge) =>
-                    `${badge.title} â€¢ ${badge.status === "earned" ? "Earned" : "In progress"} â€¢ ${badge.description}`,
+                    `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"} - ${badge.description}`,
                 )}
                 emptyLabel="Badges, gem-of-the-week, and certificates will appear here as student activity grows."
               />

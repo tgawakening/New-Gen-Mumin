@@ -84,6 +84,40 @@ type ChildProgressSummary = {
   nextSteps: string | null;
 };
 
+type JournalRatingSummary = {
+  trait: number;
+  skill: number;
+  pronunciation: number;
+  fluency: number;
+  confidence: number;
+  initiative: number;
+  responsibility: number;
+  teamContribution: number;
+};
+
+type JournalTemplateSummary = {
+  weekLabel: string;
+  theme: string;
+  traitFocus: string;
+  traitPractice: string;
+  traitMoment: string;
+  traitChallenge: string;
+  lifeSkillFocus: string;
+  lifeSkillDemonstration: string;
+  evidenceOption: string;
+  arabicPhrase: string;
+  arabicUsage: string;
+  tajweedFocus: string;
+  leadershipRole: string;
+  leadershipExample: string;
+  growthStrength: string;
+  growthImprove: string;
+  growthNextFocus: string;
+  encouragement: string;
+  teacherObservation: string | null;
+  ratingSummary: JournalRatingSummary;
+};
+
 type ChildJournalSummary = {
   id: string;
   title: string;
@@ -93,6 +127,15 @@ type ChildJournalSummary = {
   teacherFeedback: string | null;
   status: SubmissionStatus;
   submittedAt: Date;
+  template: JournalTemplateSummary;
+};
+
+type ChildJournalMonthlySummary = {
+  mostConsistentTrait: string;
+  strongestSkillArea: string;
+  arabicFluencyTrend: string;
+  leadershipDevelopmentScore: number;
+  teacherSummary: string;
 };
 
 type ChildSummary = {
@@ -111,6 +154,7 @@ type ChildSummary = {
   badges: ChildBadgeSummary[];
   progress: ChildProgressSummary[];
   journals: ChildJournalSummary[];
+  journalMonthlySummary: ChildJournalMonthlySummary;
   profile: {
     displayName: string;
     firstName: string;
@@ -178,6 +222,206 @@ function resolvePendingReason(orderStatus?: PaymentStatus | null, gateway?: stri
   }
 
   return "Your enrollment is being prepared. Please check back shortly.";
+}
+
+const JOURNAL_PREFIX = "__GENM_JOURNAL__:";
+
+function parseJson<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function clampRating(value: unknown, fallback = 3) {
+  const numeric = typeof value === "number" ? value : Number(value);
+
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+
+  return Math.min(5, Math.max(1, Math.round(numeric)));
+}
+
+function averageRating(values: number[]) {
+  if (!values.length) {
+    return 3;
+  }
+
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function toGradeLevel(score: number) {
+  if (score >= 5) return "EXCELLENT";
+  if (score >= 4) return "GOOD";
+  if (score >= 3) return "SATISFACTORY";
+  return "NEEDS_IMPROVEMENT";
+}
+
+function buildFallbackTemplate(entry: {
+  title: string;
+  reflection: string;
+  practiceMinutes: number;
+  selfRating: string | null;
+  teacherFeedback: string | null;
+}): JournalTemplateSummary {
+  const baseRating =
+    entry.selfRating === "EXCELLENT"
+      ? 5
+      : entry.selfRating === "GOOD"
+        ? 4
+        : entry.selfRating === "SATISFACTORY"
+          ? 3
+          : 2;
+
+  return {
+    weekLabel: entry.title || "Weekly journal",
+    theme: "Weekly reflection",
+    traitFocus: "Islamic character",
+    traitPractice: entry.reflection,
+    traitMoment: "Shared in the weekly reflection.",
+    traitChallenge: "Continue building consistency through regular journaling.",
+    lifeSkillFocus: "Weekly task completion",
+    lifeSkillDemonstration: `Practice time logged: ${entry.practiceMinutes} minutes.`,
+    evidenceOption: "Verbal explanation",
+    arabicPhrase: "Arabic phrase work in progress",
+    arabicUsage: "The learner can continue building this through weekly practice.",
+    tajweedFocus: "Teacher-led recitation focus",
+    leadershipRole: "Initiative role",
+    leadershipExample: "Leadership examples will grow as more weekly journals are submitted.",
+    growthStrength: entry.selfRating ? `Current self-rating: ${entry.selfRating.replace(/_/g, " ")}` : "Steady weekly reflection habits.",
+    growthImprove: "Keep adding specific examples from class and home.",
+    growthNextFocus: "Build confidence through consistent task completion and journaling.",
+    encouragement: entry.teacherFeedback ?? "Keep showing up each week. Small wins build strong habits.",
+    teacherObservation: entry.teacherFeedback,
+    ratingSummary: {
+      trait: baseRating,
+      skill: baseRating,
+      pronunciation: baseRating,
+      fluency: baseRating,
+      confidence: baseRating,
+      initiative: baseRating,
+      responsibility: baseRating,
+      teamContribution: baseRating,
+    },
+  };
+}
+
+function parseJournalTemplate(entry: {
+  title: string;
+  reflection: string;
+  practiceMinutes: number;
+  selfRating: string | null;
+  teacherFeedback: string | null;
+}) {
+  if (!entry.reflection.startsWith(JOURNAL_PREFIX)) {
+    return buildFallbackTemplate(entry);
+  }
+
+  const payload = parseJson<Record<string, unknown>>(entry.reflection.slice(JOURNAL_PREFIX.length));
+
+  if (!payload) {
+    return buildFallbackTemplate(entry);
+  }
+
+  return {
+    weekLabel: String(payload.weekLabel ?? entry.title ?? "Weekly journal"),
+    theme: String(payload.theme ?? "Weekly growth"),
+    traitFocus: String(payload.traitFocus ?? "Islamic character"),
+    traitPractice: String(payload.traitPractice ?? ""),
+    traitMoment: String(payload.traitMoment ?? ""),
+    traitChallenge: String(payload.traitChallenge ?? ""),
+    lifeSkillFocus: String(payload.lifeSkillFocus ?? "Weekly task"),
+    lifeSkillDemonstration: String(payload.lifeSkillDemonstration ?? ""),
+    evidenceOption: String(payload.evidenceOption ?? "Verbal explanation"),
+    arabicPhrase: String(payload.arabicPhrase ?? "Arabic phrase work"),
+    arabicUsage: String(payload.arabicUsage ?? ""),
+    tajweedFocus: String(payload.tajweedFocus ?? "Teacher recitation focus"),
+    leadershipRole: String(payload.leadershipRole ?? "Initiative role"),
+    leadershipExample: String(payload.leadershipExample ?? ""),
+    growthStrength: String(payload.growthStrength ?? "Steady weekly reflection habits."),
+    growthImprove: String(payload.growthImprove ?? "Continue building consistency."),
+    growthNextFocus: String(payload.growthNextFocus ?? "Carry this week's learning into next week."),
+    encouragement: String(
+      payload.encouragement ??
+        entry.teacherFeedback ??
+        "Keep growing with steady effort and weekly reflection.",
+    ),
+    teacherObservation:
+      typeof payload.teacherObservation === "string"
+        ? payload.teacherObservation
+        : entry.teacherFeedback,
+    ratingSummary: {
+      trait: clampRating(payload.traitRating),
+      skill: clampRating(payload.skillRating),
+      pronunciation: clampRating(payload.pronunciationRating),
+      fluency: clampRating(payload.fluencyRating),
+      confidence: clampRating(payload.confidenceRating),
+      initiative: clampRating(payload.initiativeRating),
+      responsibility: clampRating(payload.responsibilityRating),
+      teamContribution: clampRating(payload.teamContributionRating),
+    },
+  } satisfies JournalTemplateSummary;
+}
+
+function buildJournalMonthlySummary(journals: ChildJournalSummary[]): ChildJournalMonthlySummary {
+  if (!journals.length) {
+    return {
+      mostConsistentTrait: "Weekly journals will surface the strongest trait here.",
+      strongestSkillArea: "Life skills and task completion will build over time.",
+      arabicFluencyTrend: "Arabic fluency trend will appear after journal activity begins.",
+      leadershipDevelopmentScore: 0,
+      teacherSummary: "Teacher weekly encouragement will appear here after the first journal cycle.",
+    };
+  }
+
+  const recent = journals.slice(0, 4);
+  const traitCounts = new Map<string, number>();
+  const skillCounts = new Map<string, number>();
+
+  for (const journal of recent) {
+    traitCounts.set(
+      journal.template.traitFocus,
+      (traitCounts.get(journal.template.traitFocus) ?? 0) + 1,
+    );
+    skillCounts.set(
+      journal.template.lifeSkillFocus,
+      (skillCounts.get(journal.template.lifeSkillFocus) ?? 0) + 1,
+    );
+  }
+
+  const [mostConsistentTrait] =
+    [...traitCounts.entries()].sort((left, right) => right[1] - left[1])[0] ?? [];
+  const [strongestSkillArea] =
+    [...skillCounts.entries()].sort((left, right) => right[1] - left[1])[0] ?? [];
+
+  const averageFluency = averageRating(recent.map((journal) => journal.template.ratingSummary.fluency));
+  const leadershipDevelopmentScore = averageRating(
+    recent.flatMap((journal) => [
+      journal.template.ratingSummary.initiative,
+      journal.template.ratingSummary.responsibility,
+      journal.template.ratingSummary.teamContribution,
+    ]),
+  );
+
+  const lastTeacherVoice =
+    recent.find((journal) => journal.teacherFeedback || journal.template.encouragement)?.teacherFeedback ??
+    recent[0]?.template.encouragement ??
+    "Keep building weekly habits with sincerity and consistency.";
+
+  return {
+    mostConsistentTrait: mostConsistentTrait ?? "Character growth is still being mapped.",
+    strongestSkillArea: strongestSkillArea ?? "Life skill growth is still being mapped.",
+    arabicFluencyTrend:
+      averageFluency >= 4
+        ? "Arabic fluency is trending strongly this month."
+        : averageFluency >= 3
+          ? "Arabic fluency is developing steadily this month."
+          : "Arabic fluency needs a little more weekly repetition this month.",
+    leadershipDevelopmentScore,
+    teacherSummary: lastTeacherVoice,
+  };
 }
 
 function computeAttendanceBreakdown(attendances: Array<{ status: string }>, totalEnrollments: number) {
@@ -328,14 +572,34 @@ function buildChildBadges({
   attendanceRate,
   quizCount,
   submittedAssignments,
-  journalCount,
+  journals,
 }: {
   attendanceRate: number;
   quizCount: number;
   submittedAssignments: number;
-  journalCount: number;
+  journals: ChildJournalSummary[];
 }) {
   const badges: ChildBadgeSummary[] = [];
+  const averageLeadership = averageRating(
+    journals.flatMap((journal) => [
+      journal.template.ratingSummary.initiative,
+      journal.template.ratingSummary.responsibility,
+      journal.template.ratingSummary.teamContribution,
+    ]),
+  );
+  const averagePronunciation = averageRating(
+    journals.flatMap((journal) => [
+      journal.template.ratingSummary.pronunciation,
+      journal.template.ratingSummary.fluency,
+      journal.template.ratingSummary.confidence,
+    ]),
+  );
+  const averageTrait = averageRating(journals.map((journal) => journal.template.ratingSummary.trait));
+  const strongestSkill =
+    journals[0]?.template.lifeSkillFocus &&
+    journals[0].template.lifeSkillFocus !== "Weekly task"
+      ? journals[0].template.lifeSkillFocus
+      : "Weekly task growth";
 
   badges.push({
     id: "attendance",
@@ -359,11 +623,11 @@ function buildChildBadges({
 
   badges.push({
     id: "reflection",
-    title: journalCount >= 2 ? "Reflection Gem" : "Reflection Starter",
-    status: journalCount >= 2 ? "earned" : "progress",
+    title: journals.length >= 2 && averageTrait >= 4 ? "Patience Badge" : "Reflection Gem",
+    status: journals.length >= 2 ? "earned" : "progress",
     description:
-      journalCount >= 2
-        ? "Journal reflections are building thoughtful learning habits."
+      journals.length >= 2
+        ? "Weekly reflections are creating visible character growth."
         : "Journal entries and self-reflection will turn into visible recognition here.",
   });
 
@@ -375,6 +639,33 @@ function buildChildBadges({
       quizCount >= 2
         ? "Assessment activity is active and developing nicely."
         : "As quizzes and lesson checks are completed, assessment badges will appear here.",
+  });
+
+  badges.push({
+    id: "tajweed",
+    title: averagePronunciation >= 4 ? "Tajweed Star" : "Arabic Voice Builder",
+    status: journals.length > 0 && averagePronunciation >= 4 ? "earned" : "progress",
+    description:
+      journals.length > 0
+        ? "Arabic phrase confidence and recitation quality are being tracked through the weekly journal."
+        : "Arabic phrase and tajweed badges will appear once weekly journal entries begin.",
+  });
+
+  badges.push({
+    id: "leadership",
+    title: averageLeadership >= 4 ? "Leadership Chain Badge" : "Leadership Path",
+    status: journals.length > 0 && averageLeadership >= 4 ? "earned" : "progress",
+    description:
+      journals.length > 0
+        ? "Leadership roles, initiative, and team contribution are now visible to families."
+        : "Leadership recognition will unlock as weekly journals capture class participation.",
+  });
+
+  badges.push({
+    id: "skill",
+    title: strongestSkill.toLowerCase().includes("first aid") ? "First Aid Badge" : "Skill Builder Badge",
+    status: journals.length > 0 ? "earned" : "progress",
+    description: `Current skill focus: ${strongestSkill}.`,
   });
 
   return badges;
@@ -391,6 +682,18 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
   const quizzes = mapQuizSummaries(programQuizzes, child.quizAttempts);
   const assignments = mapAssignmentSummaries(child.enrollments, child.assignments);
   const lessonUpdates = mapLessonUpdates(child.enrollments);
+  const journals = child.journalEntries.map((entry: any) => ({
+    id: entry.id,
+    title: entry.title,
+    reflection: entry.reflection,
+    practiceMinutes: entry.practiceMinutes,
+    selfRating: entry.selfRating,
+    teacherFeedback: entry.teacherFeedback,
+    status: entry.status,
+    submittedAt: entry.submittedAt,
+    template: parseJournalTemplate(entry),
+  })) satisfies ChildJournalSummary[];
+  const journalMonthlySummary = buildJournalMonthlySummary(journals);
   const submittedAssignments = assignments.filter((assignment) =>
     assignment.status === "SUBMITTED" || assignment.status === "REVIEWED",
   ).length;
@@ -398,7 +701,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     attendanceRate,
     quizCount: quizzes.filter((quiz) => quiz.attempts.length > 0).length,
     submittedAssignments,
-    journalCount: child.journalEntries.length,
+    journals,
   });
 
   return {
@@ -437,16 +740,8 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       strengths: report.strengths,
       nextSteps: report.nextSteps,
     })),
-    journals: child.journalEntries.map((entry: any) => ({
-      id: entry.id,
-      title: entry.title,
-      reflection: entry.reflection,
-      practiceMinutes: entry.practiceMinutes,
-      selfRating: entry.selfRating,
-      teacherFeedback: entry.teacherFeedback,
-      status: entry.status,
-      submittedAt: entry.submittedAt,
-    })),
+    journals,
+    journalMonthlySummary,
     profile: {
       displayName:
         child.displayName ||

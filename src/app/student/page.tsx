@@ -70,7 +70,7 @@ export default async function StudentDashboardPage() {
           <SectionCard eyebrow="Courses" title="Your learning path">
             <InfoList
               items={child.courses.map(
-                (course) => `${course.title} • ${course.status} • ${course.meetingCount} weekly slots`,
+                (course) => `${course.title} - ${course.status} - ${course.meetingCount} weekly slots`,
               )}
               emptyLabel="Your courses will appear here once your enrollment is active."
             />
@@ -81,7 +81,7 @@ export default async function StudentDashboardPage() {
               <InfoList
                 items={child.quizzes.slice(0, 4).map((quiz) => {
                   const score = quiz.latestScore === null ? "Awaiting score" : `${quiz.latestScore} pts`;
-                  return `${quiz.title} • ${quiz.type} • ${score}`;
+                  return `${quiz.title} - ${quiz.type} - ${score}`;
                 })}
                 emptyLabel="Published quizzes will appear after your teacher prepares the lessons."
               />
@@ -89,19 +89,19 @@ export default async function StudentDashboardPage() {
                 items={child.assignments.slice(0, 4).map((assignment) => {
                   const status = assignment.status.replace(/_/g, " ");
                   const score = assignment.score === null ? "Pending review" : `${assignment.score} pts`;
-                  return `${assignment.title} • ${status} • ${score}`;
+                  return `${assignment.title} - ${status} - ${score}`;
                 })}
                 emptyLabel="Assignments and homework submissions will appear here."
               />
             </div>
           </SectionCard>
 
-          <SectionCard eyebrow="Weekly content" title="Teacher updates and today&apos;s tasks">
+          <SectionCard eyebrow="Weekly content" title="Teacher updates and today's tasks">
             <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
               <InfoList
                 items={child.lessonUpdates.slice(0, 5).map(
                   (update) =>
-                    `${update.programTitle} â€¢ ${update.topic} â€¢ ${update.teacherName ?? "Teacher"} â€¢ ${update.summary}`,
+                    `${update.programTitle} - ${update.topic} - ${update.teacherName ?? "Teacher"} - ${update.summary}`,
                 )}
                 emptyLabel="Your teacher lesson updates will appear here after content is published."
               />
@@ -110,7 +110,7 @@ export default async function StudentDashboardPage() {
                   const due = assignment.dueDate
                     ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
                     : "No due date set";
-                  return `${assignment.title} â€¢ ${assignment.status.replace(/_/g, " ")} â€¢ ${due}`;
+                  return `${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
                 })}
                 emptyLabel="Tasks and homework will appear here when your teachers assign them."
               />
@@ -122,16 +122,49 @@ export default async function StudentDashboardPage() {
               <InfoList
                 items={child.journals.slice(0, 4).map(
                   (journal) =>
-                    `${journal.title} • ${journal.practiceMinutes} min • ${formatGrade(journal.selfRating)}`,
+                    `${journal.template.weekLabel} - ${journal.practiceMinutes} min - ${formatGrade(journal.selfRating)}`,
                 )}
                 emptyLabel="Your journal entries will appear here once class reflection begins."
               />
               <InfoList
                 items={child.progress.slice(0, 4).map(
                   (report) =>
-                    `${report.programTitle} • ${formatGrade(report.grade)} • ${report.attendancePct ?? "Pending"}% attendance`,
+                    `${report.programTitle} - ${formatGrade(report.grade)} - ${report.attendancePct ?? "Pending"}% attendance`,
                 )}
                 emptyLabel="Teacher reports will appear here once a reporting cycle is complete."
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            eyebrow="Weekly growth"
+            title="Journal summary"
+            action={
+              !child.accessLocked ? (
+                <Link
+                  href="/student/journal/submit"
+                  className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
+                >
+                  Add weekly journal
+                </Link>
+              ) : null
+            }
+          >
+            <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
+              <InfoList
+                items={[
+                  `Most consistent trait - ${child.journalMonthlySummary.mostConsistentTrait}`,
+                  `Strongest skill area - ${child.journalMonthlySummary.strongestSkillArea}`,
+                  `Arabic fluency trend - ${child.journalMonthlySummary.arabicFluencyTrend}`,
+                ]}
+                emptyLabel="Monthly journal growth will appear here."
+              />
+              <InfoList
+                items={[
+                  `Leadership score - ${child.journalMonthlySummary.leadershipDevelopmentScore}/5`,
+                  `Teacher summary - ${child.journalMonthlySummary.teacherSummary}`,
+                ]}
+                emptyLabel="Leadership and teacher summary will appear here."
               />
             </div>
           </SectionCard>
@@ -143,10 +176,10 @@ export default async function StudentDashboardPage() {
               <div className={`rounded-[24px] bg-[#22304a] p-5 text-white ${child.accessLocked ? "opacity-60" : ""}`}>
                 <p className="text-lg font-semibold">{child.nextClass.title}</p>
                 <p className="mt-2 text-sm text-white/80">
-                  {formatWeekday(child.nextClass.weekday)} • {child.nextClass.startTime} - {child.nextClass.endTime}
+                  {formatWeekday(child.nextClass.weekday)} - {child.nextClass.startTime} - {child.nextClass.endTime}
                 </p>
                 <p className="mt-2 text-sm text-white/75">
-                  {child.nextClass.provider ?? "Live class"} • {child.nextClass.timezone}
+                  {child.nextClass.provider ?? "Live class"} - {child.nextClass.timezone}
                 </p>
                 <p className="mt-2 text-sm text-white/75">
                   Teacher: {child.nextClass.teacherName ?? "Assigned soon"}
@@ -175,10 +208,10 @@ export default async function StudentDashboardPage() {
           <SectionCard eyebrow="Profile" title="Learner details">
             <InfoList
               items={[
-                `Name • ${child.profile.displayName}`,
-                `Email • ${child.profile.email}`,
-                `Timezone • ${child.profile.timezone ?? "Europe/London"}`,
-                `Country • ${child.profile.countryName ?? "Pending"}`,
+                `Name - ${child.profile.displayName}`,
+                `Email - ${child.profile.email}`,
+                `Timezone - ${child.profile.timezone ?? "Europe/London"}`,
+                `Country - ${child.profile.countryName ?? "Pending"}`,
               ]}
               emptyLabel="Profile details will appear here."
             />
@@ -188,7 +221,7 @@ export default async function StudentDashboardPage() {
             <InfoList
               items={child.badges.map(
                 (badge) =>
-                  `${badge.title} â€¢ ${badge.status === "earned" ? "Earned" : "In progress"} â€¢ ${badge.description}`,
+                  `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"} - ${badge.description}`,
               )}
               emptyLabel="Badges, gem-of-the-week, and certificates will appear here as you complete more work."
             />

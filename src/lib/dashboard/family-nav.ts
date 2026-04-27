@@ -7,6 +7,7 @@ export function getStudentNavItems() {
     { label: "Quizzes", href: "/student/quizzes" },
     { label: "Progress", href: "/student/progress" },
     { label: "Journal", href: "/student/journal" },
+    { label: "Submit Journal", href: "/student/journal/submit" },
     { label: "Profile", href: "/student/profile" },
   ];
 }
