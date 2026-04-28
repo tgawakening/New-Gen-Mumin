@@ -169,8 +169,11 @@ const GBP_RATES: Record<string, number> = {
 
 export const DISCOUNT_COUPONS = {
   GEN25: { code: "GEN25", discountPercent: 25 },
+  GENM25: { code: "GENM25", discountPercent: 25 },
   GEN50: { code: "GEN50", discountPercent: 50 },
+  GENM50: { code: "GENM50", discountPercent: 50 },
   GEN75: { code: "GEN75", discountPercent: 75 },
+  GENM75: { code: "GENM75", discountPercent: 75 },
   Q7N4FULLACCESS: { code: "Q7N4FULLACCESS", discountPercent: 100 },
 } as const;
 
