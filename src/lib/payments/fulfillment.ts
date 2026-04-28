@@ -103,6 +103,9 @@ export async function markOrderPaid(
 
   if (order.registration && !alreadySucceeded) {
     const parentName = `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim();
+    const childCount = await db.registrationStudent.count({
+      where: { registrationId: order.registration.id },
+    });
     await sendDashboardUnlockedEmail({
       toEmail: order.registration.parentEmail,
       parentName,
@@ -115,6 +118,7 @@ export async function markOrderPaid(
       amount: order.totalAmount,
       currency: order.currency,
       gateway: details.gateway ?? payment.gateway,
+      childCount,
     });
     await sendAdminPaymentCompletedEmail({
       parentName,
@@ -123,6 +127,7 @@ export async function markOrderPaid(
       amount: order.totalAmount,
       currency: order.currency,
       gateway: details.gateway ?? payment.gateway,
+      childCount,
     });
   }
 }

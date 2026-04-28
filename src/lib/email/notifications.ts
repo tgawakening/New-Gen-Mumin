@@ -280,6 +280,7 @@ export async function sendPaymentCompletedEmail(input: {
   amount: number;
   currency: string;
   gateway: string;
+  childCount?: number;
 }) {
   await sendTransactionalEmail({
     toEmail: input.toEmail,
@@ -293,6 +294,7 @@ export async function sendPaymentCompletedEmail(input: {
         { label: "Order", value: input.orderNumber },
         { label: "Gateway", value: input.gateway },
         { label: "Amount", value: `${input.currency} ${input.amount}` },
+        { label: "Students", value: `${input.childCount ?? 1}` },
         { label: "Status", value: "Completed" },
       ],
       callToAction: { label: "Open your dashboard", href: resolveHref("/parent") },
@@ -307,6 +309,7 @@ export async function sendAdminPaymentCompletedEmail(input: {
   amount: number;
   currency: string;
   gateway: string;
+  childCount?: number;
 }) {
   await sendAdminFacingEmail(
     "adminNewEnrollment",
@@ -317,6 +320,7 @@ export async function sendAdminPaymentCompletedEmail(input: {
       { label: "Order", value: input.orderNumber },
       { label: "Gateway", value: input.gateway },
       { label: "Amount", value: `${input.currency} ${input.amount}` },
+      { label: "Students", value: `${input.childCount ?? 1}` },
       { label: "Status", value: "Completed" },
     ],
   );

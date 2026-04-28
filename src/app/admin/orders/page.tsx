@@ -12,6 +12,14 @@ function statusClass(status: string) {
   return "bg-[#eef2f6] text-[#556274]";
 }
 
+function canApproveOrder(order: { gateway: string; status: string; paymentStatus: string }) {
+  return (
+    order.gateway === "BANK_TRANSFER" &&
+    ["UNDER_REVIEW", "PENDING", "INITIATED"].includes(order.status) &&
+    order.paymentStatus !== "SUCCEEDED"
+  );
+}
+
 export default async function AdminOrdersPage() {
   async function approveManualPayment(formData: FormData) {
     "use server";
@@ -72,12 +80,14 @@ export default async function AdminOrdersPage() {
         </div>
 
         <div className="grid gap-4">
-          {orders.map((order) => {
-            const latestPayment = order.payments[0] ?? null;
-            const manualSubmission = latestPayment?.manualSubmission ?? null;
-            const canApproveManual =
-              order.gateway === "BANK_TRANSFER" &&
-              ["UNDER_REVIEW", "PENDING", "INITIATED"].includes(order.status);
+            {orders.map((order) => {
+              const latestPayment = order.payments[0] ?? null;
+              const manualSubmission = latestPayment?.manualSubmission ?? null;
+              const canApproveManual = canApproveOrder({
+                gateway: order.gateway,
+                status: order.status,
+                paymentStatus: latestPayment?.status ?? order.status,
+              });
 
             return (
               <div
@@ -159,6 +169,10 @@ export default async function AdminOrdersPage() {
                       Approve and unlock dashboard
                     </button>
                   </form>
+                ) : order.status === "SUCCEEDED" || latestPayment?.status === "SUCCEEDED" ? (
+                  <div className="mt-4 rounded-full bg-[#effaf3] px-5 py-3 text-center text-sm font-semibold text-[#2f6b4b]">
+                    Completed
+                  </div>
                 ) : null}
               </div>
             );

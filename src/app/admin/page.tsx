@@ -73,6 +73,24 @@ function formatMoney(amount: number, currency: string) {
   }).format(amount);
 }
 
+function canCompleteOrder(order: {
+  gateway: string;
+  status: string;
+  paymentStatus: string;
+}) {
+  return (
+    order.gateway === "BANK_TRANSFER" &&
+    ["UNDER_REVIEW", "PENDING", "INITIATED"].includes(order.status) &&
+    order.paymentStatus !== "SUCCEEDED"
+  );
+}
+
+function canCancelOrder(order: {
+  status: string;
+}) {
+  return !["FAILED", "CANCELLED"].includes(order.status);
+}
+
 function tabHref(
   tab: string,
   extra: Record<string, string | undefined> = {},
@@ -366,19 +384,35 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </div>
                     <div className="space-y-2 text-sm">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
-                      <form action={completeOrder}>
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <input type="hidden" name="referenceKey" value={order.manualSubmission?.referenceKey ?? ""} />
-                        <button className="w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
-                          Complete
-                        </button>
-                      </form>
-                      <form action={cancelOrder}>
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <button className="w-full rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
-                          Cancel
-                        </button>
-                      </form>
+                      {canCompleteOrder(order) ? (
+                        <form action={completeOrder}>
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="referenceKey" value={order.manualSubmission?.referenceKey ?? ""} />
+                          <button className="w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
+                            Complete
+                          </button>
+                        </form>
+                      ) : order.paymentStatus === "SUCCEEDED" || order.status === "SUCCEEDED" ? (
+                        <div className="w-full rounded-full bg-[#effaf3] px-4 py-2 text-center text-sm font-semibold text-[#2f6b4b]">
+                          Completed
+                        </div>
+                      ) : (
+                        <div className="w-full rounded-full bg-[#f2f4f7] px-4 py-2 text-center text-sm font-semibold text-[#7a8698]">
+                          Awaiting action
+                        </div>
+                      )}
+                      {canCancelOrder(order) ? (
+                        <form action={cancelOrder}>
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <button className="w-full rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
+                            Cancel
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="w-full rounded-full border border-[#e6e9ee] bg-[#f8fafc] px-4 py-2 text-center text-sm font-semibold text-[#8a94a3]">
+                          Cancelled
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
