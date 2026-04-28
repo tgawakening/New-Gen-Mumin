@@ -1,7 +1,11 @@
 ﻿import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { sendDashboardUnlockedEmail } from "@/lib/email/notifications";
+import {
+  sendAdminPaymentCompletedEmail,
+  sendDashboardUnlockedEmail,
+  sendPaymentCompletedEmail,
+} from "@/lib/email/notifications";
 import { activateOrderEnrollments } from "@/lib/enrollment/access";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
@@ -40,6 +44,8 @@ export async function markOrderPaid(
   if (!payment) {
     throw new Error("Payment transaction not found.");
   }
+
+  const alreadySucceeded = order.status === "SUCCEEDED" && payment.status === "SUCCEEDED";
 
   await db.paymentTransaction.update({
     where: { id: payment.id },
@@ -95,11 +101,28 @@ export async function markOrderPaid(
 
   await activateOrderEnrollments(order.id);
 
-  if (order.registration) {
+  if (order.registration && !alreadySucceeded) {
+    const parentName = `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim();
     await sendDashboardUnlockedEmail({
       toEmail: order.registration.parentEmail,
-      parentName: `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim(),
+      parentName,
       dashboardUrl: "/parent",
+    });
+    await sendPaymentCompletedEmail({
+      toEmail: order.registration.parentEmail,
+      parentName,
+      orderNumber: order.orderNumber,
+      amount: order.totalAmount,
+      currency: order.currency,
+      gateway: details.gateway ?? payment.gateway,
+    });
+    await sendAdminPaymentCompletedEmail({
+      parentName,
+      parentEmail: order.registration.parentEmail,
+      orderNumber: order.orderNumber,
+      amount: order.totalAmount,
+      currency: order.currency,
+      gateway: details.gateway ?? payment.gateway,
     });
   }
 }

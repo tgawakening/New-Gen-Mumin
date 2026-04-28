@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db } from "@/lib/db";
 import { provisionRegistrationAccess } from "@/lib/enrollment/access";
 import { getManualPaymentDetails } from "@/lib/payments/config";
+import { markOrderPaid } from "@/lib/payments/fulfillment";
 import { createPayPalSubscription } from "@/lib/payments/paypal";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
 import type { RegistrationCheckoutPayload } from "@/lib/registration/payment-schema";
@@ -15,7 +16,7 @@ export async function createCheckoutDraft(
   registrationId: string,
   payload: RegistrationCheckoutPayload,
 ) {
-  return db.$transaction(async (tx) => {
+  const checkout = await db.$transaction(async (tx) => {
     const registration = await tx.registration.findUnique({
       where: { id: registrationId },
       include: {
@@ -115,7 +116,16 @@ export async function createCheckoutDraft(
       throw new Error("Manual payment is available only for registrations from Pakistan.");
     }
 
-    if (payload.gateway === "STRIPE") {
+    if (payload.gateway === "STRIPE" && registration.totalAmount > 0) {
+      const checkoutLabel =
+        registration.items.length === 1
+          ? `${registration.items[0].offer.title} subscription`
+          : "Gen-Mumins family subscription";
+      const checkoutDescription =
+        registration.items.length === 1
+          ? registration.items[0].offer.title
+          : registration.items.map((item) => item.offer.title).join(", ");
+
       const session = await createStripeCheckoutSession({
         orderId: order.id,
         paymentId: payment.id,
@@ -123,10 +133,9 @@ export async function createCheckoutDraft(
         customerEmail: registration.parentEmail,
         currency: registration.selectedCurrency,
         orderNumber: order.orderNumber,
-        lineItems: order.items.map((item) => ({
-          description: item.description,
-          amount: item.unitAmount,
-        })),
+        checkoutLabel,
+        checkoutDescription,
+        amount: registration.totalAmount,
       });
 
       checkoutUrl = session.url ?? null;
@@ -156,7 +165,7 @@ export async function createCheckoutDraft(
           },
         },
       });
-    } else if (payload.gateway === "PAYPAL") {
+    } else if (payload.gateway === "PAYPAL" && registration.totalAmount > 0) {
       if (registration.items.length !== 1) {
         throw new Error("PayPal subscriptions are available for single programme selections only. Please use Stripe for discounted or multi-child enrollments.");
       }
@@ -226,7 +235,9 @@ export async function createCheckoutDraft(
       checkoutUrl,
       manualInstructions,
       nextStep:
-        payload.gateway === "BANK_TRANSFER"
+        registration.totalAmount <= 0
+          ? "Your discount covered the full amount. Enrollment can be completed immediately."
+          : payload.gateway === "BANK_TRANSFER"
           ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
           : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
     };
@@ -234,6 +245,21 @@ export async function createCheckoutDraft(
     maxWait: 10_000,
     timeout: 20_000,
   });
+
+  if (checkout.amount <= 0 && payload.gateway !== "BANK_TRANSFER") {
+    await markOrderPaid(checkout.orderId, {
+      providerReference: "FULL_DISCOUNT",
+      rawPayload: { autoCompleted: true, reason: "full-discount" },
+    });
+
+    return {
+      ...checkout,
+      status: "SUCCEEDED",
+      nextStep: "Enrollment completed. Your dashboard is now ready.",
+    };
+  }
+
+  return checkout;
 }
 
 export async function submitManualPaymentProof(

@@ -9,10 +9,9 @@ type StripeCheckoutInput = {
   customerEmail: string;
   currency: string;
   orderNumber: string;
-  lineItems: Array<{
-    description: string;
-    amount: number;
-  }>;
+  checkoutLabel: string;
+  checkoutDescription: string;
+  amount: number;
 };
 
 function toStripeCurrency(currency: string) {
@@ -46,18 +45,28 @@ export async function createStripeCheckoutSession(input: StripeCheckoutInput) {
         orderNumber: input.orderNumber,
       },
     },
-    line_items: input.lineItems.map((line) => ({
-      quantity: 1,
-      price_data: {
-        currency: toStripeCurrency(input.currency),
-        product_data: {
-          name: line.description,
-        },
-        unit_amount: line.amount * 100,
-        recurring: {
-          interval: "month",
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: toStripeCurrency(input.currency),
+          product_data: {
+            name: input.checkoutLabel,
+            description: input.checkoutDescription,
+          },
+          unit_amount: input.amount * 100,
+          recurring: {
+            interval: "month",
+          },
         },
       },
-    })),
+    ],
+  });
+}
+
+export async function getStripeCheckoutSession(sessionId: string) {
+  const stripe = getStripeClient();
+  return stripe.checkout.sessions.retrieve(sessionId, {
+    expand: ["subscription"],
   });
 }

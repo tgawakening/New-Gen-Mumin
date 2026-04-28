@@ -272,3 +272,52 @@ export async function sendDashboardUnlockedEmail(input: {
     }),
   });
 }
+
+export async function sendPaymentCompletedEmail(input: {
+  toEmail: string;
+  parentName: string;
+  orderNumber: string;
+  amount: number;
+  currency: string;
+  gateway: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Payment confirmed",
+    template: "dashboardUnlocked",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Payment confirmed",
+      preview: "Your Gen-Mumins payment has been confirmed.",
+      intro: `Assalamu alaikum ${input.parentName}, your payment has been confirmed and your registration is now completed.`,
+      sections: [
+        { label: "Order", value: input.orderNumber },
+        { label: "Gateway", value: input.gateway },
+        { label: "Amount", value: `${input.currency} ${input.amount}` },
+        { label: "Status", value: "Completed" },
+      ],
+      callToAction: { label: "Open your dashboard", href: resolveHref("/parent") },
+    }),
+  });
+}
+
+export async function sendAdminPaymentCompletedEmail(input: {
+  parentName: string;
+  parentEmail: string;
+  orderNumber: string;
+  amount: number;
+  currency: string;
+  gateway: string;
+}) {
+  await sendAdminFacingEmail(
+    "adminNewEnrollment",
+    "Payment completed",
+    "A Gen-Mumins order has been completed and the registration is now unlocked.",
+    [
+      { label: "Parent", value: `${input.parentName} (${input.parentEmail})` },
+      { label: "Order", value: input.orderNumber },
+      { label: "Gateway", value: input.gateway },
+      { label: "Amount", value: `${input.currency} ${input.amount}` },
+      { label: "Status", value: "Completed" },
+    ],
+  );
+}
