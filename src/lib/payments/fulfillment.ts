@@ -102,34 +102,60 @@ export async function markOrderPaid(
   await activateOrderEnrollments(order.id);
 
   if (order.registration && !alreadySucceeded) {
-    const parentName = `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim();
-    const childCount = await db.registrationStudent.count({
-      where: { registrationId: order.registration.id },
-    });
-    await sendDashboardUnlockedEmail({
-      toEmail: order.registration.parentEmail,
-      parentName,
-      dashboardUrl: "/parent",
-    });
-    await sendPaymentCompletedEmail({
-      toEmail: order.registration.parentEmail,
-      parentName,
-      orderNumber: order.orderNumber,
-      amount: order.totalAmount,
-      currency: order.currency,
-      gateway: details.gateway ?? payment.gateway,
-      childCount,
-    });
-    await sendAdminPaymentCompletedEmail({
-      parentName,
-      parentEmail: order.registration.parentEmail,
-      orderNumber: order.orderNumber,
-      amount: order.totalAmount,
-      currency: order.currency,
-      gateway: details.gateway ?? payment.gateway,
-      childCount,
-    });
+    await resendOrderCompletionEmails(order.id, details.gateway ?? payment.gateway);
   }
+}
+
+export async function resendOrderCompletionEmails(
+  orderId: string,
+  gatewayOverride?: "STRIPE" | "PAYPAL" | "BANK_TRANSFER" | "NAYAPAY" | "SCHOLARSHIP" | "FREE",
+) {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      registration: true,
+      items: true,
+      payments: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!order?.registration) {
+    throw new Error("Completed registration not found for this order.");
+  }
+
+  const payment = order.payments[0];
+  const gateway = gatewayOverride ?? payment?.gateway ?? order.gateway;
+  const parentName = `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim();
+  const childCount = await db.registrationStudent.count({
+    where: { registrationId: order.registration.id },
+  });
+
+  await sendDashboardUnlockedEmail({
+    toEmail: order.registration.parentEmail,
+    parentName,
+    dashboardUrl: "/parent",
+  });
+  await sendPaymentCompletedEmail({
+    toEmail: order.registration.parentEmail,
+    parentName,
+    orderNumber: order.orderNumber,
+    amount: order.totalAmount,
+    currency: order.currency,
+    gateway,
+    childCount,
+  });
+  await sendAdminPaymentCompletedEmail({
+    parentName,
+    parentEmail: order.registration.parentEmail,
+    orderNumber: order.orderNumber,
+    amount: order.totalAmount,
+    currency: order.currency,
+    gateway,
+    childCount,
+  });
 }
 
 export async function markOrderCancelled(orderId: string) {

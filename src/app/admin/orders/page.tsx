@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import { revalidatePath } from "next/cache";
 
 import { db } from "@/lib/db";
-import { markOrderPaid } from "@/lib/payments/fulfillment";
+import { markOrderPaid, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
 
 function statusClass(status: string) {
   if (status === "SUCCEEDED") return "bg-[#effaf3] text-[#2f6b4b]";
@@ -43,6 +43,19 @@ export default async function AdminOrdersPage() {
     revalidatePath("/admin/orders");
     revalidatePath("/parent");
     revalidatePath("/student");
+  }
+
+  async function resendCompletionEmail(formData: FormData) {
+    "use server";
+
+    const orderId = String(formData.get("orderId") || "");
+    if (!orderId) {
+      return;
+    }
+
+    await resendOrderCompletionEmails(orderId);
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin");
   }
 
   const orders = await db.order.findMany({
@@ -170,8 +183,19 @@ export default async function AdminOrdersPage() {
                     </button>
                   </form>
                 ) : order.status === "SUCCEEDED" || latestPayment?.status === "SUCCEEDED" ? (
-                  <div className="mt-4 rounded-full bg-[#effaf3] px-5 py-3 text-center text-sm font-semibold text-[#2f6b4b]">
-                    Completed
+                  <div className="mt-4 space-y-2">
+                    <div className="rounded-full bg-[#effaf3] px-5 py-3 text-center text-sm font-semibold text-[#2f6b4b]">
+                      Completed
+                    </div>
+                    <form action={resendCompletionEmail}>
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <button
+                        type="submit"
+                        className="w-full rounded-full border border-[#c9d7e6] bg-white px-5 py-3 text-sm font-semibold text-[#22304a] transition hover:bg-[#f6f8fb]"
+                      >
+                        Resend confirmation
+                      </button>
+                    </form>
                   </div>
                 ) : null}
               </div>

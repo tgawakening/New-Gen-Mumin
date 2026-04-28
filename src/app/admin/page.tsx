@@ -8,7 +8,11 @@ import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/dashboard";
-import { markOrderCancelled, markOrderPaid } from "@/lib/payments/fulfillment";
+import {
+  markOrderCancelled,
+  markOrderPaid,
+  resendOrderCompletionEmails,
+} from "@/lib/payments/fulfillment";
 
 type PageProps = {
   searchParams?: Promise<{
@@ -162,6 +166,16 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     const userId = String(formData.get("userId") || "");
     if (!userId) return;
     await db.user.delete({ where: { id: userId } });
+    revalidatePath("/admin");
+  }
+
+  async function resendCompletionEmail(formData: FormData) {
+    "use server";
+
+    const orderId = String(formData.get("orderId") || "");
+    if (!orderId) return;
+
+    await resendOrderCompletionEmails(orderId);
     revalidatePath("/admin");
   }
 
@@ -392,15 +406,23 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                             Complete
                           </button>
                         </form>
-                      ) : order.paymentStatus === "SUCCEEDED" || order.status === "SUCCEEDED" ? (
-                        <div className="w-full rounded-full bg-[#effaf3] px-4 py-2 text-center text-sm font-semibold text-[#2f6b4b]">
-                          Completed
-                        </div>
-                      ) : (
-                        <div className="w-full rounded-full bg-[#f2f4f7] px-4 py-2 text-center text-sm font-semibold text-[#7a8698]">
-                          Awaiting action
-                        </div>
-                      )}
+                        ) : order.paymentStatus === "SUCCEEDED" || order.status === "SUCCEEDED" ? (
+                          <div className="space-y-2">
+                            <div className="w-full rounded-full bg-[#effaf3] px-4 py-2 text-center text-sm font-semibold text-[#2f6b4b]">
+                              Completed
+                            </div>
+                            <form action={resendCompletionEmail}>
+                              <input type="hidden" name="orderId" value={order.id} />
+                              <button className="w-full rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                                Resend confirmation
+                              </button>
+                            </form>
+                          </div>
+                        ) : (
+                          <div className="w-full rounded-full bg-[#f2f4f7] px-4 py-2 text-center text-sm font-semibold text-[#7a8698]">
+                            Awaiting action
+                          </div>
+                        )}
                       {canCancelOrder(order) ? (
                         <form action={cancelOrder}>
                           <input type="hidden" name="orderId" value={order.id} />
