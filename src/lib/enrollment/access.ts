@@ -16,6 +16,25 @@ function getDisplayName(firstName: string, lastName?: string | null) {
   return [firstName, lastName].filter(Boolean).join(" ").trim();
 }
 
+function normalizeStudentKey(input: {
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  age?: number | null;
+  countryCode?: string | null;
+  countryName?: string | null;
+}) {
+  const fullName =
+    input.displayName?.trim() ||
+    getDisplayName(input.firstName || "", input.lastName).trim();
+
+  return [
+    fullName.toLowerCase().replace(/\s+/g, " "),
+    input.age ?? "",
+    (input.countryCode || input.countryName || "").toLowerCase(),
+  ].join("|");
+}
+
 function buildStudentEmail(registrationId: string, registrationStudentId: string) {
   return `student+${registrationId.slice(-6)}-${registrationStudentId.slice(-6)}@genmumin.local`;
 }
@@ -47,6 +66,15 @@ async function ensureRegistrationProfiles(
       parentProfile: {
         include: {
           user: true,
+          students: {
+            include: {
+              student: {
+                include: {
+                  user: true,
+                },
+              },
+            },
+          },
         },
       },
       students: true,
@@ -71,58 +99,97 @@ async function ensureRegistrationProfiles(
   }
 
   const studentProfileLookup = new Map<string, string>();
+  const existingStudentLookup = new Map(
+    registration.parentProfile.students.map(({ student }) => [
+      normalizeStudentKey({
+        firstName: student.user.firstName,
+        lastName: student.user.lastName,
+        displayName: student.displayName,
+        age: student.age,
+        countryCode: student.countryCode,
+        countryName: student.countryName,
+      }),
+      student.id,
+    ]),
+  );
 
   for (const registrationStudent of registration.students) {
     let studentProfileId = registrationStudent.studentProfileId;
 
     if (!studentProfileId) {
-      const studentEmail = buildStudentEmail(registration.id, registrationStudent.id);
       const fullName = getDisplayName(
         registrationStudent.firstName,
         registrationStudent.lastName,
       );
+      const studentMatchKey = normalizeStudentKey({
+        firstName: registrationStudent.firstName,
+        lastName: registrationStudent.lastName || registration.parentLastName,
+        displayName: registrationStudent.displayName || fullName,
+        age: registrationStudent.age,
+        countryCode:
+          registrationStudent.countryCode ?? registration.selectedCountryCode,
+        countryName:
+          registrationStudent.countryName ?? registration.selectedCountryName,
+      });
 
-      const createdStudent = await tx.user.create({
-        data: {
-          email: studentEmail,
-          role: "STUDENT",
-          status: "ACTIVE",
-          firstName: registrationStudent.firstName,
-          lastName: registrationStudent.lastName || registration.parentLastName,
-          timezone: registrationStudent.timezone || "Europe/London",
-          studentProfile: {
-            create: {
-              displayName: fullName || registrationStudent.firstName,
-              age: registrationStudent.age ?? undefined,
-              countryCode:
-                registrationStudent.countryCode ??
-                registration.selectedCountryCode ??
-                undefined,
-              countryName:
-                registrationStudent.countryName ??
-                registration.selectedCountryName ??
-                undefined,
+      const matchedStudentProfileId = existingStudentLookup.get(studentMatchKey);
+
+      if (matchedStudentProfileId) {
+        studentProfileId = matchedStudentProfileId;
+
+        await tx.registrationStudent.update({
+          where: { id: registrationStudent.id },
+          data: {
+            studentProfileId,
+            displayName: fullName || registrationStudent.displayName,
+          },
+        });
+      } else {
+        const studentEmail = buildStudentEmail(registration.id, registrationStudent.id);
+
+        const createdStudent = await tx.user.create({
+          data: {
+            email: studentEmail,
+            role: "STUDENT",
+            status: "ACTIVE",
+            firstName: registrationStudent.firstName,
+            lastName: registrationStudent.lastName || registration.parentLastName,
+            timezone: registrationStudent.timezone || "Europe/London",
+            studentProfile: {
+              create: {
+                displayName: fullName || registrationStudent.firstName,
+                age: registrationStudent.age ?? undefined,
+                countryCode:
+                  registrationStudent.countryCode ??
+                  registration.selectedCountryCode ??
+                  undefined,
+                countryName:
+                  registrationStudent.countryName ??
+                  registration.selectedCountryName ??
+                  undefined,
+              },
             },
           },
-        },
-        include: {
-          studentProfile: true,
-        },
-      });
+          include: {
+            studentProfile: true,
+          },
+        });
 
-      if (!createdStudent.studentProfile) {
-        throw new Error("Unable to create the student profile for this registration.");
+        if (!createdStudent.studentProfile) {
+          throw new Error("Unable to create the student profile for this registration.");
+        }
+
+        studentProfileId = createdStudent.studentProfile.id;
+        existingStudentLookup.set(studentMatchKey, studentProfileId);
+
+        await tx.registrationStudent.update({
+          where: { id: registrationStudent.id },
+          data: {
+            studentProfileId,
+            displayName: fullName || registrationStudent.displayName,
+          },
+        });
       }
-
-      studentProfileId = createdStudent.studentProfile.id;
-
-      await tx.registrationStudent.update({
-        where: { id: registrationStudent.id },
-        data: {
-          studentProfileId,
-          displayName: fullName || registrationStudent.displayName,
-        },
-      });
     }
 
     studentProfileLookup.set(registrationStudent.id, studentProfileId);

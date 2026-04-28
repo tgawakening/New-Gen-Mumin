@@ -462,6 +462,56 @@ function buildTeacherName(
   return `${teacher.user.firstName} ${teacher.user.lastName}`.trim();
 }
 
+function normalizeChildIdentity(input: {
+  displayName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  age?: number | null;
+  countryName?: string | null;
+}) {
+  const baseName =
+    input.displayName?.trim() ||
+    [input.firstName, input.lastName].filter(Boolean).join(" ").trim();
+
+  return [
+    baseName.toLowerCase().replace(/\s+/g, " "),
+    input.age ?? "",
+    (input.countryName ?? "").toLowerCase(),
+  ].join("|");
+}
+
+function childPriorityScore(student: any) {
+  return (
+    (student.enrollments?.length ?? 0) * 20 +
+    (student.progressReports?.length ?? 0) * 6 +
+    (student.journalEntries?.length ?? 0) * 5 +
+    (student.quizAttempts?.length ?? 0) * 3 +
+    (student.attendances?.length ?? 0) * 2
+  );
+}
+
+function dedupeParentStudents(relations: Array<{ student: any }>) {
+  const grouped = new Map<string, any>();
+
+  for (const relation of relations) {
+    const student = relation.student;
+    const key = normalizeChildIdentity({
+      displayName: student.displayName,
+      firstName: student.user?.firstName,
+      lastName: student.user?.lastName,
+      age: student.age,
+      countryName: student.countryName,
+    });
+    const existing = grouped.get(key);
+
+    if (!existing || childPriorityScore(student) > childPriorityScore(existing)) {
+      grouped.set(key, student);
+    }
+  }
+
+  return [...grouped.values()];
+}
+
 function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
   return enrollments
     .flatMap((enrollment) =>
@@ -895,7 +945,9 @@ export async function getParentDashboardData(userId: string) {
           gateway: latestOrder.gateway,
         }
       : null,
-    children: parentProfile.students.map(({ student }) => mapChildSummary(student, accessLocked)),
+    children: dedupeParentStudents(parentProfile.students).map((student) =>
+      mapChildSummary(student, accessLocked),
+    ),
   } satisfies ParentDashboardData;
 }
 
