@@ -331,6 +331,45 @@ async function copyToClipboard(value: string) {
   await navigator.clipboard.writeText(value);
 }
 
+async function storeBrowserCredential(email: string, password: string) {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return;
+  const credentialsApi = navigator.credentials as
+    | (CredentialsContainer & {
+        store?: (credential: Credential) => Promise<Credential | null>;
+      })
+    | undefined;
+  const PasswordCredentialCtor = (window as Window & {
+    PasswordCredential?: new (
+      init: {
+        id: string;
+        password: string;
+        name?: string;
+      },
+    ) => Credential;
+  }).PasswordCredential as
+    | (new (
+        init: {
+          id: string;
+          password: string;
+          name?: string;
+        },
+      ) => Credential)
+    | undefined;
+
+  if (!credentialsApi?.store || !PasswordCredentialCtor) return;
+
+  try {
+    const credential = new PasswordCredentialCtor({
+      id: email,
+      password,
+      name: email,
+    });
+    await credentialsApi.store(credential);
+  } catch {
+    // Keep registration flow non-blocking if the browser declines credential storage.
+  }
+}
+
 export function RegistrationForm({ offers, countries, autoOpen = false }: Props) {
   const [mounted, setMounted] = useState(false);
   const [isOpen, setIsOpen] = useState(autoOpen);
@@ -609,11 +648,13 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         }),
       });
 
-      if (!signupResponse.ok) {
-        const signupPayload = (await signupResponse.json()) as { error?: string };
-        const message = signupPayload.error ?? "Unable to create account.";
-        if (!message.toLowerCase().includes("already") && !message.toLowerCase().includes("exist")) throw new Error(message);
-      }
+        if (!signupResponse.ok) {
+          const signupPayload = (await signupResponse.json()) as { error?: string };
+          const message = signupPayload.error ?? "Unable to create account.";
+          if (!message.toLowerCase().includes("already") && !message.toLowerCase().includes("exist")) throw new Error(message);
+        } else {
+          await storeBrowserCredential(parentEmail, password);
+        }
 
       const registrationResponse = await fetch("/api/registration", {
         method: "POST",
@@ -734,16 +775,18 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Create password*</label>
                             <div className="relative">
-                              <input
-                                name="new-password"
-                                autoComplete="new-password"
-                                type={showPassword ? "text" : "password"}
-                                value={password}
-                                onChange={(event) => setPassword(event.target.value)}
-                                className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 pr-12 text-sm outline-none focus:border-[#f39f5f]"
-                                placeholder="Minimum 8 characters"
-                                required
-                              />
+                                <input
+                                  name="password"
+                                  autoComplete="new-password"
+                                  type={showPassword ? "text" : "password"}
+                                  value={password}
+                                  onChange={(event) => setPassword(event.target.value)}
+                                  minLength={8}
+                                  spellCheck={false}
+                                  className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 pr-12 text-sm outline-none focus:border-[#f39f5f]"
+                                  placeholder="Minimum 8 characters"
+                                  required
+                                />
                               <button
                                 type="button"
                                 onClick={() => setShowPassword((current) => !current)}
@@ -760,16 +803,18 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           <div>
                             <label className="mb-2 block text-left text-sm font-medium text-[#38506a]">Confirm password*</label>
                             <div className="relative">
-                              <input
-                                name="confirm-password"
-                                autoComplete="new-password"
-                                type={showConfirmPassword ? "text" : "password"}
-                                value={confirmPassword}
-                                onChange={(event) => setConfirmPassword(event.target.value)}
-                                className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 pr-12 text-sm outline-none focus:border-[#f39f5f]"
-                                placeholder="Re-enter password"
-                                required
-                              />
+                                <input
+                                  name="password-confirmation"
+                                  autoComplete="new-password"
+                                  type={showConfirmPassword ? "text" : "password"}
+                                  value={confirmPassword}
+                                  onChange={(event) => setConfirmPassword(event.target.value)}
+                                  minLength={8}
+                                  spellCheck={false}
+                                  className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 pr-12 text-sm outline-none focus:border-[#f39f5f]"
+                                  placeholder="Re-enter password"
+                                  required
+                                />
                               <button
                                 type="button"
                                 onClick={() => setShowConfirmPassword((current) => !current)}
@@ -829,7 +874,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                                   </div>
                                 ) : null}
                               </div>
-                              <input value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
+                                <input name="tel" autoComplete="tel" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
                             </div>
                           </div>
                         </div>

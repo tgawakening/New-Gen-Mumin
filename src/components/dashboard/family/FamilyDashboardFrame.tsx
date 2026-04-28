@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import { Footer } from "@/components/Footer";
+import { Header } from "@/components/Header";
+import { TopBar } from "@/components/TopBar";
+import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 
 type NavItem = {
   label: string;
@@ -23,13 +27,29 @@ export function FamilyDashboardFrame({
 }) {
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
+      <TopBar />
+      <Header />
+
       <div className="border-b border-[#e8dccf] bg-[linear-gradient(180deg,#fff7ee_0%,#fffdf9_100%)]">
         <div className="section-container py-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
-            {roleLabel}
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
-          <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
+                {roleLabel}
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
+              <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/"
+                className="cursor-pointer rounded-full border border-[#e1d4c2] bg-white px-4 py-2 text-sm font-semibold text-[#4f5d71] transition hover:bg-[#fbf1e5]"
+              >
+                Main site
+              </Link>
+              <FamilyLogoutButton />
+            </div>
+          </div>
         </div>
       </div>
 
@@ -58,6 +78,8 @@ export function FamilyDashboardFrame({
           {children}
         </div>
       </div>
+
+      <Footer />
     </div>
   );
 }

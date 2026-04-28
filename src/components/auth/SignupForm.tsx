@@ -2,6 +2,45 @@
 
 import { useState } from "react";
 
+async function storeBrowserCredential(email: string, password: string) {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return;
+  const credentialsApi = navigator.credentials as
+    | (CredentialsContainer & {
+        store?: (credential: Credential) => Promise<Credential | null>;
+      })
+    | undefined;
+  const PasswordCredentialCtor = (window as Window & {
+    PasswordCredential?: new (
+      init: {
+        id: string;
+        password: string;
+        name?: string;
+      },
+    ) => Credential;
+  }).PasswordCredential as
+    | (new (
+        init: {
+          id: string;
+          password: string;
+          name?: string;
+        },
+      ) => Credential)
+    | undefined;
+
+  if (!credentialsApi?.store || !PasswordCredentialCtor) return;
+
+  try {
+    const credential = new PasswordCredentialCtor({
+      id: email,
+      password,
+      name: email,
+    });
+    await credentialsApi.store(credential);
+  } catch {
+    // Keep signup flow non-blocking if the browser declines credential storage.
+  }
+}
+
 export function SignupForm() {
   const [form, setForm] = useState({
     firstName: "",
@@ -36,6 +75,7 @@ export function SignupForm() {
         throw new Error(payload.error ?? "Unable to create account.");
       }
 
+      await storeBrowserCredential(form.email, form.password);
       setMessage("Parent account created successfully. You can now continue with enrollment.");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to create account.");
@@ -45,16 +85,16 @@ export function SignupForm() {
   }
 
   return (
-    <form className="space-y-5 rounded-[32px] bg-white p-8 shadow-sm" onSubmit={handleSubmit}>
+    <form className="space-y-5 rounded-[32px] bg-white p-8 shadow-sm" onSubmit={handleSubmit} autoComplete="on">
       <div className="grid gap-4 md:grid-cols-2">
-        <input placeholder="First name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
-        <input placeholder="Last name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
+        <input name="given-name" autoComplete="given-name" placeholder="First name" value={form.firstName} onChange={(event) => setForm((current) => ({ ...current, firstName: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
+        <input name="family-name" autoComplete="family-name" placeholder="Last name" value={form.lastName} onChange={(event) => setForm((current) => ({ ...current, lastName: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
       </div>
-      <input type="email" placeholder="Email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
-      <input type="password" placeholder="Password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+      <input name="email" autoComplete="email" type="email" placeholder="Email" value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+      <input name="new-password" autoComplete="new-password" type="password" placeholder="Password" value={form.password} onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
       <div className="grid gap-4 md:grid-cols-[120px_minmax(0,1fr)]">
-        <input placeholder="Code" value={form.phoneCountryCode} onChange={(event) => setForm((current) => ({ ...current, phoneCountryCode: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
-        <input placeholder="Phone number" value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
+        <input name="tel-country-code" autoComplete="tel-country-code" placeholder="Code" value={form.phoneCountryCode} onChange={(event) => setForm((current) => ({ ...current, phoneCountryCode: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
+        <input name="tel" autoComplete="tel" placeholder="Phone number" value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} className="rounded-2xl border border-slate-200 px-4 py-3" required />
       </div>
       {error ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</p> : null}
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}

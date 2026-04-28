@@ -3,6 +3,45 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+async function storeBrowserCredential(email: string, password: string) {
+  if (typeof window === "undefined" || typeof navigator === "undefined") return;
+  const credentialsApi = navigator.credentials as
+    | (CredentialsContainer & {
+        store?: (credential: Credential) => Promise<Credential | null>;
+      })
+    | undefined;
+  const PasswordCredentialCtor = (window as Window & {
+    PasswordCredential?: new (
+      init: {
+        id: string;
+        password: string;
+        name?: string;
+      },
+    ) => Credential;
+  }).PasswordCredential as
+    | (new (
+        init: {
+          id: string;
+          password: string;
+          name?: string;
+        },
+      ) => Credential)
+    | undefined;
+
+  if (!credentialsApi?.store || !PasswordCredentialCtor) return;
+
+  try {
+    const credential = new PasswordCredentialCtor({
+      id: email,
+      password,
+      name: email,
+    });
+    await credentialsApi.store(credential);
+  } catch {
+    // Keep login flow non-blocking if the browser declines credential storage.
+  }
+}
+
 export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -30,6 +69,7 @@ export function LoginForm() {
         throw new Error(payload.error ?? "Unable to log in.");
       }
 
+      await storeBrowserCredential(email, password);
       setMessage("Login successful. Opening your dashboard...");
       router.push(payload.dashboardHome ?? "/parent");
       router.refresh();
@@ -41,9 +81,9 @@ export function LoginForm() {
   }
 
   return (
-    <form className="space-y-5 rounded-[32px] bg-white p-8 shadow-sm" onSubmit={handleSubmit}>
-      <input type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
-      <input type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+    <form className="space-y-5 rounded-[32px] bg-white p-8 shadow-sm" onSubmit={handleSubmit} autoComplete="on">
+      <input name="email" autoComplete="email" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+      <input name="password" autoComplete="current-password" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
       {error ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</p> : null}
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
       <button type="submit" disabled={isSubmitting} className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">
