@@ -51,6 +51,7 @@ export default async function AdminOrdersPage() {
           manualSubmission: true,
         },
       },
+      registration: true,
     },
   });
 
@@ -105,7 +106,21 @@ export default async function AdminOrdersPage() {
                   <span>
                     {order.currency} {order.totalAmount}
                   </span>
+                  {order.discountAmount > 0 ? (
+                    <span>Saved {order.currency} {order.discountAmount}</span>
+                  ) : null}
                   <span>{order.payments.length} payment records</span>
+                  {typeof order.registration?.pricingSnapshot === "object" &&
+                  order.registration?.pricingSnapshot &&
+                  "couponCode" in (order.registration.pricingSnapshot as object) &&
+                  typeof (order.registration.pricingSnapshot as Record<string, unknown>).couponCode === "string" ? (
+                    <span className="rounded-full bg-[#edf8ef] px-3 py-1 text-xs font-semibold text-[#2f6b4b]">
+                      {(order.registration.pricingSnapshot as Record<string, unknown>).couponCode as string}
+                      {typeof (order.registration.pricingSnapshot as Record<string, unknown>).couponDiscountPercent === "number"
+                        ? ` (${(order.registration.pricingSnapshot as Record<string, unknown>).couponDiscountPercent}% off)`
+                        : ""}
+                    </span>
+                  ) : null}
                 </div>
 
                 {manualSubmission ? (

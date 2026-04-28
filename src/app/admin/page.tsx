@@ -289,6 +289,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         <span>{order.gateway}</span>
                         <span>{formatMoney(order.totalAmount, order.currency)}</span>
                         <span>{order.pricingLabel}</span>
+                        {order.couponCode ? (
+                          <span className="rounded-full bg-[#edf8ef] px-3 py-1 text-xs font-semibold text-[#2f6b4b]">
+                            {order.couponCode}{order.couponDiscountPercent ? ` (${order.couponDiscountPercent}% off)` : ""}
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                   ))}
@@ -332,11 +337,21 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Amount</p>
                       <p className="mt-2">{formatMoney(order.totalAmount, order.currency)}</p>
                       <p className="mt-2 text-[#617184]">{order.pricingLabel}</p>
+                      {order.discountAmount > 0 ? (
+                        <p className="mt-1 text-[#617184]">Saved {formatMoney(order.discountAmount, order.currency)}</p>
+                      ) : null}
+                      {order.couponCode ? (
+                        <p className="mt-1 text-[#2f6b4b]">
+                          Coupon {order.couponCode}
+                          {order.couponDiscountPercent ? ` • ${order.couponDiscountPercent}% off` : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
                       <p className="mt-2">{order.gateway}</p>
                       <p className="mt-1 text-[#617184]">{order.paymentStatus.replace(/_/g, " ")}</p>
+                      <p className="mt-1 text-[#617184]">{order.finalAmountLabel}</p>
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Status</p>
@@ -418,6 +433,17 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
                       <p className="mt-2">{student.paymentGateway}</p>
                       <p className="mt-2 text-[#617184]">{student.pricingLabel}</p>
+                      {student.totalAmount && student.currency ? (
+                        <p className="mt-1 text-[#617184]">
+                          Final {formatMoney(student.totalAmount, student.currency)}
+                        </p>
+                      ) : null}
+                      {student.couponCode ? (
+                        <p className="mt-1 text-[#2f6b4b]">
+                          Coupon {student.couponCode}
+                          {student.couponDiscountPercent ? ` • ${student.couponDiscountPercent}% off` : ""}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Registration</p>

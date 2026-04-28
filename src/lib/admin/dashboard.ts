@@ -8,6 +8,22 @@ function extractNoteValue(notes: string | null | undefined, label: string) {
   return line ? line.split(":").slice(1).join(":").trim() : null;
 }
 
+function extractPricingSnapshotValue(
+  pricingSnapshot: unknown,
+  key: string,
+) {
+  if (!pricingSnapshot || typeof pricingSnapshot !== "object" || Array.isArray(pricingSnapshot)) {
+    return null;
+  }
+
+  const value = (pricingSnapshot as Record<string, unknown>)[key];
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  return value;
+}
+
 export type AdminDashboardFilters = {
   orderStatus?: string;
   orderPayment?: string;
@@ -162,6 +178,18 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       totalAmount: order.totalAmount,
       discountAmount: order.discountAmount,
       pricingLabel: hasDiscount(order.discountAmount) ? "Discounted" : "Full",
+      couponCode:
+        typeof extractPricingSnapshotValue(order.registration?.pricingSnapshot, "couponCode") === "string"
+          ? String(extractPricingSnapshotValue(order.registration?.pricingSnapshot, "couponCode"))
+          : null,
+      couponDiscountPercent:
+        typeof extractPricingSnapshotValue(order.registration?.pricingSnapshot, "couponDiscountPercent") === "number"
+          ? Number(extractPricingSnapshotValue(order.registration?.pricingSnapshot, "couponDiscountPercent"))
+          : null,
+      finalAmountLabel:
+        hasDiscount(order.discountAmount)
+          ? `${order.currency} ${order.totalAmount} after ${order.discountAmount} discount`
+          : `${order.currency} ${order.totalAmount}`,
       registrationStatus: order.registration?.status ?? "Pending",
       enrollmentStates: order.items
         .map((item) => item.enrollment?.status)
@@ -221,6 +249,16 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       paymentGateway: latestOrder?.gateway ?? "Pending",
       registrationStatus: latestRegistration?.status ?? "Pending",
       pricingLabel,
+      couponCode:
+        typeof extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponCode") === "string"
+          ? String(extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponCode"))
+          : null,
+      couponDiscountPercent:
+        typeof extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponDiscountPercent") === "number"
+          ? Number(extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponDiscountPercent"))
+          : null,
+      totalAmount: latestRegistration?.totalAmount ?? null,
+      currency: latestRegistration?.selectedCurrency ?? null,
       parents: student.parents.map((entry) =>
         `${entry.parent.user.firstName} ${entry.parent.user.lastName}`.trim(),
       ),
