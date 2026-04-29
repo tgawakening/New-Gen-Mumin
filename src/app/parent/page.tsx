@@ -56,6 +56,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       <SectionCard
         eyebrow="Child selector"
         title="Choose a learner"
+        icon="star"
         action={
           <Link
             href="/parent?addChild=1"
@@ -75,7 +76,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       {selectedChild ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
           <div className="space-y-6">
-            <SectionCard eyebrow="Courses" title={selectedChild.name}>
+            <SectionCard eyebrow="Courses" title={selectedChild.name} icon="book">
               <InfoList
                 items={selectedChild.courses.map(
                   (course) => `${course.title} - ${course.status} - ${course.meetingCount} weekly slots`,
@@ -84,7 +85,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               />
             </SectionCard>
 
-            <SectionCard eyebrow="Learning" title="Quizzes, assignments, and journal">
+            <SectionCard eyebrow="Learning" title="Quizzes, assignments, and journal" icon="sparkles">
               <div className={`grid gap-4 xl:grid-cols-3 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                 <InfoList
                   items={selectedChild.quizzes.slice(0, 4).map(
@@ -108,7 +109,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               </div>
             </SectionCard>
 
-            <SectionCard eyebrow="Teacher updates" title="Daily work and weekly tasks">
+            <SectionCard eyebrow="Teacher updates" title="Daily work and weekly tasks" icon="pen">
               <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                 <InfoList
                   items={selectedChild.lessonUpdates.slice(0, 5).map(
@@ -129,7 +130,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               </div>
             </SectionCard>
 
-            <SectionCard eyebrow="Weekly journal" title="Growth summary">
+            <SectionCard eyebrow="Weekly journal" title="Growth summary" icon="chart">
               <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                 <InfoList
                   items={[
@@ -151,7 +152,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           </div>
 
           <div className="space-y-6">
-            <SectionCard eyebrow="Next class" title="Schedule">
+            <SectionCard eyebrow="Next class" title="Schedule" icon="calendar">
               {selectedChild.nextClass ? (
                 <div className={`rounded-[24px] bg-[#22304a] p-5 text-white ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                   <p className="text-lg font-semibold">{selectedChild.nextClass.title}</p>
@@ -172,7 +173,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               )}
             </SectionCard>
 
-            <SectionCard eyebrow="Payments" title="Enrollment billing">
+            <SectionCard eyebrow="Payments" title="Enrollment billing" icon="sun">
               {dashboard.latestOrder ? (
                 <InfoList
                   items={[
@@ -190,7 +191,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               )}
             </SectionCard>
 
-            <SectionCard eyebrow="Recognition" title="Badges and certificates">
+            <SectionCard eyebrow="Recognition" title="Badges and certificates" icon="trophy">
               <InfoList
                 items={selectedChild.badges.map(
                   (badge) =>
@@ -202,7 +203,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           </div>
         </div>
       ) : (
-        <SectionCard eyebrow="Family dashboard" title="No child linked yet">
+        <SectionCard eyebrow="Family dashboard" title="No child linked yet" icon="home">
           <p className="text-sm leading-7 text-[#5f6b7a]">
             Complete an enrollment to see child profiles, learning progress, and class access here.
           </p>

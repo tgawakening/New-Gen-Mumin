@@ -6,11 +6,13 @@ import {
   CheckCircle2,
   ChartColumn,
   CircleUserRound,
+  Gift,
   Home,
   PenSquare,
   Sparkles,
   Star,
   SunMedium,
+  Trophy,
 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
@@ -58,6 +60,50 @@ function getMetricIcon(label: string) {
   if (normalized.includes("access")) return SunMedium;
   if (normalized.includes("order")) return CalendarDays;
   return Home;
+}
+
+type DashboardVisualIcon =
+  | "book"
+  | "calendar"
+  | "check"
+  | "chart"
+  | "profile"
+  | "sparkles"
+  | "star"
+  | "sun"
+  | "pen"
+  | "gift"
+  | "trophy"
+  | "home";
+
+function getVisualIcon(icon?: DashboardVisualIcon) {
+  switch (icon) {
+    case "book":
+      return BookOpen;
+    case "calendar":
+      return CalendarDays;
+    case "check":
+      return CheckCircle2;
+    case "chart":
+      return ChartColumn;
+    case "profile":
+      return CircleUserRound;
+    case "sparkles":
+      return Sparkles;
+    case "star":
+      return Star;
+    case "sun":
+      return SunMedium;
+    case "pen":
+      return PenSquare;
+    case "gift":
+      return Gift;
+    case "trophy":
+      return Trophy;
+    case "home":
+    default:
+      return Home;
+  }
 }
 
 export function FamilyDashboardFrame({
@@ -201,18 +247,27 @@ export function SectionCard({
   title,
   children,
   action,
+  icon = "home",
 }: {
   eyebrow: string;
   title: string;
   children: ReactNode;
   action?: ReactNode;
+  icon?: DashboardVisualIcon;
 }) {
+  const Icon = getVisualIcon(icon);
   return (
-    <section className="rounded-[30px] border border-[#eadfce] bg-white p-6 shadow-sm">
+    <section className="relative overflow-hidden rounded-[30px] border border-[#eadfce] bg-white p-6 shadow-sm">
+      <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-[#fff4e4]" />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+        <div className="flex items-start gap-4">
+          <span className="relative z-10 mt-1 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff0db] text-[#d7892f] shadow-sm">
+            <Icon className="h-5 w-5" />
+          </span>
+          <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">{eyebrow}</p>
           <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{title}</h2>
+          </div>
         </div>
         {action}
       </div>
@@ -235,8 +290,11 @@ export function InfoList({
   return (
     <ul className="space-y-3">
       {items.map((item) => (
-        <li key={item} className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
-          {item}
+        <li key={item} className="flex items-start gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
+          <span className="mt-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[#d7892f] shadow-sm">
+            <Star className="h-3 w-3" />
+          </span>
+          <span>{item}</span>
         </li>
       ))}
     </ul>

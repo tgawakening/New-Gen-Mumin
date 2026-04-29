@@ -67,7 +67,7 @@ export default async function StudentDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
         <div className="space-y-6">
-          <SectionCard eyebrow="Courses" title="Your learning path">
+          <SectionCard eyebrow="Courses" title="Your learning path" icon="book">
             <InfoList
               items={child.courses.map(
                 (course) => `${course.title} - ${course.status} - ${course.meetingCount} weekly slots`,
@@ -76,7 +76,7 @@ export default async function StudentDashboardPage() {
             />
           </SectionCard>
 
-          <SectionCard eyebrow="Assessment" title="Quizzes and assignments">
+          <SectionCard eyebrow="Assessment" title="Quizzes and assignments" icon="sparkles">
             <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
               <InfoList
                 items={child.quizzes.slice(0, 4).map((quiz) => {
@@ -96,7 +96,7 @@ export default async function StudentDashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard eyebrow="Weekly content" title="Teacher updates and today's tasks">
+          <SectionCard eyebrow="Weekly content" title="Teacher updates and today's tasks" icon="pen">
             <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
               <InfoList
                 items={child.lessonUpdates.slice(0, 5).map(
@@ -117,7 +117,7 @@ export default async function StudentDashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard eyebrow="Reflection" title="Journal and progress">
+          <SectionCard eyebrow="Reflection" title="Journal and progress" icon="chart">
             <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
               <InfoList
                 items={child.journals.slice(0, 4).map(
@@ -139,6 +139,7 @@ export default async function StudentDashboardPage() {
           <SectionCard
             eyebrow="Weekly growth"
             title="Journal summary"
+            icon="star"
             action={
               !child.accessLocked ? (
                 <Link
@@ -171,7 +172,7 @@ export default async function StudentDashboardPage() {
         </div>
 
         <div className="space-y-6">
-          <SectionCard eyebrow="Next class" title="Weekly schedule">
+          <SectionCard eyebrow="Next class" title="Weekly schedule" icon="calendar">
             {child.nextClass ? (
               <div className={`rounded-[24px] bg-[#22304a] p-5 text-white ${child.accessLocked ? "opacity-60" : ""}`}>
                 <p className="text-lg font-semibold">{child.nextClass.title}</p>
@@ -205,7 +206,7 @@ export default async function StudentDashboardPage() {
             )}
           </SectionCard>
 
-          <SectionCard eyebrow="Profile" title="Learner details">
+          <SectionCard eyebrow="Profile" title="Learner details" icon="profile">
             <InfoList
               items={[
                 `Name - ${child.profile.displayName}`,
@@ -217,7 +218,7 @@ export default async function StudentDashboardPage() {
             />
           </SectionCard>
 
-          <SectionCard eyebrow="Recognition" title="Badges and certificates">
+          <SectionCard eyebrow="Recognition" title="Badges and certificates" icon="trophy">
             <InfoList
               items={child.badges.map(
                 (badge) =>
