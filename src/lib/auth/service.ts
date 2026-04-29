@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { db } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
@@ -96,8 +96,76 @@ export async function registerTeacherAccount(payload: TeacherSignupPayload) {
   return user;
 }
 
-function createPasswordResetToken() {
-  return randomBytes(32).toString("hex");
+type PasswordResetTokenPayload = {
+  sub: string;
+  email: string;
+  exp: number;
+  pwd: string | null;
+};
+
+function toBase64Url(value: string) {
+  return Buffer.from(value, "utf8").toString("base64url");
+}
+
+function fromBase64Url(value: string) {
+  return Buffer.from(value, "base64url").toString("utf8");
+}
+
+function getPasswordResetSecret() {
+  return (
+    process.env.PASSWORD_RESET_SECRET ||
+    process.env.AUTH_SESSION_SECRET ||
+    "gen-mumins-reset-secret"
+  );
+}
+
+function getPasswordResetHashMarker(passwordHash: string | null | undefined) {
+  return passwordHash ? passwordHash.slice(-24) : null;
+}
+
+function signPasswordResetToken(payload: PasswordResetTokenPayload) {
+  const encodedPayload = toBase64Url(JSON.stringify(payload));
+  const signature = createHmac("sha256", getPasswordResetSecret())
+    .update(encodedPayload)
+    .digest("base64url");
+
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifyPasswordResetToken(token: string) {
+  const [encodedPayload, providedSignature] = token.split(".");
+
+  if (!encodedPayload || !providedSignature) {
+    throw new Error("This password reset link is invalid or has expired.");
+  }
+
+  const expectedSignature = createHmac("sha256", getPasswordResetSecret())
+    .update(encodedPayload)
+    .digest("base64url");
+
+  const providedBuffer = Buffer.from(providedSignature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (
+    providedBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(providedBuffer, expectedBuffer)
+  ) {
+    throw new Error("This password reset link is invalid or has expired.");
+  }
+
+  const payload = JSON.parse(
+    fromBase64Url(encodedPayload),
+  ) as PasswordResetTokenPayload;
+
+  if (!payload.sub || !payload.email || !payload.exp) {
+    throw new Error("This password reset link is invalid or has expired.");
+  }
+
+  if (payload.exp < Date.now()) {
+    throw new Error("This password reset link is invalid or has expired.");
+  }
+
+  return payload;
 }
 
 export async function requestPasswordReset(payload: ForgotPasswordPayload) {
@@ -109,25 +177,11 @@ export async function requestPasswordReset(payload: ForgotPasswordPayload) {
     return { accepted: true as const };
   }
 
-  await db.passwordResetToken.updateMany({
-    where: {
-      userId: user.id,
-      usedAt: null,
-    },
-    data: {
-      usedAt: new Date(),
-    },
-  });
-
-  const token = createPasswordResetToken();
-  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 2);
-
-  await db.passwordResetToken.create({
-    data: {
-      userId: user.id,
-      token,
-      expiresAt,
-    },
+  const token = signPasswordResetToken({
+    sub: user.id,
+    email: user.email,
+    exp: Date.now() + 1000 * 60 * 60 * 2,
+    pwd: getPasswordResetHashMarker(user.passwordHash),
   });
 
   await sendPasswordResetEmail({
@@ -140,38 +194,36 @@ export async function requestPasswordReset(payload: ForgotPasswordPayload) {
 }
 
 export async function resetPasswordWithToken(payload: ResetPasswordPayload) {
-  const resetToken = await db.passwordResetToken.findUnique({
-    where: { token: payload.token },
-    include: { user: true },
+  const tokenPayload = verifyPasswordResetToken(payload.token);
+
+  const user = await db.user.findUnique({
+    where: { id: tokenPayload.sub },
   });
 
-  if (!resetToken || resetToken.usedAt || resetToken.expiresAt.getTime() < Date.now()) {
+  if (
+    !user ||
+    user.email.toLowerCase() !== tokenPayload.email.toLowerCase() ||
+    getPasswordResetHashMarker(user.passwordHash) !== tokenPayload.pwd
+  ) {
     throw new Error("This password reset link is invalid or has expired.");
   }
 
   await db.$transaction(async (tx) => {
     await tx.user.update({
-      where: { id: resetToken.userId },
+      where: { id: user.id },
       data: {
         passwordHash: hashPassword(payload.password),
       },
     });
 
-    await tx.passwordResetToken.update({
-      where: { id: resetToken.id },
-      data: {
-        usedAt: new Date(),
-      },
-    });
-
     await tx.session.deleteMany({
-      where: { userId: resetToken.userId },
+      where: { userId: user.id },
     });
   });
 
   return {
-    email: resetToken.user.email,
-    role: resetToken.user.role,
+    email: user.email,
+    role: user.role,
   };
 }
 
