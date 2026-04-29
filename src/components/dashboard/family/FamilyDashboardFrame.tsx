@@ -44,6 +44,8 @@ function getNavIcon(icon?: FamilyNavIcon) {
       return CircleUserRound;
     case "pen":
       return PenSquare;
+    case "sun":
+      return SunMedium;
     case "home":
     default:
       return Home;

@@ -32,7 +32,7 @@ export default async function StudentCoursesPage() {
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
       title="Courses"
-      subtitle="Explore your Gen-Mumins learning path, weekly rhythm, teacher team, and the term-by-term plan from one connected course space."
+      subtitle="Explore your Gen-Mumins learning path, weekly rhythm, teacher team, and term highlights in a compact course space."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
@@ -49,24 +49,38 @@ export default async function StudentCoursesPage() {
         <div className={`grid gap-4 lg:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
           {child.courses.map((course) => (
             <div key={course.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
-              <h3 className="text-xl font-semibold text-[#22304a]">{course.title}</h3>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-xl font-semibold text-[#22304a]">{course.title}</h3>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
+                  {course.status}
+                </span>
+              </div>
               {course.strapline ? (
                 <p className="mt-2 text-sm font-medium text-[#c27a2c]">{course.strapline}</p>
               ) : null}
-              {course.description ? (
-                <p className="mt-3 text-sm leading-7 text-[#5f6b7a]">{course.description}</p>
-              ) : null}
-              <p className="mt-3 text-sm text-[#5f6b7a]">Status: {course.status}</p>
-              <p className="mt-2 text-sm text-[#5f6b7a]">Started: {formatDate(course.startedAt)}</p>
-              <p className="mt-2 text-sm text-[#5f6b7a]">Weekly schedule slots: {course.meetingCount}</p>
-              {course.currentTaskTitles.length ? (
+              <p className="mt-3 text-sm font-medium text-[#22304a]">
+                Instructors: {course.teachers.map((teacher) => teacher.name).slice(0, 2).join(", ") || "Assigned soon"}
+              </p>
+              <div className="mt-3 grid gap-2 text-sm text-[#5f6b7a] sm:grid-cols-2">
+                <p>Started: {formatDate(course.startedAt)}</p>
+                <p>Weekly slots: {course.meetingCount}</p>
+              </div>
+              {course.currentTaskTitles.length || course.recentLessonTopics.length ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {course.currentTaskTitles.map((task) => (
+                  {course.currentTaskTitles.slice(0, 2).map((task) => (
                     <span
                       key={task}
                       className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]"
                     >
-                      {task}
+                      Task: {task}
+                    </span>
+                  ))}
+                  {course.recentLessonTopics.slice(0, 2).map((topic) => (
+                    <span
+                      key={topic}
+                      className="rounded-full bg-[#22304a] px-3 py-1 text-xs font-semibold text-white"
+                    >
+                      Lesson: {topic}
                     </span>
                   ))}
                 </div>
@@ -84,47 +98,46 @@ export default async function StudentCoursesPage() {
       <SectionCard eyebrow="Assignments" title="Coursework and submissions">
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
           {child.assignments.map((assignment) => (
-            <div key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold text-[#22304a]">{assignment.title}</h3>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
-                  {assignment.status.replace(/_/g, " ")}
-                </span>
-              </div>
-              {assignment.weekLabel ? (
-                <p className="mt-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
-                  {assignment.weekLabel}
-                </p>
-              ) : null}
-              <p className="mt-3 text-sm text-[#5f6b7a]">Due: {formatDate(assignment.dueDate)}</p>
-              <p className="mt-2 text-sm text-[#5f6b7a]">
-                Score: {assignment.score === null ? "Pending review" : `${assignment.score} points`}
-              </p>
-              <p className="mt-2 text-sm text-[#5f6b7a]">
-                Grade: {assignment.grade ? assignment.grade.replace(/_/g, " ") : "Pending"}
-              </p>
-              {assignment.instructions ? (
-                <p className="mt-3 text-sm leading-7 text-[#4d5a6b]">{assignment.instructions}</p>
-              ) : null}
-              {assignment.resourceLinks.length ? (
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {assignment.resourceLinks.map((link) => (
-                    <a
-                      key={link}
-                      href={link}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="cursor-pointer rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]"
-                    >
-                      Open resource
-                    </a>
-                  ))}
+            <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
+              <summary className="cursor-pointer list-none">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-lg font-semibold text-[#22304a]">{assignment.title}</h3>
+                    <p className="mt-2 text-sm text-[#5f6b7a]">
+                      {assignment.programTitle} • {assignment.status.replace(/_/g, " ")} • Due {formatDate(assignment.dueDate)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
+                    {assignment.score === null ? "Pending" : `${assignment.score} pts`}
+                  </span>
                 </div>
-              ) : null}
-              {assignment.feedback ? (
-                <p className="mt-3 text-sm leading-7 text-[#4d5a6b]">{assignment.feedback}</p>
-              ) : null}
-            </div>
+              </summary>
+              <div className="mt-4 space-y-3 text-sm leading-7 text-[#4d5a6b]">
+                {assignment.weekLabel ? (
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                    {assignment.weekLabel}
+                  </p>
+                ) : null}
+                <p>Grade: {assignment.grade ? assignment.grade.replace(/_/g, " ") : "Pending"}</p>
+                {assignment.instructions ? <p>{assignment.instructions}</p> : null}
+                {assignment.resourceLinks.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {assignment.resourceLinks.map((link) => (
+                      <a
+                        key={link}
+                        href={link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="cursor-pointer rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]"
+                      >
+                        Open resource
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+                {assignment.feedback ? <p>{assignment.feedback}</p> : null}
+              </div>
+            </details>
           ))}
           {!child.assignments.length ? (
             <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
@@ -144,100 +157,36 @@ export default async function StudentCoursesPage() {
                   {course.termPlans.length} terms
                 </span>
               </div>
-
-              <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                <div className="rounded-[20px] bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">
-                    Programme outcomes
-                  </p>
-                  <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                    {course.outcomes.map((outcome) => (
-                      <li key={outcome}>• {outcome}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="rounded-[20px] bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">
-                    Weekly lesson flow
-                  </p>
-                  <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                    {course.weeklyFlow.map((step) => (
-                      <li key={step}>• {step}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                <div className="rounded-[20px] bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">
-                    Weekly class map
-                  </p>
-                  <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                    {course.weeklySchedule.map((item) => (
-                      <li key={item}>• {item}</li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="rounded-[20px] bg-white p-4">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">
-                    Key materials
-                  </p>
-                  <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                    {course.keyMaterials.map((material) => (
-                      <li key={material}>• {material}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-[20px] bg-white p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">
-                  Two-year term plan
-                </p>
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  {course.termPlans.map((term) => (
-                    <div key={term.id} className="rounded-[18px] border border-[#eadfce] bg-[#fffaf5] p-4">
-                      <p className="text-sm font-semibold text-[#22304a]">
-                        {term.title} • {term.level}
-                      </p>
-                      <p className="mt-1 text-xs font-medium uppercase tracking-[0.18em] text-[#c27a2c]">
-                        {term.window}
-                      </p>
-                      <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                        {term.highlights.map((highlight) => (
-                          <li key={highlight}>• {highlight}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </SectionCard>
-
-      <SectionCard eyebrow="Teachers" title="Who is guiding each programme">
-        <div className={`grid gap-4 lg:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
-          {child.courses.map((course) => (
-            <div key={`${course.id}-teachers`} className="rounded-[24px] bg-[#fbf6ef] p-5">
-              <h3 className="text-xl font-semibold text-[#22304a]">{course.title}</h3>
-              <div className="mt-4 space-y-4">
-                {course.teachers.map((teacher) => (
-                  <div key={`${course.id}-${teacher.name}`} className="rounded-[20px] bg-white p-4">
-                    <p className="text-base font-semibold text-[#22304a]">{teacher.name}</p>
-                    <p className="mt-1 text-sm font-medium text-[#c27a2c]">{teacher.title}</p>
-                    <p className="mt-2 text-sm text-[#5f6b7a]">{teacher.credential}</p>
-                    <p className="mt-3 text-sm leading-7 text-[#5f6b7a]">{teacher.bio}</p>
+              <div className="mt-4 space-y-3">
+                <details className="rounded-[20px] bg-white p-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                    Quick programme view
+                  </summary>
+                  <div className="mt-3 grid gap-4 text-sm leading-7 text-[#5f6b7a] xl:grid-cols-2">
+                    <ul className="space-y-2">
+                      {course.outcomes.slice(0, 4).map((outcome) => (
+                        <li key={outcome}>• {outcome}</li>
+                      ))}
+                    </ul>
+                    <ul className="space-y-2">
+                      {course.weeklySchedule.slice(0, 5).map((item) => (
+                        <li key={item}>• {item}</li>
+                      ))}
+                    </ul>
                   </div>
+                </details>
+                {course.termPlans.map((term) => (
+                  <details key={term.id} className="rounded-[20px] bg-white p-4">
+                    <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                      {term.title} • {term.level} • {term.window}
+                    </summary>
+                    <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                      {term.highlights.slice(0, 4).map((highlight) => (
+                        <li key={highlight}>• {highlight}</li>
+                      ))}
+                    </ul>
+                  </details>
                 ))}
-                {!course.teachers.length ? (
-                  <p className="rounded-[20px] bg-white p-4 text-sm text-[#5f6b7a]">
-                    Teacher assignments for this programme will appear here.
-                  </p>
-                ) : null}
               </div>
             </div>
           ))}

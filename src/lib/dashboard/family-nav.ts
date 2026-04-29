@@ -7,7 +7,8 @@ export type FamilyNavIcon =
   | "chart"
   | "journal"
   | "profile"
-  | "pen";
+  | "pen"
+  | "sun";
 
 export function getStudentNavItems() {
   return [
@@ -34,6 +35,7 @@ export function getParentNavItems(childId?: string) {
     { label: "Quizzes", href: `/parent/quizzes${suffix}`, icon: "sparkles" as const },
     { label: "Progress", href: `/parent/progress${suffix}`, icon: "chart" as const },
     { label: "Journal", href: `/parent/journal${suffix}`, icon: "journal" as const },
+    { label: "Parent Policies", href: `/parent/policies${suffix}`, icon: "sun" as const },
     { label: "Profile", href: `/parent/profile${suffix}`, icon: "profile" as const },
   ];
 }

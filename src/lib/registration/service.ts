@@ -89,6 +89,53 @@ async function ensureParentProfile(
   return createdUser.parentProfile;
 }
 
+async function hasCompletedFamilyAccess(
+  tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
+  email: string,
+) {
+  const existingUser = await tx.user.findUnique({
+    where: { email },
+    include: {
+      parentProfile: {
+        include: {
+          students: {
+            include: {
+              student: {
+                include: {
+                  enrollments: {
+                    select: { status: true },
+                  },
+                },
+              },
+            },
+          },
+          registrations: {
+            where: {
+              status: {
+                in: ["PAID", "CONVERTED"],
+              },
+            },
+            select: { id: true },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+
+  if (!existingUser?.parentProfile) {
+    return false;
+  }
+
+  const hasActiveEnrollments = existingUser.parentProfile.students.some(({ student }) =>
+    student.enrollments.some((enrollment) =>
+      ["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status),
+    ),
+  );
+
+  return hasActiveEnrollments || existingUser.parentProfile.registrations.length > 0;
+}
+
 export async function getRegistrationOptions() {
   const countries = orderRegistrationCountries();
 
@@ -171,6 +218,14 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
   }
 
   return db.$transaction(async (tx) => {
+    const completedFamilyAccess = await hasCompletedFamilyAccess(tx, payload.parentEmail);
+
+    if (completedFamilyAccess) {
+      throw new Error(
+        "This email is already registered with an active Gen-Mumins account. Kindly log in to continue from your dashboard.",
+      );
+    }
+
     let subtotalAmount = 0;
     let multiChildDiscountAmount = 0;
     const parentProfile = await ensureParentProfile(tx, payload);

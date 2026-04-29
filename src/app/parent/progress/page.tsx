@@ -22,6 +22,10 @@ export default async function ParentProgressPage({ searchParams }: PageProps) {
 
   const dashboard = await getParentDashboardData(session.user.id);
   if (!dashboard) redirect("/registration");
+  if (!dashboard.children.length) {
+    if (dashboard.pendingRegistrationId) redirect(`/registration/pending/${dashboard.pendingRegistrationId}`);
+    redirect("/registration");
+  }
 
   const params = searchParams ? await searchParams : undefined;
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];

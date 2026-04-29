@@ -229,6 +229,7 @@ export type ParentDashboardData = {
   accessLocked: boolean;
   accessStateLabel: string;
   pendingReason: string | null;
+  pendingRegistrationId: string | null;
   latestOrder: {
     orderNumber: string;
     status: PaymentStatus;
@@ -557,6 +558,12 @@ function dedupeParentStudents(relations: Array<{ student: any }>) {
   }
 
   return [...grouped.values()];
+}
+
+function studentHasDashboardAccess(student: any) {
+  return student.enrollments.some((enrollment: any) =>
+    ["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status),
+  );
 }
 
 function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
@@ -913,6 +920,13 @@ async function getParentProfile(userId: string) {
     where: { userId },
     include: {
       user: true,
+      registrations: {
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+        },
+      },
       orders: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -1004,11 +1018,21 @@ export async function getParentDashboardData(userId: string) {
   }
 
   const latestOrder = parentProfile.orders[0] ?? null;
-  const hasUnlockedAccess = parentProfile.students.some(({ student }) =>
-    student.enrollments.some((enrollment) =>
-      ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),
-    ),
+  const visibleChildren = dedupeParentStudents(parentProfile.students).filter(
+    studentHasDashboardAccess,
   );
+  const latestPendingRegistration =
+    parentProfile.registrations
+      ?.filter((registration: any) =>
+        ["DRAFT", "SUBMITTED", "PENDING_PAYMENT", "PAYMENT_REVIEW", "EXPIRED"].includes(
+          registration.status,
+        ),
+      )
+      .sort(
+        (left: any, right: any) =>
+          right.createdAt.getTime() - left.createdAt.getTime(),
+      )[0] ?? null;
+  const hasUnlockedAccess = visibleChildren.length > 0;
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentProfile.students.length > 0);
   const pendingReason = accessLocked
@@ -1032,6 +1056,7 @@ export async function getParentDashboardData(userId: string) {
     accessLocked,
     accessStateLabel: formatAccessState(accessLocked),
     pendingReason,
+    pendingRegistrationId: latestPendingRegistration?.id ?? null,
     latestOrder: latestOrder
       ? {
           orderNumber: latestOrder.orderNumber,
@@ -1041,7 +1066,7 @@ export async function getParentDashboardData(userId: string) {
           gateway: latestOrder.gateway,
         }
       : null,
-    children: dedupeParentStudents(parentProfile.students).map((student) =>
+    children: visibleChildren.map((student) =>
       mapChildSummary(student, accessLocked),
     ),
   } satisfies ParentDashboardData;

@@ -30,6 +30,12 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     getRegistrationOptions(),
   ]);
   if (!dashboard) redirect("/registration");
+  if (!dashboard.children.length) {
+    if (dashboard.pendingRegistrationId) {
+      redirect(`/registration/pending/${dashboard.pendingRegistrationId}`);
+    }
+    redirect("/registration");
+  }
 
   const params = searchParams ? await searchParams : undefined;
   const selectedChild =
@@ -40,7 +46,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
       title={`Assalamu alaikum, ${dashboard.parentName}`}
-      subtitle="Switch between children, follow attendance and course access, and monitor schedule, quizzes, journal, and progress from one family workspace."
+      subtitle="Follow active learners, track weekly progress, and stay close to classes, tasks, and journal growth from one family workspace."
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
@@ -48,7 +54,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         metrics={[
           { label: "Children", value: String(dashboard.children.length), hint: "Linked learner profiles in your family account." },
           { label: "Access", value: dashboard.accessStateLabel, hint: "Payment status controls learning access." },
-          { label: "Latest order", value: dashboard.latestOrder?.orderNumber ?? "No order yet", hint: dashboard.latestOrder ? `${dashboard.latestOrder.gateway} - ${dashboard.latestOrder.currency} ${dashboard.latestOrder.totalAmount}` : "Create or complete an enrollment to begin." },
+          { label: "Journal score", value: String(selectedChild?.journalMonthlySummary.leadershipDevelopmentScore ?? 0), hint: "Leadership and growth check-in for the selected child." },
           { label: "Selected child", value: selectedChild?.name ?? "No child yet", hint: selectedChild ? `${selectedChild.courses.length} courses - ${selectedChild.attendanceRate}% attendance` : "Your learners will appear here after registration." },
         ]}
       />
@@ -79,7 +85,8 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             <SectionCard eyebrow="Courses" title={selectedChild.name} icon="book">
               <InfoList
                 items={selectedChild.courses.map(
-                  (course) => `${course.title} - ${course.status} - ${course.meetingCount} weekly slots`,
+                  (course) =>
+                    `${course.title} - By ${course.teachers.map((teacher) => teacher.name).slice(0, 2).join(", ") || "assigned teachers"} - ${course.meetingCount} weekly slots`,
                 )}
                 emptyLabel="Courses will appear here once enrollment is active."
               />
@@ -169,24 +176,6 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               ) : (
                 <p className="text-sm leading-7 text-[#5f6b7a]">
                   Weekly schedule details will appear after class times are assigned.
-                </p>
-              )}
-            </SectionCard>
-
-            <SectionCard eyebrow="Payments" title="Enrollment billing" icon="sun">
-              {dashboard.latestOrder ? (
-                <InfoList
-                  items={[
-                    `Order - ${dashboard.latestOrder.orderNumber}`,
-                    `Gateway - ${dashboard.latestOrder.gateway}`,
-                    `Status - ${dashboard.latestOrder.status.replace(/_/g, " ")}`,
-                    `Amount - ${dashboard.latestOrder.currency} ${dashboard.latestOrder.totalAmount}`,
-                  ]}
-                  emptyLabel="Payment details will appear here."
-                />
-              ) : (
-                <p className="text-sm leading-7 text-[#5f6b7a]">
-                  Payment details will appear here after the first enrollment checkout.
                 </p>
               )}
             </SectionCard>

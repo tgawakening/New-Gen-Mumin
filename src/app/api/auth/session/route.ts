@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getDashboardHome, getCurrentSession } from "@/lib/auth/session";
+import { getCurrentSession, resolveDashboardLinkForSession } from "@/lib/auth/session";
 
 export async function GET() {
   const session = await getCurrentSession();
@@ -12,6 +12,6 @@ export async function GET() {
   return NextResponse.json({
     authenticated: true,
     user: session.user,
-    dashboardHome: getDashboardHome(session.user.role),
+    dashboardHome: await resolveDashboardLinkForSession(session.user),
   });
 }

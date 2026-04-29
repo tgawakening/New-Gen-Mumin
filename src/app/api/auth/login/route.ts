@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getDashboardHome } from "@/lib/auth/session";
+import { resolvePostLoginDestination } from "@/lib/auth/session";
 import { loginPayloadSchema } from "@/lib/auth/schema";
 import { loginParentAccount } from "@/lib/auth/service";
 
@@ -13,7 +13,13 @@ export async function POST(request: Request) {
       userId: user.id,
       email: user.email,
       role: user.role,
-      dashboardHome: getDashboardHome(user.role),
+      dashboardHome: await resolvePostLoginDestination({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+      }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to log in.";
