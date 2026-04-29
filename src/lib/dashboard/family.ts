@@ -3,6 +3,15 @@ import "server-only";
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import {
+  genMCoreOutcomes,
+  genMPolicies,
+  genMProgrammeSchedule,
+  genMTerms,
+  getGenMProgrammeByTitle,
+  getGenMTeachersForProgramme,
+} from "@/lib/genm/curriculum";
+import { parseLessonPayload, parseTaskPayload } from "@/lib/genm/published-content";
 
 type ChildCourseSummary = {
   id: string;
@@ -10,6 +19,33 @@ type ChildCourseSummary = {
   status: string;
   startedAt: Date | null;
   meetingCount: number;
+  strapline: string | null;
+  description: string | null;
+  outcomes: string[];
+  uploadIdeas: string[];
+  keyMaterials: string[];
+  weeklyFlow: string[];
+  focusTerms: string[];
+  weeklySchedule: string[];
+  wholePlanOutcomes: string[];
+  policies: string[];
+  termPlans: Array<{
+    id: string;
+    title: string;
+    window: string;
+    level: string;
+    highlights: string[];
+  }>;
+  teachers: Array<{
+    name: string;
+    title: string;
+    credential: string;
+    bio: string;
+    dummyEmail: string;
+    specialties: string[];
+  }>;
+  recentLessonTopics: string[];
+  currentTaskTitles: string[];
 };
 
 type ChildScheduleSummary = {
@@ -48,6 +84,11 @@ type ChildAssignmentSummary = {
   programTitle: string;
   title: string;
   instructions: string | null;
+  resourceLinks: string[];
+  evidenceMode: string | null;
+  weekLabel: string | null;
+  termId: string | null;
+  familyNote: string | null;
   dueDate: Date | null;
   status: SubmissionStatus | "NOT_STARTED";
   grade: string | null;
@@ -65,6 +106,12 @@ type ChildLessonUpdateSummary = {
   summary: string;
   homework: string | null;
   teacherName: string | null;
+  resourceLinks: string[];
+  parentPrompt: string | null;
+  weekLabel: string | null;
+  termId: string | null;
+  contentType: string | null;
+  materials: string | null;
 };
 
 type ChildBadgeSummary = {
@@ -571,12 +618,18 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
   const assignments = enrollments.flatMap((enrollment) =>
     enrollment.program.assignments.map((assignment: any) => {
       const submission = submissions.find((entry) => entry.assignmentId === assignment.id) ?? null;
+      const parsedInstructions = parseTaskPayload(assignment.instructions ?? null);
 
       return {
         id: assignment.id,
         programTitle: enrollment.program.title,
         title: assignment.title,
-        instructions: assignment.instructions ?? null,
+        instructions: parsedInstructions.instructions,
+        resourceLinks: parsedInstructions.resourceLinks,
+        evidenceMode: parsedInstructions.evidenceMode,
+        weekLabel: parsedInstructions.weekLabel,
+        termId: parsedInstructions.termId,
+        familyNote: parsedInstructions.familyNote,
         dueDate: assignment.dueDate,
         status: submission?.status ?? "NOT_STARTED",
         grade: submission?.grade ?? null,
@@ -602,16 +655,26 @@ function mapLessonUpdates(enrollments: any[]) {
   return enrollments
     .flatMap((enrollment) =>
       enrollment.program.schedules.flatMap((schedule: any) =>
-        (schedule.lessonLogs ?? []).map((log: any) => ({
-          id: log.id,
-          programTitle: enrollment.program.title,
-          scheduleTitle: schedule.title,
-          lessonDate: log.lessonDate,
-          topic: log.topic,
-          summary: log.summary,
-          homework: log.homework ?? null,
-          teacherName: buildTeacherName(schedule.teacher),
-        })),
+        (schedule.lessonLogs ?? []).map((log: any) => {
+          const parsedSummary = parseLessonPayload(log.summary, log.homework ?? null);
+
+          return {
+            id: log.id,
+            programTitle: enrollment.program.title,
+            scheduleTitle: schedule.title,
+            lessonDate: log.lessonDate,
+            topic: parsedSummary.topic || log.topic,
+            summary: parsedSummary.summary,
+            homework: parsedSummary.homework,
+            teacherName: buildTeacherName(schedule.teacher),
+            resourceLinks: parsedSummary.resourceLinks,
+            parentPrompt: parsedSummary.parentPrompt,
+            weekLabel: parsedSummary.weekLabel,
+            termId: parsedSummary.termId,
+            contentType: parsedSummary.contentType,
+            materials: parsedSummary.materials,
+          };
+        }),
       ),
     )
     .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
@@ -774,6 +837,39 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       status: enrollment.status.replace(/_/g, " "),
       startedAt: enrollment.startedAt,
       meetingCount: enrollment.program.schedules.length,
+      strapline: getGenMProgrammeByTitle(enrollment.program.title)?.strapline ?? null,
+      description: getGenMProgrammeByTitle(enrollment.program.title)?.description ?? null,
+      outcomes: getGenMProgrammeByTitle(enrollment.program.title)?.outcomes ?? [],
+      uploadIdeas: getGenMProgrammeByTitle(enrollment.program.title)?.uploadIdeas ?? [],
+      keyMaterials: getGenMProgrammeByTitle(enrollment.program.title)?.keyMaterials ?? [],
+      weeklyFlow: getGenMProgrammeByTitle(enrollment.program.title)?.weeklyFlow ?? [],
+      focusTerms: getGenMProgrammeByTitle(enrollment.program.title)?.focusTerms ?? [],
+      weeklySchedule: genMProgrammeSchedule,
+      wholePlanOutcomes: genMCoreOutcomes,
+      policies: genMPolicies,
+      termPlans: genMTerms.map((term) => ({
+        id: term.id,
+        title: term.title,
+        window: term.window,
+        level: term.level,
+        highlights: term.highlights,
+      })),
+      teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
+        name: teacher.name,
+        title: teacher.title,
+        credential: teacher.credential,
+        bio: teacher.bio,
+        dummyEmail: teacher.dummyEmail,
+        specialties: teacher.specialties,
+      })),
+      recentLessonTopics: lessonUpdates
+        .filter((update) => update.programTitle === enrollment.program.title)
+        .slice(0, 4)
+        .map((update) => update.topic),
+      currentTaskTitles: assignments
+        .filter((assignment) => assignment.programTitle === enrollment.program.title)
+        .slice(0, 4)
+        .map((assignment) => assignment.title),
     })),
     schedule,
     nextClass: schedule[0] ?? null,

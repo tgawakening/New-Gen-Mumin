@@ -1,3 +1,5 @@
+import { randomBytes, scryptSync } from "node:crypto";
+
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
@@ -93,6 +95,81 @@ const coupons = [
   { code: "GENM75", discountPercent: 75 },
   { code: "Q7N4FULLACCESS", discountPercent: 100 },
 ];
+
+const teacherSeedPassword = "GenMTeacher123!";
+
+const teacherProfiles = [
+  {
+    email: "abubakar.sadique@genmumin-teachers.local",
+    firstName: "Abubakar",
+    lastName: "Sadique",
+    bio: "Oversees Arabic, Islamic studies, and mentoring direction across the full two-year Gen-Mumins journey.",
+    specialties: ["Mentoring", "Arabic supervision", "Islamic studies"],
+    programSlugs: ["seerah", "arabic", "life-lessons", "tajweed"],
+  },
+  {
+    email: "ustadh.mehran@genmumin-teachers.local",
+    firstName: "Ustadh",
+    lastName: "Mehran",
+    bio: "Supports Arabic language progression, Fiqh and Hadith context, and digital presentation of the learning material.",
+    specialties: ["Arabic content", "Fiqh", "Hadith", "Web resources"],
+    programSlugs: ["arabic", "seerah"],
+  },
+  {
+    email: "abubakar.saeed@genmumin-teachers.local",
+    firstName: "Abubakar",
+    lastName: "Saeed",
+    bio: "Leads Qur'anic accent, tajweed precision, and structured recitation routines for learners.",
+    specialties: ["Tajweed", "Arabic language", "Recitation coaching"],
+    programSlugs: ["tajweed", "arabic"],
+  },
+  {
+    email: "ustaza.afira@genmumin-teachers.local",
+    firstName: "Ustaza",
+    lastName: "Afira",
+    bio: "Focuses on beginner Arabic grammar, speaking games, vocabulary growth, and lower-level confidence building.",
+    specialties: ["Arabic grammar", "Beginner Arabic", "Conversation practice"],
+    programSlugs: ["arabic"],
+  },
+  {
+    email: "ustaza.zainab@genmumin-teachers.local",
+    firstName: "Ustaza",
+    lastName: "Zainab",
+    bio: "Guides tajweed mastery, recitation quality, and long-term fluency development.",
+    specialties: ["Tajweed rules", "Recitation fluency", "Islamic studies"],
+    programSlugs: ["tajweed"],
+  },
+  {
+    email: "ustaza.zeba@genmumin-teachers.local",
+    firstName: "Ustaza",
+    lastName: "Zeba",
+    bio: "Shapes the story-based Seerah path with crafts, reflection prompts, and leadership lessons from the Prophet's life.",
+    specialties: ["Seerah", "Story-led learning", "Reflection activities"],
+    programSlugs: ["seerah"],
+  },
+  {
+    email: "dr.jaweria@genmumin-teachers.local",
+    firstName: "Dr.",
+    lastName: "Jaweria Riaz",
+    bio: "Leads the practical first-aid and safety components inside the life skills track.",
+    specialties: ["First aid", "Health", "Safety routines"],
+    programSlugs: ["life-lessons"],
+  },
+  {
+    email: "sir.mussab@genmumin-teachers.local",
+    firstName: "Sir",
+    lastName: "Mussab",
+    bio: "Leads the gardening stream, plant growth tracking, and nature-based life skills projects.",
+    specialties: ["Kitchen gardening", "Nature studies", "Project learning"],
+    programSlugs: ["life-lessons"],
+  },
+];
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const derivedKey = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${derivedKey}`;
+}
 
 async function main() {
   for (const program of programs) {
@@ -196,7 +273,61 @@ async function main() {
     });
   }
 
-  console.log("Seeded programs, offers, pricing rules, and discount coupons.");
+  for (const teacher of teacherProfiles) {
+    const user = await prisma.user.upsert({
+      where: { email: teacher.email },
+      update: {
+        firstName: teacher.firstName,
+        lastName: teacher.lastName,
+        role: "TEACHER",
+        status: "ACTIVE",
+      },
+      create: {
+        email: teacher.email,
+        passwordHash: hashPassword(teacherSeedPassword),
+        role: "TEACHER",
+        status: "ACTIVE",
+        firstName: teacher.firstName,
+        lastName: teacher.lastName,
+      },
+    });
+
+    const teacherProfile = await prisma.teacherProfile.upsert({
+      where: { userId: user.id },
+      update: {
+        bio: teacher.bio,
+        specialties: teacher.specialties,
+        isActive: true,
+      },
+      create: {
+        userId: user.id,
+        bio: teacher.bio,
+        specialties: teacher.specialties,
+        isActive: true,
+      },
+    });
+
+    for (const programSlug of teacher.programSlugs) {
+      const programId = programMap.get(programSlug);
+      if (!programId) continue;
+
+      await prisma.teacherProgram.upsert({
+        where: {
+          teacherId_programId: {
+            teacherId: teacherProfile.id,
+            programId,
+          },
+        },
+        update: {},
+        create: {
+          teacherId: teacherProfile.id,
+          programId,
+        },
+      });
+    }
+  }
+
+  console.log("Seeded programs, offers, pricing rules, discount coupons, and teacher assignments.");
 }
 
 main()

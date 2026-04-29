@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { TeacherDashboardFrame, TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { genMProgrammes, genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme } from "@/lib/genm/curriculum";
+import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload } from "@/lib/genm/published-content";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
@@ -14,6 +16,14 @@ type PageProps = {
 function cleanOptional(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
   return text.length ? text : null;
+}
+
+function splitLinks(value: string | null) {
+  if (!value) return [];
+  return value
+    .split(/[,\n]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
 export default async function TeacherCourseBuilderPage({ searchParams }: PageProps) {
@@ -36,6 +46,11 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
     const summary = String(formData.get("summary") || "").trim();
     const homework = cleanOptional(formData.get("homework"));
     const resourceLinks = cleanOptional(formData.get("resourceLinks"));
+    const parentPrompt = cleanOptional(formData.get("parentPrompt"));
+    const weekLabel = cleanOptional(formData.get("weekLabel"));
+    const termId = cleanOptional(formData.get("termId"));
+    const contentType = cleanOptional(formData.get("contentType"));
+    const materials = cleanOptional(formData.get("materials"));
 
     if (!scheduleId || !lessonDateRaw || !topic || !summary) {
       throw new Error("Please complete class, lesson date, topic, and summary before publishing.");
@@ -51,7 +66,17 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         teacherUserId,
         lessonDate: new Date(lessonDateRaw),
         topic,
-        summary,
+        summary: buildLessonPayload({
+          topic,
+          summary,
+          homework,
+          resourceLinks: splitLinks(resourceLinks),
+          parentPrompt,
+          weekLabel,
+          termId,
+          contentType,
+          materials,
+        }),
         homework: finalHomework,
       },
     });
@@ -59,7 +84,9 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
     revalidatePath("/teacher");
     revalidatePath("/teacher/course-builder");
     revalidatePath("/parent");
+    revalidatePath("/parent/courses");
     revalidatePath("/student");
+    revalidatePath("/student/courses");
     redirect("/teacher/course-builder?success=lesson");
   }
 
@@ -71,23 +98,28 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
     const dueDateRaw = cleanOptional(formData.get("dueDate"));
     const instructions = String(formData.get("instructions") || "").trim();
     const resourceLinks = cleanOptional(formData.get("taskLinks"));
+    const evidenceMode = cleanOptional(formData.get("evidenceMode"));
+    const weekLabel = cleanOptional(formData.get("taskWeekLabel"));
+    const termId = cleanOptional(formData.get("taskTermId"));
+    const familyNote = cleanOptional(formData.get("familyNote"));
 
     if (!programId || !title || !instructions) {
       throw new Error("Please complete programme, task title, and instructions before publishing.");
     }
 
-    const finalInstructions = [
-      instructions,
-      resourceLinks ? `Resources: ${resourceLinks}` : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
-
     await db.assignment.create({
       data: {
         programId,
         title,
-        instructions: finalInstructions,
+        instructions: buildTaskPayload({
+          title,
+          instructions,
+          resourceLinks: splitLinks(resourceLinks),
+          evidenceMode,
+          weekLabel,
+          termId,
+          familyNote,
+        }),
         dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
       },
     });
@@ -95,26 +127,71 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
     revalidatePath("/teacher");
     revalidatePath("/teacher/course-builder");
     revalidatePath("/parent");
+    revalidatePath("/parent/courses");
     revalidatePath("/student");
+    revalidatePath("/student/courses");
     redirect("/teacher/course-builder?success=task");
   }
 
   return (
     <TeacherDashboardFrame
       title="Course Builder"
-      subtitle="Publish weekly lesson content, attach drive links or worksheets, and assign tasks so both students and parents can track what is happening."
+      subtitle="Publish structured weekly lesson content, attach materials and drive links, and push tasks into the student and parent LMS exactly where each programme needs them."
       navItems={getTeacherNavItems()}
     >
       {params?.success ? (
         <div className="rounded-[24px] border border-[#d9e7f2] bg-[#eff7ff] px-5 py-4 text-sm text-[#2a5d84]">
           {params.success === "lesson"
             ? "Lesson content published. Parent and student dashboards will now surface the update."
-            : "Student task published. It should now appear in the parent and student work areas."}
+            : "Student task published. It should now appear in the family LMS and coursework views."}
         </div>
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.95fr)]">
         <div className="space-y-6">
+          <TeacherSection eyebrow="Programme map" title="Your current teaching streams">
+            <div className="grid gap-4 lg:grid-cols-2">
+              {dashboard.rosters.map((roster) => {
+                const programme = getGenMProgrammeByTitle(roster.title);
+                const teachers = getGenMTeachersForProgramme(roster.title);
+
+                return (
+                  <div key={roster.programId} className="rounded-[24px] bg-[#fbf6ef] p-5">
+                    <h3 className="text-xl font-semibold text-[#22304a]">{roster.title}</h3>
+                    {programme?.strapline ? (
+                      <p className="mt-2 text-sm font-medium text-[#c27a2c]">{programme.strapline}</p>
+                    ) : null}
+                    {programme?.description ? (
+                      <p className="mt-3 text-sm leading-7 text-[#5f6b7a]">{programme.description}</p>
+                    ) : null}
+                    <div className="mt-4 grid gap-3 md:grid-cols-2">
+                      <div className="rounded-[18px] bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                          Teacher team
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                          {teachers.map((teacher) => (
+                            <li key={teacher.slug}>• {teacher.name} — {teacher.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+                      <div className="rounded-[18px] bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                          Upload focus
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                          {(programme?.uploadIdeas ?? []).map((idea) => (
+                            <li key={idea}>• {idea}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </TeacherSection>
+
           <TeacherSection eyebrow="Weekly content" title="Publish a lesson update">
             <form action={publishLessonContent} className="grid gap-4">
               <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
@@ -154,6 +231,39 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                 </label>
               </div>
 
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Term
+                  <select
+                    name="termId"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  >
+                    <option value="">Select term</option>
+                    {genMTerms.map((term) => (
+                      <option key={term.id} value={term.id}>
+                        {term.title} - {term.level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Week label
+                  <input
+                    name="weekLabel"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                    placeholder="Week 5 - Cave Hira"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Content type
+                  <input
+                    name="contentType"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                    placeholder="Story, worksheet, listening task"
+                  />
+                </label>
+              </div>
+
               <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                 Teacher summary
                 <textarea
@@ -181,6 +291,25 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                   name="resourceLinks"
                   className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
                   placeholder="Paste Google Drive, PDF, video, or worksheet links"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                Materials or kit needed
+                <input
+                  name="materials"
+                  className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  placeholder="Flashcards, Ka'bah craft, plant tray, Tajweed poster"
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                Parent prompt
+                <textarea
+                  name="parentPrompt"
+                  rows={3}
+                  className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  placeholder="How should parents follow up with this lesson at home?"
                 />
               </label>
 
@@ -231,6 +360,44 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                 </label>
               </div>
 
+              <div className="grid gap-4 md:grid-cols-3">
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Term
+                  <select
+                    name="taskTermId"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  >
+                    <option value="">Select term</option>
+                    {genMTerms.map((term) => (
+                      <option key={term.id} value={term.id}>
+                        {term.title} - {term.level}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Week label
+                  <input
+                    name="taskWeekLabel"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                    placeholder="Week 5 practice task"
+                  />
+                </label>
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Evidence mode
+                  <select
+                    name="evidenceMode"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  >
+                    <option value="">Select evidence</option>
+                    <option value="photo">Photo upload later</option>
+                    <option value="video">Short video</option>
+                    <option value="zoom">Live demonstration on Zoom</option>
+                    <option value="verbal">Verbal explanation</option>
+                  </select>
+                </label>
+              </div>
+
               <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                 Task instructions
                 <textarea
@@ -251,6 +418,16 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                 />
               </label>
 
+              <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                Parent guidance note
+                <textarea
+                  name="familyNote"
+                  rows={3}
+                  className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  placeholder="How should families support this task at home this week?"
+                />
+              </label>
+
               <button
                 type="submit"
                 className="inline-flex w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1a2740]"
@@ -264,10 +441,11 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         <div className="space-y-6">
           <TeacherSection eyebrow="Recent publishing" title="Latest lesson updates">
             <TeacherInfoList
-              items={dashboard.lessonLogs.slice(0, 6).map(
-                (entry) =>
-                  `${entry.title} • ${entry.topic} • ${entry.lessonDate.toLocaleDateString("en-GB")}`,
-              )}
+              items={dashboard.lessonLogs.slice(0, 6).map((entry) => {
+                const parsed = parseLessonPayload(entry.summary, entry.homework);
+                const label = parsed.weekLabel ? `${parsed.weekLabel} • ` : "";
+                return `${entry.title} • ${label}${parsed.topic || entry.topic} • ${entry.lessonDate.toLocaleDateString("en-GB")}`;
+              })}
               emptyLabel="Published lesson updates will appear here."
             />
           </TeacherSection>
@@ -275,8 +453,10 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
           <TeacherSection eyebrow="Tasks" title="Recent assignments">
             <TeacherInfoList
               items={dashboard.assignments.slice(0, 6).map((task) => {
+                const parsed = parseTaskPayload(task.instructions);
                 const due = task.dueDate ? task.dueDate.toLocaleDateString("en-GB") : "No due date";
-                return `${task.programTitle} • ${task.title} • ${task.submissions} submissions • ${due}`;
+                const label = parsed.weekLabel ? `${parsed.weekLabel} • ` : "";
+                return `${task.programTitle} • ${label}${task.title} • ${task.submissions} submissions • ${due}`;
               })}
               emptyLabel="Published tasks will appear here."
             />
@@ -285,11 +465,20 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
           <TeacherSection eyebrow="Teacher upload flow" title="What this enables">
             <TeacherInfoList
               items={[
-                "Teachers can post weekly lesson summaries directly from their dashboard.",
-                "Parents can monitor what was taught and what tasks were assigned.",
-                "Students can see new tasks, teacher notes, and recognition progress from one place.",
+                "Teachers can post structured weekly lesson summaries directly from their dashboard.",
+                "Parents can monitor what was taught, what materials are needed, and what follow-up is expected at home.",
+                "Students can see new tasks, resource links, evidence expectations, and recognition progress from one place.",
               ]}
               emptyLabel="Publishing guidance will appear here."
+            />
+          </TeacherSection>
+
+          <TeacherSection eyebrow="Curriculum support" title="Gen-Mumins term plan reference">
+            <TeacherInfoList
+              items={genMProgrammes.map(
+                (programme) => `${programme.title} • ${programme.focusTerms.join(" • ")}`,
+              )}
+              emptyLabel="Programme guidance will appear here."
             />
           </TeacherSection>
         </div>
