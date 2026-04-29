@@ -112,6 +112,10 @@ export const emailTemplateCatalog = {
     heading: "We received your message",
     preview: "Your Gen-Mumins contact enquiry is safely with the team.",
   },
+  passwordReset: {
+    heading: "Reset your password",
+    preview: "Use this secure link to choose a new Gen-Mumins password.",
+  },
   dashboardUnlocked: {
     heading: "Dashboard unlocked",
     preview: "Your Gen-Mumins learning dashboard is now ready.",

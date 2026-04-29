@@ -16,6 +16,21 @@ export const loginPayloadSchema = z.object({
   password: z.string().min(8),
 });
 
+export const forgotPasswordPayloadSchema = z.object({
+  email: z.email(),
+});
+
+export const resetPasswordPayloadSchema = z
+  .object({
+    token: z.string().trim().min(20),
+    password: z.string().min(8),
+    confirmPassword: z.string().min(8),
+  })
+  .refine((payload) => payload.password === payload.confirmPassword, {
+    path: ["confirmPassword"],
+    message: "Passwords do not match.",
+  });
+
 export const teacherSignupPayloadSchema = z
   .object({
     firstName: z.string().trim().min(2),
@@ -36,4 +51,6 @@ export const teacherSignupPayloadSchema = z
 
 export type SignupPayload = z.infer<typeof signupPayloadSchema>;
 export type LoginPayload = z.infer<typeof loginPayloadSchema>;
+export type ForgotPasswordPayload = z.infer<typeof forgotPasswordPayloadSchema>;
+export type ResetPasswordPayload = z.infer<typeof resetPasswordPayloadSchema>;
 export type TeacherSignupPayload = z.infer<typeof teacherSignupPayloadSchema>;

@@ -249,6 +249,28 @@ export async function sendAdminContactNotificationEmail(input: {
   );
 }
 
+export async function sendPasswordResetEmail(input: {
+  toEmail: string;
+  firstName: string;
+  resetUrl: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: emailTemplateCatalog.passwordReset.heading,
+    template: "passwordReset",
+    html: renderGenMuminsEmailTemplate({
+      heading: emailTemplateCatalog.passwordReset.heading,
+      preview: emailTemplateCatalog.passwordReset.preview,
+      intro: `Assalamu alaikum ${input.firstName}, we received a request to reset your Gen-Mumins password.`,
+      sections: [
+        { label: "Security note", value: "This link will expire soon and can only be used once." },
+        { label: "Next step", value: "Open the secure reset page and choose a new password with at least 8 characters." },
+      ],
+      callToAction: { label: "Reset password", href: resolveHref(input.resetUrl) },
+    }),
+  });
+}
+
 export async function sendDashboardUnlockedEmail(input: {
   toEmail: string;
   parentName: string;
