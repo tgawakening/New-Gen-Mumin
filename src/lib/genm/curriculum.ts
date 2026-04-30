@@ -315,3 +315,26 @@ export function getGenMTeachersForProgramme(title: string) {
   return genMTeachers.filter((teacher) => teacher.programSlugs.includes(programme.slug));
 }
 
+export function getGenMTermPlansForProgramme(title: string) {
+  const programme = getGenMProgrammeByTitle(title);
+  if (!programme) return [];
+
+  return genMTerms.map((term) => {
+    const highlights =
+      programme.slug === "arabic"
+        ? term.arabic
+        : programme.slug === "tajweed"
+          ? term.tajweed
+          : programme.slug === "seerah"
+            ? term.seerah
+            : term.lifeSkills;
+
+    return {
+      id: term.id,
+      title: term.title,
+      window: term.window,
+      level: term.level,
+      highlights,
+    };
+  });
+}

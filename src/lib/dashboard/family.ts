@@ -9,6 +9,7 @@ import {
   genMProgrammeSchedule,
   genMTerms,
   getGenMProgrammeByTitle,
+  getGenMTermPlansForProgramme,
   getGenMTeachersForProgramme,
 } from "@/lib/genm/curriculum";
 import { parseLessonPayload, parseTaskPayload } from "@/lib/genm/published-content";
@@ -855,13 +856,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       weeklySchedule: genMProgrammeSchedule,
       wholePlanOutcomes: genMCoreOutcomes,
       policies: genMPolicies,
-      termPlans: genMTerms.map((term) => ({
-        id: term.id,
-        title: term.title,
-        window: term.window,
-        level: term.level,
-        highlights: term.highlights,
-      })),
+      termPlans: getGenMTermPlansForProgramme(enrollment.program.title),
       teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
         name: teacher.name,
         title: teacher.title,
