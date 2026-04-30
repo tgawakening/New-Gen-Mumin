@@ -25,6 +25,7 @@ const PENDING_REGISTRATION_STATUSES = [
   "PAYMENT_REVIEW",
   "EXPIRED",
 ] as const;
+const COMPLETED_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
 
 export const getCurrentSession = cache(async () => {
   const cookieStore = await cookies();
@@ -99,7 +100,7 @@ export async function getParentAccessSnapshot(userId: string) {
       registrations: {
         where: {
           status: {
-            in: [...PENDING_REGISTRATION_STATUSES, "PAID", "CONVERTED"],
+            in: [...PENDING_REGISTRATION_STATUSES, ...COMPLETED_REGISTRATION_STATUSES],
           },
         },
         orderBy: { createdAt: "desc" },
@@ -107,6 +108,17 @@ export async function getParentAccessSnapshot(userId: string) {
           id: true,
           status: true,
           createdAt: true,
+        },
+      },
+      orders: {
+        where: {
+          status: "SUCCEEDED",
+        },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
         },
       },
     },
@@ -127,8 +139,11 @@ export async function getParentAccessSnapshot(userId: string) {
     ),
   );
   const hasCompletedRegistration = parentProfile.registrations.some((registration) =>
-    ["PAID", "CONVERTED"].includes(registration.status),
+    COMPLETED_REGISTRATION_STATUSES.includes(
+      registration.status as (typeof COMPLETED_REGISTRATION_STATUSES)[number],
+    ),
   );
+  const hasSuccessfulOrder = parentProfile.orders.length > 0;
 
   const pendingRegistration = parentProfile.registrations.find((registration) =>
     PENDING_REGISTRATION_STATUSES.includes(
@@ -137,8 +152,12 @@ export async function getParentAccessSnapshot(userId: string) {
   );
 
   return {
-    hasDashboardAccess: hasActiveEnrollment || hasCompletedRegistration,
-    pendingRegistrationId: pendingRegistration?.id ?? null,
+    hasDashboardAccess:
+      hasActiveEnrollment || hasCompletedRegistration || hasSuccessfulOrder,
+    pendingRegistrationId:
+      hasActiveEnrollment || hasCompletedRegistration || hasSuccessfulOrder
+        ? null
+        : pendingRegistration?.id ?? null,
   };
 }
 

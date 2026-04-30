@@ -1014,9 +1014,18 @@ export async function getParentDashboardData(userId: string) {
   }
 
   const latestOrder = parentProfile.orders[0] ?? null;
-  const visibleChildren = dedupeParentStudents(parentProfile.students).filter(
+  const allChildren = dedupeParentStudents(parentProfile.students);
+  const visibleChildren = allChildren.filter(
     studentHasDashboardAccess,
   );
+  const hasCompletedRegistration = parentProfile.registrations.some((registration) =>
+    ["APPROVED", "PAID", "CONVERTED", "ACTIVE", "COMPLETED"].includes(
+      registration.status,
+    ),
+  );
+  const hasSuccessfulOrder =
+    latestOrder?.status === "SUCCEEDED" ||
+    latestOrder?.payments?.[0]?.status === "SUCCEEDED";
   const latestPendingRegistration =
     parentProfile.registrations
       ?.filter((registration: any) =>
@@ -1028,7 +1037,14 @@ export async function getParentDashboardData(userId: string) {
         (left: any, right: any) =>
           right.createdAt.getTime() - left.createdAt.getTime(),
       )[0] ?? null;
-  const hasUnlockedAccess = visibleChildren.length > 0;
+  const hasUnlockedAccess =
+    visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
+  const resolvedChildren =
+    visibleChildren.length > 0
+      ? visibleChildren
+      : hasUnlockedAccess
+        ? allChildren
+        : [];
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentProfile.students.length > 0);
   const pendingReason = accessLocked
@@ -1052,7 +1068,7 @@ export async function getParentDashboardData(userId: string) {
     accessLocked,
     accessStateLabel: formatAccessState(accessLocked),
     pendingReason,
-    pendingRegistrationId: latestPendingRegistration?.id ?? null,
+    pendingRegistrationId: hasUnlockedAccess ? null : latestPendingRegistration?.id ?? null,
     latestOrder: latestOrder
       ? {
           orderNumber: latestOrder.orderNumber,
@@ -1062,7 +1078,7 @@ export async function getParentDashboardData(userId: string) {
           gateway: latestOrder.gateway,
         }
       : null,
-    children: visibleChildren.map((student) =>
+    children: resolvedChildren.map((student) =>
       mapChildSummary(student, accessLocked),
     ),
   } satisfies ParentDashboardData;

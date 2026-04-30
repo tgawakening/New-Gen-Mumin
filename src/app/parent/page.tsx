@@ -30,7 +30,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     getRegistrationOptions(),
   ]);
   if (!dashboard) redirect("/registration");
-  if (!dashboard.children.length) {
+  if (!dashboard.children.length && dashboard.accessLocked) {
     if (dashboard.pendingRegistrationId) {
       redirect(`/registration/pending/${dashboard.pendingRegistrationId}`);
     }
