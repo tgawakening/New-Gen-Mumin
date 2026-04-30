@@ -530,6 +530,7 @@ function normalizeChildIdentity(input: {
 
 function childPriorityScore(student: any) {
   return (
+    (studentHasDashboardAccess(student) ? 1_000 : 0) +
     (student.enrollments?.length ?? 0) * 20 +
     (student.progressReports?.length ?? 0) * 6 +
     (student.journalEntries?.length ?? 0) * 5 +

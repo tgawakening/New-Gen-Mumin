@@ -147,6 +147,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <input
         name="email"
         autoComplete="email"
+        autoCapitalize="none"
+        autoCorrect="off"
         type="email"
         placeholder="Email used for your account"
         value={email}
@@ -158,6 +160,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
           <input
             name="password"
             autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
             type={showPassword ? "text" : "password"}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
@@ -189,6 +193,8 @@ export function ResetPasswordForm({ token }: { token: string }) {
           <input
             name="password-confirmation"
             autoComplete="new-password"
+            autoCapitalize="none"
+            autoCorrect="off"
             type={showConfirmPassword ? "text" : "password"}
             value={confirmPassword}
             onChange={(event) => setConfirmPassword(event.target.value)}

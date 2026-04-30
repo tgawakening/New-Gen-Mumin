@@ -304,6 +304,7 @@ export async function sendPaymentCompletedEmail(input: {
   gateway: string;
   childCount?: number;
 }) {
+  const gatewayLabel = input.gateway === "FREE" ? "Fully discounted" : input.gateway;
   await sendTransactionalEmail({
     toEmail: input.toEmail,
     subject: "Payment confirmed",
@@ -314,7 +315,7 @@ export async function sendPaymentCompletedEmail(input: {
       intro: `Assalamu alaikum ${input.parentName}, your payment has been confirmed and your registration is now completed.`,
       sections: [
         { label: "Order", value: input.orderNumber },
-        { label: "Gateway", value: input.gateway },
+        { label: "Gateway", value: gatewayLabel },
         { label: "Amount", value: `${input.currency} ${input.amount}` },
         { label: "Students", value: `${input.childCount ?? 1}` },
         { label: "Status", value: "Completed" },
@@ -333,6 +334,7 @@ export async function sendAdminPaymentCompletedEmail(input: {
   gateway: string;
   childCount?: number;
 }) {
+  const gatewayLabel = input.gateway === "FREE" ? "Fully discounted" : input.gateway;
   await sendAdminFacingEmail(
     "adminNewEnrollment",
     "Payment completed",
@@ -340,7 +342,7 @@ export async function sendAdminPaymentCompletedEmail(input: {
     [
       { label: "Parent", value: `${input.parentName} (${input.parentEmail})` },
       { label: "Order", value: input.orderNumber },
-      { label: "Gateway", value: input.gateway },
+      { label: "Gateway", value: gatewayLabel },
       { label: "Amount", value: `${input.currency} ${input.amount}` },
       { label: "Students", value: `${input.childCount ?? 1}` },
       { label: "Status", value: "Completed" },

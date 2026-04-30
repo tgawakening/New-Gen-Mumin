@@ -119,12 +119,15 @@ export async function getParentAccessSnapshot(userId: string) {
     };
   }
 
-  const hasDashboardAccess = parentProfile.students.some(({ student }) =>
+  const hasActiveEnrollment = parentProfile.students.some(({ student }) =>
     student.enrollments.some((enrollment) =>
       ACTIVE_ENROLLMENT_STATUSES.includes(
         enrollment.status as (typeof ACTIVE_ENROLLMENT_STATUSES)[number],
       ),
     ),
+  );
+  const hasCompletedRegistration = parentProfile.registrations.some((registration) =>
+    ["PAID", "CONVERTED"].includes(registration.status),
   );
 
   const pendingRegistration = parentProfile.registrations.find((registration) =>
@@ -134,7 +137,7 @@ export async function getParentAccessSnapshot(userId: string) {
   );
 
   return {
-    hasDashboardAccess,
+    hasDashboardAccess: hasActiveEnrollment || hasCompletedRegistration,
     pendingRegistrationId: pendingRegistration?.id ?? null,
   };
 }

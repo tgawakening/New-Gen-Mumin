@@ -64,6 +64,8 @@ type CheckoutResponse = {
   manualInstructions?: ManualInstructions | null;
 };
 
+type NoticeTone = "success" | "error" | "info";
+
 type PaymentValue = "STRIPE" | "PAYPAL" | "BANK_TRANSFER";
 
 type PhoneCountry = {
@@ -400,6 +402,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingProof, setIsSubmittingProof] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ tone: NoticeTone; message: string } | null>(null);
   const [draft, setDraft] = useState<DraftResponse | null>(null);
   const [success, setSuccess] = useState<CheckoutResponse | null>(null);
 
@@ -485,6 +488,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     }
   }, [success]);
 
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
   const isFormReadyForPayment = useMemo(() => {
     if (!guardianFullName.trim() || !parentEmail.trim() || !parentCity.trim() || !phoneNumber.trim() || password.length < 8 || confirmPassword.length < 8) return false;
     if (password !== confirmPassword) return false;
@@ -561,6 +570,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   }, [appliedCoupon, couponCode, couponEligibleForBundle]);
 
   const isPakistan = selectedPhoneCountry.code === "PK";
+  const isFreeEnrollment = summary.total <= 0 && summary.lines.length > 0;
   const paypalEligible = summary.lines.length === 1 && summary.discount === 0;
   const availablePaymentMethods = PAYMENT_METHODS.filter((method) => {
     if (method.value === "BANK_TRANSFER") return isPakistan;
@@ -573,6 +583,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       setSelectedGateway(availablePaymentMethods[0]?.value ?? "STRIPE");
     }
   }, [availablePaymentMethods, selectedGateway]);
+
+  const shouldLockEnrollmentSubmit = Boolean(success && !success.checkoutUrl);
 
   function updateChild(index: number, patch: Partial<ChildForm>) {
     setChildren((current) => current.map((child, currentIndex) => (currentIndex === index ? { ...child, ...patch } : child)));
@@ -600,6 +612,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     setError(null);
     setSuccess(null);
     setManualProofMessage(null);
+    setNotice(null);
     setIsSubmitting(true);
 
     if (password.length < 8) {
@@ -693,14 +706,35 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       const checkoutResponse = await fetch(`/api/registration/${registrationPayload.registrationId}/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ gateway: selectedGateway }),
+        body: JSON.stringify({ gateway: isFreeEnrollment ? "FREE" : selectedGateway }),
       });
 
       const checkoutPayload = (await checkoutResponse.json()) as CheckoutResponse & { error?: string };
       if (!checkoutResponse.ok) throw new Error(checkoutPayload.error ?? "Unable to create checkout draft.");
       setSuccess(checkoutPayload);
+      if (checkoutPayload.gateway === "BANK_TRANSFER") {
+        setNotice({
+          tone: "success",
+          message:
+            "Registration submitted successfully. Your status will be completed after admin confirmation of your manual payment.",
+        });
+      } else if (checkoutPayload.gateway === "FREE" || checkoutPayload.amount <= 0) {
+        setNotice({
+          tone: "success",
+          message:
+            "Fully discounted enrollment completed successfully. Your dashboard access is now ready.",
+        });
+      } else {
+        setNotice({
+          tone: "info",
+          message: "Registration submitted successfully. Redirecting you to secure payment now.",
+        });
+      }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to complete registration.");
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to complete registration.";
+      setError(message);
+      setNotice({ tone: "error", message });
     } finally {
       setIsSubmitting(false);
     }
@@ -721,8 +755,16 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) throw new Error(payload.error ?? "Unable to submit manual payment proof.");
       setManualProofMessage("Payment proof submitted successfully. The admin team can now review and confirm your transfer.");
+      setNotice({
+        tone: "success",
+        message:
+          "Payment proof submitted successfully. The admin team can now review and confirm your transfer.",
+      });
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to submit manual proof.");
+      const message =
+        submitError instanceof Error ? submitError.message : "Unable to submit manual proof.";
+      setError(message);
+      setNotice({ tone: "error", message });
     } finally {
       setIsSubmittingProof(false);
     }
@@ -741,6 +783,21 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       {mounted && isOpen
         ? createPortal(
         <div className="fixed inset-0 z-[400] overflow-hidden bg-[rgba(15,23,42,0.62)] px-4 py-6 backdrop-blur-[5px] sm:px-6 sm:py-10">
+          {notice ? (
+            <div className="pointer-events-none fixed right-4 top-4 z-[450] w-full max-w-sm">
+              <div
+                className={`rounded-2xl border px-4 py-3 text-sm shadow-[0_16px_30px_rgba(15,23,42,0.16)] ${
+                  notice.tone === "success"
+                    ? "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]"
+                    : notice.tone === "error"
+                      ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]"
+                      : "border-[#d7e5f2] bg-[#f5fbff] text-[#38506a]"
+                }`}
+              >
+                {notice.message}
+              </div>
+            </div>
+          ) : null}
           <div className="mx-auto flex h-full w-full max-w-[1020px] items-center justify-center">
             <div className="flex max-h-[88vh] w-full flex-col overflow-hidden rounded-[24px] border border-[#ead9c5] bg-[#fffaf5] shadow-[0_34px_94px_rgba(8,15,30,0.34)]">
               <div className="flex items-center justify-between gap-5 border-b border-[#efdfcd] bg-[linear-gradient(135deg,#fff1df_0%,#fff7ee_55%,#fff3e4_100%)] px-5 py-4 sm:px-6">
@@ -778,6 +835,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                                 <input
                                   name="password"
                                   autoComplete="new-password"
+                                  autoCapitalize="none"
+                                  autoCorrect="off"
                                   type={showPassword ? "text" : "password"}
                                   value={password}
                                   onChange={(event) => setPassword(event.target.value)}
@@ -806,6 +865,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                                 <input
                                   name="password-confirmation"
                                   autoComplete="new-password"
+                                  autoCapitalize="none"
+                                  autoCorrect="off"
                                   type={showConfirmPassword ? "text" : "password"}
                                   value={confirmPassword}
                                   onChange={(event) => setConfirmPassword(event.target.value)}
@@ -1084,29 +1145,35 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           <h3 className="text-lg font-semibold text-[#22304a]">Payment method</h3>
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isFormReadyForPayment ? "bg-[#ecf8f0] text-[#2f6b4b]" : "bg-[#f2f4f7] text-[#7a8698]"}`}>{isFormReadyForPayment ? "Active" : "Complete form first"}</span>
                         </div>
-                        <div className="mt-4 space-y-3">
-                          {availablePaymentMethods.map((method) => (
-                            <label key={method.value} className={`block cursor-pointer rounded-2xl border px-4 py-3 transition ${selectedGateway === method.value ? "border-[#f3a25d] bg-[#fff1df]" : "border-[#ebdccb] bg-white"} ${isFormReadyForPayment ? "opacity-100" : "opacity-55"}`}>
-                              <div className="flex items-start gap-3">
-                                <input type="radio" name="gateway" checked={selectedGateway === method.value} onChange={() => setSelectedGateway(method.value)} disabled={!isFormReadyForPayment} className="mt-1" />
-                                <div>
-                                  <p className="font-semibold text-[#22304a]">{method.label}</p>
-                                  <p className="mt-1 text-sm leading-6 text-[#6d7785]">{method.description}</p>
+                        {isFreeEnrollment ? (
+                          <div className="mt-4 rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-4 text-sm leading-7 text-[#2f6b4b]">
+                            This enrollment is fully discounted. No payment method is needed and the child will be enrolled immediately after submission.
+                          </div>
+                        ) : (
+                          <div className="mt-4 space-y-3">
+                            {availablePaymentMethods.map((method) => (
+                              <label key={method.value} className={`block cursor-pointer rounded-2xl border px-4 py-3 transition ${selectedGateway === method.value ? "border-[#f3a25d] bg-[#fff1df]" : "border-[#ebdccb] bg-white"} ${isFormReadyForPayment ? "opacity-100" : "opacity-55"}`}>
+                                <div className="flex items-start gap-3">
+                                  <input type="radio" name="gateway" checked={selectedGateway === method.value} onChange={() => setSelectedGateway(method.value)} disabled={!isFormReadyForPayment} className="mt-1" />
+                                  <div>
+                                    <p className="font-semibold text-[#22304a]">{method.label}</p>
+                                    <p className="mt-1 text-sm leading-6 text-[#6d7785]">{method.description}</p>
+                                  </div>
                                 </div>
+                              </label>
+                            ))}
+                            {!paypalEligible ? (
+                              <div className="rounded-2xl border border-[#f6d8b3] bg-[#fff7ea] px-4 py-3 text-sm text-[#9b6328]">
+                                PayPal subscriptions are available for one programme selection at a time. For multi-child or discounted combinations, please use Stripe.
                               </div>
-                            </label>
-                          ))}
-                          {!paypalEligible ? (
-                            <div className="rounded-2xl border border-[#f6d8b3] bg-[#fff7ea] px-4 py-3 text-sm text-[#9b6328]">
-                              PayPal subscriptions are available for one programme selection at a time. For multi-child or discounted combinations, please use Stripe.
-                            </div>
-                          ) : null}
-                          {!isPakistan ? (
-                            <div className="rounded-2xl border border-[#e4ebf3] bg-[#f8fbff] px-4 py-3 text-sm text-[#5d6c81]">
-                              Manual Bank Transfer and JazzCash are available only when Pakistan is selected as the country.
-                            </div>
-                          ) : null}
-                        </div>
+                            ) : null}
+                            {!isPakistan ? (
+                              <div className="rounded-2xl border border-[#e4ebf3] bg-[#f8fbff] px-4 py-3 text-sm text-[#5d6c81]">
+                                Manual Bank Transfer and JazzCash are available only when Pakistan is selected as the country.
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
                       </>,
                     )}
 
@@ -1114,7 +1181,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                     {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p><p className="mt-2 text-xs">Your browser can save this password for future logins after account creation.</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, click the submit button again.</p> : null}</div> : null}
                     {error ? <div className="rounded-2xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-3 text-sm text-[#a23c3c]">{error}</div> : null}
 
-                    {selectedGateway === "BANK_TRANSFER" ? (
+                    {selectedGateway === "BANK_TRANSFER" && !isFreeEnrollment ? (
                       sectionCard(
                         <>
                           <h3 className="text-lg font-semibold text-[#22304a]">Manual payment</h3>
@@ -1177,9 +1244,20 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                       )
                     ) : null}
 
-                    <button type="submit" disabled={isSubmitting} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:cursor-not-allowed disabled:opacity-60">
-                      {isSubmitting ? "Submitting..." : success?.checkoutUrl ? "Retry payment handoff" : "Complete enrollment"}
-                    </button>
+                    {success?.checkoutUrl ? (
+                      <a href={success.checkoutUrl} className="block w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#182235]">
+                        Continue to payment
+                      </a>
+                    ) : (
+                      <button type="submit" disabled={isSubmitting || shouldLockEnrollmentSubmit} className="w-full cursor-pointer rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:cursor-not-allowed disabled:opacity-60">
+                        {isSubmitting ? "Submitting..." : isFreeEnrollment ? "Enroll now" : shouldLockEnrollmentSubmit ? "Enrollment submitted" : "Complete enrollment"}
+                      </button>
+                    )}
+                    {shouldLockEnrollmentSubmit ? (
+                      <p className="text-center text-xs leading-6 text-[#6d7785]">
+                        This enrollment has already been submitted. Use the next step above instead of submitting it again.
+                      </p>
+                    ) : null}
                   </aside>
                 </div>
               </form>
