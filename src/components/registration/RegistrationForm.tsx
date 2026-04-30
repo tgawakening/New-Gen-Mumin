@@ -272,6 +272,10 @@ function sectionCard(children: React.ReactNode, extraClassName = "") {
   );
 }
 
+function normalizePhoneNumber(value: string) {
+  return value.replace(/[^\d]/g, "");
+}
+
 function getPasswordStrength(password: string) {
   if (!password) {
     return {
@@ -494,13 +498,25 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     return () => window.clearTimeout(timer);
   }, [notice]);
 
+  const phoneValidationMessage = useMemo(() => {
+    if (!phoneNumber.trim()) {
+      return "Enter at least 6 digits for the phone number.";
+    }
+
+    if (normalizePhoneNumber(phoneNumber).length < 6) {
+      return "Phone number must contain at least 6 digits.";
+    }
+
+    return null;
+  }, [phoneNumber]);
+
   const isFormReadyForPayment = useMemo(() => {
-    if (!guardianFullName.trim() || !parentEmail.trim() || !parentCity.trim() || !phoneNumber.trim() || password.length < 8 || confirmPassword.length < 8) return false;
+    if (!guardianFullName.trim() || !parentEmail.trim() || !parentCity.trim() || phoneValidationMessage || password.length < 8 || confirmPassword.length < 8) return false;
     if (password !== confirmPassword) return false;
     if (!heardAboutGenM.trim()) return false;
     if (hopesFromProgram.trim().split(/\s+/).filter(Boolean).length > 50) return false;
     return children.every((child) => child.fullName.trim() && child.age.trim() && child.gender.trim() && child.selectedOfferSlugs.length > 0);
-  }, [children, confirmPassword, guardianFullName, heardAboutGenM, hopesFromProgram, parentCity, parentEmail, password, phoneNumber]);
+  }, [children, confirmPassword, guardianFullName, heardAboutGenM, hopesFromProgram, parentCity, parentEmail, password, phoneValidationMessage]);
 
   const couponEligibleForBundle = useMemo(
     () =>
@@ -627,6 +643,13 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       return;
     }
 
+    if (phoneValidationMessage) {
+      setError(phoneValidationMessage);
+      setNotice({ tone: "error", message: phoneValidationMessage });
+      setIsSubmitting(false);
+      return;
+    }
+
     if (hopesFromProgram.trim().split(/\s+/).filter(Boolean).length > 50) {
       setError("What they hope to get from Gen-M must stay within 50 words.");
       setIsSubmitting(false);
@@ -655,7 +678,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
           email: parentEmail,
           password,
           phoneCountryCode: selectedPhoneCountry.dialCode,
-          phoneNumber,
+          phoneNumber: normalizePhoneNumber(phoneNumber),
           billingCountryCode: selectedPhoneCountry.code,
           billingCountryName: selectedPhoneCountry.name,
         }),
@@ -677,7 +700,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
           parentLastName: lastName,
           parentEmail,
           phoneCountryCode: selectedPhoneCountry.dialCode,
-          phoneNumber,
+          phoneNumber: normalizePhoneNumber(phoneNumber),
           whatsappNumber: "",
           selectedCountryCode: selectedPhoneCountry.code,
           selectedCountryName: selectedPhoneCountry.name,
@@ -935,7 +958,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                                   </div>
                                 ) : null}
                               </div>
-                                <input name="tel" autoComplete="tel" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]" placeholder="Phone number" required />
+                                <div>
+                                  <input name="tel" autoComplete="tel" value={phoneNumber} onChange={(event) => setPhoneNumber(event.target.value)} className={`w-full rounded-2xl border bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f] ${phoneValidationMessage ? "border-[#d88989]" : "border-[#d8c3ac]"}`} placeholder="Phone number" required />
+                                  <p className={`mt-2 text-xs font-medium ${phoneValidationMessage ? "text-[#b24c4c]" : "text-[#657284]"}`}>
+                                    {phoneValidationMessage ?? "Use at least 6 digits without spaces or symbols if possible."}
+                                  </p>
+                                </div>
                             </div>
                           </div>
                         </div>

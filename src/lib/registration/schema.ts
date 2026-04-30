@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+const phoneNumberSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.replace(/[^\d]/g, "") : value),
+  z.string().min(6, "Phone number must contain at least 6 digits."),
+);
+
 export const registrationStudentSchema = z.object({
   firstName: z.string().trim().min(2),
   lastName: z.string().trim().min(1),
@@ -22,7 +27,7 @@ export const registrationPayloadSchema = z.object({
   parentLastName: z.string().trim().min(2),
   parentEmail: z.email(),
   phoneCountryCode: z.string().trim().min(1),
-  phoneNumber: z.string().trim().min(6),
+  phoneNumber: phoneNumberSchema,
   whatsappNumber: z.string().trim().optional().or(z.literal("")),
   selectedCountryCode: z.string().trim().min(2).max(2),
   selectedCountryName: z.string().trim().min(2),

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ZodError } from "zod";
 
 import {
   sendAdminNewEnrollmentEmail,
@@ -45,6 +46,28 @@ export async function POST(request: Request) {
       status: registration.status,
     });
   } catch (error) {
+    if (error instanceof ZodError) {
+      const phoneIssue = error.issues.find(
+        (issue) => issue.path.join(".") === "phoneNumber",
+      );
+
+      if (phoneIssue) {
+        return NextResponse.json(
+          { error: "Phone number must contain at least 6 digits." },
+          { status: 400 },
+        );
+      }
+
+      return NextResponse.json(
+        {
+          error:
+            error.issues[0]?.message ??
+            "Please review the registration form and try again.",
+        },
+        { status: 400 },
+      );
+    }
+
     const message = error instanceof Error ? error.message : "Unable to create registration.";
 
     return NextResponse.json({ error: message }, { status: 400 });
