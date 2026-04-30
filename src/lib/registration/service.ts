@@ -36,6 +36,40 @@ function calculateDiscount(studentIndex: number, amount: number) {
   return Math.round(amount * 0.5);
 }
 
+function normalizeStudentIdentity(input: {
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  age?: number | null;
+  countryCode?: string | null;
+  countryName?: string | null;
+}) {
+  const fullName =
+    input.displayName?.trim() ||
+    [input.firstName, input.lastName].filter(Boolean).join(" ").trim();
+
+  return [
+    fullName.toLowerCase().replace(/\s+/g, " "),
+    input.age ?? "",
+    (input.countryCode || input.countryName || "").toLowerCase(),
+  ].join("|");
+}
+
+function getProgramSlugsForOffer(offerSlug: string) {
+  switch (offerSlug) {
+    case "full-bundle":
+      return ["seerah", "life-lessons", "arabic", "tajweed"];
+    case "arabic-tajweed-pair":
+      return ["arabic", "tajweed"];
+    case "seerah-single":
+      return ["seerah"];
+    case "life-lessons-single":
+      return ["life-lessons"];
+    default:
+      return [];
+  }
+}
+
 async function ensureParentProfile(
   tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
   payload: RegistrationPayload,
@@ -91,19 +125,43 @@ async function ensureParentProfile(
 
 async function hasCompletedFamilyAccess(
   tx: Parameters<Parameters<typeof db.$transaction>[0]>[0],
-  email: string,
+  payload: RegistrationPayload,
+  requestedOfferRecords: CatalogOfferRecord[],
 ) {
   const existingUser = await tx.user.findUnique({
-    where: { email },
-    include: {
+    where: { email: payload.parentEmail },
+    select: {
+      id: true,
       parentProfile: {
-        include: {
+        select: {
           students: {
-            include: {
+            select: {
               student: {
-                include: {
+                select: {
+                  id: true,
+                  age: true,
+                  countryCode: true,
+                  countryName: true,
+                  displayName: true,
                   enrollments: {
-                    select: { status: true },
+                    where: {
+                      status: {
+                        in: ["ACTIVE", "CONFIRMED", "COMPLETED"],
+                      },
+                    },
+                    select: {
+                      program: {
+                        select: {
+                          slug: true,
+                        },
+                      },
+                    },
+                  },
+                  user: {
+                    select: {
+                      firstName: true,
+                      lastName: true,
+                    },
                   },
                 },
               },
@@ -127,13 +185,73 @@ async function hasCompletedFamilyAccess(
     return false;
   }
 
-  const hasActiveEnrollments = existingUser.parentProfile.students.some(({ student }) =>
-    student.enrollments.some((enrollment) =>
-      ["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status),
-    ),
+  const hasActiveEnrollments = existingUser.parentProfile.students.some(
+    ({ student }) => student.enrollments.length > 0,
   );
 
-  return hasActiveEnrollments || existingUser.parentProfile.registrations.length > 0;
+  const hasCompletedRegistration = existingUser.parentProfile.registrations.length > 0;
+
+  if (!hasActiveEnrollments && !hasCompletedRegistration) {
+    return false;
+  }
+
+  const requestedOfferLookup = new Map<string, CatalogOfferRecord>(
+    requestedOfferRecords.map((offer) => [offer.slug, offer]),
+  );
+  const existingStudentLookup = new Map<string, Set<string>>(
+    existingUser.parentProfile.students.map(({ student }) => {
+      const identityKey = normalizeStudentIdentity({
+        firstName: student.user.firstName,
+        lastName: student.user.lastName,
+        displayName: student.displayName,
+        age: student.age,
+        countryCode: student.countryCode,
+        countryName: student.countryName,
+      });
+      const programSlugs = new Set<string>(
+        student.enrollments
+          .map((enrollment) => enrollment.program.slug)
+          .filter(Boolean),
+      );
+
+      return [identityKey, programSlugs];
+    }),
+  );
+
+  const isIntroducingNewAccess = payload.students.some((student) => {
+    const identityKey = normalizeStudentIdentity({
+      firstName: student.firstName,
+      lastName: student.lastName,
+      age: student.age,
+      countryCode: payload.selectedCountryCode,
+      countryName: payload.selectedCountryName,
+    });
+    const existingProgramSlugs = existingStudentLookup.get(identityKey);
+
+    if (!existingProgramSlugs) {
+      return true;
+    }
+
+    return student.selectedOfferSlugs.some((offerSlug) => {
+      const offer = requestedOfferLookup.get(offerSlug);
+
+      if (!offer) {
+        return false;
+      }
+
+      const requestedProgramSlugs = getProgramSlugsForOffer(offer.slug);
+
+      if (requestedProgramSlugs.length === 0) {
+        return true;
+      }
+
+      return requestedProgramSlugs.some(
+        (programSlug) => !existingProgramSlugs.has(programSlug),
+      );
+    });
+  });
+
+  return !isIntroducingNewAccess;
 }
 
 export async function getRegistrationOptions() {
@@ -218,11 +336,11 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
   }
 
   return db.$transaction(async (tx) => {
-    const completedFamilyAccess = await hasCompletedFamilyAccess(tx, payload.parentEmail);
+    const completedFamilyAccess = await hasCompletedFamilyAccess(tx, payload, offers);
 
     if (completedFamilyAccess) {
       throw new Error(
-        "This email is already registered with an active Gen-Mumins account. Kindly log in to continue from your dashboard.",
+        "This email is already registered for the selected Gen-Mumins programme. Kindly log in to continue from your dashboard.",
       );
     }
 
