@@ -343,5 +343,8 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
     });
 
     return updated;
+  }, {
+    maxWait: 10_000,
+    timeout: 20_000,
   });
 }
