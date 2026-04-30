@@ -108,108 +108,16 @@ export async function createCheckoutDraft(
       },
     });
 
-    let checkoutUrl: string | null = null;
-    let providerReference: string | null = null;
     let manualInstructions: ReturnType<typeof getManualPaymentDetails> | null = null;
 
     if (payload.gateway === "BANK_TRANSFER" && registration.selectedCountryCode !== "PK") {
       throw new Error("Manual payment is available only for registrations from Pakistan.");
     }
 
-    if (payload.gateway === "STRIPE" && registration.totalAmount > 0) {
-      const checkoutLabel =
-        registration.items.length === 1
-          ? `${registration.items[0].offer.title} subscription`
-          : "Gen-Mumins family subscription";
-      const checkoutDescription =
-        registration.items.length === 1
-          ? registration.items[0].offer.title
-          : registration.items.map((item) => item.offer.title).join(", ");
-
-      const session = await createStripeCheckoutSession({
-        orderId: order.id,
-        paymentId: payment.id,
-        registrationId,
-        customerEmail: registration.parentEmail,
-        currency: registration.selectedCurrency,
-        orderNumber: order.orderNumber,
-        checkoutLabel,
-        checkoutDescription,
-        amount: registration.totalAmount,
-      });
-
-      checkoutUrl = session.url ?? null;
-      providerReference = session.id;
-
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          providerOrderId: session.id,
-          providerReference: session.subscription?.toString() ?? null,
-          metadata: {
-            provider: "stripe",
-            checkoutSessionId: session.id,
-            checkoutUrl: session.url,
-          },
-        },
-      });
-
-      await tx.paymentTransaction.update({
-        where: { id: payment.id },
-        data: {
-          providerOrderId: session.id,
-          providerReference: session.subscription?.toString() ?? null,
-          rawPayload: {
-            checkoutSessionId: session.id,
-            checkoutUrl: session.url,
-          },
-        },
-      });
-    } else if (payload.gateway === "PAYPAL" && registration.totalAmount > 0) {
+    if (payload.gateway === "PAYPAL" && registration.totalAmount > 0) {
       if (registration.items.length !== 1) {
         throw new Error("PayPal subscriptions are available for single programme selections only. Please use Stripe for discounted or multi-child enrollments.");
       }
-
-      const paypal = await createPayPalSubscription({
-        orderId: order.id,
-        paymentId: payment.id,
-        orderNumber: order.orderNumber,
-        customerEmail: registration.parentEmail,
-        customerName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
-        currency: registration.selectedCurrency,
-        offerSlug: registration.items[0].offer.slug,
-        countryCode: registration.selectedCountryCode ?? "",
-      });
-
-      checkoutUrl = paypal.approvalUrl;
-      providerReference = paypal.subscriptionId;
-
-      await tx.order.update({
-        where: { id: order.id },
-        data: {
-          providerOrderId: paypal.subscriptionId,
-          providerReference: paypal.planId,
-          metadata: {
-            provider: "paypal",
-            subscriptionId: paypal.subscriptionId,
-            planId: paypal.planId,
-            productId: paypal.productId,
-          },
-        },
-      });
-
-      await tx.paymentTransaction.update({
-        where: { id: payment.id },
-        data: {
-          providerOrderId: paypal.subscriptionId,
-          providerReference: paypal.planId,
-          rawPayload: {
-            approvalUrl: paypal.approvalUrl,
-            productId: paypal.productId,
-            planId: paypal.planId,
-          },
-        },
-      });
     } else if (payload.gateway === "BANK_TRANSFER") {
       manualInstructions = getManualPaymentDetails();
     }
@@ -224,6 +132,7 @@ export async function createCheckoutDraft(
     });
 
     return {
+      registrationId,
       orderId: order.id,
       paymentId: payment.id,
       orderNumber: order.orderNumber,
@@ -231,20 +140,122 @@ export async function createCheckoutDraft(
       amount: payment.amount,
       currency: payment.currency,
       status: payment.status,
-      providerReference,
-      checkoutUrl,
+      selectedCountryCode: registration.selectedCountryCode,
+      parentEmail: registration.parentEmail,
+      parentName: `${registration.parentFirstName} ${registration.parentLastName}`.trim(),
+      itemTitles: registration.items.map((item) => item.offer.title),
+      itemSlugs: registration.items.map((item) => item.offer.slug),
       manualInstructions,
-      nextStep:
-        registration.totalAmount <= 0
-          ? "Your discount covered the full amount. Enrollment can be completed immediately."
-          : payload.gateway === "BANK_TRANSFER"
-          ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
-          : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`,
     };
   }, {
     maxWait: 10_000,
     timeout: 20_000,
   });
+
+  let checkoutUrl: string | null = null;
+  let providerReference: string | null = null;
+  let nextStep =
+    checkout.amount <= 0
+      ? "Your discount covered the full amount. Enrollment can be completed immediately."
+      : payload.gateway === "BANK_TRANSFER"
+        ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
+        : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`;
+
+  if (payload.gateway === "STRIPE" && checkout.amount > 0) {
+    const checkoutLabel =
+      checkout.itemTitles.length === 1
+        ? `${checkout.itemTitles[0]} subscription`
+        : "Gen-Mumins family subscription";
+    const checkoutDescription =
+      checkout.itemTitles.length === 1
+        ? checkout.itemTitles[0]
+        : checkout.itemTitles.join(", ");
+
+    const session = await createStripeCheckoutSession({
+      orderId: checkout.orderId,
+      paymentId: checkout.paymentId,
+      registrationId: checkout.registrationId,
+      customerEmail: checkout.parentEmail,
+      currency: checkout.currency,
+      orderNumber: checkout.orderNumber,
+      checkoutLabel,
+      checkoutDescription,
+      amount: checkout.amount,
+    });
+
+    checkoutUrl = session.url ?? null;
+    providerReference = session.id;
+
+    await db.order.update({
+      where: { id: checkout.orderId },
+      data: {
+        providerOrderId: session.id,
+        providerReference: session.subscription?.toString() ?? null,
+        metadata: {
+          provider: "stripe",
+          checkoutSessionId: session.id,
+          checkoutUrl: session.url,
+        },
+      },
+    });
+
+    await db.paymentTransaction.update({
+      where: { id: checkout.paymentId },
+      data: {
+        providerOrderId: session.id,
+        providerReference: session.subscription?.toString() ?? null,
+        rawPayload: {
+          checkoutSessionId: session.id,
+          checkoutUrl: session.url,
+        },
+      },
+    });
+  } else if (payload.gateway === "PAYPAL" && checkout.amount > 0) {
+    if (checkout.itemSlugs.length !== 1) {
+      throw new Error("PayPal subscriptions are available for single programme selections only. Please use Stripe for discounted or multi-child enrollments.");
+    }
+
+    const paypal = await createPayPalSubscription({
+      orderId: checkout.orderId,
+      paymentId: checkout.paymentId,
+      orderNumber: checkout.orderNumber,
+      customerEmail: checkout.parentEmail,
+      customerName: checkout.parentName,
+      currency: checkout.currency,
+      offerSlug: checkout.itemSlugs[0],
+      countryCode: checkout.selectedCountryCode ?? "",
+    });
+
+    checkoutUrl = paypal.approvalUrl;
+    providerReference = paypal.subscriptionId;
+
+    await db.order.update({
+      where: { id: checkout.orderId },
+      data: {
+        providerOrderId: paypal.subscriptionId,
+        providerReference: paypal.planId,
+        metadata: {
+          provider: "paypal",
+          subscriptionId: paypal.subscriptionId,
+          planId: paypal.planId,
+          productId: paypal.productId,
+        },
+      },
+    });
+
+    await db.paymentTransaction.update({
+      where: { id: checkout.paymentId },
+      data: {
+        providerOrderId: paypal.subscriptionId,
+        providerReference: paypal.planId,
+        rawPayload: {
+          approvalUrl: paypal.approvalUrl,
+          productId: paypal.productId,
+          planId: paypal.planId,
+        },
+      },
+    });
+  }
 
   if (checkout.amount <= 0 && payload.gateway !== "BANK_TRANSFER") {
     await markOrderPaid(checkout.orderId, {
@@ -259,7 +270,19 @@ export async function createCheckoutDraft(
     };
   }
 
-  return checkout;
+  return {
+    orderId: checkout.orderId,
+    paymentId: checkout.paymentId,
+    orderNumber: checkout.orderNumber,
+    gateway: checkout.gateway,
+    amount: checkout.amount,
+    currency: checkout.currency,
+    status: checkout.status,
+    providerReference,
+    checkoutUrl,
+    manualInstructions: checkout.manualInstructions,
+    nextStep,
+  };
 }
 
 export async function submitManualPaymentProof(
