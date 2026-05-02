@@ -921,6 +921,11 @@ async function getParentProfile(userId: string) {
           id: true,
           status: true,
           createdAt: true,
+          students: {
+            select: {
+              studentProfileId: true,
+            },
+          },
         },
       },
       orders: {
@@ -1015,8 +1020,17 @@ export async function getParentDashboardData(userId: string) {
 
   const latestOrder = parentProfile.orders[0] ?? null;
   const allChildren = dedupeParentStudents(parentProfile.students);
+  const completedStudentIds = new Set(
+    parentProfile.registrations
+      .filter((registration) => ["PAID", "CONVERTED"].includes(registration.status))
+      .flatMap((registration) =>
+        registration.students
+          .map((student) => student.studentProfileId)
+          .filter((studentId): studentId is string => Boolean(studentId)),
+      ),
+  );
   const visibleChildren = allChildren.filter(
-    studentHasDashboardAccess,
+    (student) => studentHasDashboardAccess(student) || completedStudentIds.has(student.id),
   );
   const hasCompletedRegistration = parentProfile.registrations.some((registration) =>
     ["APPROVED", "PAID", "CONVERTED", "ACTIVE", "COMPLETED"].includes(
@@ -1039,12 +1053,7 @@ export async function getParentDashboardData(userId: string) {
       )[0] ?? null;
   const hasUnlockedAccess =
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
-  const resolvedChildren =
-    visibleChildren.length > 0
-      ? visibleChildren
-      : hasUnlockedAccess
-        ? allChildren
-        : [];
+  const resolvedChildren = visibleChildren;
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentProfile.students.length > 0);
   const pendingReason = accessLocked
