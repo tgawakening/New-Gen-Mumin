@@ -174,6 +174,7 @@ export const DISCOUNT_COUPONS = {
   GENM50: { code: "GENM50", discountPercent: 50 },
   GEN75: { code: "GEN75", discountPercent: 75 },
   GENM75: { code: "GENM75", discountPercent: 75 },
+  GENMPK5833: { code: "GENMPK5833", discountAmount: 7000, currency: "PKR" },
   Q7N4FULLACCESS: { code: "Q7N4FULLACCESS", discountPercent: 100 },
 } as const;
 

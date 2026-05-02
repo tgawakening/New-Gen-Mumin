@@ -417,12 +417,24 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
       }
     }
 
-    const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
-    const effectiveFallbackCoupon = couponEligibleForSelection ? fallbackCoupon : null;
-    const couponPercent = coupon?.discountPercent ?? effectiveFallbackCoupon?.discountPercent ?? 0;
-    const couponAmount =
+  const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
+  const effectiveFallbackCoupon = couponEligibleForSelection ? fallbackCoupon : null;
+  const fallbackCouponAmount =
+    effectiveFallbackCoupon &&
+    "discountAmount" in effectiveFallbackCoupon &&
+    effectiveFallbackCoupon.currency === currency
+      ? effectiveFallbackCoupon.discountAmount
+      : 0;
+  const fallbackCouponPercent =
+    effectiveFallbackCoupon && "discountPercent" in effectiveFallbackCoupon
+      ? effectiveFallbackCoupon.discountPercent
+      : 0;
+  const couponPercent = coupon?.discountPercent ?? fallbackCouponPercent;
+  const couponAmount =
       coupon?.discountAmount && coupon.currency === currency
         ? coupon.discountAmount
+        : fallbackCouponAmount
+          ? fallbackCouponAmount
         : couponPercent > 0
           ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
           : 0;

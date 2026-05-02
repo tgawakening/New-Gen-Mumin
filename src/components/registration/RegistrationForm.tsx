@@ -87,6 +87,19 @@ type PriceBreakdown = {
   usesRegionalPricing: boolean;
 };
 
+function getCouponPercent(coupon: ReturnType<typeof getDiscountCoupon>) {
+  return coupon && "discountPercent" in coupon ? coupon.discountPercent : 0;
+}
+
+function getCouponFixedAmount(
+  coupon: ReturnType<typeof getDiscountCoupon>,
+  currency: string,
+) {
+  return coupon && "discountAmount" in coupon && coupon.currency === currency
+    ? coupon.discountAmount
+    : 0;
+}
+
 const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: string }> = [
   { value: "STRIPE", label: "Card / Pay by link", description: "Stripe subscription checkout for cards and hosted payment links." },
   { value: "PAYPAL", label: "PayPal", description: "PayPal monthly subscription approval for wallet-based recurring payments." },
@@ -545,8 +558,13 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         lines.push({ childLabel: child.fullName || `Child ${childIndex + 1}`, offerTitle: offer.title, price, multiChildDiscount: lineMultiChildDiscount });
       });
     });
-    const couponDiscount =
-      effectiveCoupon ? Math.round((subtotal - multiChildDiscount) * (effectiveCoupon.discountPercent / 100)) : 0;
+    const couponFixedAmount = getCouponFixedAmount(effectiveCoupon, selectedPhoneCountry.currency);
+    const couponPercent = getCouponPercent(effectiveCoupon);
+    const couponDiscount = couponFixedAmount
+      ? couponFixedAmount
+      : effectiveCoupon
+        ? Math.round((subtotal - multiChildDiscount) * (couponPercent / 100))
+        : 0;
     return {
       currency: selectedPhoneCountry.currency,
       subtotal,
@@ -555,7 +573,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       discount: multiChildDiscount + couponDiscount,
       total: subtotal - multiChildDiscount - couponDiscount,
       couponCode: effectiveCoupon?.code ?? null,
-      couponDiscountPercent: effectiveCoupon?.discountPercent ?? 0,
+      couponDiscountPercent: couponPercent,
+      couponFixedAmount,
       lines,
     };
   }, [children, effectiveCoupon, offerMap, selectedPhoneCountry]);
@@ -579,11 +598,14 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       };
     }
 
-    return {
-      tone: "success" as const,
-      message: `${appliedCoupon.discountPercent}% discount applied to this checkout.`,
-    };
-  }, [appliedCoupon, couponCode, couponEligibleForBundle]);
+      return {
+        tone: "success" as const,
+        message:
+          getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency) > 0
+            ? `${formatMoney(getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency), selectedPhoneCountry.currency)} discount applied to this checkout.`
+            : `${getCouponPercent(appliedCoupon)}% discount applied to this checkout.`,
+      };
+  }, [appliedCoupon, couponCode, couponEligibleForBundle, selectedPhoneCountry.currency]);
 
   const isPakistan = selectedPhoneCountry.code === "PK";
   const isFreeEnrollment = summary.total <= 0 && summary.lines.length > 0;
@@ -1155,7 +1177,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               <span className="flex items-center gap-2">
                                 <span>Coupon discount</span>
                                 <span className="rounded-full bg-[#2f6b4b] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-white">
-                                  {summary.couponDiscountPercent}% applied
+                                  {summary.couponFixedAmount > 0 ? "Offer applied" : `${summary.couponDiscountPercent}% applied`}
                                 </span>
                               </span>
                               <span>- {formatMoney(summary.couponDiscount, summary.currency)}</span>

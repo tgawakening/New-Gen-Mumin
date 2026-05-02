@@ -93,6 +93,7 @@ const coupons = [
   { code: "GENM50", discountPercent: 50 },
   { code: "GEN75", discountPercent: 75 },
   { code: "GENM75", discountPercent: 75 },
+  { code: "GENMPK5833", discountAmount: 7000, currency: "PKR" },
   { code: "Q7N4FULLACCESS", discountPercent: 100 },
 ];
 
@@ -263,11 +264,15 @@ async function main() {
       where: { code: coupon.code },
       update: {
         discountPercent: coupon.discountPercent,
+        discountAmount: coupon.discountAmount,
+        currency: coupon.currency,
         isActive: true,
       },
       create: {
         code: coupon.code,
         discountPercent: coupon.discountPercent,
+        discountAmount: coupon.discountAmount,
+        currency: coupon.currency,
         isActive: true,
       },
     });
