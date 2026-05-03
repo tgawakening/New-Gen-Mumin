@@ -34,6 +34,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
+  const teacherDashboard = dashboard;
 
   const params = searchParams ? await searchParams : undefined;
 
@@ -51,6 +52,8 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
     const termId = cleanOptional(formData.get("termId"));
     const contentType = cleanOptional(formData.get("contentType"));
     const materials = cleanOptional(formData.get("materials"));
+    const programmeFocus = cleanOptional(formData.get("programmeFocus"));
+    const lessonObjective = cleanOptional(formData.get("lessonObjective"));
 
     if (!scheduleId || !lessonDateRaw || !topic || !summary) {
       throw new Error("Please complete class, lesson date, topic, and summary before publishing.");
@@ -69,6 +72,9 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         summary: buildLessonPayload({
           topic,
           summary,
+          instructorName: teacherDashboard.teacherName,
+          programmeFocus,
+          lessonObjective,
           homework,
           resourceLinks: splitLinks(resourceLinks),
           parentPrompt,
@@ -102,6 +108,8 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
     const weekLabel = cleanOptional(formData.get("taskWeekLabel"));
     const termId = cleanOptional(formData.get("taskTermId"));
     const familyNote = cleanOptional(formData.get("familyNote"));
+    const programmeFocus = cleanOptional(formData.get("taskProgrammeFocus"));
+    const taskCategory = cleanOptional(formData.get("taskCategory"));
 
     if (!programId || !title || !instructions) {
       throw new Error("Please complete programme, task title, and instructions before publishing.");
@@ -114,6 +122,9 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         instructions: buildTaskPayload({
           title,
           instructions,
+          instructorName: teacherDashboard.teacherName,
+          programmeFocus,
+          taskCategory,
           resourceLinks: splitLinks(resourceLinks),
           evidenceMode,
           weekLabel,
@@ -151,7 +162,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         <div className="space-y-6">
           <TeacherSection eyebrow="Programme map" title="Your current teaching streams">
             <div className="grid gap-4 lg:grid-cols-2">
-              {dashboard.rosters.map((roster) => {
+              {teacherDashboard.rosters.map((roster) => {
                 const programme = getGenMProgrammeByTitle(roster.title);
                 const teachers = getGenMTeachersForProgramme(roster.title);
 
@@ -202,7 +213,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                   required
                 >
                   <option value="">Select a class</option>
-                  {dashboard.classes.map((entry) => (
+                  {teacherDashboard.classes.map((entry) => (
                     <option key={entry.id} value={entry.id}>
                       {entry.title} • {entry.startTime}-{entry.endTime}
                     </option>
@@ -262,6 +273,14 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                     placeholder="Story, worksheet, listening task"
                   />
                 </label>
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Programme focus
+                  <input
+                    name="programmeFocus"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                    placeholder="Makharij, Hijrah, dialogue practice"
+                  />
+                </label>
               </div>
 
               <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
@@ -272,6 +291,15 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                   className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
                   placeholder="What was covered today, what should parents know, and what should students focus on?"
                   required
+                />
+              </label>
+
+              <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                Lesson objective
+                <input
+                  name="lessonObjective"
+                  className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  placeholder="What should learners understand or practise by the end of this lesson?"
                 />
               </label>
 
@@ -332,7 +360,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                   required
                 >
                   <option value="">Select a programme</option>
-                  {dashboard.rosters.map((roster) => (
+                  {teacherDashboard.rosters.map((roster) => (
                     <option key={roster.programId} value={roster.programId}>
                       {roster.title}
                     </option>
@@ -396,7 +424,24 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
                     <option value="verbal">Verbal explanation</option>
                   </select>
                 </label>
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Task category
+                  <input
+                    name="taskCategory"
+                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                    placeholder="Worksheet, memorisation, recitation, project"
+                  />
+                </label>
               </div>
+
+              <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                Programme focus
+                <input
+                  name="taskProgrammeFocus"
+                  className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                  placeholder="Noon saakin, Seerah reflection, first-aid drill"
+                />
+              </label>
 
               <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                 Task instructions
@@ -441,7 +486,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         <div className="space-y-6">
           <TeacherSection eyebrow="Recent publishing" title="Latest lesson updates">
             <TeacherInfoList
-              items={dashboard.lessonLogs.slice(0, 6).map((entry) => {
+              items={teacherDashboard.lessonLogs.slice(0, 6).map((entry) => {
                 const parsed = parseLessonPayload(entry.summary, entry.homework);
                 const label = parsed.weekLabel ? `${parsed.weekLabel} • ` : "";
                 return `${entry.title} • ${label}${parsed.topic || entry.topic} • ${entry.lessonDate.toLocaleDateString("en-GB")}`;
@@ -452,7 +497,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
 
           <TeacherSection eyebrow="Tasks" title="Recent assignments">
             <TeacherInfoList
-              items={dashboard.assignments.slice(0, 6).map((task) => {
+              items={teacherDashboard.assignments.slice(0, 6).map((task) => {
                 const parsed = parseTaskPayload(task.instructions);
                 const due = task.dueDate ? task.dueDate.toLocaleDateString("en-GB") : "No due date";
                 const label = parsed.weekLabel ? `${parsed.weekLabel} • ` : "";

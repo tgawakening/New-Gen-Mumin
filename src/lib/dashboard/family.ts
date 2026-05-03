@@ -47,6 +47,20 @@ type ChildCourseSummary = {
     }>;
   recentLessonTopics: string[];
   currentTaskTitles: string[];
+  recentLessonCards: Array<{
+    id: string;
+    topic: string;
+    teacherName: string | null;
+    weekLabel: string | null;
+    contentType: string | null;
+  }>;
+  currentTaskCards: Array<{
+    id: string;
+    title: string;
+    teacherName: string | null;
+    taskCategory: string | null;
+    weekLabel: string | null;
+  }>;
 };
 
 type ChildScheduleSummary = {
@@ -85,6 +99,9 @@ type ChildAssignmentSummary = {
   programTitle: string;
   title: string;
   instructions: string | null;
+  teacherName: string | null;
+  programmeFocus: string | null;
+  taskCategory: string | null;
   resourceLinks: string[];
   evidenceMode: string | null;
   weekLabel: string | null;
@@ -105,6 +122,8 @@ type ChildLessonUpdateSummary = {
   lessonDate: Date;
   topic: string;
   summary: string;
+  lessonObjective: string | null;
+  programmeFocus: string | null;
   homework: string | null;
   teacherName: string | null;
   resourceLinks: string[];
@@ -629,13 +648,19 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
       const submission = submissions.find((entry) => entry.assignmentId === assignment.id) ?? null;
       const parsedInstructions = parseTaskPayload(assignment.instructions ?? null);
 
-      return {
-        id: assignment.id,
-        programTitle: enrollment.program.title,
-        title: assignment.title,
-        instructions: parsedInstructions.instructions,
-        resourceLinks: parsedInstructions.resourceLinks,
-        evidenceMode: parsedInstructions.evidenceMode,
+        return {
+          id: assignment.id,
+          programTitle: enrollment.program.title,
+          title: assignment.title,
+          instructions: parsedInstructions.instructions,
+          teacherName:
+            parsedInstructions.instructorName ??
+            getGenMTeachersForProgramme(enrollment.program.title)[0]?.name ??
+            null,
+          programmeFocus: parsedInstructions.programmeFocus,
+          taskCategory: parsedInstructions.taskCategory,
+          resourceLinks: parsedInstructions.resourceLinks,
+          evidenceMode: parsedInstructions.evidenceMode,
         weekLabel: parsedInstructions.weekLabel,
         termId: parsedInstructions.termId,
         familyNote: parsedInstructions.familyNote,
@@ -674,8 +699,10 @@ function mapLessonUpdates(enrollments: any[]) {
             lessonDate: log.lessonDate,
             topic: parsedSummary.topic || log.topic,
             summary: parsedSummary.summary,
+            lessonObjective: parsedSummary.lessonObjective,
+            programmeFocus: parsedSummary.programmeFocus,
             homework: parsedSummary.homework,
-            teacherName: buildTeacherName(schedule.teacher),
+            teacherName: parsedSummary.instructorName ?? buildTeacherName(schedule.teacher),
             resourceLinks: parsedSummary.resourceLinks,
             parentPrompt: parsedSummary.parentPrompt,
             weekLabel: parsedSummary.weekLabel,
@@ -869,11 +896,31 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
         .filter((update) => update.programTitle === enrollment.program.title)
         .slice(0, 4)
         .map((update) => update.topic),
-      currentTaskTitles: assignments
-        .filter((assignment) => assignment.programTitle === enrollment.program.title)
-        .slice(0, 4)
-        .map((assignment) => assignment.title),
-    })),
+        currentTaskTitles: assignments
+          .filter((assignment) => assignment.programTitle === enrollment.program.title)
+          .slice(0, 4)
+          .map((assignment) => assignment.title),
+        recentLessonCards: lessonUpdates
+          .filter((update) => update.programTitle === enrollment.program.title)
+          .slice(0, 3)
+          .map((update) => ({
+            id: update.id,
+            topic: update.topic,
+            teacherName: update.teacherName,
+            weekLabel: update.weekLabel,
+            contentType: update.contentType,
+          })),
+        currentTaskCards: assignments
+          .filter((assignment) => assignment.programTitle === enrollment.program.title)
+          .slice(0, 3)
+          .map((assignment) => ({
+            id: assignment.id,
+            title: assignment.title,
+            teacherName: assignment.teacherName,
+            taskCategory: assignment.taskCategory,
+            weekLabel: assignment.weekLabel,
+          })),
+      })),
     schedule,
     nextClass: schedule[0] ?? null,
     quizzes,

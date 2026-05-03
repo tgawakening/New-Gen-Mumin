@@ -96,6 +96,48 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                   ))}
                 </div>
               ) : null}
+              {(course.recentLessonCards.length || course.currentTaskCards.length) ? (
+                <div className="mt-4 space-y-3">
+                  {course.recentLessonCards.length ? (
+                    <div className="rounded-[18px] bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                        Latest lesson updates
+                      </p>
+                      <div className="mt-3 space-y-2 text-sm text-[#5f6b7a]">
+                        {course.recentLessonCards.map((lesson) => (
+                          <div key={lesson.id} className="rounded-[14px] border border-[#eef2f5] px-3 py-2">
+                            <p className="font-semibold text-[#22304a]">{lesson.topic}</p>
+                            <p className="mt-1 text-xs text-[#6d7785]">
+                              By {lesson.teacherName ?? "Assigned teacher"}
+                              {lesson.weekLabel ? ` • ${lesson.weekLabel}` : ""}
+                              {lesson.contentType ? ` • ${lesson.contentType}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {course.currentTaskCards.length ? (
+                    <div className="rounded-[18px] bg-white p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                        Current tasks
+                      </p>
+                      <div className="mt-3 space-y-2 text-sm text-[#5f6b7a]">
+                        {course.currentTaskCards.map((task) => (
+                          <div key={task.id} className="rounded-[14px] border border-[#eef2f5] px-3 py-2">
+                            <p className="font-semibold text-[#22304a]">{task.title}</p>
+                            <p className="mt-1 text-xs text-[#6d7785]">
+                              By {task.teacherName ?? "Assigned teacher"}
+                              {task.weekLabel ? ` • ${task.weekLabel}` : ""}
+                              {task.taskCategory ? ` • ${task.taskCategory}` : ""}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

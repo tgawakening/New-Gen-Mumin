@@ -4,6 +4,9 @@ const TASK_PREFIX = "__GENM_TASK__:";
 type LessonPayload = {
   topic: string;
   summary: string;
+  instructorName?: string | null;
+  programmeFocus?: string | null;
+  lessonObjective?: string | null;
   homework?: string | null;
   resourceLinks?: string[];
   parentPrompt?: string | null;
@@ -16,6 +19,9 @@ type LessonPayload = {
 type TaskPayload = {
   title: string;
   instructions: string;
+  instructorName?: string | null;
+  programmeFocus?: string | null;
+  taskCategory?: string | null;
   resourceLinks?: string[];
   evidenceMode?: string | null;
   weekLabel?: string | null;
@@ -40,6 +46,9 @@ export function parseLessonPayload(value: string, fallbackHomework?: string | nu
     return {
       topic: "",
       summary: value,
+      instructorName: null,
+      programmeFocus: null,
+      lessonObjective: null,
       homework: fallbackHomework ?? null,
       resourceLinks: [] as string[],
       parentPrompt: null,
@@ -56,6 +65,9 @@ export function parseLessonPayload(value: string, fallbackHomework?: string | nu
     return {
       topic: "",
       summary: value,
+      instructorName: null,
+      programmeFocus: null,
+      lessonObjective: null,
       homework: fallbackHomework ?? null,
       resourceLinks: [] as string[],
       parentPrompt: null,
@@ -66,12 +78,15 @@ export function parseLessonPayload(value: string, fallbackHomework?: string | nu
     };
   }
 
-  return {
-    topic: parsed.topic ?? "",
-    summary: parsed.summary ?? "",
-    homework: parsed.homework ?? fallbackHomework ?? null,
-    resourceLinks: Array.isArray(parsed.resourceLinks) ? parsed.resourceLinks : [],
-    parentPrompt: parsed.parentPrompt ?? null,
+    return {
+      topic: parsed.topic ?? "",
+      summary: parsed.summary ?? "",
+      instructorName: parsed.instructorName ?? null,
+      programmeFocus: parsed.programmeFocus ?? null,
+      lessonObjective: parsed.lessonObjective ?? null,
+      homework: parsed.homework ?? fallbackHomework ?? null,
+      resourceLinks: Array.isArray(parsed.resourceLinks) ? parsed.resourceLinks : [],
+      parentPrompt: parsed.parentPrompt ?? null,
     weekLabel: parsed.weekLabel ?? null,
     termId: parsed.termId ?? null,
     contentType: parsed.contentType ?? null,
@@ -87,6 +102,9 @@ export function parseTaskPayload(value: string | null) {
   if (!value || !value.startsWith(TASK_PREFIX)) {
     return {
       instructions: value,
+      instructorName: null as string | null,
+      programmeFocus: null as string | null,
+      taskCategory: null as string | null,
       resourceLinks: [] as string[],
       evidenceMode: null as string | null,
       weekLabel: null as string | null,
@@ -100,6 +118,9 @@ export function parseTaskPayload(value: string | null) {
   if (!parsed) {
     return {
       instructions: value,
+      instructorName: null as string | null,
+      programmeFocus: null as string | null,
+      taskCategory: null as string | null,
       resourceLinks: [] as string[],
       evidenceMode: null as string | null,
       weekLabel: null as string | null,
@@ -110,6 +131,9 @@ export function parseTaskPayload(value: string | null) {
 
   return {
     instructions: parsed.instructions ?? null,
+    instructorName: parsed.instructorName ?? null,
+    programmeFocus: parsed.programmeFocus ?? null,
+    taskCategory: parsed.taskCategory ?? null,
     resourceLinks: Array.isArray(parsed.resourceLinks) ? parsed.resourceLinks : [],
     evidenceMode: parsed.evidenceMode ?? null,
     weekLabel: parsed.weekLabel ?? null,
