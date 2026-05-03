@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
@@ -25,6 +26,8 @@ type PageProps = {
     studentRegistrationStatus?: string;
     studentProgram?: string;
     studentPricing?: string;
+    notice?: string;
+    tone?: string;
   }>;
 };
 
@@ -107,6 +110,28 @@ function tabHref(
   return `/admin?${params.toString()}`;
 }
 
+function buildReturnHref(
+  tab: string,
+  extra: Record<string, string | undefined> = {},
+) {
+  return tabHref(tab, extra);
+}
+
+function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
+  if (!notice) return null;
+
+  const styles =
+    tone === "error"
+      ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]"
+      : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]";
+
+  return (
+    <div className={`rounded-[20px] border px-5 py-4 text-sm font-medium shadow-sm ${styles}`}>
+      {notice}
+    </div>
+  );
+}
+
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
 
@@ -135,48 +160,74 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
     const orderId = String(formData.get("orderId") || "");
     const referenceKey = String(formData.get("referenceKey") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
     if (!orderId) return;
 
-    await markOrderPaid(orderId, {
-      gateway: "BANK_TRANSFER",
-      providerReference: referenceKey || null,
-      rawPayload: {
-        approvedByAdmin: true,
-        approvedAt: new Date().toISOString(),
-      },
-    });
+    try {
+      await markOrderPaid(orderId, {
+        gateway: "BANK_TRANSFER",
+        providerReference: referenceKey || null,
+        rawPayload: {
+          approvedByAdmin: true,
+          approvedAt: new Date().toISOString(),
+        },
+      });
 
-    revalidatePath("/admin");
-    revalidatePath("/parent");
-    revalidatePath("/student");
+      revalidatePath("/admin");
+      revalidatePath("/parent");
+      revalidatePath("/student");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order completed successfully&tone=success`);
+    } catch {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to complete this order right now&tone=error`);
+    }
   }
 
   async function cancelOrder(formData: FormData) {
     "use server";
     const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
     if (!orderId) return;
-    await markOrderCancelled(orderId);
-    revalidatePath("/admin");
-    revalidatePath("/parent");
-    revalidatePath("/student");
+
+    try {
+      await markOrderCancelled(orderId);
+      revalidatePath("/admin");
+      revalidatePath("/parent");
+      revalidatePath("/student");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order cancelled successfully&tone=success`);
+    } catch {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to cancel this order right now&tone=error`);
+    }
   }
 
   async function deleteStudent(formData: FormData) {
     "use server";
     const userId = String(formData.get("userId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=students");
     if (!userId) return;
-    await db.user.delete({ where: { id: userId } });
-    revalidatePath("/admin");
+
+    try {
+      await db.user.delete({ where: { id: userId } });
+      revalidatePath("/admin");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Student deleted successfully&tone=success`);
+    } catch {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to delete this student right now&tone=error`);
+    }
   }
 
   async function resendCompletionEmail(formData: FormData) {
     "use server";
 
     const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
     if (!orderId) return;
 
-    await resendOrderCompletionEmails(orderId);
-    revalidatePath("/admin");
+    try {
+      await resendOrderCompletionEmails(orderId);
+      revalidatePath("/admin");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
+    } catch {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to resend the confirmation email right now&tone=error`);
+    }
   }
 
   const params = searchParams ? await searchParams : {};
@@ -194,10 +245,23 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   };
 
   const data = await getAdminDashboardData(filters);
+  const currentOrderHref = buildReturnHref("orders", {
+    orderStatus: params?.orderStatus,
+    orderPayment: params?.orderPayment,
+    orderProgram: params?.orderProgram,
+    orderPricing: params?.orderPricing,
+  });
+  const currentStudentHref = buildReturnHref("students", {
+    studentPayment: params?.studentPayment,
+    studentRegistrationStatus: params?.studentRegistrationStatus,
+    studentProgram: params?.studentProgram,
+    studentPricing: params?.studentPricing,
+  });
 
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
       <div className="section-container space-y-5">
+        <NoticeBanner notice={params?.notice} tone={params?.tone} />
         <div className="rounded-[28px] border border-[#dce4ed] bg-white px-4 py-4 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="flex flex-col gap-3 md:flex-row md:items-center">
@@ -402,6 +466,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         <form action={completeOrder}>
                           <input type="hidden" name="orderId" value={order.id} />
                           <input type="hidden" name="referenceKey" value={order.manualSubmission?.referenceKey ?? ""} />
+                          <input type="hidden" name="returnUrl" value={currentOrderHref} />
                           <button className="w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
                             Complete
                           </button>
@@ -413,6 +478,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                             </div>
                             <form action={resendCompletionEmail}>
                               <input type="hidden" name="orderId" value={order.id} />
+                              <input type="hidden" name="returnUrl" value={currentOrderHref} />
                               <button className="w-full rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
                                 Resend confirmation
                               </button>
@@ -426,6 +492,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       {canCancelOrder(order) ? (
                         <form action={cancelOrder}>
                           <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnUrl" value={currentOrderHref} />
                           <button className="w-full rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
                             Cancel
                           </button>
@@ -511,6 +578,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
                       <form action={deleteStudent}>
                         <input type="hidden" name="userId" value={student.userId} />
+                        <input type="hidden" name="returnUrl" value={currentStudentHref} />
                         <button className="w-full rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
                           Delete
                         </button>
