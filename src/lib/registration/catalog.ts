@@ -167,6 +167,17 @@ const GBP_RATES: Record<string, number> = {
   JPY: 191,
 };
 
+export function convertAmountToGbp(amount: number, currency?: string | null) {
+  const normalizedCurrency = currency?.toUpperCase() ?? "GBP";
+  const rate = GBP_RATES[normalizedCurrency];
+
+  if (!rate || rate <= 0) {
+    return amount;
+  }
+
+  return amount / rate;
+}
+
 export const DISCOUNT_COUPONS = {
   GEN25: { code: "GEN25", discountPercent: 25 },
   GENM25: { code: "GENM25", discountPercent: 25 },

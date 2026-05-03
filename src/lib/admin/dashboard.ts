@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { convertAmountToGbp } from "@/lib/registration/catalog";
 
 function extractNoteValue(notes: string | null | undefined, label: string) {
   if (!notes) return null;
@@ -45,7 +46,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     activeEnrollments,
     pendingRegistrations,
     unreadMessages,
-    paidRevenue,
+    paidOrders,
     recentRegistrations,
     orders,
     students,
@@ -59,9 +60,12 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       },
     }),
     db.contactMessage.count({ where: { status: "NEW" } }),
-    db.order.aggregate({
+    db.order.findMany({
       where: { status: "SUCCEEDED" },
-      _sum: { totalAmount: true },
+      select: {
+        totalAmount: true,
+        currency: true,
+      },
     }),
     db.registration.findMany({
       orderBy: { createdAt: "desc" },
@@ -307,13 +311,17 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     new Set(studentsView.flatMap((student) => student.enrollments.map((entry) => entry.programTitle))),
   ).sort((a, b) => a.localeCompare(b));
 
+  const revenueGbp = paidOrders.reduce((sum, order) => {
+    return sum + convertAmountToGbp(order.totalAmount, order.currency);
+  }, 0);
+
   return {
     metrics: {
       totalStudents,
       activeEnrollments,
       pendingRegistrations,
       unreadMessages,
-      revenueGbp: paidRevenue._sum.totalAmount ?? 0,
+      revenueGbp: Math.round(revenueGbp * 100) / 100,
     },
     recentRegistrations,
     orders: filteredOrders,

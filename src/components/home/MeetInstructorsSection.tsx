@@ -11,7 +11,7 @@ const INSTRUCTORS = [
   {
     src: "/images/ustad-abubakar.png",
     name: "Ustadh Abubakar Sadique",
-    role: "Program Director",
+    role: "Program Lead Coordinator",
     bio: "Hafiz-e-Qur'an with formal Islamic education. Holds AD & BS from the University of the Punjab. Certified in Teacher Training, Islamic Finance (Kuwait University), Arabic Language, and School Management.",
   },
   {
@@ -34,15 +34,15 @@ const INSTRUCTORS = [
   },
   {
     src: "/images/ustad-zeba.png",
-    name: "Ustadha Zeba Ghazal Quraishi",
-    role: "BA Architecture",
-    bio: "Teacher of Islamic education in Kuwait and Dubai. Former SEND specialist teaching assistant in the UK (Secondary Maths). Over 25 years of voluntary Islamic teaching experience within community education.",
+    name: "Sister Javeria Khuram",
+    role: "Seerah Instructor",
+    bio: "Supports the Seerah pathway with child-friendly storytelling, reflective discussion, and weekly lesson guidance that helps families connect Prophetic character with daily life.",
   },
   {
     src: "/images/ustad-nimra.png",
-    name: "Dr. Nimra Khan",
-    role: "Arabic Course Instructor",
-    bio: "Medical graduate with a one-year Arabic specialization. Former instructor of this program with strong expertise in spoken Arabic, widely known for simplifying language learning for practical everyday use.",
+    name: "Sister Sabah",
+    role: "Seerah Instructor",
+    bio: "Contributes to the Seerah stream through nurturing class delivery, engaging follow-up prompts, and practical reflection activities that keep children connected to the weekly Prophetic lessons.",
   },
 ];
 

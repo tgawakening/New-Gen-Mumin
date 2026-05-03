@@ -37,14 +37,14 @@ type ChildCourseSummary = {
     level: string;
     highlights: string[];
   }>;
-  teachers: Array<{
-    name: string;
-    title: string;
-    credential: string;
-    bio: string;
-    dummyEmail: string;
-    specialties: string[];
-  }>;
+    teachers: Array<{
+      name: string;
+      title: string;
+      credential: string;
+      bio: string;
+      email: string;
+      specialties: string[];
+    }>;
   recentLessonTopics: string[];
   currentTaskTitles: string[];
 };
@@ -857,14 +857,14 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       wholePlanOutcomes: genMCoreOutcomes,
       policies: genMPolicies,
       termPlans: getGenMTermPlansForProgramme(enrollment.program.title),
-      teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
-        name: teacher.name,
-        title: teacher.title,
-        credential: teacher.credential,
-        bio: teacher.bio,
-        dummyEmail: teacher.dummyEmail,
-        specialties: teacher.specialties,
-      })),
+        teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
+          name: teacher.name,
+          title: teacher.title,
+          credential: teacher.credential,
+          bio: teacher.bio,
+          email: teacher.email,
+          specialties: teacher.specialties,
+        })),
       recentLessonTopics: lessonUpdates
         .filter((update) => update.programTitle === enrollment.program.title)
         .slice(0, 4)
@@ -916,26 +916,26 @@ async function getParentProfile(userId: string) {
     where: { userId },
     include: {
       user: true,
-      registrations: {
-        select: {
-          id: true,
-          status: true,
-          createdAt: true,
+        registrations: {
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
           students: {
             select: {
               studentProfileId: true,
             },
           },
         },
-      },
-      orders: {
-        orderBy: { createdAt: "desc" },
-        take: 1,
-        include: {
-          payments: {
-            orderBy: { createdAt: "desc" },
-            take: 1,
-          },
+        },
+        orders: {
+          orderBy: { createdAt: "desc" },
+          take: 12,
+          include: {
+            payments: {
+              orderBy: { createdAt: "desc" },
+              take: 1,
+            },
         },
       },
       students: {
@@ -1018,7 +1018,12 @@ export async function getParentDashboardData(userId: string) {
     return null;
   }
 
-  const latestOrder = parentProfile.orders[0] ?? null;
+  const latestOrder =
+    parentProfile.orders.find(
+      (order) => order.status === "SUCCEEDED" || order.payments[0]?.status === "SUCCEEDED",
+    ) ??
+    parentProfile.orders[0] ??
+    null;
   const allChildren = dedupeParentStudents(parentProfile.students);
   const completedStudentIds = new Set(
     parentProfile.registrations

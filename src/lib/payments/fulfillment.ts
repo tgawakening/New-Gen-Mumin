@@ -20,7 +20,7 @@ export async function markOrderPaid(
     providerPaymentId?: string | null;
     providerReference?: string | null;
     rawPayload?: unknown;
-    gateway?: "STRIPE" | "PAYPAL" | "BANK_TRANSFER";
+    gateway?: "STRIPE" | "PAYPAL" | "BANK_TRANSFER" | "NAYAPAY";
     subscriptionId?: string | null;
   },
 ) {

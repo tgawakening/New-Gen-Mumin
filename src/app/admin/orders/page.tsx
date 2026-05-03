@@ -28,9 +28,9 @@ function statusClass(status: string) {
   return "bg-[#eef2f6] text-[#556274]";
 }
 
-function canApproveOrder(order: { gateway: string; status: string; paymentStatus: string }) {
+function canMarkOrderPaid(order: { gateway: string; status: string; paymentStatus: string }) {
   return (
-    order.gateway === "BANK_TRANSFER" &&
+    ["BANK_TRANSFER", "STRIPE", "PAYPAL", "NAYAPAY"].includes(order.gateway) &&
     ["UNDER_REVIEW", "PENDING", "INITIATED"].includes(order.status) &&
     order.paymentStatus !== "SUCCEEDED"
   );
@@ -46,6 +46,7 @@ export default async function AdminOrdersPage({
 
     const orderId = String(formData.get("orderId") || "");
     const referenceKey = String(formData.get("referenceKey") || "");
+    const gateway = String(formData.get("gateway") || "BANK_TRANSFER");
     const returnUrl = String(formData.get("returnUrl") || "/admin/orders");
 
     if (!orderId) {
@@ -54,10 +55,14 @@ export default async function AdminOrdersPage({
 
     try {
       await markOrderPaid(orderId, {
-        gateway: "BANK_TRANSFER",
+        gateway:
+          gateway === "STRIPE" || gateway === "PAYPAL" || gateway === "NAYAPAY" || gateway === "BANK_TRANSFER"
+            ? gateway
+            : "BANK_TRANSFER",
         providerReference: referenceKey || null,
         rawPayload: {
           approvedByAdmin: true,
+          approvedGateway: gateway,
           approvedAt: new Date().toISOString(),
         },
       });
@@ -131,7 +136,7 @@ export default async function AdminOrdersPage({
             {orders.map((order) => {
               const latestPayment = order.payments[0] ?? null;
               const manualSubmission = latestPayment?.manualSubmission ?? null;
-              const canApproveManual = canApproveOrder({
+              const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
                 paymentStatus: latestPayment?.status ?? order.status,
@@ -210,12 +215,13 @@ export default async function AdminOrdersPage({
                       name="referenceKey"
                       value={manualSubmission?.referenceKey ?? ""}
                     />
+                    <input type="hidden" name="gateway" value={order.gateway} />
                     <input type="hidden" name="returnUrl" value="/admin/orders" />
                     <button
                       type="submit"
                       className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#182236]"
                     >
-                      Approve and unlock dashboard
+                      {order.gateway === "BANK_TRANSFER" ? "Approve and unlock dashboard" : "Mark paid and unlock dashboard"}
                     </button>
                   </form>
                 ) : order.status === "SUCCEEDED" || latestPayment?.status === "SUCCEEDED" ? (

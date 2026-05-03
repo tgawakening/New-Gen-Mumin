@@ -80,13 +80,13 @@ function formatMoney(amount: number, currency: string) {
   }).format(amount);
 }
 
-function canCompleteOrder(order: {
+function canMarkOrderPaid(order: {
   gateway: string;
   status: string;
   paymentStatus: string;
 }) {
   return (
-    order.gateway === "BANK_TRANSFER" &&
+    ["BANK_TRANSFER", "STRIPE", "PAYPAL", "NAYAPAY"].includes(order.gateway) &&
     ["UNDER_REVIEW", "PENDING", "INITIATED"].includes(order.status) &&
     order.paymentStatus !== "SUCCEEDED"
   );
@@ -160,15 +160,20 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
     const orderId = String(formData.get("orderId") || "");
     const referenceKey = String(formData.get("referenceKey") || "");
+    const gateway = String(formData.get("gateway") || "BANK_TRANSFER");
     const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
     if (!orderId) return;
 
     try {
       await markOrderPaid(orderId, {
-        gateway: "BANK_TRANSFER",
+        gateway:
+          gateway === "STRIPE" || gateway === "PAYPAL" || gateway === "NAYAPAY" || gateway === "BANK_TRANSFER"
+            ? gateway
+            : "BANK_TRANSFER",
         providerReference: referenceKey || null,
         rawPayload: {
           approvedByAdmin: true,
+          approvedGateway: gateway,
           approvedAt: new Date().toISOString(),
         },
       });
@@ -462,13 +467,18 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </div>
                     <div className="space-y-2 text-sm">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
-                      {canCompleteOrder(order) ? (
+                      {canMarkOrderPaid(order) ? (
                         <form action={completeOrder}>
                           <input type="hidden" name="orderId" value={order.id} />
-                          <input type="hidden" name="referenceKey" value={order.manualSubmission?.referenceKey ?? ""} />
+                          <input
+                            type="hidden"
+                            name="referenceKey"
+                            value={order.manualSubmission?.referenceKey ?? ""}
+                          />
+                          <input type="hidden" name="gateway" value={order.gateway} />
                           <input type="hidden" name="returnUrl" value={currentOrderHref} />
                           <button className="w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
-                            Complete
+                            {order.gateway === "BANK_TRANSFER" ? "Complete" : "Mark paid"}
                           </button>
                         </form>
                         ) : order.paymentStatus === "SUCCEEDED" || order.status === "SUCCEEDED" ? (
