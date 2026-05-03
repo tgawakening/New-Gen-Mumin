@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import { db } from "@/lib/db";
-import { provisionRegistrationAccess } from "@/lib/enrollment/access";
+import { syncRegistrationAccess } from "@/lib/enrollment/access";
 import { getManualPaymentDetails } from "@/lib/payments/config";
 import { markOrderPaid } from "@/lib/payments/fulfillment";
 import { createPayPalSubscription } from "@/lib/payments/paypal";
@@ -44,8 +44,6 @@ export async function createCheckoutDraft(
     if (!registration.parentProfileId || !registration.parentProfile) {
       throw new Error("Parent profile is required before checkout.");
     }
-
-    await provisionRegistrationAccess(tx, registrationId, "PENDING");
 
     let order = await tx.order.findFirst({
       where: { registrationId },
@@ -151,6 +149,12 @@ export async function createCheckoutDraft(
     maxWait: 10_000,
     timeout: 20_000,
   });
+
+  try {
+    await syncRegistrationAccess(checkout.registrationId, "PENDING");
+  } catch (error) {
+    console.error("Unable to pre-provision registration access before payment.", error);
+  }
 
   let checkoutUrl: string | null = null;
   let providerReference: string | null = null;

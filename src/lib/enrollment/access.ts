@@ -289,7 +289,17 @@ export async function activateOrderEnrollments(orderId: string) {
     return;
   }
 
+  await syncRegistrationAccess(order.registrationId, "ACTIVE");
+}
+
+export async function syncRegistrationAccess(
+  registrationId: string,
+  targetStatus: MutableEnrollmentStatus,
+) {
   await db.$transaction(async (tx) => {
-    await provisionRegistrationAccess(tx, order.registrationId!, "ACTIVE");
+    await provisionRegistrationAccess(tx, registrationId, targetStatus);
+  }, {
+    maxWait: 10_000,
+    timeout: 40_000,
   });
 }

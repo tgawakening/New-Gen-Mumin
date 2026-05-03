@@ -652,6 +652,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     setManualProofMessage(null);
     setNotice(null);
     setIsSubmitting(true);
+    let createdRegistrationId: string | null = null;
 
     if (password.length < 8) {
       setError("Password must contain at least 8 characters.");
@@ -747,6 +748,11 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       const registrationPayload = (await registrationResponse.json()) as DraftResponse & { error?: string };
       if (!registrationResponse.ok) throw new Error(registrationPayload.error ?? "Unable to create registration draft.");
       setDraft(registrationPayload);
+      createdRegistrationId = registrationPayload.registrationId;
+      setNotice({
+        tone: "info",
+        message: "Registration submitted successfully. Preparing your payment step now.",
+      });
 
       const checkoutResponse = await fetch(`/api/registration/${registrationPayload.registrationId}/checkout`, {
         method: "POST",
@@ -776,8 +782,11 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         });
       }
     } catch (submitError) {
-      const message =
+      const rawMessage =
         submitError instanceof Error ? submitError.message : "Unable to complete registration.";
+      const message = createdRegistrationId
+        ? `Your registration details were saved, but the payment step could not finish. Please try the payment step again. ${rawMessage}`
+        : rawMessage;
       setError(message);
       setNotice({ tone: "error", message });
     } finally {
@@ -1227,8 +1236,8 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                       </>,
                     )}
 
-                    {draft ? <div className="rounded-2xl border border-[#ead8c3] bg-[#fffaf4] px-4 py-3 text-sm text-[#5f6b7a]"><p className="font-semibold text-[#22304a]">Draft saved</p><p className="mt-1">Registration ID: {draft.registrationId}</p></div> : null}
-                    {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p><p className="mt-2 text-xs">Your browser can save this password for future logins after account creation.</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If redirect does not start automatically, click the submit button again.</p> : null}</div> : null}
+                    {draft ? <div className="rounded-2xl border border-[#ead8c3] bg-[#fffaf4] px-4 py-3 text-sm text-[#5f6b7a]"><p className="font-semibold text-[#22304a]">Registration submitted</p><p className="mt-1">Registration ID: {draft.registrationId}</p></div> : null}
+                    {success ? <div className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm leading-7 text-[#2f6b4b]"><p className="font-semibold">Order {success.orderNumber} is ready.</p><p className="mt-1">{success.nextStep}</p><p className="mt-2 text-xs">Your browser can save this password for future logins after account creation.</p>{success.checkoutUrl ? <p className="mt-2 text-xs">If the redirect does not start automatically, use the Continue to payment button below.</p> : null}</div> : null}
                     {error ? <div className="rounded-2xl border border-[#f0cccc] bg-[#fff4f4] px-4 py-3 text-sm text-[#a23c3c]">{error}</div> : null}
 
                     {selectedGateway === "BANK_TRANSFER" && !isFreeEnrollment ? (
