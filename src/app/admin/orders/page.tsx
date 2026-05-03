@@ -29,10 +29,15 @@ function statusClass(status: string) {
 }
 
 function canMarkOrderPaid(order: { gateway: string; status: string; paymentStatus: string }) {
+  const paymentStillPending = ["INITIATED", "PENDING", "UNDER_REVIEW", "REQUIRES_ACTION"].includes(
+    order.paymentStatus,
+  );
+  const orderNeedsSync = ["UNDER_REVIEW", "PENDING", "INITIATED", "SUCCEEDED"].includes(order.status);
+
   return (
     ["BANK_TRANSFER", "STRIPE", "PAYPAL", "NAYAPAY"].includes(order.gateway) &&
-    ["UNDER_REVIEW", "PENDING", "INITIATED"].includes(order.status) &&
-    order.paymentStatus !== "SUCCEEDED"
+    orderNeedsSync &&
+    paymentStillPending
   );
 }
 
@@ -221,7 +226,11 @@ export default async function AdminOrdersPage({
                       type="submit"
                       className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#182236]"
                     >
-                      {order.gateway === "BANK_TRANSFER" ? "Approve and unlock dashboard" : "Mark paid and unlock dashboard"}
+                      {order.status === "SUCCEEDED"
+                        ? "Sync payment completed"
+                        : order.gateway === "BANK_TRANSFER"
+                          ? "Approve and unlock dashboard"
+                          : "Mark paid and unlock dashboard"}
                     </button>
                   </form>
                 ) : order.status === "SUCCEEDED" || latestPayment?.status === "SUCCEEDED" ? (
