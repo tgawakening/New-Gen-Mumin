@@ -47,6 +47,47 @@ function formatPersonName(firstName?: string | null, lastName?: string | null) {
     .trim();
 }
 
+function formatProgramTitle(title?: string | null, slug?: string | null) {
+  if (slug === "full-bundle" || title === "Gen-Mumins Full Bundle") {
+    return "Gen-Mumin Bundle";
+  }
+
+  return title || "Program pending";
+}
+
+function buildRegistrationChildren(
+  registration?: {
+    students: Array<{
+      id: string;
+      firstName: string;
+      lastName: string | null;
+      displayName: string | null;
+      age: number | null;
+      gender: string | null;
+    }>;
+    items: Array<{
+      registrationStudentId: string;
+      offer: { title: string; slug: string } | null;
+    }>;
+  } | null,
+) {
+  if (!registration) return [];
+
+  return registration.students.map((child) => {
+    const programs = registration.items
+      .filter((item) => item.registrationStudentId === child.id)
+      .map((item) => formatProgramTitle(item.offer?.title, item.offer?.slug));
+
+    return {
+      id: child.id,
+      name: formatPersonName(child.firstName, child.lastName) || child.displayName || "Unnamed child",
+      age: child.age,
+      gender: child.gender,
+      programs: Array.from(new Set(programs)),
+    };
+  });
+}
+
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
   const [
     totalStudents,
@@ -98,6 +139,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
             items: {
               include: {
                 offer: true,
+                registrationStudent: true,
               },
             },
           },
@@ -147,6 +189,11 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
             registration: {
               include: {
                 students: true,
+                items: {
+                  include: {
+                    offer: true,
+                  },
+                },
               },
             },
             items: {
@@ -169,11 +216,12 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
 
   const ordersView = orders.map((order) => {
     const latestPayment = order.payments[0] ?? null;
+    const childDetails = buildRegistrationChildren(order.registration);
     const programTitles = Array.from(
       new Set(
         order.items.flatMap((item) => {
           if (item.enrollment?.program?.title) return [item.enrollment.program.title];
-          if (item.offer?.title) return [item.offer.title];
+          if (item.offer?.title) return [formatProgramTitle(item.offer.title, item.offer.slug)];
           return [];
         }),
       ),
@@ -182,7 +230,10 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     return {
       id: order.id,
       orderNumber: order.orderNumber,
-      parentName: `${order.parent.user.firstName} ${order.parent.user.lastName}`.trim(),
+      parentName:
+        order.registration
+          ? formatPersonName(order.registration.parentFirstName, order.registration.parentLastName)
+          : formatPersonName(order.parent.user.firstName, order.parent.user.lastName),
       parentEmail: order.parent.user.email,
       phone: order.parent.user.phoneNumber
         ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
@@ -212,6 +263,8 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           (value): value is NonNullable<typeof value> => Boolean(value),
         ),
       programTitles,
+      childCount: childDetails.length,
+      childDetails,
       createdAt: order.createdAt,
       manualSubmission: latestPayment?.manualSubmission ?? null,
       paymentStatus: latestPayment?.status ?? order.status,
@@ -247,9 +300,8 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const linkedParentNames = student.parents
       .map((entry) => formatPersonName(entry.parent.user.firstName, entry.parent.user.lastName))
       .filter(Boolean);
-    const childNames = latestRegistration?.students.map((child) =>
-      formatPersonName(child.firstName, child.lastName) || child.displayName || "Unnamed child",
-    ) ?? [];
+    const childDetails = buildRegistrationChildren(latestRegistration);
+    const childNames = childDetails.map((child) => child.name);
     const pricingLabel = student.registrationStudents.some((entry) =>
       entry.items.some((item) => item.discountAmount > 0),
     )
@@ -285,6 +337,15 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       currency: latestRegistration?.selectedCurrency ?? null,
       parentName: registrationParentName || linkedParentNames.join(", ") || "No parent linked",
       childCount: childNames.length || 1,
+      childDetails: childDetails.length ? childDetails : [
+        {
+          id: student.id,
+          name: student.displayName || formatPersonName(student.user.firstName, student.user.lastName) || "Unnamed child",
+          age: student.age,
+          gender: null,
+          programs: student.enrollments.map((enrollment) => enrollment.program.title),
+        },
+      ],
       childNames: childNames.length ? childNames : [
         student.displayName || formatPersonName(student.user.firstName, student.user.lastName) || "Unnamed child",
       ],

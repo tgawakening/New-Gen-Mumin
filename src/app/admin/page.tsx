@@ -189,6 +189,50 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ChildDetailsList({
+  children,
+}: {
+  children: Array<{
+    id: string;
+    name: string;
+    age: number | null;
+    gender: string | null;
+    programs: string[];
+  }>;
+}) {
+  if (children.length === 0) {
+    return <p className="mt-2 text-sm text-[#617184]">No children linked yet.</p>;
+  }
+
+  return (
+    <div className="mt-2 space-y-2">
+      {children.map((child) => (
+        <div key={child.id} className="rounded-2xl border border-[#e6edf4] bg-white px-3 py-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p className="font-semibold text-[#22304a]">{child.name}</p>
+              <p className="mt-1 text-xs text-[#617184]">
+                Age {child.age ?? "Pending"}{child.gender ? ` - ${child.gender}` : ""}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 md:justify-end">
+              {child.programs.length ? child.programs.map((program) => (
+                <span key={program} className="rounded-full bg-[#eef6ff] px-3 py-1 text-[11px] font-semibold text-[#2a76aa]">
+                  {program}
+                </span>
+              )) : (
+                <span className="rounded-full bg-[#f2f4f7] px-3 py-1 text-[11px] font-semibold text-[#7a8698]">
+                  Program pending
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function canMarkOrderPaid(order: {
   gateway: string;
   status: string;
@@ -539,22 +583,29 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               </button>
             </form>
 
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                href="/api/admin/orders/export"
+                className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+              >
+                Export completed orders CSV
+              </Link>
+            </div>
+
             <div className="space-y-4">
               {data.orders.map((order) => (
                 <div key={order.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
-                  <div className="grid gap-4 xl:grid-cols-[1.4fr_0.7fr_0.9fr_0.9fr_0.8fr]">
+                  <div className="grid gap-4 xl:grid-cols-[0.95fr_1.35fr_0.7fr_0.8fr_0.7fr_0.7fr]">
                     <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {order.programTitles.map((title) => (
-                          <span key={title} className="rounded-full bg-[#e6f6ef] px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#2f6b4b]">
-                            {title}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="mt-3 font-semibold text-[#22304a]">{order.parentName}</p>
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Parent</p>
+                      <p className="mt-2 font-semibold text-[#22304a]">{order.parentName || "Parent pending"}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.parentEmail}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.phone}</p>
                       <p className="mt-2 text-sm text-[#22304a]">{order.orderNumber}</p>
+                    </div>
+                    <div className="text-sm text-[#22304a]">
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {order.childCount || order.childDetails.length}</p>
+                      <ChildDetailsList children={order.childDetails} />
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Amount</p>
@@ -666,34 +717,27 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               >
                 Add student manually
               </Link>
+              <Link
+                href="/api/admin/orders/export"
+                className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+              >
+                Export completed orders CSV
+              </Link>
             </div>
 
             <div className="space-y-4">
               {data.students.map((student) => (
                 <div key={student.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
-                  <div className="grid gap-4 xl:grid-cols-[1fr_1fr_0.8fr_0.8fr_0.75fr_0.8fr]">
-                    <div>
-                      <p className="font-semibold text-[#22304a]">{student.name}</p>
-                      <p className="mt-1 text-sm text-[#617184]">{student.email}</p>
-                      <p className="mt-1 text-sm text-[#617184]">{student.phone}</p>
-                    </div>
+                  <div className="grid gap-4 xl:grid-cols-[0.95fr_1.35fr_0.8fr_0.75fr]">
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Parent</p>
                       <p className="mt-2">{student.parentName}</p>
-                      <p className="mt-3 font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children</p>
-                      <p className="mt-2 text-[#617184]">
-                        {student.childCount} enrolled: {student.childNames.join(", ")}
-                      </p>
+                      <p className="mt-1 text-[#617184]">{student.email}</p>
+                      <p className="mt-1 text-[#617184]">{student.phone}</p>
                     </div>
                     <div className="text-sm text-[#22304a]">
-                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Programs</p>
-                      <div className="mt-2 flex flex-col gap-2">
-                        {student.enrollments.length ? student.enrollments.map((entry) => (
-                          <span key={entry.id} className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#2a76aa]">
-                            {entry.programTitle}
-                          </span>
-                        )) : <span className="text-[#617184]">No active program</span>}
-                      </div>
+                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {student.childCount}</p>
+                      <ChildDetailsList children={student.childDetails} />
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
@@ -711,14 +755,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         </p>
                       ) : null}
                     </div>
-                    <div className="text-sm text-[#22304a]">
+                    <div className="space-y-2 text-sm">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Registration</p>
-                      <span className={`mt-2 inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(student.registrationStatus)}`}>
+                      <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(student.registrationStatus)}`}>
                         {student.registrationStatus.replace(/_/g, " ")}
                       </span>
-                    </div>
-                    <div className="space-y-2 text-sm">
-                      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
+                      <p className="pt-2 font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
                       <form action={deleteStudent}>
                         <input type="hidden" name="userId" value={student.userId} />
                         <input type="hidden" name="returnUrl" value={currentStudentHref} />
