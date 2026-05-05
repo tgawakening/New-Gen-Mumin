@@ -127,8 +127,17 @@ const GBP_RATES: Record<string, number> = {
 };
 
 const REGIONAL_PRICE_OVERRIDES: Record<string, Partial<Record<string, number>>> = {
-  US: { "seerah-leadership-bundle": 40, "full-bundle": 80 },
-  CA: { "seerah-leadership-bundle": 40 },
+  US: {
+    "seerah-single": 25,
+    "life-lessons-single": 25,
+    "seerah-leadership-bundle": 50,
+    "full-bundle": 80,
+  },
+  CA: {
+    "seerah-single": 25,
+    "life-lessons-single": 25,
+    "seerah-leadership-bundle": 50,
+  },
   AE: { "full-bundle": 200 },
   SA: { "full-bundle": 200 },
 };

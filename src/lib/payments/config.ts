@@ -74,12 +74,28 @@ export function getPayPalPlanId(input: PayPalPlanLookupInput) {
     return required("PAYPAL_PLAN_USD_SEERAH_LEADERSHIP");
   }
 
+  if (normalizedCurrency === "USD" && input.offerSlug === "seerah-single") {
+    return required("PAYPAL_PLAN_USD_SEERAH");
+  }
+
+  if (normalizedCurrency === "USD" && input.offerSlug === "life-lessons-single") {
+    return required("PAYPAL_PLAN_USD_LIFE_LESSONS");
+  }
+
   if (normalizedCurrency === "USD" && input.offerSlug === "full-bundle") {
     return required("PAYPAL_PLAN_USD_BUNDLE");
   }
 
   if (normalizedCurrency === "CAD" && input.offerSlug === "seerah-leadership-bundle") {
     return required("PAYPAL_PLAN_CAD_SEERAH_LEADERSHIP");
+  }
+
+  if (normalizedCurrency === "CAD" && input.offerSlug === "seerah-single") {
+    return required("PAYPAL_PLAN_CAD_SEERAH");
+  }
+
+  if (normalizedCurrency === "CAD" && input.offerSlug === "life-lessons-single") {
+    return required("PAYPAL_PLAN_CAD_LIFE_LESSONS");
   }
 
   if (normalizedCurrency === "AED" && input.offerSlug === "full-bundle") {

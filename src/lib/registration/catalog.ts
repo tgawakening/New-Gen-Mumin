@@ -21,15 +21,15 @@ export const DEFAULT_PROGRAMS: CatalogProgram[] = [
     slug: "seerah",
     title: "The Prophet's Seerah",
     shortDescription: "Stories, lessons, and love for the Messenger in a child-friendly format.",
-    monthlyPriceGbp: 20,
-    monthlyPricePkr: 3000,
+    monthlyPriceGbp: 25,
+    monthlyPricePkr: 3750,
   },
   {
     slug: "life-lessons",
     title: "Life Lessons & Leadership",
     shortDescription: "Practical Islamic manners, confidence, and leadership training for children.",
-    monthlyPriceGbp: 20,
-    monthlyPricePkr: 2000,
+    monthlyPriceGbp: 25,
+    monthlyPricePkr: 2500,
   },
   {
     slug: "arabic",
@@ -54,8 +54,8 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     kind: "SINGLE",
     description: "Single-program monthly enrollment for Seerah.",
     programSlugs: ["seerah"],
-    basePriceGbp: 20,
-    basePricePkr: 3000,
+    basePriceGbp: 25,
+    basePricePkr: 3750,
   },
   {
     slug: "life-lessons-single",
@@ -63,8 +63,8 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     kind: "SINGLE",
     description: "Single-program monthly enrollment for Life Lessons & Leadership.",
     programSlugs: ["life-lessons"],
-    basePriceGbp: 20,
-    basePricePkr: 2000,
+    basePriceGbp: 25,
+    basePricePkr: 2500,
   },
   {
     slug: "seerah-leadership-bundle",
@@ -72,8 +72,8 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     kind: "PAIR",
     description: "Combined monthly enrollment for Seerah and Life Lessons & Leadership.",
     programSlugs: ["seerah", "life-lessons"],
-    basePriceGbp: 40,
-    basePricePkr: 5000,
+    basePriceGbp: 50,
+    basePricePkr: 6250,
   },
   {
     slug: "arabic-tajweed-pair",
@@ -102,11 +102,15 @@ export const REGIONAL_PRICE_OVERRIDES: Record<
   Partial<Record<(typeof DEFAULT_OFFERS)[number]["slug"], number>>
 > = {
   US: {
-    "seerah-leadership-bundle": 40,
+    "seerah-single": 25,
+    "life-lessons-single": 25,
+    "seerah-leadership-bundle": 50,
     "full-bundle": 80,
   },
   CA: {
-    "seerah-leadership-bundle": 40,
+    "seerah-single": 25,
+    "life-lessons-single": 25,
+    "seerah-leadership-bundle": 50,
   },
   AE: {
     "full-bundle": 200,
