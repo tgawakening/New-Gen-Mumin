@@ -22,7 +22,7 @@ export const DEFAULT_PROGRAMS: CatalogProgram[] = [
     title: "The Prophet's Seerah",
     shortDescription: "Stories, lessons, and love for the Messenger in a child-friendly format.",
     monthlyPriceGbp: 20,
-    monthlyPricePkr: 2000,
+    monthlyPricePkr: 3000,
   },
   {
     slug: "life-lessons",
@@ -55,7 +55,7 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     description: "Single-program monthly enrollment for Seerah.",
     programSlugs: ["seerah"],
     basePriceGbp: 20,
-    basePricePkr: 2000,
+    basePricePkr: 3000,
   },
   {
     slug: "life-lessons-single",
@@ -65,6 +65,15 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     programSlugs: ["life-lessons"],
     basePriceGbp: 20,
     basePricePkr: 2000,
+  },
+  {
+    slug: "seerah-leadership-bundle",
+    title: "Seerah + Life Lessons & Leadership",
+    kind: "PAIR",
+    description: "Combined monthly enrollment for Seerah and Life Lessons & Leadership.",
+    programSlugs: ["seerah", "life-lessons"],
+    basePriceGbp: 40,
+    basePricePkr: 5000,
   },
   {
     slug: "arabic-tajweed-pair",
@@ -93,7 +102,11 @@ export const REGIONAL_PRICE_OVERRIDES: Record<
   Partial<Record<(typeof DEFAULT_OFFERS)[number]["slug"], number>>
 > = {
   US: {
+    "seerah-leadership-bundle": 40,
     "full-bundle": 80,
+  },
+  CA: {
+    "seerah-leadership-bundle": 40,
   },
   AE: {
     "full-bundle": 200,

@@ -61,6 +61,8 @@ function getProgramSlugsForOffer(offerSlug: string) {
       return ["seerah", "life-lessons", "arabic", "tajweed"];
     case "arabic-tajweed-pair":
       return ["arabic", "tajweed"];
+    case "seerah-leadership-bundle":
+      return ["seerah", "life-lessons"];
     case "seerah-single":
       return ["seerah"];
     case "life-lessons-single":

@@ -40,6 +40,13 @@ function hasDiscount(totalDiscount: number) {
   return totalDiscount > 0;
 }
 
+function formatPersonName(firstName?: string | null, lastName?: string | null) {
+  return [firstName, lastName === "Parent" ? "" : lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+}
+
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
   const [
     totalStudents,
@@ -137,7 +144,11 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
         },
         registrationStudents: {
           include: {
-            registration: true,
+            registration: {
+              include: {
+                students: true,
+              },
+            },
             items: {
               include: {
                 offer: true,
@@ -230,6 +241,15 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const studentsView = students.map((student) => {
     const latestOrder = student.parents[0]?.parent.orders[0] ?? null;
     const latestRegistration = student.registrationStudents[0]?.registration ?? null;
+    const registrationParentName = latestRegistration
+      ? formatPersonName(latestRegistration.parentFirstName, latestRegistration.parentLastName)
+      : "";
+    const linkedParentNames = student.parents
+      .map((entry) => formatPersonName(entry.parent.user.firstName, entry.parent.user.lastName))
+      .filter(Boolean);
+    const childNames = latestRegistration?.students.map((child) =>
+      formatPersonName(child.firstName, child.lastName) || child.displayName || "Unnamed child",
+    ) ?? [];
     const pricingLabel = student.registrationStudents.some((entry) =>
       entry.items.some((item) => item.discountAmount > 0),
     )
@@ -263,9 +283,11 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           : null,
       totalAmount: latestRegistration?.totalAmount ?? null,
       currency: latestRegistration?.selectedCurrency ?? null,
-      parents: student.parents.map((entry) =>
-        `${entry.parent.user.firstName} ${entry.parent.user.lastName}`.trim(),
-      ),
+      parentName: registrationParentName || linkedParentNames.join(", ") || "No parent linked",
+      childCount: childNames.length || 1,
+      childNames: childNames.length ? childNames : [
+        student.displayName || formatPersonName(student.user.firstName, student.user.lastName) || "Unnamed child",
+      ],
       createdAt: student.createdAt,
       age: student.age,
       countryName: student.countryName,

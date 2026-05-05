@@ -199,7 +199,11 @@ const GBP_RATES: Record<string, number> = {
 
 const REGIONAL_PRICE_OVERRIDES: Record<string, Partial<Record<string, number>>> = {
   US: {
+    "seerah-leadership-bundle": 40,
     "full-bundle": 80,
+  },
+  CA: {
+    "seerah-leadership-bundle": 40,
   },
   AE: {
     "full-bundle": 200,
@@ -1169,9 +1173,6 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                               {couponFeedback.message}
                             </p>
                           ) : null}
-                          <div className="mt-3 rounded-2xl border border-[#f6d8b3] bg-[#fff7ea] px-4 py-3 text-sm leading-6 text-[#9b6328]">
-                            Early bird offer for 3 days: use code <span className="font-semibold">GEN25</span> and get 25% off the Gen-Mumins Full Bundle.
-                          </div>
                           {!couponEligibleForBundle ? (
                             <p className="mt-2 text-sm leading-6 text-[#6d7785]">
                               Discount codes work only for the Gen-Mumins Full Bundle selection for children.

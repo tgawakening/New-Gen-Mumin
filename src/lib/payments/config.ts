@@ -65,12 +65,21 @@ export function getPayPalPlanId(input: PayPalPlanLookupInput) {
   if (normalizedCurrency === "GBP") {
     if (input.offerSlug === "full-bundle") return required("PAYPAL_PLAN_GBP_BUNDLE");
     if (input.offerSlug === "arabic-tajweed-pair") return required("PAYPAL_PLAN_GBP_PAIR");
+    if (input.offerSlug === "seerah-leadership-bundle") return required("PAYPAL_PLAN_GBP_SEERAH_LEADERSHIP");
     if (input.offerSlug === "seerah-single") return required("PAYPAL_PLAN_GBP_SEERAH");
     if (input.offerSlug === "life-lessons-single") return required("PAYPAL_PLAN_GBP_LIFE_LESSONS");
   }
 
+  if (normalizedCurrency === "USD" && input.offerSlug === "seerah-leadership-bundle") {
+    return required("PAYPAL_PLAN_USD_SEERAH_LEADERSHIP");
+  }
+
   if (normalizedCurrency === "USD" && input.offerSlug === "full-bundle") {
     return required("PAYPAL_PLAN_USD_BUNDLE");
+  }
+
+  if (normalizedCurrency === "CAD" && input.offerSlug === "seerah-leadership-bundle") {
+    return required("PAYPAL_PLAN_CAD_SEERAH_LEADERSHIP");
   }
 
   if (normalizedCurrency === "AED" && input.offerSlug === "full-bundle") {
@@ -84,6 +93,7 @@ export function getPayPalPlanId(input: PayPalPlanLookupInput) {
   if (normalizedCurrency === "PKR" || normalizedCountry === "PK" || normalizedCountry === "IN" || normalizedCountry === "BD" || normalizedCountry === "AF") {
     if (input.offerSlug === "full-bundle") return required("PAYPAL_PLAN_PKR_BUNDLE");
     if (input.offerSlug === "arabic-tajweed-pair") return required("PAYPAL_PLAN_PKR_PAIR");
+    if (input.offerSlug === "seerah-leadership-bundle") return required("PAYPAL_PLAN_PKR_SEERAH_LEADERSHIP");
     if (input.offerSlug === "seerah-single") return required("PAYPAL_PLAN_PKR_SEERAH");
     if (input.offerSlug === "life-lessons-single") return required("PAYPAL_PLAN_PKR_LIFE_LESSONS");
   }
