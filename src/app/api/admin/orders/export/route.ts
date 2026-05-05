@@ -20,17 +20,6 @@ function formatProgramTitle(title?: string | null, slug?: string | null) {
   return title || "Program pending";
 }
 
-function formatDate(value?: Date | null) {
-  if (!value) return "";
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(value);
-}
-
 function safeCsvValue(value: string | number | null | undefined) {
   const raw = String(value ?? "");
   const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
@@ -39,6 +28,19 @@ function safeCsvValue(value: string | number | null | undefined) {
 
 function toCsv(rows: Array<Array<string | number | null | undefined>>) {
   return rows.map((row) => row.map(safeCsvValue).join(",")).join("\r\n");
+}
+
+function formatAmountPaid(amount: number, currency: string, discountAmount: number) {
+  const pricingLabel = discountAmount > 0 ? "Discounted price" : "Full price";
+  return `${currency} ${amount} (${pricingLabel})`;
+}
+
+function formatPaymentMethod(gateway: string) {
+  return gateway
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export async function GET() {
@@ -85,14 +87,7 @@ export async function GET() {
       "Children details",
       "Programs overview",
       "Amount paid",
-      "Currency",
-      "Pricing type",
-      "Discount amount",
       "Payment method",
-      "Payment status",
-      "Order number",
-      "Paid at",
-      "Registration status",
     ],
   ];
 
@@ -120,7 +115,6 @@ export async function GET() {
         registration?.items.map((item) => formatProgramTitle(item.offer?.title, item.offer?.slug)) ?? [],
       ),
     ).join(", ");
-    const latestPayment = order.payments[0] ?? null;
 
     rows.push([
       parentName || "Parent pending",
@@ -129,15 +123,8 @@ export async function GET() {
       childDetails.length,
       childDetails.join("\n"),
       programsOverview,
-      order.totalAmount,
-      order.currency,
-      order.discountAmount > 0 ? "Discounted" : "Full price",
-      order.discountAmount,
-      order.gateway,
-      latestPayment?.status ?? order.status,
-      order.orderNumber,
-      formatDate(order.paidAt ?? order.updatedAt),
-      registration?.status ?? "Pending",
+      formatAmountPaid(order.totalAmount, order.currency, order.discountAmount),
+      formatPaymentMethod(order.gateway),
     ]);
   }
 
