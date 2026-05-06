@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 
 import { resolvePostLoginDestination } from "@/lib/auth/session";
 import { loginPayloadSchema } from "@/lib/auth/schema";
-import { loginParentAccount } from "@/lib/auth/service";
+import { loginAccount } from "@/lib/auth/service";
 
 export async function POST(request: Request) {
   try {
     const payload = loginPayloadSchema.parse(await request.json());
-    const user = await loginParentAccount(payload);
+    const user = await loginAccount(payload);
 
     return NextResponse.json({
       userId: user.id,

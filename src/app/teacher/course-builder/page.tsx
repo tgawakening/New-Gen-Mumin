@@ -203,6 +203,97 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
             </div>
           </TeacherSection>
 
+          <TeacherSection eyebrow="Programme builders" title="Structured builder lanes by programme">
+            <div className="space-y-5">
+              {teacherDashboard.rosters.map((roster) => {
+                const programme = getGenMProgrammeByTitle(roster.title);
+                const teachers = getGenMTeachersForProgramme(roster.title);
+                const relatedAssignments = teacherDashboard.assignments.filter(
+                  (assignment) => assignment.programId === roster.programId,
+                );
+
+                if (!programme) {
+                  return null;
+                }
+
+                return (
+                  <div key={`${roster.programId}-builder`} className="rounded-[24px] bg-[#fbf6ef] p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h3 className="text-2xl font-semibold text-[#22304a]">{programme.title}</h3>
+                        <p className="mt-2 text-sm font-medium text-[#c27a2c]">{programme.strapline}</p>
+                      </div>
+                      <span className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#22304a]">
+                        {roster.students.length} learners • {relatedAssignments.length} tasks
+                      </span>
+                    </div>
+
+                    <div className="mt-5 grid gap-4 xl:grid-cols-3">
+                      <div className="rounded-[18px] bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                          Teacher team
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                          {teachers.map((teacher) => (
+                            <li key={teacher.slug}>• {teacher.name} — {teacher.title}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="rounded-[18px] bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                          Key materials
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                          {programme.keyMaterials.slice(0, 6).map((item) => (
+                            <li key={item}>• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="rounded-[18px] bg-white p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                          Suggested uploads
+                        </p>
+                        <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                          {programme.uploadIdeas.map((item) => (
+                            <li key={item}>• {item}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-3">
+                      {genMTerms.map((term) => {
+                        const highlights =
+                          programme.slug === "arabic"
+                            ? term.arabic
+                            : programme.slug === "tajweed"
+                              ? term.tajweed
+                              : programme.slug === "seerah"
+                                ? term.seerah
+                                : term.lifeSkills;
+
+                        return (
+                          <details key={`${roster.programId}-${term.id}`} className="rounded-[18px] bg-white p-4">
+                            <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                              {term.title} • {term.level} • {term.window}
+                            </summary>
+                            <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
+                              {highlights.map((highlight) => (
+                                <li key={highlight}>• {highlight}</li>
+                              ))}
+                            </ul>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </TeacherSection>
+
           <TeacherSection eyebrow="Weekly content" title="Publish a lesson update">
             <form action={publishLessonContent} className="grid gap-4">
               <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">

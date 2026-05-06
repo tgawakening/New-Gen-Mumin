@@ -43,7 +43,7 @@ export async function registerParentAccount(payload: SignupPayload) {
   return user;
 }
 
-export async function loginParentAccount(payload: LoginPayload) {
+export async function loginAccount(payload: LoginPayload) {
   const user = await db.user.findUnique({ where: { email: payload.email } });
 
   if (!user || !user.passwordHash) {
