@@ -98,6 +98,13 @@ export function getPayPalPlanId(input: PayPalPlanLookupInput) {
     return required("PAYPAL_PLAN_CAD_LIFE_LESSONS");
   }
 
+  if (
+    input.offerSlug === "seerah-leadership-bundle" &&
+    (normalizedCountry === "AE" || normalizedCountry === "SA")
+  ) {
+    return required("PAYPAL_PLAN_PKR_SEERAH_LEADERSHIP");
+  }
+
   if (normalizedCurrency === "AED" && input.offerSlug === "full-bundle") {
     return required("PAYPAL_PLAN_AED_BUNDLE");
   }

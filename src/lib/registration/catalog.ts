@@ -113,9 +113,11 @@ export const REGIONAL_PRICE_OVERRIDES: Record<
     "seerah-leadership-bundle": 50,
   },
   AE: {
+    "seerah-leadership-bundle": 65,
     "full-bundle": 200,
   },
   SA: {
+    "seerah-leadership-bundle": 65,
     "full-bundle": 200,
   },
 };

@@ -138,8 +138,8 @@ const REGIONAL_PRICE_OVERRIDES: Record<string, Partial<Record<string, number>>> 
     "life-lessons-single": 25,
     "seerah-leadership-bundle": 50,
   },
-  AE: { "full-bundle": 200 },
-  SA: { "full-bundle": 200 },
+  AE: { "seerah-leadership-bundle": 65, "full-bundle": 200 },
+  SA: { "seerah-leadership-bundle": 65, "full-bundle": 200 },
 };
 
 function splitName(fullName: string) {
