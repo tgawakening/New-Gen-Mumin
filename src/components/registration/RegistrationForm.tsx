@@ -3,7 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { FULL_BUNDLE_COUPON_OFFER_SLUG, getDiscountCoupon } from "@/lib/registration/catalog";
+import {
+  getDiscountCoupon,
+  isCouponEligibleForSelection,
+  PKR_OFFER_PRICE_OVERRIDES,
+} from "@/lib/registration/catalog";
 
 type Offer = {
   slug: string;
@@ -263,11 +267,12 @@ function getRegionalPrice(offer: Offer, phoneCountry: PhoneCountry): PriceBreakd
 
   const convertedAmount = Math.round(offer.basePriceGbp * phoneCountry.gbpRate);
   const southAsia = new Set(["PK", "IN", "BD", "AF"]);
-  if (!southAsia.has(phoneCountry.code) || !offer.basePricePkr) {
+  const pkrBaseAmount = PKR_OFFER_PRICE_OVERRIDES[offer.slug] ?? offer.basePricePkr;
+  if (!southAsia.has(phoneCountry.code) || !pkrBaseAmount) {
     return { displayCurrency: phoneCountry.currency, displayAmount: convertedAmount, convertedAmount, discountPercent: 0, discountedGbp: offer.basePriceGbp, usesRegionalPricing: false };
   }
-  const discountFactor = offer.basePricePkr / (offer.basePriceGbp * 350);
-  const displayAmount = phoneCountry.code === "PK" ? offer.basePricePkr : Math.round(offer.basePriceGbp * phoneCountry.gbpRate * discountFactor);
+  const discountFactor = pkrBaseAmount / (offer.basePriceGbp * 350);
+  const displayAmount = phoneCountry.code === "PK" ? pkrBaseAmount : Math.round(offer.basePriceGbp * phoneCountry.gbpRate * discountFactor);
   const discountPercent = Math.max(0, Math.round((1 - displayAmount / convertedAmount) * 100));
   return { displayCurrency: phoneCountry.currency, displayAmount, convertedAmount, discountPercent, discountedGbp: Number((displayAmount / phoneCountry.gbpRate).toFixed(1)), usesRegionalPricing: true };
 }
@@ -461,7 +466,6 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const defaultOfferSlug = orderedOffers.find((offer) => offer.kind === "BUNDLE")?.slug
     ?? orderedOffers[0]?.slug
     ?? "";
-  const bundleOfferSlug = defaultOfferSlug || FULL_BUNDLE_COUPON_OFFER_SLUG;
   const appliedCoupon = useMemo(() => getDiscountCoupon(couponCode), [couponCode]);
 
   useEffect(() => {
@@ -543,12 +547,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
 
   const couponEligibleForBundle = useMemo(
     () =>
-      children.length > 0 &&
-      children.every(
-        (child) =>
-          child.selectedOfferSlugs.length === 1 && child.selectedOfferSlugs[0] === bundleOfferSlug,
+      isCouponEligibleForSelection(
+        appliedCoupon,
+        children.map((child) => child.selectedOfferSlugs),
+        selectedPhoneCountry.code,
       ),
-    [bundleOfferSlug, children],
+    [appliedCoupon, children, selectedPhoneCountry.code],
   );
 
   const effectiveCoupon = couponEligibleForBundle ? appliedCoupon : null;
@@ -570,11 +574,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     });
     const couponFixedAmount = getCouponFixedAmount(effectiveCoupon, selectedPhoneCountry.currency);
     const couponPercent = getCouponPercent(effectiveCoupon);
-    const couponDiscount = couponFixedAmount
+    const rawCouponDiscount = couponFixedAmount
       ? couponFixedAmount
       : effectiveCoupon
         ? Math.round((subtotal - multiChildDiscount) * (couponPercent / 100))
         : 0;
+    const couponDiscount = Math.min(rawCouponDiscount, subtotal - multiChildDiscount);
     return {
       currency: selectedPhoneCountry.currency,
       subtotal,
@@ -602,9 +607,12 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     }
 
     if (!couponEligibleForBundle) {
+      const isPkStudentCode = appliedCoupon.code === "PKSTUDENT";
       return {
         tone: "info" as const,
-        message: "Coupon discounts apply only when every child is enrolled in the Gen-Mumins Full Bundle.",
+        message: isPkStudentCode
+          ? "PKSTUDENT applies only for Pakistani students enrolled in Seerah + Life Lessons & Leadership."
+          : "This coupon applies only when every child is enrolled in the Gen-Mumins Full Bundle.",
       };
     }
 
@@ -1181,7 +1189,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
                           ) : null}
                           {!couponEligibleForBundle ? (
                             <p className="mt-2 text-sm leading-6 text-[#6d7785]">
-                              Discount codes work only for the Gen-Mumins Full Bundle selection for children.
+                              Full-bundle codes apply to the Gen-Mumins Full Bundle. Use PKSTUDENT for Pakistani students taking Seerah + Life Lessons & Leadership.
                             </p>
                           ) : null}
                         </div>

@@ -11,7 +11,7 @@ const programs = [
     shortDescription: "Stories, lessons, and love for the Messenger in a child-friendly format.",
     description: "Weekly live Seerah learning for children aged 6 to 12.",
     monthlyPriceGbp: 25,
-    monthlyPricePkr: 3750,
+    monthlyPricePkr: 3000,
     sortOrder: 1,
   },
   {
@@ -20,7 +20,7 @@ const programs = [
     shortDescription: "Practical Islamic manners, confidence, and leadership training for children.",
     description: "Live sessions focused on akhlaq, self-management, and leadership.",
     monthlyPriceGbp: 25,
-    monthlyPricePkr: 2500,
+    monthlyPricePkr: 2000,
     sortOrder: 2,
   },
   {
@@ -50,7 +50,7 @@ const offers = [
     description: "Single-program monthly enrollment for Seerah.",
     kind: "SINGLE",
     basePriceGbp: 25,
-    basePricePkr: 3750,
+    basePricePkr: 3000,
     sortOrder: 1,
     programSlugs: ["seerah"],
   },
@@ -60,7 +60,7 @@ const offers = [
     description: "Single-program monthly enrollment for Life Lessons & Leadership.",
     kind: "SINGLE",
     basePriceGbp: 25,
-    basePricePkr: 2500,
+    basePricePkr: 2000,
     sortOrder: 2,
     programSlugs: ["life-lessons"],
   },
@@ -70,7 +70,7 @@ const offers = [
     description: "Combined monthly enrollment for Seerah and Life Lessons & Leadership.",
     kind: "PAIR",
     basePriceGbp: 50,
-    basePricePkr: 6250,
+    basePricePkr: 5000,
     sortOrder: 3,
     programSlugs: ["seerah", "life-lessons"],
   },
@@ -104,6 +104,7 @@ const coupons = [
   { code: "GEN75", discountPercent: 75 },
   { code: "GENM75", discountPercent: 75 },
   { code: "GENMPK60", discountAmount: 7000, currency: "PKR" },
+  { code: "PKSTUDENT", discountAmount: 1000, currency: "PKR" },
   { code: "Q7N4FULLACCESS", discountPercent: 100 },
 ];
 

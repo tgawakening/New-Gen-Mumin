@@ -22,14 +22,14 @@ export const DEFAULT_PROGRAMS: CatalogProgram[] = [
     title: "The Prophet's Seerah",
     shortDescription: "Stories, lessons, and love for the Messenger in a child-friendly format.",
     monthlyPriceGbp: 25,
-    monthlyPricePkr: 3750,
+    monthlyPricePkr: 3000,
   },
   {
     slug: "life-lessons",
     title: "Life Lessons & Leadership",
     shortDescription: "Practical Islamic manners, confidence, and leadership training for children.",
     monthlyPriceGbp: 25,
-    monthlyPricePkr: 2500,
+    monthlyPricePkr: 2000,
   },
   {
     slug: "arabic",
@@ -55,7 +55,7 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     description: "Single-program monthly enrollment for Seerah.",
     programSlugs: ["seerah"],
     basePriceGbp: 25,
-    basePricePkr: 3750,
+    basePricePkr: 3000,
   },
   {
     slug: "life-lessons-single",
@@ -64,7 +64,7 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     description: "Single-program monthly enrollment for Life Lessons & Leadership.",
     programSlugs: ["life-lessons"],
     basePriceGbp: 25,
-    basePricePkr: 2500,
+    basePricePkr: 2000,
   },
   {
     slug: "seerah-leadership-bundle",
@@ -73,7 +73,7 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     description: "Combined monthly enrollment for Seerah and Life Lessons & Leadership.",
     programSlugs: ["seerah", "life-lessons"],
     basePriceGbp: 50,
-    basePricePkr: 6250,
+    basePricePkr: 5000,
   },
   {
     slug: "arabic-tajweed-pair",
@@ -94,6 +94,12 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     basePricePkr: 12000,
   },
 ];
+
+export const PKR_OFFER_PRICE_OVERRIDES: Record<string, number> = {
+  "seerah-single": 3000,
+  "life-lessons-single": 2000,
+  "seerah-leadership-bundle": 5000,
+};
 
 export const SOUTH_ASIA_COUNTRY_CODES = new Set(["PK", "IN", "BD", "AF"]);
 
@@ -205,10 +211,40 @@ export const DISCOUNT_COUPONS = {
   GEN75: { code: "GEN75", discountPercent: 75 },
   GENM75: { code: "GENM75", discountPercent: 75 },
   GENMPK60: { code: "GENMPK60", discountAmount: 7000, currency: "PKR" },
+  PKSTUDENT: { code: "PKSTUDENT", discountAmount: 1000, currency: "PKR" },
   Q7N4FULLACCESS: { code: "Q7N4FULLACCESS", discountPercent: 100 },
 } as const;
 
 export const FULL_BUNDLE_COUPON_OFFER_SLUG = "full-bundle";
+export const SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG = "seerah-leadership-bundle";
+
+const SEERAH_LEADERSHIP_PK_STUDENT_COUPON_CODES = new Set(["PKSTUDENT"]);
+
+export function isCouponEligibleForSelection(
+  coupon: ReturnType<typeof getDiscountCoupon>,
+  selectedOfferSlugsByStudent: string[][],
+  countryCode?: string | null,
+) {
+  if (!coupon || selectedOfferSlugsByStudent.length === 0) {
+    return false;
+  }
+
+  if (SEERAH_LEADERSHIP_PK_STUDENT_COUPON_CODES.has(coupon.code)) {
+    return (
+      countryCode?.toUpperCase() === "PK" &&
+      selectedOfferSlugsByStudent.every(
+        (offerSlugs) =>
+          offerSlugs.length === 1 &&
+          offerSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+      )
+    );
+  }
+
+  return selectedOfferSlugsByStudent.every(
+    (offerSlugs) =>
+      offerSlugs.length === 1 && offerSlugs[0] === FULL_BUNDLE_COUPON_OFFER_SLUG,
+  );
+}
 
 export function getDiscountCoupon(code?: string | null) {
   if (!code) return null;
@@ -260,13 +296,14 @@ export function resolveOfferAmount(
   }
 
   if (resolvedCurrency === "PKR") {
-    return offer.basePricePkr ?? offer.basePriceGbp;
+    return PKR_OFFER_PRICE_OVERRIDES[offer.slug] ?? offer.basePricePkr ?? offer.basePriceGbp;
   }
 
   if (SOUTH_ASIA_COUNTRY_CODES.has(normalizedCountryCode) && offer.basePricePkr) {
     const targetRate = GBP_RATES[resolvedCurrency];
     if (targetRate) {
-      const discountFactor = offer.basePricePkr / (offer.basePriceGbp * GBP_RATES.PKR);
+      const pkrBaseAmount = PKR_OFFER_PRICE_OVERRIDES[offer.slug] ?? offer.basePricePkr;
+      const discountFactor = pkrBaseAmount / (offer.basePriceGbp * GBP_RATES.PKR);
       return Math.round(offer.basePriceGbp * targetRate * discountFactor);
     }
   }

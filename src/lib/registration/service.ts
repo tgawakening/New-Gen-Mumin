@@ -1,9 +1,10 @@
 import { db } from "@/lib/db";
 import {
   DEFAULT_OFFERS,
-  FULL_BUNDLE_COUPON_OFFER_SLUG,
   getDiscountCoupon,
+  isCouponEligibleForSelection,
   orderRegistrationCountries,
+  PKR_OFFER_PRICE_OVERRIDES,
   REGISTRATION_COUNTRIES,
   resolveCurrency,
   resolveOfferAmount,
@@ -274,7 +275,13 @@ export async function getRegistrationOptions() {
     });
 
     if (offers.length > 0) {
-      return { offers, countries };
+      return {
+        offers: offers.map((offer) => ({
+          ...offer,
+          basePricePkr: PKR_OFFER_PRICE_OVERRIDES[offer.slug] ?? offer.basePricePkr,
+        })),
+        countries,
+      };
     }
   } catch {
     // Fallback to static catalog when the database is not seeded yet.
@@ -308,13 +315,14 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
   const missingOffer = requestedOfferSlugs.find((slug) => !offerLookup.has(slug));
   const normalizedCouponCode = payload.couponCode?.trim().toUpperCase() ?? "";
   const fallbackCoupon = getDiscountCoupon(normalizedCouponCode);
-  const couponEligibleForSelection =
-    payload.students.length > 0 &&
-    payload.students.every(
-      (student) =>
-        student.selectedOfferSlugs.length === 1 &&
-        student.selectedOfferSlugs[0] === FULL_BUNDLE_COUPON_OFFER_SLUG,
-    );
+  const selectedOfferSlugsByStudent = payload.students.map(
+    (student) => student.selectedOfferSlugs,
+  );
+  const couponEligibleForSelection = isCouponEligibleForSelection(
+    fallbackCoupon,
+    selectedOfferSlugsByStudent,
+    payload.selectedCountryCode,
+  );
   const coupon = fallbackCoupon && couponEligibleForSelection
     ? await db.coupon.findFirst({
         where: {
@@ -419,27 +427,28 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
       }
     }
 
-  const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
-  const effectiveFallbackCoupon = couponEligibleForSelection ? fallbackCoupon : null;
-  const fallbackCouponAmount =
-    effectiveFallbackCoupon &&
-    "discountAmount" in effectiveFallbackCoupon &&
-    effectiveFallbackCoupon.currency === currency
-      ? effectiveFallbackCoupon.discountAmount
-      : 0;
-  const fallbackCouponPercent =
-    effectiveFallbackCoupon && "discountPercent" in effectiveFallbackCoupon
-      ? effectiveFallbackCoupon.discountPercent
-      : 0;
-  const couponPercent = coupon?.discountPercent ?? fallbackCouponPercent;
-  const couponAmount =
+    const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
+    const effectiveFallbackCoupon = couponEligibleForSelection ? fallbackCoupon : null;
+    const fallbackCouponAmount =
+      effectiveFallbackCoupon &&
+      "discountAmount" in effectiveFallbackCoupon &&
+      effectiveFallbackCoupon.currency === currency
+        ? effectiveFallbackCoupon.discountAmount
+        : 0;
+    const fallbackCouponPercent =
+      effectiveFallbackCoupon && "discountPercent" in effectiveFallbackCoupon
+        ? effectiveFallbackCoupon.discountPercent
+        : 0;
+    const couponPercent = coupon?.discountPercent ?? fallbackCouponPercent;
+    const rawCouponAmount =
       coupon?.discountAmount && coupon.currency === currency
         ? coupon.discountAmount
         : fallbackCouponAmount
           ? fallbackCouponAmount
-        : couponPercent > 0
-          ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
-          : 0;
+          : couponPercent > 0
+            ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
+            : 0;
+    const couponAmount = Math.min(rawCouponAmount, subtotalAfterMultiChild);
     const discountAmount = multiChildDiscountAmount + couponAmount;
 
     const updated = await tx.registration.update({
