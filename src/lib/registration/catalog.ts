@@ -203,7 +203,7 @@ export function convertAmountToGbp(amount: number, currency?: string | null) {
   return amount / rate;
 }
 
-export const DISCOUNT_COUPONS = {
+export const PUBLIC_DISCOUNT_COUPONS = {
   GEN25: { code: "GEN25", discountPercent: 25 },
   GENM25: { code: "GENM25", discountPercent: 25 },
   GEN50: { code: "GEN50", discountPercent: 50 },
@@ -211,33 +211,20 @@ export const DISCOUNT_COUPONS = {
   GEN75: { code: "GEN75", discountPercent: 75 },
   GENM75: { code: "GENM75", discountPercent: 75 },
   GENMPK60: { code: "GENMPK60", discountAmount: 7000, currency: "PKR" },
-  PKSTUDENT: { code: "PKSTUDENT", discountAmount: 1000, currency: "PKR" },
   Q7N4FULLACCESS: { code: "Q7N4FULLACCESS", discountPercent: 100 },
 } as const;
+
+export const DISCOUNT_COUPONS = PUBLIC_DISCOUNT_COUPONS;
 
 export const FULL_BUNDLE_COUPON_OFFER_SLUG = "full-bundle";
 export const SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG = "seerah-leadership-bundle";
 
-const SEERAH_LEADERSHIP_PK_STUDENT_COUPON_CODES = new Set(["PKSTUDENT"]);
-
 export function isCouponEligibleForSelection(
   coupon: ReturnType<typeof getDiscountCoupon>,
   selectedOfferSlugsByStudent: string[][],
-  countryCode?: string | null,
 ) {
   if (!coupon || selectedOfferSlugsByStudent.length === 0) {
     return false;
-  }
-
-  if (SEERAH_LEADERSHIP_PK_STUDENT_COUPON_CODES.has(coupon.code)) {
-    return (
-      countryCode?.toUpperCase() === "PK" &&
-      selectedOfferSlugsByStudent.every(
-        (offerSlugs) =>
-          offerSlugs.length === 1 &&
-          offerSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
-      )
-    );
   }
 
   return selectedOfferSlugsByStudent.every(
@@ -250,6 +237,12 @@ export function getDiscountCoupon(code?: string | null) {
   if (!code) return null;
   const normalized = code.trim().toUpperCase();
   return Object.values(DISCOUNT_COUPONS).find((coupon) => coupon.code === normalized) ?? null;
+}
+
+export function getPublicDiscountCoupon(code?: string | null) {
+  if (!code) return null;
+  const normalized = code.trim().toUpperCase();
+  return Object.values(PUBLIC_DISCOUNT_COUPONS).find((coupon) => coupon.code === normalized) ?? null;
 }
 
 export function orderRegistrationCountries() {

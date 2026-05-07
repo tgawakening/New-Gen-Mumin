@@ -1,15 +1,24 @@
 import { db } from "@/lib/db";
 import {
   DEFAULT_OFFERS,
+  FULL_BUNDLE_COUPON_OFFER_SLUG,
   getDiscountCoupon,
-  isCouponEligibleForSelection,
   orderRegistrationCountries,
   PKR_OFFER_PRICE_OVERRIDES,
   REGISTRATION_COUNTRIES,
   resolveCurrency,
   resolveOfferAmount,
+  SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
 } from "@/lib/registration/catalog";
 import type { RegistrationPayload } from "@/lib/registration/schema";
+
+const BACKEND_ONLY_DISCOUNT_COUPONS = {
+  PKSTUDENT: { code: "PKSTUDENT", discountAmount: 1000, currency: "PKR" },
+} as const;
+
+type RegistrationCoupon =
+  | ReturnType<typeof getDiscountCoupon>
+  | (typeof BACKEND_ONLY_DISCOUNT_COUPONS)[keyof typeof BACKEND_ONLY_DISCOUNT_COUPONS];
 
 type CatalogOfferRecord = {
   id: string;
@@ -35,6 +44,46 @@ function calculateDiscount(studentIndex: number, amount: number) {
   }
 
   return Math.round(amount * 0.5);
+}
+
+function getRegistrationDiscountCoupon(code?: string | null): RegistrationCoupon {
+  const publicCoupon = getDiscountCoupon(code);
+  if (publicCoupon || !code) {
+    return publicCoupon;
+  }
+
+  const normalized = code.trim().toUpperCase();
+  return (
+    Object.values(BACKEND_ONLY_DISCOUNT_COUPONS).find(
+      (coupon) => coupon.code === normalized,
+    ) ?? null
+  );
+}
+
+function isRegistrationCouponEligibleForSelection(
+  coupon: RegistrationCoupon,
+  selectedOfferSlugsByStudent: string[][],
+  countryCode?: string | null,
+) {
+  if (!coupon || selectedOfferSlugsByStudent.length === 0) {
+    return false;
+  }
+
+  if (coupon.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKSTUDENT.code) {
+    return (
+      countryCode?.toUpperCase() === "PK" &&
+      selectedOfferSlugsByStudent.every(
+        (offerSlugs) =>
+          offerSlugs.length === 1 &&
+          offerSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+      )
+    );
+  }
+
+  return selectedOfferSlugsByStudent.every(
+    (offerSlugs) =>
+      offerSlugs.length === 1 && offerSlugs[0] === FULL_BUNDLE_COUPON_OFFER_SLUG,
+  );
 }
 
 function normalizeStudentIdentity(input: {
@@ -314,11 +363,11 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
   const offerLookup = buildOfferLookup(offers);
   const missingOffer = requestedOfferSlugs.find((slug) => !offerLookup.has(slug));
   const normalizedCouponCode = payload.couponCode?.trim().toUpperCase() ?? "";
-  const fallbackCoupon = getDiscountCoupon(normalizedCouponCode);
+  const fallbackCoupon = getRegistrationDiscountCoupon(normalizedCouponCode);
   const selectedOfferSlugsByStudent = payload.students.map(
     (student) => student.selectedOfferSlugs,
   );
-  const couponEligibleForSelection = isCouponEligibleForSelection(
+  const couponEligibleForSelection = isRegistrationCouponEligibleForSelection(
     fallbackCoupon,
     selectedOfferSlugsByStudent,
     payload.selectedCountryCode,
