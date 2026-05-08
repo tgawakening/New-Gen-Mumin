@@ -9,6 +9,7 @@ import {
   resolveCurrency,
   resolveOfferAmount,
   SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+  SEERAH_SINGLE_OFFER_SLUG,
 } from "@/lib/registration/catalog";
 import type { RegistrationPayload } from "@/lib/registration/schema";
 
@@ -75,7 +76,9 @@ function isRegistrationCouponEligibleForSelection(
       selectedOfferSlugsByStudent.every(
         (offerSlugs) =>
           offerSlugs.length === 1 &&
-          offerSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+          [SEERAH_SINGLE_OFFER_SLUG, SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG].includes(
+            offerSlugs[0],
+          ),
       )
     );
   }

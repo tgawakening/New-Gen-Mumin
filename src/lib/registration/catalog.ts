@@ -217,6 +217,7 @@ export const PUBLIC_DISCOUNT_COUPONS = {
 export const DISCOUNT_COUPONS = PUBLIC_DISCOUNT_COUPONS;
 
 export const FULL_BUNDLE_COUPON_OFFER_SLUG = "full-bundle";
+export const SEERAH_SINGLE_OFFER_SLUG = "seerah-single";
 export const SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG = "seerah-leadership-bundle";
 
 export function isCouponEligibleForSelection(
