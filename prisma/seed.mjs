@@ -114,9 +114,9 @@ const teacherProfiles = [
     firstName: "Abubakar",
     lastName: "Sadique",
     password: "GenM-Abubakar2026!",
-    bio: "Oversees mentoring, Arabic, and Islamic studies across the Gen-Mumins journey.",
+    bio: "Oversees mentoring direction and contributes directly to the Arabic stream as a programme coordinator.",
     specialties: ["Mentoring", "Arabic supervision", "Islamic studies"],
-    programSlugs: ["seerah", "arabic", "life-lessons", "tajweed"],
+    programSlugs: ["arabic"],
   },
   {
     email: "mehranraziq@gmail.com",
@@ -125,7 +125,7 @@ const teacherProfiles = [
     password: "GenM-Mehran2026!",
     bio: "Supports Arabic progression, Fiqh and Hadith context, and lesson resource design.",
     specialties: ["Arabic content", "Fiqh", "Hadith", "Web resources"],
-    programSlugs: ["arabic", "seerah", "tajweed"],
+    programSlugs: ["arabic"],
   },
   {
     email: "shoaibmufti1221122@gmail.com",
@@ -137,6 +137,24 @@ const teacherProfiles = [
     programSlugs: ["arabic"],
   },
   {
+    email: "abubakarsaeed.genm@gmail.com",
+    firstName: "Abubakar",
+    lastName: "Saeed",
+    password: "GenM-TajweedAbubakar2026!",
+    bio: "Leads tajweed practice, Qur'anic accent work, and guided recitation habits for the tajweed stream.",
+    specialties: ["Tajweed", "Qur'anic accent", "Arabic language support"],
+    programSlugs: ["tajweed"],
+  },
+  {
+    email: "zainab.tajweed.genm@gmail.com",
+    firstName: "Zainab",
+    lastName: "Tajweed",
+    password: "GenM-Zainab2026!",
+    bio: "Supports structured Qur'an recitation, tajweed fluency, and higher-level correction for the tajweed stream.",
+    specialties: ["Qur'an teaching", "Tajweed fluency", "Recitation correction"],
+    programSlugs: ["tajweed"],
+  },
+  {
     email: "javeriabasir0@gmail.com",
     firstName: "Javeria",
     lastName: "Khuram",
@@ -146,7 +164,7 @@ const teacherProfiles = [
     programSlugs: ["seerah"],
   },
   {
-    email: "Umm.abdissamee@gmail.com",
+    email: "umm.abdissamee@gmail.com",
     firstName: "Sabah",
     lastName: "Abdissamee",
     password: "GenM-Sabah2026!",
@@ -161,6 +179,15 @@ const teacherProfiles = [
     password: "GenM-Jaweria2026!",
     bio: "Leads first-aid and safety teaching inside the life skills programme.",
     specialties: ["First aid", "Health", "Safety routines"],
+    programSlugs: ["life-lessons"],
+  },
+  {
+    email: "mussab.gardening.genm@gmail.com",
+    firstName: "Sir",
+    lastName: "Mussab",
+    password: "GenM-Mussab2026!",
+    bio: "Leads the gardening and plant-growth side of the life-skills curriculum with practical home projects and nature-based learning.",
+    specialties: ["Kitchen gardening", "Nature projects", "Plant growth tracking"],
     programSlugs: ["life-lessons"],
   },
 ];
@@ -310,6 +337,10 @@ async function main() {
         specialties: teacher.specialties,
         isActive: true,
       },
+    });
+
+    await prisma.teacherProgram.deleteMany({
+      where: { teacherId: teacherProfile.id },
     });
 
     for (const programSlug of teacher.programSlugs) {

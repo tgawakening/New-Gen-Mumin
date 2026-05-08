@@ -8,7 +8,6 @@ import {
 } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { db } from "@/lib/db";
 import {
-  genMProgrammes,
   genMTerms,
   getGenMProgrammeByTitle,
   getGenMTeachersForProgramme,
@@ -177,8 +176,7 @@ export function CourseBuilderWorkspace({
   }
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.95fr)]">
-      <div className="space-y-6">
+    <div className="space-y-6">
         {success ? (
           <div className="rounded-[24px] border border-[#d9e7f2] bg-[#eff7ff] px-5 py-4 text-sm text-[#2a5d84]">
             {success === "lesson"
@@ -202,12 +200,14 @@ export function CourseBuilderWorkspace({
                         <p className="mt-2 text-sm font-medium text-[#c27a2c]">{programme.strapline}</p>
                       ) : null}
                     </div>
-                    <Link
-                      href={`/teacher/course-builder/${programme?.slug ?? ""}`}
-                      className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#2a76aa]"
-                    >
-                      Open workspace
-                    </Link>
+                    {!selectedProgrammeSlug ? (
+                      <Link
+                        href={`/teacher/course-builder/${programme?.slug ?? ""}`}
+                        className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#2a76aa]"
+                      >
+                        Open workspace
+                      </Link>
+                    ) : null}
                   </div>
                   {programme?.description ? (
                     <p className="mt-3 text-sm leading-7 text-[#5f6b7a]">{programme.description}</p>
@@ -332,6 +332,7 @@ export function CourseBuilderWorkspace({
           </div>
         </TeacherSection>
 
+        <div className="grid gap-6 xl:grid-cols-2">
         <TeacherSection eyebrow="Weekly content" title="Publish a lesson update">
           <form action={publishLessonContent} className="grid gap-4">
             <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
@@ -622,9 +623,9 @@ export function CourseBuilderWorkspace({
             </button>
           </form>
         </TeacherSection>
-      </div>
+        </div>
 
-      <div className="space-y-6">
+        <div className="grid gap-6 xl:grid-cols-2">
         <TeacherSection eyebrow="Recent publishing" title="Latest lesson updates">
           <TeacherInfoList
             items={visibleLessons.slice(0, 6).map((entry) => {
@@ -647,30 +648,7 @@ export function CourseBuilderWorkspace({
             emptyLabel="Published tasks will appear here."
           />
         </TeacherSection>
-
-        <TeacherSection eyebrow="Teacher upload flow" title="What this enables">
-          <TeacherInfoList
-            items={[
-              "Teachers can post structured weekly lesson summaries directly from their dashboard.",
-              "Parents can monitor what was taught, what materials are needed, and what follow-up is expected at home.",
-              "Students can see new tasks, resource links, evidence expectations, and recognition progress from one place.",
-            ]}
-            emptyLabel="Publishing guidance will appear here."
-          />
-        </TeacherSection>
-
-        <TeacherSection
-          eyebrow="Curriculum support"
-          title={selectedProgramme ? `${selectedProgramme.title} term plan reference` : "Gen-Mumins term plan reference"}
-        >
-          <TeacherInfoList
-            items={(selectedProgramme ? [selectedProgramme] : genMProgrammes).map(
-              (programme) => `${programme.title} - ${programme.focusTerms.join(" - ")}`,
-            )}
-            emptyLabel="Programme guidance will appear here."
-          />
-        </TeacherSection>
-      </div>
+        </div>
     </div>
   );
 }
