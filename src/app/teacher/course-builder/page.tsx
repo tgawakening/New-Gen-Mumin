@@ -9,7 +9,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { CourseBuilderWorkspace } from "./CourseBuilderWorkspace";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials" }>;
 };
 
 export default async function TeacherCourseBuilderPage({ searchParams }: PageProps) {
@@ -25,7 +25,10 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
   if (dashboard.rosters.length === 1) {
     const programme = getGenMProgrammeByTitle(dashboard.rosters[0].title);
     if (programme) {
-      redirect(`/teacher/course-builder/${programme.slug}${params?.success ? `?success=${params.success}` : ""}`);
+      const query = new URLSearchParams();
+      if (params?.success) query.set("success", params.success);
+      if (params?.tab) query.set("tab", params.tab);
+      redirect(`/teacher/course-builder/${programme.slug}${query.size ? `?${query.toString()}` : ""}`);
     }
   }
 
@@ -35,7 +38,12 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
       subtitle="Choose one assigned programme workspace. Each teacher now works only inside their own programme builder instead of seeing the full teaching suite at once."
       navItems={getTeacherNavItems()}
     >
-      <CourseBuilderWorkspace dashboard={dashboard} teacherUserId={session.user.id} success={params?.success} />
+      <CourseBuilderWorkspace
+        dashboard={dashboard}
+        teacherUserId={session.user.id}
+        success={params?.success}
+        activeTab={params?.tab ?? "overview"}
+      />
     </TeacherDashboardFrame>
   );
 }

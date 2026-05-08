@@ -10,7 +10,7 @@ import { CourseBuilderWorkspace } from "../CourseBuilderWorkspace";
 
 type PageProps = {
   params: Promise<{ programmeSlug: string }>;
-  searchParams?: Promise<{ success?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials" }>;
 };
 
 export default async function TeacherProgrammeBuilderPage({ params, searchParams }: PageProps) {
@@ -51,6 +51,7 @@ export default async function TeacherProgrammeBuilderPage({ params, searchParams
         teacherUserId={session.user.id}
         success={resolvedSearch?.success}
         selectedProgrammeSlug={programme.slug as GenMProgramSlug}
+        activeTab={resolvedSearch?.tab ?? "overview"}
       />
     </TeacherDashboardFrame>
   );
