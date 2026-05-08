@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -28,12 +28,16 @@ export default async function TeacherProgrammeBuilderPage({ params, searchParams
   );
 
   if (!assignedProgramme) {
-    notFound();
+    const fallbackProgramme = dashboard.rosters[0] ? getGenMProgrammeByTitle(dashboard.rosters[0].title) : null;
+    if (fallbackProgramme) {
+      redirect(`/teacher/course-builder/${fallbackProgramme.slug}`);
+    }
+    redirect("/teacher/course-builder");
   }
 
   const programme = getGenMProgrammeByTitle(assignedProgramme.title);
   if (!programme) {
-    notFound();
+    redirect("/teacher/course-builder");
   }
 
   return (
