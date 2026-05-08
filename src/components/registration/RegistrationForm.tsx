@@ -7,6 +7,8 @@ import {
   FULL_BUNDLE_COUPON_OFFER_SLUG,
   getPublicDiscountCoupon,
   PKR_OFFER_PRICE_OVERRIDES,
+  SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+  SEERAH_SINGLE_OFFER_SLUG,
 } from "@/lib/registration/catalog";
 
 type Offer = {
@@ -90,6 +92,13 @@ type PriceBreakdown = {
   discountedGbp: number;
   usesRegionalPricing: boolean;
 };
+
+const PRIVATE_STUDENT_COUPON_CODE = "PKSTUDENT";
+const PRIVATE_STUDENT_COUPON_AMOUNT_PKR = 1000;
+const PRIVATE_STUDENT_COUPON_OFFER_SLUGS = new Set([
+  SEERAH_SINGLE_OFFER_SLUG,
+  SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+]);
 
 function getCouponPercent(coupon: ReturnType<typeof getPublicDiscountCoupon>) {
   return coupon && "discountPercent" in coupon ? coupon.discountPercent : 0;
@@ -466,6 +475,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
   const defaultOfferSlug = orderedOffers.find((offer) => offer.kind === "BUNDLE")?.slug
     ?? orderedOffers[0]?.slug
     ?? "";
+  const normalizedCouponCode = couponCode.trim().toUpperCase();
   const appliedCoupon = useMemo(() => getPublicDiscountCoupon(couponCode), [couponCode]);
 
   useEffect(() => {
@@ -545,7 +555,7 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     return children.every((child) => child.fullName.trim() && child.age.trim() && child.gender.trim() && child.selectedOfferSlugs.length > 0);
   }, [children, confirmPassword, guardianFullName, heardAboutGenM, hopesFromProgram, parentCity, parentEmail, password, phoneValidationMessage]);
 
-  const couponEligibleForBundle = useMemo(
+  const publicCouponEligibleForBundle = useMemo(
     () =>
       Boolean(appliedCoupon) &&
       children.length > 0 &&
@@ -557,7 +567,21 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     [appliedCoupon, children],
   );
 
-  const effectiveCoupon = couponEligibleForBundle ? appliedCoupon : null;
+  const privateStudentCouponEligible = useMemo(
+    () =>
+      normalizedCouponCode === PRIVATE_STUDENT_COUPON_CODE &&
+      selectedPhoneCountry.code === "PK" &&
+      children.length > 0 &&
+      children.every(
+        (child) =>
+          child.selectedOfferSlugs.length === 1 &&
+          PRIVATE_STUDENT_COUPON_OFFER_SLUGS.has(child.selectedOfferSlugs[0]),
+      ),
+    [children, normalizedCouponCode, selectedPhoneCountry.code],
+  );
+
+  const couponEligibleForBundle = publicCouponEligibleForBundle || privateStudentCouponEligible;
+  const effectiveCoupon = publicCouponEligibleForBundle ? appliedCoupon : null;
 
   const summary = useMemo(() => {
     const lines: Array<{ childLabel: string; offerTitle: string; price: PriceBreakdown; multiChildDiscount: number }> = [];
@@ -576,8 +600,14 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     });
     const couponFixedAmount = getCouponFixedAmount(effectiveCoupon, selectedPhoneCountry.currency);
     const couponPercent = getCouponPercent(effectiveCoupon);
+    const privateStudentCouponDiscount =
+      privateStudentCouponEligible && selectedPhoneCountry.currency === "PKR"
+        ? PRIVATE_STUDENT_COUPON_AMOUNT_PKR
+        : 0;
     const rawCouponDiscount = couponFixedAmount
       ? couponFixedAmount
+      : privateStudentCouponDiscount
+        ? privateStudentCouponDiscount
       : effectiveCoupon
         ? Math.round((subtotal - multiChildDiscount) * (couponPercent / 100))
         : 0;
@@ -589,19 +619,19 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       couponDiscount,
       discount: multiChildDiscount + couponDiscount,
       total: subtotal - multiChildDiscount - couponDiscount,
-      couponCode: effectiveCoupon?.code ?? null,
+      couponCode: effectiveCoupon?.code ?? (privateStudentCouponEligible ? normalizedCouponCode : null),
       couponDiscountPercent: couponPercent,
-      couponFixedAmount,
+      couponFixedAmount: couponFixedAmount || privateStudentCouponDiscount,
       lines,
     };
-  }, [children, effectiveCoupon, offerMap, selectedPhoneCountry]);
+  }, [children, effectiveCoupon, normalizedCouponCode, offerMap, privateStudentCouponEligible, selectedPhoneCountry]);
 
   const couponFeedback = useMemo(() => {
     if (!couponCode.trim()) {
       return null;
     }
 
-    if (!appliedCoupon) {
+    if (!appliedCoupon && normalizedCouponCode !== PRIVATE_STUDENT_COUPON_CODE) {
       return {
         tone: "info" as const,
         message: "This code will be checked securely after submission.",
@@ -611,18 +641,20 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     if (!couponEligibleForBundle) {
       return {
         tone: "info" as const,
-        message: "This coupon applies only when every child is enrolled in the eligible bundle.",
+        message: "This coupon applies only when every child is enrolled in an eligible selection.",
       };
     }
 
       return {
         tone: "success" as const,
         message:
-          getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency) > 0
+          privateStudentCouponEligible
+            ? `${formatMoney(PRIVATE_STUDENT_COUPON_AMOUNT_PKR, "PKR")} discount applied to this checkout.`
+            : getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency) > 0
             ? `${formatMoney(getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency), selectedPhoneCountry.currency)} discount applied to this checkout.`
             : `${getCouponPercent(appliedCoupon)}% discount applied to this checkout.`,
       };
-  }, [appliedCoupon, couponCode, couponEligibleForBundle, selectedPhoneCountry.currency]);
+  }, [appliedCoupon, couponCode, couponEligibleForBundle, normalizedCouponCode, privateStudentCouponEligible, selectedPhoneCountry.currency]);
 
   const isPakistan = selectedPhoneCountry.code === "PK";
   const isFreeEnrollment = summary.total <= 0 && summary.lines.length > 0;
