@@ -3,6 +3,7 @@ import "server-only";
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 import {
   genMCoreOutcomes,
   genMPolicies,
@@ -70,6 +71,7 @@ type ChildScheduleSummary = {
   startTime: string;
   endTime: string;
   timezone: string;
+  nextStartsAt: Date;
   meetingUrl: string | null;
   teacherName: string | null;
   provider: string | null;
@@ -597,17 +599,14 @@ function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
         startTime: schedule.startTime,
         endTime: schedule.endTime,
         timezone: schedule.timezone,
+        nextStartsAt: nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
         meetingUrl: schedule.meetingUrl,
         teacherName: buildTeacherName(schedule.teacher),
         provider: schedule.meetingProvider,
       })),
     )
     .sort((left, right) => {
-      if (left.weekday !== right.weekday) {
-        return left.weekday - right.weekday;
-      }
-
-      return left.startTime.localeCompare(right.startTime);
+      return left.nextStartsAt.getTime() - right.nextStartsAt.getTime();
     });
 }
 

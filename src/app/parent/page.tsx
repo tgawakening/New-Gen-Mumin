@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
@@ -172,6 +173,11 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                   <p className="mt-2 text-sm text-white/75">
                     {selectedChild.nextClass.provider ?? "Live class"} - {selectedChild.nextClass.timezone}
                   </p>
+                  <LiveClassCountdown
+                    startsAt={selectedChild.nextClass.nextStartsAt.toISOString()}
+                    meetingUrl={selectedChild.nextClass.meetingUrl}
+                    accessLocked={selectedChild.accessLocked}
+                  />
                 </div>
               ) : (
                 <p className="text-sm leading-7 text-[#5f6b7a]">

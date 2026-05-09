@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
+import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
+import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
   FamilyDashboardFrame,
   InfoList,
@@ -29,6 +31,8 @@ export default async function StudentDashboardPage() {
   if (!dashboard) {
     redirect("/auth/login");
   }
+  await ensureStudentLiveClassReminders(session.user.id);
+  const notifications = await getUnreadNotifications(session.user.id);
 
   const child = dashboard.child;
 
@@ -67,6 +71,23 @@ export default async function StudentDashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
         <div className="space-y-6">
+          {notifications.length ? (
+            <SectionCard eyebrow="Live class alerts" title="Notifications" icon="calendar">
+              <div className="space-y-3">
+                {notifications.map((notification) => (
+                  <Link
+                    key={notification.id}
+                    href={notification.href ?? "/student/schedule"}
+                    className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
+                  >
+                    <p className="font-semibold text-[#22304a]">{notification.title}</p>
+                    <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
+                  </Link>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
           <SectionCard eyebrow="Courses" title="Your learning path" icon="book">
             <InfoList
               items={child.courses.map(
@@ -185,19 +206,11 @@ export default async function StudentDashboardPage() {
                 <p className="mt-2 text-sm text-white/75">
                   Teacher: {child.nextClass.teacherName ?? "Assigned soon"}
                 </p>
-                {child.nextClass.meetingUrl && !child.accessLocked ? (
-                  <Link
-                    href={child.nextClass.meetingUrl}
-                    target="_blank"
-                    className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
-                  >
-                    Open meeting link
-                  </Link>
-                ) : (
-                  <p className="mt-4 text-sm text-white/70">
-                    Meeting links become active once your access is fully unlocked.
-                  </p>
-                )}
+                <LiveClassCountdown
+                  startsAt={child.nextClass.nextStartsAt.toISOString()}
+                  meetingUrl={child.nextClass.meetingUrl}
+                  accessLocked={child.accessLocked}
+                />
               </div>
             ) : (
               <p className="text-sm leading-7 text-[#5f6b7a]">
