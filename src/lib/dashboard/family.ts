@@ -62,6 +62,7 @@ type ChildCourseSummary = {
     taskCategory: string | null;
     weekLabel: string | null;
   }>;
+  upcomingSessions: ChildScheduleSummary[];
 };
 
 type ChildScheduleSummary = {
@@ -590,7 +591,7 @@ function studentHasDashboardAccess(student: any) {
 }
 
 function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
-  return enrollments
+  const entries = enrollments
     .flatMap((enrollment) =>
       enrollment.program.schedules.map((schedule: any) => ({
         id: schedule.id,
@@ -604,10 +605,21 @@ function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
         teacherName: buildTeacherName(schedule.teacher),
         provider: schedule.meetingProvider,
       })),
-    )
-    .sort((left, right) => {
-      return left.nextStartsAt.getTime() - right.nextStartsAt.getTime();
-    });
+    );
+
+  const deduped = new Map<string, ChildScheduleSummary>();
+  for (const entry of entries) {
+    const key = [
+      entry.meetingUrl ?? "pending",
+      entry.title,
+      entry.weekday,
+      entry.startTime,
+      entry.endTime,
+    ].join("|");
+    if (!deduped.has(key)) deduped.set(key, entry);
+  }
+
+  return [...deduped.values()].sort((left, right) => left.nextStartsAt.getTime() - right.nextStartsAt.getTime());
 }
 
 function mapQuizSummaries(quizzes: any[], quizAttempts: any[]) {
@@ -919,6 +931,9 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
             taskCategory: assignment.taskCategory,
             weekLabel: assignment.weekLabel,
           })),
+        upcomingSessions: schedule
+          .filter((entry) => entry.title === enrollment.program.title || entry.title.startsWith("Whole Gen-Mumin:"))
+          .slice(0, 3),
       })),
     schedule,
     nextClass: schedule[0] ?? null,

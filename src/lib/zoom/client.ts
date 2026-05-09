@@ -9,6 +9,11 @@ type ZoomMeetingPayload = {
   startTime: string;
   durationMinutes: number;
   weekday: number;
+  waitingRoom?: boolean;
+  joinBeforeHost?: boolean;
+  muteUponEntry?: boolean;
+  autoRecording?: "none" | "local" | "cloud";
+  passcode?: string;
 };
 
 type ZoomMeetingResponse = {
@@ -104,12 +109,13 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
           weekly_days: toZoomWeeklyDay(payload.weekday),
         },
         settings: {
-          join_before_host: false,
-          waiting_room: true,
+          join_before_host: payload.joinBeforeHost ?? false,
+          waiting_room: payload.waitingRoom ?? true,
           approval_type: 2,
           registration_type: 1,
-          mute_upon_entry: true,
-          auto_recording: "cloud",
+          mute_upon_entry: payload.muteUponEntry ?? true,
+          auto_recording: payload.autoRecording ?? "cloud",
+          password: payload.passcode || undefined,
         },
       }),
       cache: "no-store",

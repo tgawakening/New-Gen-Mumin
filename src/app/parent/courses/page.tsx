@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -76,6 +77,28 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                 <p>Started: {formatDate(course.startedAt)}</p>
                 <p>Weekly slots: {course.meetingCount}</p>
               </div>
+              {course.upcomingSessions.length ? (
+                <div className="mt-4 rounded-[18px] bg-[#22304a] p-4 text-white">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+                    Upcoming sessions
+                  </p>
+                  <div className="mt-3 space-y-3">
+                    {course.upcomingSessions.map((session) => (
+                      <div key={session.id} className="rounded-[16px] bg-white/10 p-3">
+                        <p className="font-semibold">{session.provider ?? "Live class"}</p>
+                        <p className="mt-1 text-sm text-white/75">
+                          {session.startTime}-{session.endTime} {session.timezone}
+                        </p>
+                        <LiveClassCountdown
+                          startsAt={session.nextStartsAt.toISOString()}
+                          meetingUrl={session.meetingUrl}
+                          accessLocked={selectedChild.accessLocked}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
               {course.recentLessonTopics.length || course.currentTaskTitles.length ? (
                 <div className="mt-4 flex flex-wrap gap-2">
                   {course.recentLessonTopics.slice(0, 2).map((topic) => (

@@ -349,3 +349,47 @@ export async function sendAdminPaymentCompletedEmail(input: {
     ],
   );
 }
+
+export async function sendAdminZoomMeetingRequestEmail(input: {
+  teacherName: string;
+  teacherEmail: string;
+  programTitle: string;
+  sessionTitle: string;
+  schedule: string;
+}) {
+  await sendAdminFacingEmail(
+    "adminZoomMeetingRequest",
+    "Zoom meeting approval requested",
+    "A teacher has requested a Zoom live class from the LMS.",
+    [
+      { label: "Teacher", value: `${input.teacherName} (${input.teacherEmail})` },
+      { label: "Programme", value: input.programTitle },
+      { label: "Session", value: input.sessionTitle },
+      { label: "Schedule", value: input.schedule },
+    ],
+  );
+}
+
+export async function sendTeacherZoomMeetingApprovedEmail(input: {
+  toEmail: string;
+  teacherName: string;
+  sessionTitle: string;
+  programTitle: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Zoom meeting approved",
+    template: "teacherZoomMeetingApproved",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Zoom meeting approved",
+      preview: "Your requested Zoom live class has been approved.",
+      intro: `Assalamu alaikum ${input.teacherName}, your Zoom live class has been approved.`,
+      sections: [
+        { label: "Programme", value: input.programTitle },
+        { label: "Session", value: input.sessionTitle },
+        { label: "Next step", value: "Open your teacher schedule to start or join the class." },
+      ],
+      callToAction: { label: "Open teacher schedule", href: resolveHref("/teacher/schedule") },
+    }),
+  });
+}

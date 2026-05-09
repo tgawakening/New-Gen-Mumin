@@ -2,6 +2,7 @@ export function getTeacherNavItems() {
   return [
     { label: "Dashboard", href: "/teacher" },
     { label: "Classes", href: "/teacher/classes" },
+    { label: "Live Sessions", href: "/teacher/live-sessions" },
     { label: "Attendance", href: "/teacher/attendance" },
     { label: "Course Builder", href: "/teacher/course-builder" },
     { label: "Quizzes", href: "/teacher/quizzes" },
