@@ -452,6 +452,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </Link>
                   );
                 })}
+                <Link
+                  href="/admin/classes"
+                  className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+                >
+                  Live Classes
+                </Link>
               </div>
             </div>
 

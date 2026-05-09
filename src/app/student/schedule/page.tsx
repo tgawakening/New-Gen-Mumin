@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
+import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { FamilyDashboardFrame, MetricGrid, SectionCard, formatWeekday } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 export default async function StudentSchedulePage() {
@@ -13,6 +14,8 @@ export default async function StudentSchedulePage() {
 
   const dashboard = await getStudentDashboardData(session.user.id);
   if (!dashboard) redirect("/auth/login");
+  await ensureStudentLiveClassReminders(session.user.id);
+  const notifications = await getUnreadNotifications(session.user.id);
 
   const child = dashboard.child;
 
@@ -32,6 +35,23 @@ export default async function StudentSchedulePage() {
           { label: "Access", value: child.accessLocked ? "Locked" : "Open", hint: "Schedule opens fully after payment confirmation." },
         ]}
       />
+
+      {notifications.length ? (
+        <SectionCard eyebrow="Live class alerts" title="Notifications">
+          <div className="space-y-3">
+            {notifications.map((notification) => (
+              <Link
+                key={notification.id}
+                href={notification.href ?? "/student/schedule"}
+                className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
+              >
+                <p className="font-semibold text-[#22304a]">{notification.title}</p>
+                <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
+              </Link>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard eyebrow="Weekly timetable" title="Class schedule">
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>

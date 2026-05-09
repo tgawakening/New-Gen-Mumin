@@ -45,6 +45,12 @@ const envSchema = z.object({
   BANK_TRANSFER_IBAN: z.string().min(1).optional(),
   JAZZCASH_ACCOUNT_NAME: z.string().min(1).optional(),
   JAZZCASH_MOBILE_NUMBER: z.string().min(1).optional(),
+  ZOOM_ACCOUNT_ID: z.string().min(1).optional(),
+  ZOOM_CLIENT_ID: z.string().min(1).optional(),
+  ZOOM_CLIENT_SECRET: z.string().min(1).optional(),
+  ZOOM_HOST_USER_ID: z.string().min(1).optional(),
+  ZOOM_WEBHOOK_SECRET_TOKEN: z.string().min(1).optional(),
+  LIVE_CLASS_REMINDER_MINUTES: z.coerce.number().int().positive().default(15),
 });
 
 export const env = envSchema.safeParse({
@@ -92,4 +98,10 @@ export const env = envSchema.safeParse({
   BANK_TRANSFER_IBAN: process.env.BANK_TRANSFER_IBAN,
   JAZZCASH_ACCOUNT_NAME: process.env.JAZZCASH_ACCOUNT_NAME,
   JAZZCASH_MOBILE_NUMBER: process.env.JAZZCASH_MOBILE_NUMBER,
+  ZOOM_ACCOUNT_ID: process.env.ZOOM_ACCOUNT_ID,
+  ZOOM_CLIENT_ID: process.env.ZOOM_CLIENT_ID,
+  ZOOM_CLIENT_SECRET: process.env.ZOOM_CLIENT_SECRET,
+  ZOOM_HOST_USER_ID: process.env.ZOOM_HOST_USER_ID,
+  ZOOM_WEBHOOK_SECRET_TOKEN: process.env.ZOOM_WEBHOOK_SECRET_TOKEN,
+  LIVE_CLASS_REMINDER_MINUTES: process.env.LIVE_CLASS_REMINDER_MINUTES,
 });

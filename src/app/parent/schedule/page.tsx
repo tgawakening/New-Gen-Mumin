@@ -1,8 +1,10 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { ensureParentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -22,6 +24,8 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
 
   const dashboard = await getParentDashboardData(session.user.id);
   if (!dashboard) redirect("/registration");
+  await ensureParentLiveClassReminders(session.user.id);
+  const notifications = await getUnreadNotifications(session.user.id);
   if (!dashboard.children.length) {
     if (dashboard.pendingRegistrationId) redirect(`/registration/pending/${dashboard.pendingRegistrationId}`);
     redirect("/registration");
@@ -57,6 +61,23 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
             ]}
           />
 
+          {notifications.length ? (
+            <SectionCard eyebrow="Live class alerts" title="Notifications">
+              <div className="space-y-3">
+                {notifications.map((notification) => (
+                  <Link
+                    key={notification.id}
+                    href={notification.href ?? "/parent/schedule"}
+                    className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
+                  >
+                    <p className="font-semibold text-[#22304a]">{notification.title}</p>
+                    <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
+                  </Link>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
           <SectionCard eyebrow="Timetable" title={`${selectedChild.name}'s weekly classes`}>
             <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
               {selectedChild.schedule.map((entry) => (
@@ -68,6 +89,15 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
                   <p className="mt-2 text-sm text-[#5f6b7a]">
                     Teacher: {entry.teacherName ?? "Assigned soon"} • {entry.provider ?? "Live class"}
                   </p>
+                  {entry.meetingUrl && !selectedChild.accessLocked ? (
+                    <Link
+                      href={entry.meetingUrl}
+                      target="_blank"
+                      className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      Join meeting
+                    </Link>
+                  ) : null}
                 </div>
               ))}
             </div>

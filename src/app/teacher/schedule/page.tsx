@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { ensureTeacherLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection, formatWeekday } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 export default async function TeacherSchedulePage() {
@@ -13,6 +14,8 @@ export default async function TeacherSchedulePage() {
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
+  await ensureTeacherLiveClassReminders(session.user.id);
+  const notifications = await getUnreadNotifications(session.user.id);
 
   return (
     <TeacherDashboardFrame
@@ -28,6 +31,23 @@ export default async function TeacherSchedulePage() {
           { label: "Providers", value: String(new Set(dashboard.classes.map((entry) => entry.provider || "Live class")).size), hint: "Zoom/meeting provider variety." },
         ]}
       />
+
+      {notifications.length ? (
+        <TeacherSection eyebrow="Live class alerts" title="Notifications">
+          <div className="space-y-3">
+            {notifications.map((notification) => (
+              <Link
+                key={notification.id}
+                href={notification.href ?? "/teacher/schedule"}
+                className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
+              >
+                <p className="font-semibold text-[#22304a]">{notification.title}</p>
+                <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
+              </Link>
+            ))}
+          </div>
+        </TeacherSection>
+      ) : null}
 
       <TeacherSection eyebrow="Weekly timetable" title="Assigned schedule">
         <div className="space-y-4">
