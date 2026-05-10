@@ -35,9 +35,20 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const selectedProgramId = selectedChild.courses[0]?.id ?? null;
-  const materials = selectedProgramId
-    ? await listMaterials({ programId: selectedProgramId, status: "approved", limit: 20 })
-    : [];
+  let materials: Awaited<ReturnType<typeof listMaterials>> = [];
+  if (selectedProgramId) {
+    try {
+      materials = await listMaterials({ programId: selectedProgramId, status: "approved", limit: 20 });
+    } catch {
+      materials = [];
+    }
+  }
+  const groupedMaterials = materials.reduce<Record<string, typeof materials>>((groups, material) => {
+    const folderName = material.folderName ?? "General";
+    groups[folderName] = groups[folderName] ?? [];
+    groups[folderName].push(material);
+    return groups;
+  }, {});
 
   return (
     <FamilyDashboardFrame
@@ -172,17 +183,24 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       </SectionCard>
 
       <SectionCard eyebrow="Course library" title="Approved materials">
-        <div className="grid gap-3 md:grid-cols-2">
-          {materials.map((material) => (
-            <a
-              key={material.id}
-              href={material.webViewLink ?? "#"}
-              target="_blank"
-              className="rounded-[20px] border border-[#eadfce] bg-white px-4 py-4 text-sm"
-            >
-              <p className="font-semibold text-[#22304a]">{material.name}</p>
-              <p className="mt-1 text-xs text-[#617184]">{material.programTitle ?? "Program material"}</p>
-            </a>
+        <div className="space-y-4">
+          {Object.entries(groupedMaterials).map(([folderName, folderMaterials]) => (
+            <div key={folderName} className="rounded-[20px] bg-[#fbf6ef] p-4">
+              <p className="text-sm font-semibold text-[#22304a]">{folderName}</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {folderMaterials.map((material) => (
+                  <a
+                    key={material.id}
+                    href={material.webViewLink ?? "#"}
+                    target="_blank"
+                    className="rounded-[16px] border border-[#eadfce] bg-white px-4 py-3 text-sm"
+                  >
+                    <p className="font-semibold text-[#22304a]">{material.name}</p>
+                    <p className="mt-1 text-xs text-[#617184]">{material.programTitle ?? "Program material"}</p>
+                  </a>
+                ))}
+              </div>
+            </div>
           ))}
           {!materials.length ? (
             <p className="rounded-[20px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">

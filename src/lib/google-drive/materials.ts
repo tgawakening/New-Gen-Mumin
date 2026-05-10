@@ -14,6 +14,7 @@ export type DriveMaterial = {
   programTitle: string | null;
   status: string;
   uploadedBy: string | null;
+  folderName: string | null;
 };
 
 type DriveFile = {
@@ -69,11 +70,41 @@ export async function ensureProgramFolder(programId: string) {
   return created.id;
 }
 
+export async function ensureChildFolder(parentFolderId: string, folderName: string) {
+  const trimmed = folderName.trim();
+  if (!trimmed) return parentFolderId;
+
+  const query = [
+    `'${parentFolderId}' in parents`,
+    "mimeType = 'application/vnd.google-apps.folder'",
+    `name = '${escapeQuery(trimmed)}'`,
+    "trashed = false",
+  ].join(" and ");
+
+  const existing = await driveRequest<{ files: Array<{ id: string; name: string }> }>(
+    `/files?q=${encodeURIComponent(query)}&fields=files(id,name)`,
+  );
+  if (existing.files[0]) return existing.files[0].id;
+
+  const created = await driveRequest<{ id: string }>("/files?fields=id", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: trimmed,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentFolderId],
+    }),
+  });
+
+  return created.id;
+}
+
 export async function uploadTeacherMaterial(input: {
   programId: string;
   teacherUserId: string;
   file: File;
   title?: string;
+  folderName?: string;
 }) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: input.teacherUserId },
@@ -87,7 +118,9 @@ export async function uploadTeacherMaterial(input: {
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
 
-  const folderId = await ensureProgramFolder(input.programId);
+  const programFolderId = await ensureProgramFolder(input.programId);
+  const folderId = await ensureChildFolder(programFolderId, input.folderName ?? "");
+  const folderName = input.folderName?.trim() || "General";
   const boundary = `genmumin-${Date.now()}`;
   const metadata = {
     name: input.title || input.file.name,
@@ -98,6 +131,7 @@ export async function uploadTeacherMaterial(input: {
       programTitle: program.title,
       uploadedByUserId: input.teacherUserId,
       uploadedByName: `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim(),
+      folderName,
       status: "pending",
       visibility: "students_parents",
     },
@@ -153,6 +187,7 @@ function mapDriveFile(file: DriveFile): DriveMaterial {
     programTitle: file.appProperties?.programTitle ?? null,
     status: file.appProperties?.status ?? "pending",
     uploadedBy: file.appProperties?.uploadedByName ?? null,
+    folderName: file.appProperties?.folderName ?? "General",
   };
 }
 

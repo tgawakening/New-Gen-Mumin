@@ -73,13 +73,20 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
     }
   }
 
-  const materials = await listMaterials({ limit: 80 });
+  let driveError: string | null = null;
+  let materials: Awaited<ReturnType<typeof listMaterials>> = [];
+  try {
+    materials = await listMaterials({ limit: 80 });
+  } catch (error) {
+    driveError = error instanceof Error ? error.message : "Unable to load Google Drive materials.";
+  }
   const pending = materials.filter((material) => material.status === "pending");
 
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
       <div className="section-container space-y-5">
         <NoticeBanner notice={params.notice} tone={params.tone} />
+        <NoticeBanner notice={driveError ?? undefined} tone="error" />
         <div className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -106,7 +113,7 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
                   <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_auto] xl:items-center">
                     <div>
                       <p className="font-semibold text-[#22304a]">{material.name}</p>
-                      <p className="mt-1 text-sm text-[#617184]">{material.programTitle} - uploaded by {material.uploadedBy ?? "teacher"}</p>
+                      <p className="mt-1 text-sm text-[#617184]">{material.programTitle} - {material.folderName ?? "General"} - uploaded by {material.uploadedBy ?? "teacher"}</p>
                     </div>
                     <a href={material.webViewLink ?? "#"} target="_blank" className="text-sm font-semibold text-[#2a76aa]">Preview file</a>
                     <div className="flex flex-wrap gap-2 xl:justify-end">
@@ -135,7 +142,7 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="font-semibold text-[#22304a]">{material.name}</p>
-                    <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.status}</p>
+                    <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.folderName ?? "General"} - {material.status}</p>
                   </div>
                   {material.webViewLink ? <a href={material.webViewLink} target="_blank" className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Open</a> : null}
                 </div>

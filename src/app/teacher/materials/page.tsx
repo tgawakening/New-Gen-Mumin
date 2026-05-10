@@ -37,7 +37,13 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const programIds = new Set(dashboard.rosters.map((roster) => roster.programId));
-  const materials = (await listMaterials({ limit: 50 })).filter((material) => material.programId && programIds.has(material.programId));
+  let driveError: string | null = null;
+  let materials: Awaited<ReturnType<typeof listMaterials>> = [];
+  try {
+    materials = (await listMaterials({ limit: 50 })).filter((material) => material.programId && programIds.has(material.programId));
+  } catch (error) {
+    driveError = error instanceof Error ? error.message : "Unable to load Google Drive materials.";
+  }
 
   async function uploadMaterialAction(formData: FormData) {
     "use server";
@@ -52,6 +58,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
         programId: String(formData.get("programId") || ""),
         teacherUserId: currentSession.user.id,
         title: String(formData.get("title") || file.name),
+        folderName: String(formData.get("folderName") || "General"),
         file,
       });
       revalidatePath("/teacher/materials");
@@ -70,6 +77,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
       navItems={getTeacherNavItems()}
     >
       <NoticeBanner notice={params.notice} tone={params.tone} />
+      <NoticeBanner notice={driveError ?? undefined} tone="error" />
       <TeacherMetricGrid
         metrics={[
           { label: "Drive", value: isGoogleDriveConfigured() ? "Ready" : "Missing", hint: "Google Drive service account connection." },
@@ -93,6 +101,10 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
             Display title
             <input name="title" placeholder="Week 1 worksheet" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
           </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Folder / week
+            <input name="folderName" placeholder="Week 1, Homework, Recordings" defaultValue="General" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
           <label className="space-y-2 text-sm font-semibold text-[#22304a] md:col-span-2">
             File
             <input name="file" type="file" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
@@ -110,7 +122,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="font-semibold text-[#22304a]">{material.name}</p>
-                  <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.status}</p>
+                  <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.folderName ?? "General"} - {material.status}</p>
                 </div>
                 {material.webViewLink ? (
                   <a href={material.webViewLink} target="_blank" className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
