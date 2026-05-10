@@ -105,6 +105,7 @@ export async function uploadTeacherMaterial(input: {
   file: File;
   title?: string;
   folderName?: string;
+  publishToStudents?: boolean;
 }) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: input.teacherUserId },
@@ -133,7 +134,7 @@ export async function uploadTeacherMaterial(input: {
       uploadedByName: `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim(),
       folderName,
       status: "pending",
-      visibility: "students_parents",
+      visibility: input.publishToStudents === false ? "internal" : "students_parents",
     },
   };
 
@@ -175,6 +176,67 @@ export async function uploadTeacherMaterial(input: {
   return uploaded;
 }
 
+export async function uploadAdminMaterial(input: {
+  programId: string;
+  adminUserId: string;
+  file: File;
+  title?: string;
+  folderName?: string;
+  publishToStudents?: boolean;
+}) {
+  const admin = await db.user.findUnique({ where: { id: input.adminUserId } });
+  if (!admin || admin.role !== "ADMIN") throw new Error("Admin not found.");
+
+  const program = await db.program.findUnique({ where: { id: input.programId } });
+  if (!program) throw new Error("Program not found.");
+
+  const programFolderId = await ensureProgramFolder(input.programId);
+  const folderId = await ensureChildFolder(programFolderId, input.folderName ?? "");
+  const folderName = input.folderName?.trim() || "General";
+  const publish = input.publishToStudents !== false;
+  const boundary = `genmumin-${Date.now()}`;
+  const metadata = {
+    name: input.title || input.file.name,
+    parents: [folderId],
+    appProperties: {
+      genMumin: "course-material",
+      programId: input.programId,
+      programTitle: program.title,
+      uploadedByUserId: input.adminUserId,
+      uploadedByName: "Admin",
+      folderName,
+      status: publish ? "approved" : "internal",
+      visibility: publish ? "students_parents" : "internal",
+      approvedByUserId: input.adminUserId,
+      approvedAt: new Date().toISOString(),
+    },
+  };
+
+  const bytes = Buffer.from(await input.file.arrayBuffer());
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Type: ${input.file.type || "application/octet-stream"}\r\n\r\n`),
+    bytes,
+    Buffer.from(`\r\n--${boundary}--`),
+  ]);
+
+  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,webViewLink,createdTime,appProperties", {
+    method: "POST",
+    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
+
+  if (publish) {
+    await driveRequest(`/files/${uploaded.id}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" }),
+    });
+  }
+
+  return uploaded;
+}
+
 function mapDriveFile(file: DriveFile): DriveMaterial {
   return {
     id: file.id,
@@ -204,6 +266,10 @@ export async function listMaterials(options: { status?: string; programId?: stri
   );
 
   return payload.files.map(mapDriveFile);
+}
+
+export async function deleteMaterial(fileId: string) {
+  await driveRequest(`/files/${fileId}`, { method: "DELETE" });
 }
 
 export async function approveMaterial(fileId: string, adminUserId: string) {

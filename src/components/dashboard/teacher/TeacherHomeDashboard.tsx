@@ -103,6 +103,21 @@ export function TeacherHomeDashboard({
           </TeacherSection>
 
           <TeacherSection
+            eyebrow="Materials"
+            title="Course resources"
+            action={!adminPreview ? <Link href="/teacher/materials" className={linkClass}>Open materials</Link> : null}
+          >
+            <TeacherInfoList
+              items={[
+                "Upload worksheets, recordings, and revision files",
+                "Organize resources by week or folder",
+                "Admin approval publishes selected files to learners",
+              ]}
+              emptyLabel="Course materials will appear here."
+            />
+          </TeacherSection>
+
+          <TeacherSection
             eyebrow="Profile"
             title="Teaching profile"
             action={!adminPreview ? <Link href="/teacher/profile" className={linkClass}>Open profile</Link> : null}

@@ -6,6 +6,19 @@ import { env } from "@/lib/env";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 
+function normalizePrivateKey(value: string) {
+  let key = value.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || key.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(key);
+      key = typeof parsed === "string" ? parsed : String(parsed.private_key ?? key);
+    } catch {
+      key = key.slice(1, -1);
+    }
+  }
+  return key.replace(/\\n/g, "\n").trim();
+}
+
 function getDriveConfig() {
   if (!env.success) throw new Error("Application environment is not configured.");
 
@@ -23,7 +36,7 @@ function getDriveConfig() {
 
   return {
     clientEmail: GOOGLE_DRIVE_CLIENT_EMAIL,
-    privateKey: GOOGLE_DRIVE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    privateKey: normalizePrivateKey(GOOGLE_DRIVE_PRIVATE_KEY),
     rootFolderId: GOOGLE_DRIVE_ROOT_FOLDER_ID,
     projectId: GOOGLE_DRIVE_PROJECT_ID,
     privateKeyId: GOOGLE_DRIVE_PRIVATE_KEY_ID,

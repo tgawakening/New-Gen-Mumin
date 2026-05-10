@@ -6,8 +6,9 @@ import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { getCurrentSession } from "@/lib/auth/session";
-import { approveMaterial, listMaterials, rejectMaterial } from "@/lib/google-drive/materials";
+import { approveMaterial, deleteMaterial, listMaterials, rejectMaterial, uploadAdminMaterial } from "@/lib/google-drive/materials";
 import { isGoogleDriveConfigured } from "@/lib/google-drive/client";
+import { db } from "@/lib/db";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -73,6 +74,45 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
     }
   }
 
+  async function uploadAdminMaterialAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/materials");
+    try {
+      const file = formData.get("file");
+      if (!(file instanceof File) || file.size === 0) throw new Error("Choose a file to upload.");
+      await uploadAdminMaterial({
+        programId: String(formData.get("programId") || ""),
+        adminUserId: currentSession.user.id,
+        title: String(formData.get("title") || file.name),
+        folderName: String(formData.get("folderName") || "General"),
+        publishToStudents: formData.get("publishToStudents") === "on",
+        file,
+      });
+      revalidatePath("/admin/materials");
+      revalidatePath("/student/courses");
+      revalidatePath("/parent/courses");
+      redirect(noticeHref("Admin material uploaded."));
+    } catch (error) {
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to upload material.", "error"));
+    }
+  }
+
+  async function deleteAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/materials");
+    try {
+      await deleteMaterial(String(formData.get("fileId") || ""));
+      revalidatePath("/admin/materials");
+      revalidatePath("/student/courses");
+      revalidatePath("/parent/courses");
+      redirect(noticeHref("Material deleted from Google Drive."));
+    } catch (error) {
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to delete material.", "error"));
+    }
+  }
+
   let driveError: string | null = null;
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   try {
@@ -81,6 +121,7 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
     driveError = error instanceof Error ? error.message : "Unable to load Google Drive materials.";
   }
   const pending = materials.filter((material) => material.status === "pending");
+  const programs = await db.program.findMany({ orderBy: [{ sortOrder: "asc" }, { title: "asc" }] });
 
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
@@ -102,6 +143,42 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
             </div>
           </div>
         </div>
+
+        <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6f7d8f]">Admin upload</p>
+          <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Upload directly to Drive</h2>
+          <form action={uploadAdminMaterialAction} className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Program folder
+              <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+                {programs.map((program) => (
+                  <option key={program.id} value={program.id}>{program.title}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Folder / week
+              <input name="folderName" defaultValue="General" placeholder="Week 1, Homework, Recordings" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Display title
+              <input name="title" placeholder="Admin resource" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+              <input name="publishToStudents" type="checkbox" defaultChecked className="h-4 w-4" />
+              Show in student/parent dashboards
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a] md:col-span-2">
+              Choose file
+              <div className="rounded-2xl border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
+                <input name="file" type="file" required className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#0f4d81] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+              </div>
+            </label>
+            <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white md:col-span-2 md:justify-self-start">
+              Upload as admin
+            </button>
+          </form>
+        </section>
 
         {pending.length ? (
           <section className="rounded-[28px] border border-[#f0d7aa] bg-[#fffaf1] p-6 shadow-sm">
@@ -145,6 +222,10 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
                     <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.folderName ?? "General"} - {material.status}</p>
                   </div>
                   {material.webViewLink ? <a href={material.webViewLink} target="_blank" className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Open</a> : null}
+                  <form action={deleteAction}>
+                    <input type="hidden" name="fileId" value={material.id} />
+                    <button className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">Delete</button>
+                  </form>
                 </div>
               </div>
             ))}

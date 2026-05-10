@@ -59,6 +59,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
         teacherUserId: currentSession.user.id,
         title: String(formData.get("title") || file.name),
         folderName: String(formData.get("folderName") || "General"),
+        publishToStudents: formData.get("publishToStudents") === "on",
         file,
       });
       revalidatePath("/teacher/materials");
@@ -105,9 +106,15 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
             Folder / week
             <input name="folderName" placeholder="Week 1, Homework, Recordings" defaultValue="General" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
           </label>
+          <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+            <input name="publishToStudents" type="checkbox" defaultChecked className="h-4 w-4" />
+            Show after approval in student/parent dashboards
+          </label>
           <label className="space-y-2 text-sm font-semibold text-[#22304a] md:col-span-2">
-            File
-            <input name="file" type="file" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            Choose file
+            <div className="rounded-2xl border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
+              <input name="file" type="file" required className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#0f4d81] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+            </div>
           </label>
           <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white md:col-span-2 md:justify-self-start">
             Upload for approval
