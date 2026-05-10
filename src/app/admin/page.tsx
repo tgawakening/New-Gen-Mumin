@@ -7,6 +7,7 @@ import { Eye } from "lucide-react";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/dashboard";
@@ -464,19 +465,25 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 >
                   Teacher Dashboards
                 </Link>
+                <Link
+                  href="/admin/materials"
+                  className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+                >
+                  Materials
+                </Link>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
+              <NotificationBell />
               <Link
                 href={tabHref(activeTab)}
                 className="rounded-full border border-[#d9c7b1] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#fff7ef]"
               >
                 Refresh
               </Link>
-              <div className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm text-[#22304a]">
-                <span className="font-semibold">TGA Admin</span>
-                <span className="ml-2 text-[#67778d]">tgawakening786@gmail.com</span>
+              <div className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                TGA Admin
               </div>
               <AdminLogoutButton />
             </div>

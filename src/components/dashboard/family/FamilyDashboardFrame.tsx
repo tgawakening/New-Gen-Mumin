@@ -18,6 +18,7 @@ import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { TopBar } from "@/components/TopBar";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
 
 type NavItem = {
@@ -156,6 +157,7 @@ export function FamilyDashboardFrame({
                   Main site
                 </Link>
               ) : null}
+              <NotificationBell />
               <FamilyLogoutButton />
             </div>
           </div>

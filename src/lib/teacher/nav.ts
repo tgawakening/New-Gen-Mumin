@@ -5,6 +5,7 @@ export function getTeacherNavItems() {
     { label: "Live Sessions", href: "/teacher/live-sessions" },
     { label: "Attendance", href: "/teacher/attendance" },
     { label: "Course Builder", href: "/teacher/course-builder" },
+    { label: "Materials", href: "/teacher/materials" },
     { label: "Quizzes", href: "/teacher/quizzes" },
     { label: "Lesson Log", href: "/teacher/lesson-log" },
     { label: "Journal", href: "/teacher/journal" },

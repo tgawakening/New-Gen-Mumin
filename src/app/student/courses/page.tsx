@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
+import { listMaterials } from "@/lib/google-drive/materials";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
   FamilyDashboardFrame,
@@ -28,6 +29,9 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
   const child = dashboard.child;
   const params = searchParams ? await searchParams : {};
   const selectedCourse = child.courses.find((course) => course.id === params.course) ?? child.courses[0] ?? null;
+  const materials = selectedCourse
+    ? await listMaterials({ programId: selectedCourse.id, status: "approved", limit: 20 })
+    : [];
 
   return (
     <FamilyDashboardFrame
@@ -109,6 +113,29 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
           </p>
         )}
       </SectionCard>
+
+      {selectedCourse ? (
+        <SectionCard eyebrow="Course library" title={`${selectedCourse.title} materials`}>
+          <div className="grid gap-3 md:grid-cols-2">
+            {materials.map((material) => (
+              <a
+                key={material.id}
+                href={material.webViewLink ?? "#"}
+                target="_blank"
+                className="rounded-[20px] border border-[#eadfce] bg-white px-4 py-4 text-sm"
+              >
+                <p className="font-semibold text-[#22304a]">{material.name}</p>
+                <p className="mt-1 text-xs text-[#617184]">{material.programTitle ?? selectedCourse.title}</p>
+              </a>
+            ))}
+            {!materials.length ? (
+              <p className="rounded-[20px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
+                Approved course materials will appear here after your teacher uploads them.
+              </p>
+            ) : null}
+          </div>
+        </SectionCard>
+      ) : null}
 
       {selectedCourse ? (
         <SectionCard eyebrow="Gen-Mumins plan" title={`${selectedCourse.title} curriculum`}>

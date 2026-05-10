@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 
 type NavItem = {
   label: string;
@@ -21,11 +22,16 @@ export function TeacherDashboardFrame({
     <div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#e8dccf] bg-[linear-gradient(180deg,#fff7ee_0%,#fffdf9_100%)]">
         <div className="section-container py-8">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
-            Teacher Dashboard
-          </p>
-          <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
-          <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
+                Teacher Dashboard
+              </p>
+              <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
+              <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
+            </div>
+            <NotificationBell />
+          </div>
         </div>
       </div>
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { listMaterials } from "@/lib/google-drive/materials";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
   ChildSelector,
@@ -33,6 +34,10 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : undefined;
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
+  const selectedProgramId = selectedChild.courses[0]?.id ?? null;
+  const materials = selectedProgramId
+    ? await listMaterials({ programId: selectedProgramId, status: "approved", limit: 20 })
+    : [];
 
   return (
     <FamilyDashboardFrame
@@ -163,6 +168,27 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
               ) : null}
             </div>
           ))}
+        </div>
+      </SectionCard>
+
+      <SectionCard eyebrow="Course library" title="Approved materials">
+        <div className="grid gap-3 md:grid-cols-2">
+          {materials.map((material) => (
+            <a
+              key={material.id}
+              href={material.webViewLink ?? "#"}
+              target="_blank"
+              className="rounded-[20px] border border-[#eadfce] bg-white px-4 py-4 text-sm"
+            >
+              <p className="font-semibold text-[#22304a]">{material.name}</p>
+              <p className="mt-1 text-xs text-[#617184]">{material.programTitle ?? "Program material"}</p>
+            </a>
+          ))}
+          {!materials.length ? (
+            <p className="rounded-[20px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
+              Approved course materials will appear here after teacher uploads are approved.
+            </p>
+          ) : null}
         </div>
       </SectionCard>
 

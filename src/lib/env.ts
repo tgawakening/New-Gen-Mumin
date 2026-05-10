@@ -51,6 +51,12 @@ const envSchema = z.object({
   ZOOM_HOST_USER_ID: z.string().min(1).optional(),
   ZOOM_WEBHOOK_SECRET_TOKEN: z.string().min(1).optional(),
   LIVE_CLASS_REMINDER_MINUTES: z.coerce.number().int().positive().default(15),
+  GOOGLE_DRIVE_PROJECT_ID: z.string().min(1).optional(),
+  GOOGLE_DRIVE_CLIENT_EMAIL: z.string().email().optional(),
+  GOOGLE_DRIVE_PRIVATE_KEY_ID: z.string().min(1).optional(),
+  GOOGLE_DRIVE_PRIVATE_KEY: z.string().min(1).optional(),
+  GOOGLE_DRIVE_ROOT_FOLDER_ID: z.string().min(1).optional(),
+  GOOGLE_DRIVE_SHARED_OWNER_EMAIL: z.string().email().optional(),
 });
 
 export const env = envSchema.safeParse({
@@ -104,4 +110,10 @@ export const env = envSchema.safeParse({
   ZOOM_HOST_USER_ID: process.env.ZOOM_HOST_USER_ID,
   ZOOM_WEBHOOK_SECRET_TOKEN: process.env.ZOOM_WEBHOOK_SECRET_TOKEN,
   LIVE_CLASS_REMINDER_MINUTES: process.env.LIVE_CLASS_REMINDER_MINUTES,
+  GOOGLE_DRIVE_PROJECT_ID: process.env.GOOGLE_DRIVE_PROJECT_ID,
+  GOOGLE_DRIVE_CLIENT_EMAIL: process.env.GOOGLE_DRIVE_CLIENT_EMAIL,
+  GOOGLE_DRIVE_PRIVATE_KEY_ID: process.env.GOOGLE_DRIVE_PRIVATE_KEY_ID,
+  GOOGLE_DRIVE_PRIVATE_KEY: process.env.GOOGLE_DRIVE_PRIVATE_KEY,
+  GOOGLE_DRIVE_ROOT_FOLDER_ID: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
+  GOOGLE_DRIVE_SHARED_OWNER_EMAIL: process.env.GOOGLE_DRIVE_SHARED_OWNER_EMAIL,
 });
