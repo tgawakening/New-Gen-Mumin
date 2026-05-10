@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Eye } from "lucide-react";
+import { Banknote, BookOpen, Eye, FileText, Home, RefreshCw, Users, UserSquare2, GraduationCap } from "lucide-react";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
@@ -37,10 +37,10 @@ type PageProps = {
 };
 
 const TABS = [
-  { key: "home", label: "Home" },
-  { key: "orders", label: "Orders" },
-  { key: "students", label: "Students" },
-  { key: "fee-waivers", label: "Fee Waivers" },
+  { key: "home", label: "Home", icon: Home },
+  { key: "orders", label: "Orders", icon: Banknote },
+  { key: "students", label: "Students", icon: Users },
+  { key: "fee-waivers", label: "Fee Waivers", icon: FileText },
 ] as const;
 
 function badgeClasses(status: string) {
@@ -426,63 +426,73 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     <div className="min-h-screen bg-[#edf2f6] py-6">
       <div className="section-container space-y-5">
         <NoticeBanner notice={params?.notice} tone={params?.tone} />
-        <div className="rounded-[28px] border border-[#dce4ed] bg-white px-4 py-4 shadow-sm">
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
-              <div className="rounded-2xl bg-[#0f4d81] px-4 py-3 text-white">
+        <div className="rounded-[24px] border border-[#dce4ed] bg-white px-3 py-3 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="shrink-0 rounded-2xl bg-[#0f4d81] px-4 py-3 text-white">
                 <p className="text-lg font-semibold">GM</p>
               </div>
-              <div>
+              <div className="hidden shrink-0 lg:block">
                 <p className="text-lg font-semibold text-[#22304a]">Gen-Mumins</p>
                 <p className="text-sm text-[#647388]">Admin workspace</p>
               </div>
-              <div className="flex flex-wrap gap-2 md:ml-6">
+              <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto whitespace-nowrap md:ml-3">
                 {TABS.map((tab) => {
                   const active = activeTab === tab.key;
+                  const Icon = tab.icon;
                   return (
                     <Link
                       key={tab.key}
                       href={tabHref(tab.key)}
-                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      title={tab.label}
+                      className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
                         active
                           ? "bg-[#0f4d81] text-white shadow-sm"
                           : "border border-[#d9e2eb] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
                       }`}
                     >
-                      {tab.label}
+                      <Icon className="h-4 w-4" />
+                      <span className="hidden xl:inline">{tab.label}</span>
                     </Link>
                   );
                 })}
                 <Link
                   href="/admin/classes"
-                  className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+                  title="Live Classes"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d9e2eb] bg-white px-3 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
                 >
-                  Live Classes
+                  <BookOpen className="h-4 w-4" />
+                  <span className="hidden xl:inline">Live Classes</span>
                 </Link>
                 <Link
                   href="/admin/teachers"
-                  className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+                  title="Teacher Dashboards"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d9e2eb] bg-white px-3 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
                 >
-                  Teacher Dashboards
+                  <UserSquare2 className="h-4 w-4" />
+                  <span className="hidden 2xl:inline">Teacher Dashboards</span>
                 </Link>
                 <Link
                   href="/admin/materials"
-                  className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+                  title="Materials"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d9e2eb] bg-white px-3 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
                 >
-                  Materials
+                  <GraduationCap className="h-4 w-4" />
+                  <span className="hidden xl:inline">Materials</span>
                 </Link>
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex shrink-0 items-center gap-2">
               <NotificationBell />
               <Link
                 href={tabHref(activeTab)}
-                className="rounded-full border border-[#d9c7b1] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#fff7ef]"
+                title="Refresh"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#d9c7b1] bg-white text-[#22304a] transition hover:bg-[#fff7ef]"
               >
-                Refresh
+                <RefreshCw className="h-4 w-4" />
               </Link>
-              <div className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+              <div className="hidden rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] sm:block">
                 TGA Admin
               </div>
               <AdminLogoutButton />

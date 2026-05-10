@@ -11,167 +11,108 @@ import {
   InfoList,
   MetricGrid,
   SectionCard,
-  formatGrade,
   formatWeekday,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 export default async function StudentDashboardPage() {
   const session = await getCurrentSession();
-
-  if (!session) {
-    redirect("/auth/login");
-  }
-
-  if (session.user.role !== "STUDENT") {
-    redirect(getDashboardHome(session.user.role));
-  }
+  if (!session) redirect("/auth/login");
+  if (session.user.role !== "STUDENT") redirect(getDashboardHome(session.user.role));
 
   const dashboard = await getStudentDashboardData(session.user.id);
+  if (!dashboard) redirect("/auth/login");
 
-  if (!dashboard) {
-    redirect("/auth/login");
-  }
   await ensureStudentLiveClassReminders(session.user.id);
-  const notifications = await getUnreadNotifications(session.user.id);
-
+  const notifications = await getUnreadNotifications(session.user.id, 3);
   const child = dashboard.child;
 
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
       title={dashboard.studentName}
-      subtitle="Your courses, assessment activity, weekly journal, progress reports, and class schedule all live in one learning dashboard."
+      subtitle="A clear overview of today’s class access, course activity, tasks, and growth."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
       <MetricGrid
         metrics={[
-          {
-            label: "Courses",
-            value: String(child.courses.length),
-            hint: "Your enrolled programs and class status.",
-          },
-          {
-            label: "Attendance",
-            value: `${child.attendanceRate}%`,
-            hint: "Present, late, absent, and excused tracking.",
-          },
-          {
-            label: "Quizzes",
-            value: String(child.quizzes.length),
-            hint: "Pre-lesson and post-lesson assessments.",
-          },
-          {
-            label: "Assignments",
-            value: String(child.assignments.length),
-            hint: "Submission tracking and teacher review.",
-          },
+          { label: "Courses", value: String(child.courses.length), hint: "Enrolled programs." },
+          { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
+          { label: "Quizzes", value: String(child.quizzes.length), hint: "Published assessments." },
+          { label: "Assignments", value: String(child.assignments.length), hint: "Active coursework." },
         ]}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.25fr)_minmax(280px,0.75fr)]">
         <div className="space-y-6">
           {notifications.length ? (
-            <SectionCard eyebrow="Live class alerts" title="Notifications" icon="calendar">
-              <div className="space-y-3">
+            <SectionCard eyebrow="Alerts" title="Latest notifications" icon="calendar">
+              <div className="grid gap-3 md:grid-cols-3">
                 {notifications.map((notification) => (
                   <Link
                     key={notification.id}
                     href={notification.href ?? "/student/schedule"}
-                    className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
+                    className="rounded-[18px] border border-[#eadfce] bg-white px-4 py-3"
                   >
-                    <p className="font-semibold text-[#22304a]">{notification.title}</p>
-                    <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
+                    <p className="text-sm font-semibold text-[#22304a]">{notification.title}</p>
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#5f6b7a]">{notification.body}</p>
                   </Link>
                 ))}
               </div>
             </SectionCard>
           ) : null}
 
-          <SectionCard eyebrow="Courses" title="Your learning path" icon="book">
-            <InfoList
-              items={child.courses.map(
-                (course) => `${course.title} - ${course.status} - ${course.meetingCount} weekly slots`,
-              )}
-              emptyLabel="Your courses will appear here once your enrollment is active."
-            />
-          </SectionCard>
-
-          <SectionCard eyebrow="Assessment" title="Quizzes and assignments" icon="sparkles">
-            <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
+          <SectionCard eyebrow="Learning" title="Courses and current work" icon="book">
+            <div className={`grid gap-4 lg:grid-cols-3 ${child.accessLocked ? "opacity-60" : ""}`}>
               <InfoList
-                items={child.quizzes.slice(0, 4).map((quiz) => {
-                  const score = quiz.latestScore === null ? "Awaiting score" : `${quiz.latestScore} pts`;
-                  return `${quiz.title} - ${quiz.type} - ${score}`;
-                })}
-                emptyLabel="Published quizzes will appear after your teacher prepares the lessons."
+                items={child.courses.slice(0, 4).map((course) => `${course.title} - ${course.meetingCount} slots`)}
+                emptyLabel="Courses will appear here once enrollment is active."
               />
               <InfoList
                 items={child.assignments.slice(0, 4).map((assignment) => {
-                  const status = assignment.status.replace(/_/g, " ");
-                  const score = assignment.score === null ? "Pending review" : `${assignment.score} pts`;
-                  return `${assignment.title} - ${status} - ${score}`;
-                })}
-                emptyLabel="Assignments and homework submissions will appear here."
-              />
-            </div>
-          </SectionCard>
-
-          <SectionCard eyebrow="Weekly content" title="Teacher updates and today's tasks" icon="pen">
-            <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
-              <InfoList
-                items={child.lessonUpdates.slice(0, 5).map(
-                  (update) =>
-                    `${update.programTitle} - ${update.topic} - ${update.teacherName ?? "Teacher"} - ${update.summary}`,
-                )}
-                emptyLabel="Your teacher lesson updates will appear here after content is published."
-              />
-              <InfoList
-                items={child.assignments.slice(0, 5).map((assignment) => {
-                  const due = assignment.dueDate
-                    ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
-                    : "No due date set";
+                  const due = assignment.dueDate ? assignment.dueDate.toLocaleDateString("en-GB") : "No due date";
                   return `${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
                 })}
-                emptyLabel="Tasks and homework will appear here when your teachers assign them."
+                emptyLabel="Tasks will appear here."
+              />
+              <InfoList
+                items={child.quizzes.slice(0, 4).map((quiz) => {
+                  const score = quiz.latestScore === null ? "Awaiting score" : `${quiz.latestScore} pts`;
+                  return `${quiz.title} - ${score}`;
+                })}
+                emptyLabel="Quizzes will appear here."
               />
             </div>
           </SectionCard>
 
-          <SectionCard eyebrow="Reflection" title="Journal and progress" icon="chart">
-            <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
-              <InfoList
-                items={child.journals.slice(0, 4).map(
-                  (journal) =>
-                    `${journal.template.weekLabel} - ${journal.practiceMinutes} min - ${formatGrade(journal.selfRating)}`,
-                )}
-                emptyLabel="Your journal entries will appear here once class reflection begins."
-              />
-              <InfoList
-                items={child.progress.slice(0, 4).map(
-                  (report) =>
-                    `${report.programTitle} - ${formatGrade(report.grade)} - ${report.attendancePct ?? "Pending"}% attendance`,
-                )}
-                emptyLabel="Teacher reports will appear here once a reporting cycle is complete."
-              />
+          <SectionCard eyebrow="Updates" title="Recent teacher activity" icon="pen">
+            <div className={`grid gap-3 md:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
+              {child.lessonUpdates.slice(0, 4).map((update) => (
+                <div key={update.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">
+                  <p className="font-semibold text-[#22304a]">{update.programTitle}</p>
+                  <p className="mt-1 text-[#5f6b7a]">{update.topic}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#6d7785]">{update.summary}</p>
+                </div>
+              ))}
+              {!child.lessonUpdates.length ? (
+                <p className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm text-[#5f6b7a]">
+                  Teacher updates will appear here.
+                </p>
+              ) : null}
             </div>
           </SectionCard>
-
         </div>
 
         <div className="space-y-6">
           <SectionCard eyebrow="Next class" title="Weekly schedule" icon="calendar">
             {child.nextClass ? (
-              <div className={`rounded-[24px] bg-[#22304a] p-5 text-white ${child.accessLocked ? "opacity-60" : ""}`}>
-                <p className="text-lg font-semibold">{child.nextClass.title}</p>
+              <div className={`rounded-[22px] bg-[#22304a] p-5 text-white ${child.accessLocked ? "opacity-60" : ""}`}>
+                <p className="text-base font-semibold">{child.nextClass.title}</p>
                 <p className="mt-2 text-sm text-white/80">
-                  {formatWeekday(child.nextClass.weekday)} - {child.nextClass.startTime} - {child.nextClass.endTime}
+                  {formatWeekday(child.nextClass.weekday)} - {child.nextClass.startTime}-{child.nextClass.endTime}
                 </p>
                 <p className="mt-2 text-sm text-white/75">
                   {child.nextClass.provider ?? "Live class"} - {child.nextClass.timezone}
-                </p>
-                <p className="mt-2 text-sm text-white/75">
-                  Teacher: {child.nextClass.teacherName ?? "Assigned soon"}
                 </p>
                 <LiveClassCountdown
                   startsAt={child.nextClass.nextStartsAt.toISOString()}
@@ -180,9 +121,7 @@ export default async function StudentDashboardPage() {
                 />
               </div>
             ) : (
-              <p className="text-sm leading-7 text-[#5f6b7a]">
-                Your class schedule will appear here once the weekly slot is assigned.
-              </p>
+              <p className="text-sm leading-7 text-[#5f6b7a]">Your class schedule will appear here once assigned.</p>
             )}
           </SectionCard>
 
@@ -195,38 +134,21 @@ export default async function StudentDashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard
-            eyebrow="Weekly growth"
-            title="Growth summary"
-            icon="star"
-            action={
-              !child.accessLocked ? (
-                <Link
-                  href="/student/journal/submit"
-                  className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
-                >
-                  Add journal
-                </Link>
-              ) : null
-            }
-          >
+          <SectionCard eyebrow="Growth" title="Growth summary" icon="star">
             <InfoList
               items={[
                 `Trait - ${child.journalMonthlySummary.mostConsistentTrait}`,
                 `Skill - ${child.journalMonthlySummary.strongestSkillArea}`,
                 `Leadership - ${child.journalMonthlySummary.leadershipDevelopmentScore}/5`,
               ]}
-              emptyLabel="Monthly journal growth will appear here."
+              emptyLabel="Growth summary will appear here."
             />
           </SectionCard>
 
-          <SectionCard eyebrow="Recognition" title="Badges and certificates" icon="trophy">
+          <SectionCard eyebrow="Recognition" title="Badges" icon="trophy">
             <InfoList
-              items={child.badges.slice(0, 3).map(
-                (badge) =>
-                  `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"}`,
-              )}
-              emptyLabel="Badges, gem-of-the-week, and certificates will appear here as you complete more work."
+              items={child.badges.slice(0, 2).map((badge) => `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"}`)}
+              emptyLabel="Badges will appear here."
             />
           </SectionCard>
         </div>
