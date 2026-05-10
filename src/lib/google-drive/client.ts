@@ -28,34 +28,86 @@ function getDriveConfig() {
     GOOGLE_DRIVE_ROOT_FOLDER_ID,
     GOOGLE_DRIVE_PROJECT_ID,
     GOOGLE_DRIVE_PRIVATE_KEY_ID,
+    GOOGLE_DRIVE_OAUTH_CLIENT_ID,
+    GOOGLE_DRIVE_OAUTH_CLIENT_SECRET,
+    GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,
   } = env.data;
 
-  if (!GOOGLE_DRIVE_CLIENT_EMAIL || !GOOGLE_DRIVE_PRIVATE_KEY || !GOOGLE_DRIVE_ROOT_FOLDER_ID) {
+  if (!GOOGLE_DRIVE_ROOT_FOLDER_ID) {
+    throw new Error("Google Drive root folder ID is missing.");
+  }
+
+  const hasOAuth =
+    GOOGLE_DRIVE_OAUTH_CLIENT_ID &&
+    GOOGLE_DRIVE_OAUTH_CLIENT_SECRET &&
+    GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN;
+  const hasServiceAccount = GOOGLE_DRIVE_CLIENT_EMAIL && GOOGLE_DRIVE_PRIVATE_KEY;
+
+  if (!hasOAuth && !hasServiceAccount) {
     throw new Error("Google Drive environment variables are missing.");
   }
 
   return {
     clientEmail: GOOGLE_DRIVE_CLIENT_EMAIL,
-    privateKey: normalizePrivateKey(GOOGLE_DRIVE_PRIVATE_KEY),
+    privateKey: GOOGLE_DRIVE_PRIVATE_KEY ? normalizePrivateKey(GOOGLE_DRIVE_PRIVATE_KEY) : null,
     rootFolderId: GOOGLE_DRIVE_ROOT_FOLDER_ID,
     projectId: GOOGLE_DRIVE_PROJECT_ID,
     privateKeyId: GOOGLE_DRIVE_PRIVATE_KEY_ID,
+    oauthClientId: GOOGLE_DRIVE_OAUTH_CLIENT_ID,
+    oauthClientSecret: GOOGLE_DRIVE_OAUTH_CLIENT_SECRET,
+    oauthRefreshToken: GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,
   };
 }
 
 export function isGoogleDriveConfigured() {
+  if (!env.success) return false;
+
   return (
-    env.success &&
     Boolean(
       env.data.GOOGLE_DRIVE_CLIENT_EMAIL &&
         env.data.GOOGLE_DRIVE_PRIVATE_KEY &&
+        env.data.GOOGLE_DRIVE_ROOT_FOLDER_ID,
+    ) ||
+    Boolean(
+      env.data.GOOGLE_DRIVE_OAUTH_CLIENT_ID &&
+        env.data.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET &&
+        env.data.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN &&
         env.data.GOOGLE_DRIVE_ROOT_FOLDER_ID,
     )
   );
 }
 
-async function getAccessToken() {
-  const config = getDriveConfig();
+async function getOAuthAccessToken(config: ReturnType<typeof getDriveConfig>) {
+  if (!config.oauthClientId || !config.oauthClientSecret || !config.oauthRefreshToken) {
+    throw new Error("Google Drive OAuth refresh token is missing.");
+  }
+
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.oauthClientId,
+      client_secret: config.oauthClientSecret,
+      refresh_token: config.oauthRefreshToken,
+      grant_type: "refresh_token",
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google OAuth refresh failed: ${await response.text()}`);
+  }
+
+  const payload = (await response.json()) as { access_token?: string };
+  if (!payload.access_token) throw new Error("Google OAuth response did not include an access token.");
+  return payload.access_token;
+}
+
+async function getServiceAccountAccessToken(config: ReturnType<typeof getDriveConfig>) {
+  if (!config.clientEmail || !config.privateKey) {
+    throw new Error("Google Drive service account credentials are missing.");
+  }
+
   const key = await importPKCS8(config.privateKey, "RS256");
   const now = Math.floor(Date.now() / 1000);
   const assertion = await new SignJWT({ scope: DRIVE_SCOPE })
@@ -90,6 +142,15 @@ async function getAccessToken() {
   const payload = (await response.json()) as { access_token?: string };
   if (!payload.access_token) throw new Error("Google token response did not include an access token.");
   return payload.access_token;
+}
+
+async function getAccessToken() {
+  const config = getDriveConfig();
+  if (config.oauthClientId && config.oauthClientSecret && config.oauthRefreshToken) {
+    return getOAuthAccessToken(config);
+  }
+
+  return getServiceAccountAccessToken(config);
 }
 
 export async function driveRequest<T>(path: string, init: RequestInit = {}) {

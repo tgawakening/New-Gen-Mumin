@@ -57,6 +57,9 @@ const envSchema = z.object({
   GOOGLE_DRIVE_PRIVATE_KEY: z.string().min(1).optional(),
   GOOGLE_DRIVE_ROOT_FOLDER_ID: z.string().min(1).optional(),
   GOOGLE_DRIVE_SHARED_OWNER_EMAIL: z.string().email().optional(),
+  GOOGLE_DRIVE_OAUTH_CLIENT_ID: z.string().min(1).optional(),
+  GOOGLE_DRIVE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN: z.string().min(1).optional(),
 });
 
 export const env = envSchema.safeParse({
@@ -116,4 +119,7 @@ export const env = envSchema.safeParse({
   GOOGLE_DRIVE_PRIVATE_KEY: process.env.GOOGLE_DRIVE_PRIVATE_KEY,
   GOOGLE_DRIVE_ROOT_FOLDER_ID: process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID,
   GOOGLE_DRIVE_SHARED_OWNER_EMAIL: process.env.GOOGLE_DRIVE_SHARED_OWNER_EMAIL,
+  GOOGLE_DRIVE_OAUTH_CLIENT_ID: process.env.GOOGLE_DRIVE_OAUTH_CLIENT_ID,
+  GOOGLE_DRIVE_OAUTH_CLIENT_SECRET: process.env.GOOGLE_DRIVE_OAUTH_CLIENT_SECRET,
+  GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN: process.env.GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN,
 });
