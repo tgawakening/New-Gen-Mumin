@@ -458,6 +458,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 >
                   Live Classes
                 </Link>
+                <Link
+                  href="/admin/teachers"
+                  className="rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+                >
+                  Teacher Dashboards
+                </Link>
               </div>
             </div>
 

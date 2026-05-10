@@ -123,10 +123,16 @@ export function FamilyDashboardFrame({
   children: ReactNode;
   pendingReason?: string | null;
 }) {
+  const hideSiteHeader = roleLabel === "Student Dashboard";
+
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
-      <TopBar />
-      <Header />
+      {!hideSiteHeader ? (
+        <>
+          <TopBar />
+          <Header />
+        </>
+      ) : null}
 
       <div className="relative overflow-hidden border-b border-[#e8dccf] bg-[linear-gradient(180deg,#fff7ee_0%,#fffdf9_100%)]">
         <div className="pointer-events-none absolute left-[-40px] top-8 h-36 w-36 rounded-full bg-[#ffd7a8]/40 blur-3xl" />
@@ -142,12 +148,14 @@ export function FamilyDashboardFrame({
               <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <Link
-                href="/"
-                className="cursor-pointer rounded-full border border-[#e1d4c2] bg-white px-4 py-2 text-sm font-semibold text-[#4f5d71] transition hover:bg-[#fbf1e5]"
-              >
-                Main site
-              </Link>
+              {!hideSiteHeader ? (
+                <Link
+                  href="/"
+                  className="cursor-pointer rounded-full border border-[#e1d4c2] bg-white px-4 py-2 text-sm font-semibold text-[#4f5d71] transition hover:bg-[#fbf1e5]"
+                >
+                  Main site
+                </Link>
+              ) : null}
               <FamilyLogoutButton />
             </div>
           </div>
@@ -190,7 +198,7 @@ export function FamilyDashboardFrame({
         </div>
       </div>
 
-      <Footer />
+      {!hideSiteHeader ? <Footer /> : null}
     </div>
   );
 }

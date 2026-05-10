@@ -157,39 +157,6 @@ export default async function StudentDashboardPage() {
             </div>
           </SectionCard>
 
-          <SectionCard
-            eyebrow="Weekly growth"
-            title="Journal summary"
-            icon="star"
-            action={
-              !child.accessLocked ? (
-                <Link
-                  href="/student/journal/submit"
-                  className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
-                >
-                  Add weekly journal
-                </Link>
-              ) : null
-            }
-          >
-            <div className={`grid gap-4 xl:grid-cols-2 ${child.accessLocked ? "opacity-60" : ""}`}>
-              <InfoList
-                items={[
-                  `Most consistent trait - ${child.journalMonthlySummary.mostConsistentTrait}`,
-                  `Strongest skill area - ${child.journalMonthlySummary.strongestSkillArea}`,
-                  `Arabic fluency trend - ${child.journalMonthlySummary.arabicFluencyTrend}`,
-                ]}
-                emptyLabel="Monthly journal growth will appear here."
-              />
-              <InfoList
-                items={[
-                  `Leadership score - ${child.journalMonthlySummary.leadershipDevelopmentScore}/5`,
-                  `Teacher summary - ${child.journalMonthlySummary.teacherSummary}`,
-                ]}
-                emptyLabel="Leadership and teacher summary will appear here."
-              />
-            </div>
-          </SectionCard>
         </div>
 
         <div className="space-y-6">
@@ -220,22 +187,44 @@ export default async function StudentDashboardPage() {
           </SectionCard>
 
           <SectionCard eyebrow="Profile" title="Learner details" icon="profile">
+            <div className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
+              <p className="font-semibold text-[#22304a]">{child.profile.displayName}</p>
+              <p className="break-all text-xs leading-5 text-[#617184]">{child.profile.email}</p>
+              <p className="mt-2">Timezone - {child.profile.timezone ?? "Europe/London"}</p>
+              <p>Country - {child.profile.countryName ?? "Pending"}</p>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            eyebrow="Weekly growth"
+            title="Growth summary"
+            icon="star"
+            action={
+              !child.accessLocked ? (
+                <Link
+                  href="/student/journal/submit"
+                  className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
+                >
+                  Add journal
+                </Link>
+              ) : null
+            }
+          >
             <InfoList
               items={[
-                `Name - ${child.profile.displayName}`,
-                `Email - ${child.profile.email}`,
-                `Timezone - ${child.profile.timezone ?? "Europe/London"}`,
-                `Country - ${child.profile.countryName ?? "Pending"}`,
+                `Trait - ${child.journalMonthlySummary.mostConsistentTrait}`,
+                `Skill - ${child.journalMonthlySummary.strongestSkillArea}`,
+                `Leadership - ${child.journalMonthlySummary.leadershipDevelopmentScore}/5`,
               ]}
-              emptyLabel="Profile details will appear here."
+              emptyLabel="Monthly journal growth will appear here."
             />
           </SectionCard>
 
           <SectionCard eyebrow="Recognition" title="Badges and certificates" icon="trophy">
             <InfoList
-              items={child.badges.map(
+              items={child.badges.slice(0, 3).map(
                 (badge) =>
-                  `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"} - ${badge.description}`,
+                  `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"}`,
               )}
               emptyLabel="Badges, gem-of-the-week, and certificates will appear here as you complete more work."
             />
