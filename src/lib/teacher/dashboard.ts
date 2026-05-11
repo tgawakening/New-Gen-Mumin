@@ -84,6 +84,15 @@ export type TeacherDashboardData = {
     instructions: string | null;
     dueDate: Date | null;
     submissions: number;
+    submissionDetails: Array<{
+      id: string;
+      studentName: string;
+      status: string;
+      score: number | null;
+      grade: string | null;
+      submittedAt: Date | null;
+      feedback: string | null;
+    }>;
   }>;
   reports: Array<{
     id: string;
@@ -122,7 +131,15 @@ export async function getTeacherDashboardData(userId: string) {
               },
               assignments: {
                 include: {
-                  submissions: true,
+                  submissions: {
+                    include: {
+                      student: {
+                        include: {
+                          user: true,
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -162,7 +179,15 @@ export async function getTeacherDashboardData(userId: string) {
               },
               assignments: {
                 include: {
-                  submissions: true,
+                  submissions: {
+                    include: {
+                      student: {
+                        include: {
+                          user: true,
+                        },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -313,6 +338,17 @@ export async function getTeacherDashboardData(userId: string) {
         instructions: task.instructions ?? null,
         dueDate: task.dueDate,
         submissions: task.submissions.length,
+        submissionDetails: task.submissions.map((submission) => ({
+          id: submission.id,
+          studentName:
+            submission.student.displayName ||
+            `${submission.student.user.firstName} ${submission.student.user.lastName}`.trim(),
+          status: submission.status.replace(/_/g, " "),
+          score: submission.score,
+          grade: submission.grade ? submission.grade.replace(/_/g, " ") : null,
+          submittedAt: submission.submittedAt,
+          feedback: submission.feedback,
+        })),
       })),
     )
     .sort((left, right) => {

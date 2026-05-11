@@ -364,15 +364,36 @@ export function CourseBuilderWorkspace({
               </TeacherSection>
 
               <TeacherSection eyebrow="Tasks" title="Recent assignments">
-                <TeacherInfoList
-                  items={visibleAssignments.slice(0, 6).map((task) => {
+                <div className="space-y-3">
+                  {visibleAssignments.slice(0, 6).map((task) => {
                     const parsed = parseTaskPayload(task.instructions);
                     const due = task.dueDate ? task.dueDate.toLocaleDateString("en-GB") : "No due date";
                     const label = parsed.weekLabel ? `${parsed.weekLabel} - ` : "";
-                    return `${task.programTitle} - ${label}${task.title} - ${task.submissions} submissions - ${due}`;
+                    return (
+                      <details key={task.id} className="rounded-[18px] bg-[#fbf6ef] p-4">
+                        <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                          {task.programTitle} - {label}{task.title} - {task.submissions} submissions - {due}
+                        </summary>
+                        <div className="mt-3 space-y-2">
+                          {task.submissionDetails.map((submission) => (
+                            <div key={submission.id} className="rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[#4d5a6b]">
+                              <p className="font-semibold text-[#22304a]">{submission.studentName}</p>
+                              <p>Status: {submission.status} {submission.submittedAt ? `- ${submission.submittedAt.toLocaleDateString("en-GB")}` : ""}</p>
+                              <p>Score: {submission.score ?? "Pending"} {submission.grade ? `- ${submission.grade}` : ""}</p>
+                              {submission.feedback ? <p>Feedback: {submission.feedback}</p> : null}
+                            </div>
+                          ))}
+                          {!task.submissionDetails.length ? (
+                            <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#6b7482]">No submissions yet.</p>
+                          ) : null}
+                        </div>
+                      </details>
+                    );
                   })}
-                  emptyLabel="Published tasks will appear here."
-                />
+                  {!visibleAssignments.length ? (
+                    <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">Published tasks will appear here.</p>
+                  ) : null}
+                </div>
               </TeacherSection>
 
               <TeacherSection eyebrow="Teacher team" title="Who is coordinating this programme">
@@ -717,6 +738,36 @@ export function CourseBuilderWorkspace({
                   Publish student task
                 </button>
               </form>
+
+              <div className="mt-8 border-t border-[#eadfce] pt-6">
+                <h3 className="text-lg font-semibold text-[#22304a]">Submission tracker</h3>
+                <div className="mt-4 space-y-3">
+                  {visibleAssignments.map((task) => (
+                    <details key={task.id} className="rounded-[18px] bg-[#fbf6ef] p-4">
+                      <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                        {task.title} - {task.submissions} submissions
+                      </summary>
+                      <div className="mt-3 grid gap-3 md:grid-cols-2">
+                        {task.submissionDetails.map((submission) => (
+                          <div key={submission.id} className="rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[#4d5a6b]">
+                            <p className="font-semibold text-[#22304a]">{submission.studentName}</p>
+                            <p>Status: {submission.status}</p>
+                            <p>Submitted: {submission.submittedAt ? submission.submittedAt.toLocaleDateString("en-GB") : "Not submitted"}</p>
+                            <p>Score: {submission.score ?? "Pending"} {submission.grade ? `- ${submission.grade}` : ""}</p>
+                            {submission.feedback ? <p>Feedback: {submission.feedback}</p> : null}
+                          </div>
+                        ))}
+                        {!task.submissionDetails.length ? (
+                          <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#6b7482]">No student submissions yet.</p>
+                        ) : null}
+                      </div>
+                    </details>
+                  ))}
+                  {!visibleAssignments.length ? (
+                    <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">Publish a task first, then submissions will appear here.</p>
+                  ) : null}
+                </div>
+              </div>
             </TeacherSection>
           ) : null}
 
