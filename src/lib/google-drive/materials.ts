@@ -10,6 +10,7 @@ export type DriveMaterial = {
   mimeType: string;
   webViewLink: string | null;
   webContentLink: string | null;
+  thumbnailLink: string | null;
   createdTime: string;
   programId: string | null;
   programTitle: string | null;
@@ -26,6 +27,7 @@ type DriveFile = {
   mimeType: string;
   webViewLink?: string;
   webContentLink?: string;
+  thumbnailLink?: string;
   createdTime: string;
   appProperties?: Record<string, string>;
 };
@@ -167,7 +169,7 @@ export async function uploadTeacherMaterial(input: {
     Buffer.from(`\r\n--${boundary}--`),
   ]);
 
-  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,webViewLink,createdTime,appProperties", {
+  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
     method: "POST",
     headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
     body,
@@ -251,7 +253,7 @@ export async function uploadAdminMaterial(input: {
     Buffer.from(`\r\n--${boundary}--`),
   ]);
 
-  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,webViewLink,createdTime,appProperties", {
+  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
     method: "POST",
     headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
     body,
@@ -279,6 +281,7 @@ function mapDriveFile(file: DriveFile): DriveMaterial {
     mimeType: file.mimeType,
     webViewLink: file.webViewLink ?? null,
     webContentLink: file.webContentLink ?? null,
+    thumbnailLink: file.thumbnailLink ?? null,
     createdTime: file.createdTime,
     programId: file.appProperties?.programId ?? null,
     programTitle: file.appProperties?.programTitle ?? null,
@@ -300,7 +303,7 @@ export async function listMaterials(options: { status?: string; programId?: stri
   ].filter(Boolean).join(" and ");
 
   const payload = await driveRequest<{ files: DriveFile[] }>(
-    `/files?q=${encodeURIComponent(query)}&pageSize=${options.limit ?? 50}&orderBy=createdTime desc&fields=files(id,name,mimeType,webViewLink,webContentLink,createdTime,appProperties)`,
+    `/files?q=${encodeURIComponent(query)}&pageSize=${options.limit ?? 50}&orderBy=createdTime desc&fields=files(id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties)`,
   );
 
   return payload.files.map(mapDriveFile);

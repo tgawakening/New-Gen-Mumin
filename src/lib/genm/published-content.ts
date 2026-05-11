@@ -14,6 +14,7 @@ type LessonPayload = {
   termId?: string | null;
   contentType?: string | null;
   materials?: string | null;
+  attachments?: PublishedAttachment[];
 };
 
 type TaskPayload = {
@@ -27,6 +28,15 @@ type TaskPayload = {
   weekLabel?: string | null;
   termId?: string | null;
   familyNote?: string | null;
+  attachments?: PublishedAttachment[];
+};
+
+export type PublishedAttachment = {
+  id: string;
+  name: string;
+  url: string | null;
+  mimeType: string | null;
+  thumbnailUrl?: string | null;
 };
 
 function safeJsonParse<T>(value: string): T | null {
@@ -56,6 +66,7 @@ export function parseLessonPayload(value: string, fallbackHomework?: string | nu
       termId: null,
       contentType: null,
       materials: null,
+      attachments: [] as PublishedAttachment[],
     };
   }
 
@@ -75,22 +86,24 @@ export function parseLessonPayload(value: string, fallbackHomework?: string | nu
       termId: null,
       contentType: null,
       materials: null,
+      attachments: [] as PublishedAttachment[],
     };
   }
 
-    return {
-      topic: parsed.topic ?? "",
-      summary: parsed.summary ?? "",
-      instructorName: parsed.instructorName ?? null,
-      programmeFocus: parsed.programmeFocus ?? null,
-      lessonObjective: parsed.lessonObjective ?? null,
-      homework: parsed.homework ?? fallbackHomework ?? null,
-      resourceLinks: Array.isArray(parsed.resourceLinks) ? parsed.resourceLinks : [],
-      parentPrompt: parsed.parentPrompt ?? null,
+  return {
+    topic: parsed.topic ?? "",
+    summary: parsed.summary ?? "",
+    instructorName: parsed.instructorName ?? null,
+    programmeFocus: parsed.programmeFocus ?? null,
+    lessonObjective: parsed.lessonObjective ?? null,
+    homework: parsed.homework ?? fallbackHomework ?? null,
+    resourceLinks: Array.isArray(parsed.resourceLinks) ? parsed.resourceLinks : [],
+    parentPrompt: parsed.parentPrompt ?? null,
     weekLabel: parsed.weekLabel ?? null,
     termId: parsed.termId ?? null,
     contentType: parsed.contentType ?? null,
     materials: parsed.materials ?? null,
+    attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
   };
 }
 
@@ -110,6 +123,7 @@ export function parseTaskPayload(value: string | null) {
       weekLabel: null as string | null,
       termId: null as string | null,
       familyNote: null as string | null,
+      attachments: [] as PublishedAttachment[],
     };
   }
 
@@ -126,6 +140,7 @@ export function parseTaskPayload(value: string | null) {
       weekLabel: null as string | null,
       termId: null as string | null,
       familyNote: null as string | null,
+      attachments: [] as PublishedAttachment[],
     };
   }
 
@@ -139,5 +154,6 @@ export function parseTaskPayload(value: string | null) {
     weekLabel: parsed.weekLabel ?? null,
     termId: parsed.termId ?? null,
     familyNote: parsed.familyNote ?? null,
+    attachments: Array.isArray(parsed.attachments) ? parsed.attachments : [],
   };
 }

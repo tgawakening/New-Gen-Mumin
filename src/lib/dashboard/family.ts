@@ -13,7 +13,7 @@ import {
   getGenMTermPlansForProgramme,
   getGenMTeachersForProgramme,
 } from "@/lib/genm/curriculum";
-import { parseLessonPayload, parseTaskPayload } from "@/lib/genm/published-content";
+import { parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
 
 type ChildCourseSummary = {
   id: string;
@@ -106,6 +106,7 @@ type ChildAssignmentSummary = {
   programmeFocus: string | null;
   taskCategory: string | null;
   resourceLinks: string[];
+  attachments: PublishedAttachment[];
   evidenceMode: string | null;
   weekLabel: string | null;
   termId: string | null;
@@ -130,6 +131,7 @@ type ChildLessonUpdateSummary = {
   homework: string | null;
   teacherName: string | null;
   resourceLinks: string[];
+  attachments: PublishedAttachment[];
   parentPrompt: string | null;
   weekLabel: string | null;
   termId: string | null;
@@ -671,6 +673,7 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
           programmeFocus: parsedInstructions.programmeFocus,
           taskCategory: parsedInstructions.taskCategory,
           resourceLinks: parsedInstructions.resourceLinks,
+          attachments: parsedInstructions.attachments,
           evidenceMode: parsedInstructions.evidenceMode,
         weekLabel: parsedInstructions.weekLabel,
         termId: parsedInstructions.termId,
@@ -715,6 +718,7 @@ function mapLessonUpdates(enrollments: any[]) {
             homework: parsedSummary.homework,
             teacherName: parsedSummary.instructorName ?? buildTeacherName(schedule.teacher),
             resourceLinks: parsedSummary.resourceLinks,
+            attachments: parsedSummary.attachments,
             parentPrompt: parsedSummary.parentPrompt,
             weekLabel: parsedSummary.weekLabel,
             termId: parsedSummary.termId,

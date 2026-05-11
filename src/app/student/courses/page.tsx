@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FileText, ImageIcon, Video } from "lucide-react";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
@@ -16,6 +17,52 @@ import {
 type PageProps = {
   searchParams?: Promise<{ course?: string }>;
 };
+
+type Attachment = {
+  id: string;
+  name: string;
+  url: string | null;
+  mimeType: string | null;
+  thumbnailUrl?: string | null;
+};
+
+function getAttachmentIcon(mimeType: string | null) {
+  if (mimeType?.startsWith("image/")) return ImageIcon;
+  if (mimeType?.startsWith("video/")) return Video;
+  return FileText;
+}
+
+function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
+  if (!attachments.length) return null;
+
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {attachments.map((attachment) => {
+        const Icon = getAttachmentIcon(attachment.mimeType);
+        return (
+          <a
+            key={attachment.id}
+            href={attachment.url ?? "#"}
+            target="_blank"
+            className="overflow-hidden rounded-[18px] border border-[#eadfce] bg-white text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex aspect-video items-center justify-center bg-[#f5efe6]">
+              {attachment.thumbnailUrl ? (
+                <img src={attachment.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <Icon className="h-8 w-8 text-[#c27a2c]" />
+              )}
+            </div>
+            <div className="p-3">
+              <p className="line-clamp-2 font-semibold text-[#22304a]">{attachment.name}</p>
+              <p className="mt-1 text-xs text-[#617184]">{attachment.mimeType ?? "Course file"}</p>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
 
 export default async function StudentCoursesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
@@ -43,6 +90,12 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
     groups[folderName].push(material);
     return groups;
   }, {});
+  const selectedLessonUpdates = selectedCourse
+    ? child.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
+    : [];
+  const selectedAssignments = selectedCourse
+    ? child.assignments.filter((assignment) => assignment.programTitle === selectedCourse.title)
+    : child.assignments;
 
   return (
     <FamilyDashboardFrame
@@ -126,6 +179,45 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       </SectionCard>
 
       {selectedCourse ? (
+        <SectionCard eyebrow="Weekly lessons" title={`${selectedCourse.title} lesson content`}>
+          <div className="space-y-4">
+            {selectedLessonUpdates.map((update) => (
+              <article key={update.id} className="rounded-[22px] bg-[#fbf6ef] p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                      {update.weekLabel ?? update.contentType ?? "Lesson"}
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{update.topic}</h3>
+                    <p className="mt-2 text-sm leading-7 text-[#5f6b7a]">{update.summary}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
+                    {formatDate(update.lessonDate)}
+                  </span>
+                </div>
+                {update.lessonObjective ? <p className="mt-3 text-sm font-semibold text-[#22304a]">{update.lessonObjective}</p> : null}
+                <AttachmentGrid attachments={update.attachments} />
+                {update.resourceLinks.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {update.resourceLinks.map((resource) => (
+                      <a key={resource} href={resource} target="_blank" className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                        Resource link
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+            {!selectedLessonUpdates.length ? (
+              <p className="rounded-[20px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
+                Weekly lessons and attached resources will appear here after your teacher publishes them.
+              </p>
+            ) : null}
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {selectedCourse ? (
         <SectionCard eyebrow="Course library" title={`${selectedCourse.title} materials`}>
           <div className="space-y-4">
             {Object.entries(groupedMaterials).map(([folderName, folderMaterials]) => (
@@ -196,7 +288,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
 
       <SectionCard eyebrow="Assignments" title="Coursework and submissions">
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
-          {child.assignments.map((assignment) => (
+          {selectedAssignments.map((assignment) => (
             <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
               <summary className="cursor-pointer list-none">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -213,11 +305,21 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
               </summary>
               <div className="mt-4 space-y-3 text-sm leading-7 text-[#4d5a6b]">
                 {assignment.instructions ? <p>{assignment.instructions}</p> : null}
+                <AttachmentGrid attachments={assignment.attachments} />
+                {assignment.resourceLinks.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {assignment.resourceLinks.map((resource) => (
+                      <a key={resource} href={resource} target="_blank" className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                        Resource link
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
                 {assignment.feedback ? <p>{assignment.feedback}</p> : null}
               </div>
             </details>
           ))}
-          {!child.assignments.length ? (
+          {!selectedAssignments.length ? (
             <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
               Assignments will appear once teachers publish coursework.
             </p>

@@ -1,11 +1,58 @@
 import Link from "next/link";
 import { ReactNode } from "react";
+import {
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  ClipboardList,
+  FileText,
+  FolderOpen,
+  GraduationCap,
+  LayoutDashboard,
+  NotebookPen,
+  PenTool,
+  PieChart,
+  UserRound,
+  Video,
+} from "lucide-react";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 
 type NavItem = {
   label: string;
   href: string;
+  icon?: string;
 };
+
+function getTeacherNavIcon(icon?: string) {
+  switch (icon) {
+    case "classes":
+      return GraduationCap;
+    case "video":
+      return Video;
+    case "check":
+      return CheckCircle2;
+    case "builder":
+      return PenTool;
+    case "folder":
+      return FolderOpen;
+    case "quiz":
+      return ClipboardList;
+    case "lesson":
+      return BookOpen;
+    case "journal":
+      return NotebookPen;
+    case "reports":
+      return PieChart;
+    case "calendar":
+      return CalendarDays;
+    case "profile":
+      return UserRound;
+    case "home":
+      return LayoutDashboard;
+    default:
+      return FileText;
+  }
+}
 
 export function TeacherDashboardFrame({
   title,
@@ -30,7 +77,15 @@ export function TeacherDashboardFrame({
               <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
               <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
             </div>
-            <NotificationBell />
+            <div className="flex items-center gap-3">
+              <Link
+                href="/"
+                className="rounded-full border border-[#e1d4c2] bg-white px-4 py-2 text-sm font-semibold text-[#4f5d71] transition hover:bg-[#fbf1e5]"
+              >
+                Main site
+              </Link>
+              <NotificationBell />
+            </div>
           </div>
         </div>
       </div>
@@ -43,13 +98,22 @@ export function TeacherDashboardFrame({
             </p>
             <div className="mt-5 space-y-2">
               {navItems.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="block rounded-2xl bg-white/8 px-4 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12"
-                >
-                  {item.label}
-                </Link>
+                (() => {
+                  const Icon = getTeacherNavIcon(item.icon);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      className="flex items-center gap-3 rounded-2xl bg-white/8 px-4 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12"
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })()
               ))}
             </div>
           </div>

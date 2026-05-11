@@ -2,10 +2,12 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { db } from "@/lib/db";
 import { genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, type GenMProgramSlug } from "@/lib/genm/curriculum";
-import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload } from "@/lib/genm/published-content";
+import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
+import { uploadTeacherMaterial } from "@/lib/google-drive/materials";
 import type { TeacherDashboardData } from "@/lib/teacher/dashboard";
 
 type BuilderTab = "overview" | "plan" | "lesson" | "task" | "materials";
@@ -37,6 +39,41 @@ function splitLinks(value: string | null) {
     .split(/[,\n]/)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function getUploadFiles(formData: FormData, fieldName: string) {
+  return formData.getAll(fieldName).filter((entry): entry is File => entry instanceof File && entry.size > 0);
+}
+
+async function uploadBuilderAttachments(input: {
+  files: File[];
+  programId: string;
+  teacherUserId: string;
+  folderName: string;
+  titlePrefix: string;
+}) {
+  const attachments: PublishedAttachment[] = [];
+
+  for (const file of input.files) {
+    const uploaded = await uploadTeacherMaterial({
+      programId: input.programId,
+      teacherUserId: input.teacherUserId,
+      title: `${input.titlePrefix} - ${file.name}`,
+      folderName: input.folderName,
+      publishToStudents: true,
+      file,
+    });
+
+    attachments.push({
+      id: uploaded.id,
+      name: uploaded.name,
+      url: uploaded.webViewLink ?? null,
+      mimeType: uploaded.mimeType ?? file.type ?? null,
+      thumbnailUrl: uploaded.thumbnailLink ?? null,
+    });
+  }
+
+  return attachments;
 }
 
 function getProgrammeTeachingCapabilities(programmeSlug: GenMProgramSlug) {
@@ -111,10 +148,21 @@ export function CourseBuilderWorkspace({
     const materials = cleanOptional(formData.get("materials"));
     const programmeFocus = cleanOptional(formData.get("programmeFocus"));
     const lessonObjective = cleanOptional(formData.get("lessonObjective"));
+    const attachmentFiles = getUploadFiles(formData, "lessonFiles");
 
     if (!scheduleId || !lessonDateRaw || !topic || !summary) {
       throw new Error("Please complete class, lesson date, topic, and summary before publishing.");
     }
+
+    const schedule = dashboard.classes.find((entry) => entry.id === scheduleId);
+    if (!schedule) throw new Error("Choose a valid class schedule.");
+    const attachments = await uploadBuilderAttachments({
+      files: attachmentFiles,
+      programId: schedule.programId,
+      teacherUserId,
+      folderName: ["Lessons", weekLabel || topic].filter(Boolean).join(" / "),
+      titlePrefix: weekLabel || topic,
+    });
 
     const finalHomework =
       [homework, resourceLinks ? `Resources: ${resourceLinks}` : null].filter(Boolean).join("\n\n") || null;
@@ -138,6 +186,7 @@ export function CourseBuilderWorkspace({
           termId,
           contentType,
           materials,
+          attachments,
         }),
         homework: finalHomework,
       },
@@ -169,10 +218,19 @@ export function CourseBuilderWorkspace({
     const familyNote = cleanOptional(formData.get("familyNote"));
     const programmeFocus = cleanOptional(formData.get("taskProgrammeFocus"));
     const taskCategory = cleanOptional(formData.get("taskCategory"));
+    const attachmentFiles = getUploadFiles(formData, "taskFiles");
 
     if (!programId || !title || !instructions) {
       throw new Error("Please complete programme, task title, and instructions before publishing.");
     }
+
+    const attachments = await uploadBuilderAttachments({
+      files: attachmentFiles,
+      programId,
+      teacherUserId,
+      folderName: ["Tasks", weekLabel || title].filter(Boolean).join(" / "),
+      titlePrefix: weekLabel || title,
+    });
 
     await db.assignment.create({
       data: {
@@ -189,6 +247,7 @@ export function CourseBuilderWorkspace({
           weekLabel,
           termId,
           familyNote,
+          attachments,
         }),
         dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
       },
@@ -208,13 +267,15 @@ export function CourseBuilderWorkspace({
 
   return (
     <div className="space-y-6">
-      {success ? (
-        <div className="rounded-[24px] border border-[#d9e7f2] bg-[#eff7ff] px-5 py-4 text-sm text-[#2a5d84]">
-          {success === "lesson"
-            ? "Lesson content published. Parent and student dashboards will now surface the update."
-            : "Student task published. It should now appear in the family LMS and coursework views."}
-        </div>
-      ) : null}
+      <ActionToast
+        message={
+          success === "lesson"
+            ? "Lesson content published with resources."
+            : success === "task"
+              ? "Student task published with resources."
+              : undefined
+        }
+      />
 
       <TeacherSection eyebrow="Programme map" title={selectedProgramme ? `${selectedProgramme.title} builder` : "Choose your programme workspace"}>
         {selectedProgramme ? (
@@ -392,8 +453,11 @@ export function CourseBuilderWorkspace({
           ) : null}
 
           {activeTab === "lesson" ? (
-            <TeacherSection eyebrow="Weekly content" title="Publish a lesson update">
+            <TeacherSection eyebrow="Weekly content" title="Publish a lesson with resources">
               <form action={publishLessonContent} className="grid gap-4">
+                <div className="rounded-[20px] border border-[#d9e7f2] bg-[#f5fbff] p-4 text-sm leading-7 text-[#4d5a6b]">
+                  Add the weekly lesson update, then attach slides, images, PDFs, worksheets, or short videos. Uploaded files are saved in the programme Drive folder and shown inside the student course page.
+                </div>
                 <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                   Class schedule
                   <select
@@ -517,6 +581,20 @@ export function CourseBuilderWorkspace({
                   />
                 </label>
 
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Lesson files
+                  <div className="rounded-[18px] border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
+                    <input
+                      name="lessonFiles"
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx"
+                      className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#2a76aa] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                    />
+                    <p className="mt-2 text-xs font-normal text-[#617184]">Slides, PDFs, images, worksheets, docs, and short videos are supported.</p>
+                  </div>
+                </label>
+
                 <button type="submit" className="inline-flex w-fit rounded-full bg-[#2a76aa] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#245f88]">
                   Publish lesson update
                 </button>
@@ -525,12 +603,12 @@ export function CourseBuilderWorkspace({
           ) : null}
 
           {activeTab === "task" ? (
-            <TeacherSection eyebrow="Student work" title="Assign a task or homework">
+            <TeacherSection eyebrow="Student work" title="Assign a task with resources">
               <form action={publishStudentTask} className="grid gap-4">
                 <input type="hidden" name="programId" value={selectedRoster?.programId ?? ""} />
 
-                <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm text-[#5f6b7a]">
-                  Publishing task for <span className="font-semibold text-[#22304a]">{selectedRoster?.title}</span>.
+                <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm leading-7 text-[#5f6b7a]">
+                  Publishing task for <span className="font-semibold text-[#22304a]">{selectedRoster?.title}</span>. Attach worksheets, examples, images, or files students need before starting.
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -609,6 +687,20 @@ export function CourseBuilderWorkspace({
                     className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
                     placeholder="Paste Google Drive, worksheet, or reference links"
                   />
+                </label>
+
+                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  Task files
+                  <div className="rounded-[18px] border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
+                    <input
+                      name="taskFiles"
+                      type="file"
+                      multiple
+                      accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx"
+                      className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+                    />
+                    <p className="mt-2 text-xs font-normal text-[#617184]">Uploaded files are saved to Google Drive and shown with this task in the student LMS.</p>
+                  </div>
                 </label>
 
                 <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
