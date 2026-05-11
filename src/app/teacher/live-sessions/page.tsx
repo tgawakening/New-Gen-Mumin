@@ -7,6 +7,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { requestTeacherLiveClass } from "@/lib/live-classes/service";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
@@ -18,22 +19,6 @@ type PageProps = {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
-
-function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
-  if (!notice) return null;
-
-  return (
-    <div
-      className={`rounded-[20px] border px-5 py-4 text-sm font-medium shadow-sm ${
-        tone === "error"
-          ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]"
-          : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]"
-      }`}
-    >
-      {notice}
-    </div>
-  );
-}
 
 function noticeHref(message: string, tone: "success" | "error" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
@@ -65,38 +50,40 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           startTime: String(formData.get("startTime") || "16:00"),
           endTime: String(formData.get("endTime") || "17:00"),
           timezone: String(formData.get("timezone") || "Europe/London"),
-          createZoomMeeting: false,
+          createZoomMeeting: true,
         },
         currentSession.user.id,
       );
 
       revalidatePath("/teacher/live-sessions");
       revalidatePath("/admin/classes");
-      redirect(noticeHref("Zoom session request sent to admin for approval."));
+      revalidatePath("/student/schedule");
+      revalidatePath("/parent/schedule");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to request this Zoom session.";
       redirect(noticeHref(message, "error"));
     }
+    redirect(noticeHref("Zoom live session created successfully. Admin has been notified."));
   }
 
   return (
     <TeacherDashboardFrame
       title="Live Sessions"
-      subtitle="Request Zoom sessions for your assigned programmes. Admin approval creates the final recurring Zoom meeting and notifies learners."
+      subtitle="Create Zoom sessions for your assigned programmes. Admin is notified automatically for monitoring."
       navItems={getTeacherNavItems()}
     >
-      <NoticeBanner notice={params.notice} tone={params.tone} />
+      <ActionToast message={params.notice} tone={params.tone} />
 
       <TeacherMetricGrid
         metrics={[
           { label: "Assigned programs", value: String(dashboard.rosters.length), hint: "Programmes you can request sessions for." },
           { label: "Existing sessions", value: String(dashboard.classes.length), hint: "Approved or pending live classes." },
           { label: "Students", value: String(dashboard.metrics.students), hint: "Learners reached after approval." },
-          { label: "Approval", value: "Admin", hint: "Teacher requests are reviewed before publishing." },
+          { label: "Publishing", value: "Direct", hint: "Admin receives a notification." },
         ]}
       />
 
-      <TeacherSection eyebrow="Zoom request" title="Request a recurring live session">
+      <TeacherSection eyebrow="Zoom session" title="Create a recurring live session">
         <form action={requestSessionAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Program
@@ -143,7 +130,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           </label>
 
           <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
-            Send for admin approval
+            Create Zoom session
           </button>
         </form>
       </TeacherSection>
@@ -162,7 +149,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                 {WEEKDAYS[entry.weekday]} {entry.startTime}-{entry.endTime} {entry.timezone}
               </p>
               <p className="mt-2 text-sm text-[#5f6b7a]">
-                {entry.meetingUrl ? "Approved and linked to Zoom" : "Waiting for admin approval or Zoom sync"}
+                {entry.meetingUrl ? "Linked to Zoom" : "Waiting for Zoom sync"}
               </p>
             </div>
           ))}

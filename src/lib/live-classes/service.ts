@@ -127,6 +127,22 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
 
+  const meeting = input.createZoomMeeting
+    ? await createRecurringZoomMeeting({
+        topic: input.title,
+        agenda: `${program.title} teacher-created live session`,
+        timezone: input.timezone,
+        startTime: toZoomLocalStartTime(nextWeeklyOccurrence(input.weekday, input.startTime)),
+        durationMinutes: durationMinutes(input.startTime, input.endTime),
+        weekday: input.weekday,
+        waitingRoom: input.waitingRoom,
+        joinBeforeHost: input.joinBeforeHost,
+        muteUponEntry: input.muteUponEntry,
+        autoRecording: input.autoRecording,
+        passcode: input.passcode,
+      })
+    : null;
+
   const schedule = await db.classSchedule.create({
     data: {
       programId: input.programId,
@@ -137,7 +153,10 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
       startTime: input.startTime,
       endTime: input.endTime,
       timezone: input.timezone,
-      meetingProvider: PENDING_ZOOM_PROVIDER,
+      meetingProvider: meeting ? "Zoom" : PENDING_ZOOM_PROVIDER,
+      meetingUrl: meeting?.join_url ?? null,
+      meetingId: meeting?.id ? String(meeting.id) : null,
+      recurringSeriesId: meeting?.id ? String(meeting.id) : null,
       startsOn: nextWeeklyOccurrence(input.weekday, input.startTime),
     },
   });
@@ -147,8 +166,10 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
     await db.notification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
-        title: "Zoom meeting approval needed",
-        body: `${teacherDisplayName(teacher)} requested ${input.title} for ${program.title}.`,
+        title: meeting ? "Teacher scheduled a Zoom class" : "Zoom meeting approval needed",
+        body: meeting
+          ? `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}.`
+          : `${teacherDisplayName(teacher)} requested ${input.title} for ${program.title}.`,
         href: "/admin/classes",
       })),
     });
@@ -161,6 +182,8 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
     sessionTitle: input.title,
     schedule: `${input.startTime}-${input.endTime} ${input.timezone}`,
   });
+
+  if (meeting) await notifyEnrolledUsers(schedule.id);
 
   return schedule;
 }

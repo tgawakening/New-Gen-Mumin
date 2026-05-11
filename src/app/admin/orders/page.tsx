@@ -3,23 +3,9 @@ export const dynamic = "force-dynamic";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { db } from "@/lib/db";
 import { markOrderPaid, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
-
-function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
-  if (!notice) return null;
-
-  const styles =
-    tone === "error"
-      ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]"
-      : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]";
-
-  return (
-    <div className={`rounded-[20px] border px-5 py-4 text-sm font-medium shadow-sm ${styles}`}>
-      {notice}
-    </div>
-  );
-}
 
 function statusClass(status: string) {
   if (status === "SUCCEEDED") return "bg-[#effaf3] text-[#2f6b4b]";
@@ -75,10 +61,10 @@ export default async function AdminOrdersPage({
       revalidatePath("/admin/orders");
       revalidatePath("/parent");
       revalidatePath("/student");
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order completed successfully&tone=success`);
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to complete this order right now&tone=error`);
     }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order completed successfully&tone=success`);
   }
 
   async function resendCompletionEmail(formData: FormData) {
@@ -94,10 +80,10 @@ export default async function AdminOrdersPage({
       await resendOrderCompletionEmails(orderId);
       revalidatePath("/admin/orders");
       revalidatePath("/admin");
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to resend the confirmation email right now&tone=error`);
     }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
   }
 
   const params = searchParams ? await searchParams : undefined;
@@ -123,7 +109,7 @@ export default async function AdminOrdersPage({
   return (
     <div className="min-h-screen bg-[#f7f4eb] py-10">
       <div className="section-container space-y-6">
-        <NoticeBanner notice={params?.notice} tone={params?.tone} />
+        <ActionToast message={params?.notice} tone={params?.tone} />
         <div>
           <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
             Admin / Orders

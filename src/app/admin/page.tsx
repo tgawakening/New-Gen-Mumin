@@ -7,6 +7,7 @@ import { Banknote, BookOpen, Eye, FileText, Home, RefreshCw, Users, UserSquare2,
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
@@ -276,21 +277,6 @@ function buildReturnHref(
   return tabHref(tab, extra);
 }
 
-function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
-  if (!notice) return null;
-
-  const styles =
-    tone === "error"
-      ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]"
-      : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]";
-
-  return (
-    <div className={`rounded-[20px] border px-5 py-4 text-sm font-medium shadow-sm ${styles}`}>
-      {notice}
-    </div>
-  );
-}
-
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
 
@@ -340,10 +326,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       revalidatePath("/admin");
       revalidatePath("/parent");
       revalidatePath("/student");
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order completed successfully&tone=success`);
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to complete this order right now&tone=error`);
     }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order completed successfully&tone=success`);
   }
 
   async function cancelOrder(formData: FormData) {
@@ -357,10 +343,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       revalidatePath("/admin");
       revalidatePath("/parent");
       revalidatePath("/student");
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order cancelled successfully&tone=success`);
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to cancel this order right now&tone=error`);
     }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order cancelled successfully&tone=danger`);
   }
 
   async function deleteStudent(formData: FormData) {
@@ -372,10 +358,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     try {
       await db.user.delete({ where: { id: userId } });
       revalidatePath("/admin");
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Student deleted successfully&tone=success`);
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to delete this student right now&tone=error`);
     }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Student deleted successfully&tone=danger`);
   }
 
   async function resendCompletionEmail(formData: FormData) {
@@ -388,10 +374,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     try {
       await resendOrderCompletionEmails(orderId);
       revalidatePath("/admin");
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to resend the confirmation email right now&tone=error`);
     }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
   }
 
   const params = searchParams ? await searchParams : {};
@@ -425,7 +411,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
       <div className="section-container space-y-5">
-        <NoticeBanner notice={params?.notice} tone={params?.tone} />
+        <ActionToast message={params?.notice} tone={params?.tone} />
         <div className="rounded-[24px] border border-[#dce4ed] bg-white px-3 py-3 shadow-sm">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">

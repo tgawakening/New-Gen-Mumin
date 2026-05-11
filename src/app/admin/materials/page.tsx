@@ -5,8 +5,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { approveMaterial, deleteMaterial, listMaterials, rejectMaterial, uploadAdminMaterial } from "@/lib/google-drive/materials";
+import { approveMaterial, deleteMaterial, grantAdminAccessToMaterials, listMaterials, rejectMaterial, uploadAdminMaterial } from "@/lib/google-drive/materials";
 import { isGoogleDriveConfigured } from "@/lib/google-drive/client";
 import { db } from "@/lib/db";
 
@@ -14,18 +15,14 @@ type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
 };
 
-function noticeHref(message: string, tone: "success" | "error" = "success") {
+function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
   return `/admin/materials?${params.toString()}`;
 }
 
-function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
-  if (!notice) return null;
-  return (
-    <div className={`rounded-[20px] border px-5 py-4 text-sm font-medium ${tone === "error" ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]" : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]"}`}>
-      {notice}
-    </div>
-  );
+function ErrorBanner({ message }: { message?: string }) {
+  if (!message) return null;
+  return <div className="rounded-[20px] border border-[#f0cccc] bg-[#fff4f4] px-5 py-4 text-sm font-medium text-[#a23c3c]">{message}</div>;
 }
 
 export default async function AdminMaterialsPage({ searchParams }: PageProps) {
@@ -55,10 +52,10 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
       revalidatePath("/admin/materials");
       revalidatePath("/student/courses");
       revalidatePath("/parent/courses");
-      redirect(noticeHref("Material approved and published."));
     } catch (error) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to approve material.", "error"));
     }
+    redirect(noticeHref("Material approved and published."));
   }
 
   async function rejectAction(formData: FormData) {
@@ -68,10 +65,10 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
     try {
       await rejectMaterial(String(formData.get("fileId") || ""), currentSession.user.id);
       revalidatePath("/admin/materials");
-      redirect(noticeHref("Material marked as needing changes."));
     } catch (error) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to reject material.", "error"));
     }
+    redirect(noticeHref("Material marked as needing changes.", "danger"));
   }
 
   async function uploadAdminMaterialAction(formData: FormData) {
@@ -92,10 +89,10 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
       revalidatePath("/admin/materials");
       revalidatePath("/student/courses");
       revalidatePath("/parent/courses");
-      redirect(noticeHref("Admin material uploaded."));
     } catch (error) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to upload material.", "error"));
     }
+    redirect(noticeHref("Admin material uploaded successfully."));
   }
 
   async function deleteAction(formData: FormData) {
@@ -107,16 +104,17 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
       revalidatePath("/admin/materials");
       revalidatePath("/student/courses");
       revalidatePath("/parent/courses");
-      redirect(noticeHref("Material deleted from Google Drive."));
     } catch (error) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to delete material.", "error"));
     }
+    redirect(noticeHref("Material deleted from Google Drive.", "danger"));
   }
 
   let driveError: string | null = null;
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   try {
     materials = await listMaterials({ limit: 80 });
+    await grantAdminAccessToMaterials(materials.map((material) => material.id));
   } catch (error) {
     driveError = error instanceof Error ? error.message : "Unable to load Google Drive materials.";
   }
@@ -126,8 +124,8 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
       <div className="section-container space-y-5">
-        <NoticeBanner notice={params.notice} tone={params.tone} />
-        <NoticeBanner notice={driveError ?? undefined} tone="error" />
+        <ActionToast message={params.notice} tone={params.tone} />
+        <ErrorBanner message={driveError ?? undefined} />
         <div className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>

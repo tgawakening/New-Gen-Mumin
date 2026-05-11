@@ -153,6 +153,17 @@ async function getAccessToken() {
   return getServiceAccountAccessToken(config);
 }
 
+async function parseDriveResponse<T>(response: Response) {
+  const text = await response.text();
+  if (!text.trim()) return undefined as T;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Google Drive returned an unreadable response: ${text.slice(0, 240)}`);
+  }
+}
+
 export async function driveRequest<T>(path: string, init: RequestInit = {}) {
   const accessToken = await getAccessToken();
   const response = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
@@ -168,7 +179,7 @@ export async function driveRequest<T>(path: string, init: RequestInit = {}) {
     throw new Error(`Google Drive request failed: ${await response.text()}`);
   }
 
-  return (await response.json()) as T;
+  return parseDriveResponse<T>(response);
 }
 
 export async function driveUpload<T>(path: string, init: RequestInit = {}) {
@@ -186,7 +197,7 @@ export async function driveUpload<T>(path: string, init: RequestInit = {}) {
     throw new Error(`Google Drive upload failed: ${await response.text()}`);
   }
 
-  return (await response.json()) as T;
+  return parseDriveResponse<T>(response);
 }
 
 export function getDriveRootFolderId() {

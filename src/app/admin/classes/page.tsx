@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
@@ -34,25 +35,9 @@ const WEEKDAYS = [
   "Saturday",
 ];
 
-function noticeHref(message: string, tone: "success" | "error" = "success") {
+function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
   return `/admin/classes?${params.toString()}`;
-}
-
-function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
-  if (!notice) return null;
-
-  return (
-    <div
-      className={`rounded-[20px] border px-5 py-4 text-sm font-medium shadow-sm ${
-        tone === "error"
-          ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]"
-          : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]"
-      }`}
-    >
-      {notice}
-    </div>
-  );
 }
 
 function formatTeacherName(teacher: {
@@ -114,11 +99,11 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       revalidatePath("/teacher/schedule");
       revalidatePath("/student/schedule");
       revalidatePath("/parent/schedule");
-      redirect(noticeHref("Live class created successfully."));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to create live class.";
       redirect(noticeHref(message, "error"));
     }
+    redirect(noticeHref("Live class created successfully."));
   }
 
   async function syncZoomAction(formData: FormData) {
@@ -133,11 +118,11 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       revalidatePath("/teacher/schedule");
       revalidatePath("/student/schedule");
       revalidatePath("/parent/schedule");
-      redirect(noticeHref("Zoom meeting created and linked to the class."));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to sync this class to Zoom.";
       redirect(noticeHref(message, "error"));
     }
+    redirect(noticeHref("Zoom meeting created and linked to the class."));
   }
 
   async function approveRequestAction(formData: FormData) {
@@ -154,11 +139,11 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       revalidatePath("/student/schedule");
       revalidatePath("/parent");
       revalidatePath("/parent/schedule");
-      redirect(noticeHref("Teacher Zoom meeting request approved."));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to approve this Zoom request.";
       redirect(noticeHref(message, "error"));
     }
+    redirect(noticeHref("Teacher Zoom meeting request approved."));
   }
 
   async function rejectRequestAction(formData: FormData) {
@@ -171,11 +156,11 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       await rejectTeacherLiveClass(String(formData.get("scheduleId") || ""));
       revalidatePath("/admin/classes");
       revalidatePath("/teacher/schedule");
-      redirect(noticeHref("Teacher Zoom meeting request declined."));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to decline this Zoom request.";
       redirect(noticeHref(message, "error"));
     }
+    redirect(noticeHref("Teacher Zoom meeting request declined.", "danger"));
   }
 
   const [programs, teachers, schedules] = await Promise.all([
@@ -200,7 +185,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
       <div className="section-container space-y-5">
-        <NoticeBanner notice={params.notice} tone={params.tone} />
+        <ActionToast message={params.notice} tone={params.tone} />
 
         <div className="rounded-[28px] border border-[#dce4ed] bg-white px-4 py-4 shadow-sm">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">

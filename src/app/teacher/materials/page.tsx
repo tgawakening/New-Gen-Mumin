@@ -4,28 +4,25 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { uploadTeacherMaterial, listMaterials } from "@/lib/google-drive/materials";
+import { deleteTeacherMaterial, uploadTeacherMaterial, listMaterials } from "@/lib/google-drive/materials";
 import { isGoogleDriveConfigured } from "@/lib/google-drive/client";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
 };
 
-function noticeHref(message: string, tone: "success" | "error" = "success") {
+function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
   return `/teacher/materials?${params.toString()}`;
 }
 
-function NoticeBanner({ notice, tone }: { notice?: string; tone?: string }) {
-  if (!notice) return null;
-  return (
-    <div className={`rounded-[20px] border px-5 py-4 text-sm font-medium ${tone === "error" ? "border-[#f0cccc] bg-[#fff4f4] text-[#a23c3c]" : "border-[#cfe9d8] bg-[#edf8ef] text-[#2f6b4b]"}`}>
-      {notice}
-    </div>
-  );
+function ErrorBanner({ message }: { message?: string }) {
+  if (!message) return null;
+  return <div className="rounded-[20px] border border-[#f0cccc] bg-[#fff4f4] px-5 py-4 text-sm font-medium text-[#a23c3c]">{message}</div>;
 }
 
 export default async function TeacherMaterialsPage({ searchParams }: PageProps) {
@@ -64,27 +61,46 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
       });
       revalidatePath("/teacher/materials");
       revalidatePath("/admin/materials");
-      redirect(noticeHref("Material uploaded and sent to admin for approval."));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to upload this material.";
       redirect(noticeHref(message, "error"));
     }
+    redirect(noticeHref("Material uploaded successfully."));
+  }
+
+  async function deleteMaterialAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+
+    try {
+      await deleteTeacherMaterial(String(formData.get("fileId") || ""), currentSession.user.id);
+      revalidatePath("/teacher/materials");
+      revalidatePath("/admin/materials");
+      revalidatePath("/student/courses");
+      revalidatePath("/parent/courses");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to delete this material.";
+      redirect(noticeHref(message, "error"));
+    }
+    redirect(noticeHref("Material deleted successfully.", "danger"));
   }
 
   return (
     <TeacherDashboardFrame
       title="Course Materials"
-      subtitle="Upload program files directly to the Gen-Mumin Google Drive. Admin approval publishes them to student and parent dashboards."
+      subtitle="Upload program files directly to the Gen-Mumin Google Drive. Published resources appear for students and parents immediately when selected."
       navItems={getTeacherNavItems()}
     >
-      <NoticeBanner notice={params.notice} tone={params.tone} />
-      <NoticeBanner notice={driveError ?? undefined} tone="error" />
+      <ActionToast message={params.notice} tone={params.tone} />
+      <ErrorBanner message={driveError ?? undefined} />
       <TeacherMetricGrid
         metrics={[
           { label: "Drive", value: isGoogleDriveConfigured() ? "Ready" : "Missing", hint: "Google Drive service account connection." },
           { label: "Programs", value: String(dashboard.rosters.length), hint: "Assigned upload folders." },
           { label: "Materials", value: String(materials.length), hint: "Uploaded files visible in this workspace." },
-          { label: "Approval", value: "Admin", hint: "Files publish after review." },
+          { label: "Publishing", value: "Direct", hint: "Admin is notified for monitoring." },
         ]}
       />
 
@@ -108,7 +124,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
           </label>
           <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
             <input name="publishToStudents" type="checkbox" defaultChecked className="h-4 w-4" />
-            Show after approval in student/parent dashboards
+            Show in student/parent dashboards
           </label>
           <label className="space-y-2 text-sm font-semibold text-[#22304a] md:col-span-2">
             Choose file
@@ -117,7 +133,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
             </div>
           </label>
           <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white md:col-span-2 md:justify-self-start">
-            Upload for approval
+            Upload material
           </button>
         </form>
       </TeacherSection>
@@ -131,11 +147,17 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
                   <p className="font-semibold text-[#22304a]">{material.name}</p>
                   <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.folderName ?? "General"} - {material.status}</p>
                 </div>
-                {material.webViewLink ? (
-                  <a href={material.webViewLink} target="_blank" className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
-                    Open
-                  </a>
-                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {material.webViewLink ? (
+                    <a href={material.webViewLink} target="_blank" className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                      Open
+                    </a>
+                  ) : null}
+                  <form action={deleteMaterialAction}>
+                    <input type="hidden" name="fileId" value={material.id} />
+                    <button className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">Delete</button>
+                  </form>
+                </div>
               </div>
             </div>
           ))}

@@ -359,8 +359,8 @@ export async function sendAdminZoomMeetingRequestEmail(input: {
 }) {
   await sendAdminFacingEmail(
     "adminZoomMeetingRequest",
-    "Zoom meeting approval requested",
-    "A teacher has requested a Zoom live class from the LMS.",
+    "Teacher scheduled a Zoom live class",
+    "A teacher created or requested a Zoom live class from the LMS.",
     [
       { label: "Teacher", value: `${input.teacherName} (${input.teacherEmail})` },
       { label: "Programme", value: input.programTitle },

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { driveRequest, driveUpload, getDriveRootFolderId } from "@/lib/google-drive/client";
 
 export type DriveMaterial = {
@@ -14,7 +15,9 @@ export type DriveMaterial = {
   programTitle: string | null;
   status: string;
   uploadedBy: string | null;
+  uploadedByUserId: string | null;
   folderName: string | null;
+  visibility: string | null;
 };
 
 type DriveFile = {
@@ -37,6 +40,24 @@ function folderNameForProgram(title: string) {
   if (title.toLowerCase().includes("tajweed")) return "Tajweed";
   if (title.toLowerCase().includes("arabic")) return "Arabic";
   return title;
+}
+
+async function shareFileWithEmails(fileId: string, emails: Array<string | null | undefined>, role: "reader" | "writer" = "writer") {
+  const uniqueEmails = [...new Set(emails.filter((email): email is string => Boolean(email)))];
+  for (const emailAddress of uniqueEmails) {
+    await driveRequest(`/files/${fileId}/permissions?sendNotificationEmail=false`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role, type: "user", emailAddress }),
+    }).catch(() => undefined);
+  }
+}
+
+async function shareFileWithDashboardAdmins(fileId: string, admins: Array<{ email: string }>) {
+  const accessEmails = env.success
+    ? [env.data.GOOGLE_DRIVE_SHARED_OWNER_EMAIL, env.data.GOOGLE_DRIVE_ADMIN_ACCESS_EMAIL, ...admins.map((admin) => admin.email)]
+    : admins.map((admin) => admin.email);
+  await shareFileWithEmails(fileId, accessEmails, "writer");
 }
 
 export async function ensureProgramFolder(programId: string) {
@@ -133,7 +154,7 @@ export async function uploadTeacherMaterial(input: {
       uploadedByUserId: input.teacherUserId,
       uploadedByName: `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim(),
       folderName,
-      status: "pending",
+      status: input.publishToStudents === false ? "internal" : "approved",
       visibility: input.publishToStudents === false ? "internal" : "students_parents",
     },
   };
@@ -154,21 +175,31 @@ export async function uploadTeacherMaterial(input: {
 
   const admins = await db.user.findMany({ where: { role: "ADMIN" } });
   if (admins.length) {
+    await shareFileWithDashboardAdmins(uploaded.id, admins);
     await db.notification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
-        title: "Course material approval needed",
+        title: "New teacher material uploaded",
         body: `${teacher.user.firstName} uploaded ${uploaded.name} for ${program.title}.`,
         href: "/admin/materials",
       })),
     });
   }
 
+  if (input.publishToStudents !== false) {
+    await driveRequest(`/files/${uploaded.id}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" }),
+    });
+    await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title);
+  }
+
   await db.notification.create({
     data: {
       userId: input.teacherUserId,
-      title: "Material uploaded for approval",
-      body: `${uploaded.name} was uploaded to ${program.title} and is waiting for admin approval.`,
+      title: "Material uploaded",
+      body: `${uploaded.name} was uploaded to ${program.title}.`,
       href: "/teacher/materials",
     },
   });
@@ -234,6 +265,10 @@ export async function uploadAdminMaterial(input: {
     });
   }
 
+  const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { email: true } });
+  await shareFileWithDashboardAdmins(uploaded.id, admins);
+  if (publish) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title);
+
   return uploaded;
 }
 
@@ -249,15 +284,18 @@ function mapDriveFile(file: DriveFile): DriveMaterial {
     programTitle: file.appProperties?.programTitle ?? null,
     status: file.appProperties?.status ?? "pending",
     uploadedBy: file.appProperties?.uploadedByName ?? null,
+    uploadedByUserId: file.appProperties?.uploadedByUserId ?? null,
     folderName: file.appProperties?.folderName ?? "General",
+    visibility: file.appProperties?.visibility ?? null,
   };
 }
 
-export async function listMaterials(options: { status?: string; programId?: string; limit?: number } = {}) {
+export async function listMaterials(options: { status?: string; programId?: string; visibility?: string; limit?: number } = {}) {
   const query = [
     "appProperties has { key='genMumin' and value='course-material' }",
     options.status ? `appProperties has { key='status' and value='${escapeQuery(options.status)}' }` : "",
     options.programId ? `appProperties has { key='programId' and value='${escapeQuery(options.programId)}' }` : "",
+    options.visibility ? `appProperties has { key='visibility' and value='${escapeQuery(options.visibility)}' }` : "",
     "trashed = false",
   ].filter(Boolean).join(" and ");
 
@@ -270,6 +308,42 @@ export async function listMaterials(options: { status?: string; programId?: stri
 
 export async function deleteMaterial(fileId: string) {
   await driveRequest(`/files/${fileId}`, { method: "DELETE" });
+}
+
+export async function grantAdminAccessToMaterials(fileIds: string[]) {
+  if (!fileIds.length) return;
+  const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { email: true } });
+  await Promise.all(fileIds.map((fileId) => shareFileWithDashboardAdmins(fileId, admins)));
+}
+
+export async function deleteTeacherMaterial(fileId: string, teacherUserId: string) {
+  const file = await driveRequest<DriveFile>(`/files/${fileId}?fields=id,name,appProperties`);
+  if (file.appProperties?.uploadedByUserId !== teacherUserId) {
+    throw new Error("You can only delete your own uploaded materials.");
+  }
+  await deleteMaterial(fileId);
+}
+
+async function notifyMaterialLearners(fileId: string, fileName: string, programId: string, programTitle: string) {
+  const enrollments = await db.enrollment.findMany({
+    where: { programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
+    include: { student: { include: { user: true } }, parent: { include: { user: true } } },
+  });
+  const userIds = new Set<string>();
+  for (const enrollment of enrollments) {
+    userIds.add(enrollment.student.user.id);
+    if (enrollment.parent?.user.id) userIds.add(enrollment.parent.user.id);
+  }
+  if (!userIds.size) return;
+
+  await db.notification.createMany({
+    data: [...userIds].map((userId) => ({
+      userId,
+      title: "New course material",
+      body: `${fileName} is available in ${programTitle}.`,
+      href: `/student/courses?material=${fileId}`,
+    })),
+  });
 }
 
 export async function approveMaterial(fileId: string, adminUserId: string) {
@@ -307,26 +381,8 @@ export async function approveMaterial(fileId: string, adminUserId: string) {
   }
 
   const programId = updated.appProperties?.programId;
-  if (programId) {
-    const enrollments = await db.enrollment.findMany({
-      where: { programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
-      include: { student: { include: { user: true } }, parent: { include: { user: true } } },
-    });
-    const userIds = new Set<string>();
-    for (const enrollment of enrollments) {
-      userIds.add(enrollment.student.user.id);
-      userIds.add(enrollment.parent.user.id);
-    }
-    if (userIds.size) {
-      await db.notification.createMany({
-        data: [...userIds].map((userId) => ({
-          userId,
-          title: "New course material",
-          body: `${updated.name} is available in ${programTitle}.`,
-          href: "/student/courses",
-        })),
-      });
-    }
+  if (programId && updated.appProperties?.visibility !== "internal") {
+    await notifyMaterialLearners(updated.id, updated.name, programId, programTitle);
   }
 
   return updated;
