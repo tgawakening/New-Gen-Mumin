@@ -88,7 +88,7 @@ export const genMTeachers: GenMTeacherProfile[] = [
     title: "Arabic Level 1-2 Instructor",
     credential: "7 Years International Teaching Experience",
     bio: "Focuses on beginner Arabic grammar, speaking games, vocabulary growth, and lower-level confidence building.",
-    email: "shoaibmufti1221122@gmail.com",
+    email: "shoaibmufti11221122@gmail.com",
     specialties: ["Arabic grammar", "Beginner Arabic", "Conversation practice"],
     programSlugs: ["arabic"],
   },

@@ -128,7 +128,8 @@ const teacherProfiles = [
     programSlugs: ["arabic"],
   },
   {
-    email: "shoaibmufti1221122@gmail.com",
+    email: "shoaibmufti11221122@gmail.com",
+    legacyEmail: "shoaibmufti1221122@gmail.com",
     firstName: "Afira",
     lastName: "Tahir",
     password: "GenM-Afira2026!",
@@ -305,24 +306,36 @@ async function main() {
   }
 
   for (const teacher of teacherProfiles) {
-    const user = await prisma.user.upsert({
-      where: { email: teacher.email },
-      update: {
-        passwordHash: hashPassword(teacher.password),
-        firstName: teacher.firstName,
-        lastName: teacher.lastName,
-        role: "TEACHER",
-        status: "ACTIVE",
+    const existingTeacherUser = await prisma.user.findFirst({
+      where: {
+        email: {
+          in: [teacher.email, teacher.legacyEmail].filter(Boolean),
+        },
       },
-      create: {
+    });
+
+    const user = existingTeacherUser
+      ? await prisma.user.update({
+        where: { id: existingTeacherUser.id },
+        data: {
+          email: teacher.email,
+          passwordHash: hashPassword(teacher.password),
+          firstName: teacher.firstName,
+          lastName: teacher.lastName,
+          role: "TEACHER",
+          status: "ACTIVE",
+        },
+      })
+      : await prisma.user.create({
+        data: {
         email: teacher.email,
         passwordHash: hashPassword(teacher.password),
         role: "TEACHER",
         status: "ACTIVE",
         firstName: teacher.firstName,
         lastName: teacher.lastName,
-      },
-    });
+        },
+      });
 
     const teacherProfile = await prisma.teacherProfile.upsert({
       where: { userId: user.id },

@@ -12,6 +12,10 @@ import type {
   TeacherSignupPayload,
 } from "@/lib/auth/schema";
 
+const LOGIN_EMAIL_ALIASES: Record<string, string> = {
+  "shoaibmufti11221122@gmail.com": "shoaibmufti1221122@gmail.com",
+};
+
 export async function registerParentAccount(payload: SignupPayload) {
   const existing = await db.user.findUnique({ where: { email: payload.email } });
 
@@ -44,7 +48,12 @@ export async function registerParentAccount(payload: SignupPayload) {
 }
 
 export async function loginAccount(payload: LoginPayload) {
-  const user = await db.user.findUnique({ where: { email: payload.email } });
+  const aliasEmail = LOGIN_EMAIL_ALIASES[payload.email];
+  let user = await db.user.findUnique({ where: { email: payload.email } });
+
+  if (!user && aliasEmail) {
+    user = await db.user.findUnique({ where: { email: aliasEmail } });
+  }
 
   if (!user || !user.passwordHash) {
     throw new Error("Invalid email or password.");
@@ -56,6 +65,16 @@ export async function loginAccount(payload: LoginPayload) {
 
   if (user.status !== "ACTIVE") {
     throw new Error("This account is not active right now.");
+  }
+
+  if (aliasEmail && user.email === aliasEmail) {
+    const existingNewEmail = await db.user.findUnique({ where: { email: payload.email } });
+    if (!existingNewEmail) {
+      user = await db.user.update({
+        where: { id: user.id },
+        data: { email: payload.email },
+      });
+    }
   }
 
   await createSession(user.id);
