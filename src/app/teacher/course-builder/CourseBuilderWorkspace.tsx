@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { BookOpen, ClipboardList, FileText, HelpCircle, Layers, PenSquare, PlusCircle, Video } from "lucide-react";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
@@ -19,14 +20,16 @@ type CourseBuilderWorkspaceProps = {
   success?: string;
   selectedProgrammeSlug?: GenMProgramSlug | null;
   activeTab?: BuilderTab;
+  prefillWeekLabel?: string;
+  prefillTopic?: string;
 };
 
-const builderTabs: Array<{ id: BuilderTab; label: string }> = [
-  { id: "overview", label: "Overview" },
-  { id: "plan", label: "Publishing Plan" },
-  { id: "lesson", label: "Publish Lesson" },
-  { id: "task", label: "Assign Homework" },
-  { id: "materials", label: "Materials Kit" },
+const builderTabs: Array<{ id: BuilderTab; label: string; icon: typeof Layers }> = [
+  { id: "overview", label: "Overview", icon: Layers },
+  { id: "plan", label: "Curriculum", icon: BookOpen },
+  { id: "lesson", label: "Publish Lesson", icon: FileText },
+  { id: "task", label: "Assign Homework", icon: ClipboardList },
+  { id: "materials", label: "Materials Kit", icon: PlusCircle },
 ];
 
 function cleanOptional(value: FormDataEntryValue | null) {
@@ -109,12 +112,21 @@ function getProgrammeTeachingCapabilities(programmeSlug: GenMProgramSlug) {
   ];
 }
 
+function getProgrammeHighlights(programmeSlug: GenMProgramSlug, term: (typeof genMTerms)[number]) {
+  if (programmeSlug === "arabic") return term.arabic;
+  if (programmeSlug === "tajweed") return term.tajweed;
+  if (programmeSlug === "seerah") return term.seerah;
+  return term.lifeSkills;
+}
+
 export function CourseBuilderWorkspace({
   dashboard,
   teacherUserId,
   success,
   selectedProgrammeSlug = null,
   activeTab = "overview",
+  prefillWeekLabel,
+  prefillTopic,
 }: CourseBuilderWorkspaceProps) {
   const selectedRoster = selectedProgrammeSlug
     ? dashboard.rosters.find((roster) => getGenMProgrammeByTitle(roster.title)?.slug === selectedProgrammeSlug) ?? null
@@ -132,6 +144,14 @@ export function CourseBuilderWorkspace({
   const successRedirectPath = selectedProgrammeSlug ? `/teacher/course-builder/${selectedProgrammeSlug}` : "/teacher/course-builder";
   const programmeTeachers = selectedRoster ? getGenMTeachersForProgramme(selectedRoster.title) : [];
   const tabBaseHref = selectedProgrammeSlug ? `/teacher/course-builder/${selectedProgrammeSlug}` : "/teacher/course-builder";
+  const selectedProgramId = selectedRoster?.programId ?? visibleRosters[0]?.programId ?? "";
+
+  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string }) {
+    const query = new URLSearchParams({ tab });
+    if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
+    if (options?.topic) query.set("topic", options.topic);
+    return `${tabBaseHref}?${query.toString()}`;
+  }
 
   async function publishLessonContent(formData: FormData) {
     "use server";
@@ -142,6 +162,7 @@ export function CourseBuilderWorkspace({
     const summary = String(formData.get("summary") || "").trim();
     const homework = cleanOptional(formData.get("homework"));
     const resourceLinks = cleanOptional(formData.get("resourceLinks"));
+    const mediaLink = cleanOptional(formData.get("mediaLink"));
     const parentPrompt = cleanOptional(formData.get("parentPrompt"));
     const weekLabel = cleanOptional(formData.get("weekLabel"));
     const termId = cleanOptional(formData.get("termId"));
@@ -165,8 +186,9 @@ export function CourseBuilderWorkspace({
       titlePrefix: weekLabel || topic,
     });
 
+    const combinedResourceLinks = [mediaLink, resourceLinks].filter(Boolean).join("\n");
     const finalHomework =
-      [homework, resourceLinks ? `Resources: ${resourceLinks}` : null].filter(Boolean).join("\n\n") || null;
+      [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
 
     await db.lessonLog.create({
       data: {
@@ -181,7 +203,7 @@ export function CourseBuilderWorkspace({
           programmeFocus,
           lessonObjective,
           homework,
-          resourceLinks: splitLinks(resourceLinks),
+          resourceLinks: splitLinks(combinedResourceLinks),
           parentPrompt,
           weekLabel,
           termId,
@@ -355,14 +377,16 @@ export function CourseBuilderWorkspace({
               <div className="mt-5 flex flex-wrap gap-3">
                 {builderTabs.map((tab) => {
                   const isActive = activeTab === tab.id;
+                  const Icon = tab.icon;
                   return (
                     <Link
                       key={tab.id}
                       href={`${tabBaseHref}?tab=${tab.id}`}
-                      className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                      className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
                         isActive ? "bg-[#22304a] text-white" : "bg-white text-[#2a76aa] hover:bg-[#eef5fb]"
                       }`}
                     >
+                      <Icon className="h-4 w-4" />
                       {tab.label}
                     </Link>
                   );
@@ -410,6 +434,28 @@ export function CourseBuilderWorkspace({
         <>
           {activeTab === "overview" ? (
             <div className="grid gap-6 xl:grid-cols-2">
+              <TeacherSection eyebrow="Course builder" title="Build this programme from one place">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[
+                    { label: "Curriculum", href: buildBuilderHref("plan"), icon: BookOpen, body: "View term plans, week focus, and lesson actions." },
+                    { label: "Create lesson", href: buildBuilderHref("lesson"), icon: FileText, body: "Publish title, summary, thumbnail/video links, and files." },
+                    { label: "Assign task", href: buildBuilderHref("task"), icon: ClipboardList, body: "Create homework with Drive resources and submission tracking." },
+                    { label: "Quiz builder", href: `/teacher/quizzes/create?programId=${selectedProgramId}`, icon: HelpCircle, body: "Create checks linked to this programme." },
+                  ].map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Link key={item.label} href={item.href} className="rounded-[20px] bg-[#fbf6ef] p-4 transition hover:-translate-y-0.5 hover:shadow-sm">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-[#c27a2c]">
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <p className="mt-3 font-semibold text-[#22304a]">{item.label}</p>
+                        <p className="mt-1 text-xs leading-5 text-[#617184]">{item.body}</p>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </TeacherSection>
+
               <TeacherSection eyebrow="Recent publishing" title="Latest lesson updates">
                 <TeacherInfoList
                   items={visibleLessons.slice(0, 6).map((entry) => {
@@ -504,28 +550,83 @@ export function CourseBuilderWorkspace({
 
                 <div className="space-y-3">
                   {genMTerms.map((term) => {
-                    const highlights =
-                      selectedProgramme.slug === "arabic"
-                        ? term.arabic
-                        : selectedProgramme.slug === "tajweed"
-                          ? term.tajweed
-                          : selectedProgramme.slug === "seerah"
-                            ? term.seerah
-                            : term.lifeSkills;
+                    const highlights = getProgrammeHighlights(selectedProgramme.slug, term);
+                    const termLessons = visibleLessons
+                      .map((entry) => ({ entry, parsed: parseLessonPayload(entry.summary, entry.homework) }))
+                      .filter(({ parsed }) => parsed.termId === term.id);
 
                     return (
                       <details key={term.id} className="rounded-[18px] border border-[#eadfce] bg-white p-4" open={term.id === "term-1"}>
                         <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                          {term.title} - {term.level} - {term.window}
+                          Modules / Chapters / Weeks - {term.title} - {term.level} - {term.window}
                         </summary>
-                        <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                          {highlights.map((highlight) => (
-                            <li key={highlight}>- {highlight}</li>
-                          ))}
-                        </ul>
+                        <div className="mt-4 space-y-3">
+                          {highlights.map((highlight, index) => {
+                            const weekLabel = `${term.title} Week ${index + 1}`;
+                            const quizHref = `/teacher/quizzes/create?programId=${selectedProgramId}&weekLabel=${encodeURIComponent(weekLabel)}&lessonTitle=${encodeURIComponent(highlight)}`;
+
+                            return (
+                              <div key={highlight} className="rounded-[18px] border border-[#f0e5d7] bg-[#fffaf5] p-4">
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekLabel}</p>
+                                    <h4 className="mt-1 text-base font-semibold text-[#22304a]">{highlight}</h4>
+                                    <p className="mt-2 text-sm leading-6 text-[#5f6b7a]">
+                                      Add one or more lessons for this week, then create its quiz, live class, or assignment from the same row.
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    <Link href={buildBuilderHref("lesson", { weekLabel, topic: highlight })} className="inline-flex items-center gap-1 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
+                                      <FileText className="h-3.5 w-3.5" /> Lesson
+                                    </Link>
+                                    <Link href={quizHref} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                      <HelpCircle className="h-3.5 w-3.5" /> Quiz
+                                    </Link>
+                                    <Link href="/teacher/live-sessions" className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                      <Video className="h-3.5 w-3.5" /> Live
+                                    </Link>
+                                    <Link href={buildBuilderHref("task", { weekLabel, topic: highlight })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                      <PenSquare className="h-3.5 w-3.5" /> Task
+                                    </Link>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                          {termLessons.length ? (
+                            <div className="rounded-[18px] bg-[#f5fbff] p-4">
+                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#2a76aa]">Lessons already published in this term</p>
+                              <div className="mt-3 space-y-2">
+                                {termLessons.map(({ entry, parsed }) => (
+                                  <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
+                                    <span>
+                                      <span className="font-semibold text-[#22304a]">{parsed.weekLabel ?? "Lesson"}</span> - {parsed.topic || entry.topic}
+                                    </span>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Link href={`/teacher/quizzes/create?programId=${selectedProgramId}&weekLabel=${encodeURIComponent(parsed.weekLabel ?? term.title)}&lessonTitle=${encodeURIComponent(parsed.topic || entry.topic)}`} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
+                                      <Link href={buildBuilderHref("task", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic })} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
                       </details>
                     );
                   })}
+                  <div className="rounded-[18px] border border-dashed border-[#d8c3ac] bg-[#fffaf5] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-[#22304a]">Create a new week / topic</p>
+                        <p className="mt-1 text-sm text-[#5f6b7a]">Use this when the programme needs an extra chapter, revision week, or special session.</p>
+                      </div>
+                      <Link href={buildBuilderHref("lesson", { weekLabel: "New week", topic: "New lesson topic" })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                        <PlusCircle className="h-4 w-4" /> New lesson
+                      </Link>
+                    </div>
+                  </div>
                 </div>
               </div>
             </TeacherSection>
@@ -562,6 +663,7 @@ export function CourseBuilderWorkspace({
                     Topic
                     <input
                       name="topic"
+                      defaultValue={prefillTopic ?? ""}
                       className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
                       placeholder="Week focus or lesson title"
                       required
@@ -583,7 +685,7 @@ export function CourseBuilderWorkspace({
                   </label>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Week label
-                    <input name="weekLabel" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Week 5 - Cave Hira" />
+                    <input name="weekLabel" defaultValue={prefillWeekLabel ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Week 5 - Cave Hira" />
                   </label>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Content type
@@ -632,6 +734,14 @@ export function CourseBuilderWorkspace({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                    Thumbnail / video link
+                    <input
+                      name="mediaLink"
+                      className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
+                      placeholder="Paste lesson thumbnail, YouTube, Vimeo, or Drive video link"
+                    />
+                  </label>
+                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Resource links
                     <input
                       name="resourceLinks"
@@ -640,7 +750,7 @@ export function CourseBuilderWorkspace({
                     />
                   </label>
 
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56] md:col-span-2">
                     Materials or kit needed
                     <input
                       name="materials"
@@ -695,6 +805,7 @@ export function CourseBuilderWorkspace({
                     Task title
                     <input
                       name="title"
+                      defaultValue={prefillTopic ?? ""}
                       className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
                       placeholder="Weekly worksheet, reading, or practice task"
                       required
@@ -720,7 +831,7 @@ export function CourseBuilderWorkspace({
                   </label>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Week label
-                    <input name="taskWeekLabel" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Week 5 practice task" />
+                    <input name="taskWeekLabel" defaultValue={prefillWeekLabel ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Week 5 practice task" />
                   </label>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Evidence mode

@@ -9,7 +9,7 @@ import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string; error?: string }>;
+  searchParams?: Promise<{ success?: string; error?: string; programId?: string; weekLabel?: string; lessonTitle?: string }>;
 };
 
 const QUESTION_TYPES = [
@@ -27,6 +27,10 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
+  const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
+    ? params.programId
+    : dashboard.rosters[0]?.programId;
+  const defaultTitle = params.lessonTitle || (params.weekLabel ? `${params.weekLabel} quiz` : "");
 
   async function createQuizAction(formData: FormData) {
     "use server";
@@ -97,10 +101,14 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
 
       <TeacherSection eyebrow="Quiz builder" title="Create a student quiz">
         <form action={createQuizAction} className="grid gap-4">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr]">
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              Title
+              <input name="title" required defaultValue={defaultTitle} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Week 1 Arabic vocabulary check" />
+            </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Program
-              <select name="programId" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+              <select name="programId" required defaultValue={defaultProgramId} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                 {dashboard.rosters.map((roster) => (
                   <option key={roster.programId} value={roster.programId}>{roster.title}</option>
                 ))}
@@ -114,15 +122,11 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
               </select>
             </label>
           </div>
-          <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-            Title
-            <input name="title" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Week 1 Arabic vocabulary check" />
-          </label>
-          <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-            Description
-            <textarea name="description" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Short instructions for students." />
-          </label>
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px_210px]">
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              Description
+              <textarea name="description" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Short instructions for students." />
+            </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Time limit minutes
               <input name="timeLimitMinutes" type="number" min="0" defaultValue="10" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
@@ -133,13 +137,13 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
             </label>
           </div>
 
-          <div className="space-y-4">
+          <div className="grid gap-4 xl:grid-cols-2">
             {[1, 2, 3, 4, 5].map((index) => (
-              <div key={index} className="rounded-[22px] bg-[#fbf6ef] p-4">
+              <div key={index} className="min-w-0 rounded-[22px] bg-[#fbf6ef] p-4">
                 <p className="font-semibold text-[#22304a]">Question {index}</p>
                 <div className="mt-3 grid gap-3">
                   <input name={`question-${index}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Question prompt" />
-                  <div className="grid gap-3 md:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px] lg:grid-cols-[minmax(0,1fr)_90px] 2xl:grid-cols-[minmax(0,1fr)_90px_minmax(0,1fr)]">
                     <select name={`type-${index}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                       {QUESTION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
                     </select>

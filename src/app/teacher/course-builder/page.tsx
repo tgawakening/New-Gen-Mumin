@@ -9,7 +9,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { CourseBuilderWorkspace } from "./CourseBuilderWorkspace";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials" }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string }>;
 };
 
 export default async function TeacherCourseBuilderPage({ searchParams }: PageProps) {
@@ -43,6 +43,8 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         teacherUserId={session.user.id}
         success={params?.success}
         activeTab={params?.tab ?? "overview"}
+        prefillWeekLabel={params?.weekLabel}
+        prefillTopic={params?.topic}
       />
     </TeacherDashboardFrame>
   );
