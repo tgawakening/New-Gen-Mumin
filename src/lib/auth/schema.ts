@@ -12,8 +12,8 @@ export const signupPayloadSchema = z.object({
 });
 
 export const loginPayloadSchema = z.object({
-  email: z.email(),
-  password: z.string().min(8),
+  email: z.email().transform((value) => value.trim().toLowerCase()),
+  password: z.string().transform((value) => value.trim()).pipe(z.string().min(8)),
 });
 
 export const forgotPasswordPayloadSchema = z.object({

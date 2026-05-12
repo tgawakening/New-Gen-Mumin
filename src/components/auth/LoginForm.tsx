@@ -47,6 +47,7 @@ export function LoginForm() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -57,11 +58,14 @@ export function LoginForm() {
     setMessage(null);
     setIsSubmitting(true);
 
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPassword = password.trim();
+
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: normalizedEmail, password: normalizedPassword }),
       });
 
       const payload = await response.json();
@@ -70,7 +74,7 @@ export function LoginForm() {
         throw new Error(payload.error ?? "Unable to log in.");
       }
 
-      await storeBrowserCredential(email, password);
+      await storeBrowserCredential(normalizedEmail, normalizedPassword);
       setMessage("Login successful. Opening your dashboard...");
       router.push(payload.dashboardHome ?? "/parent");
       router.refresh();
@@ -84,7 +88,27 @@ export function LoginForm() {
   return (
     <form className="mx-auto w-full max-w-md space-y-5 rounded-[28px] border border-[#eadfce] bg-white p-6 shadow-sm sm:p-8" onSubmit={handleSubmit} autoComplete="on">
       <input name="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
-      <input name="password" autoComplete="current-password" autoCapitalize="none" autoCorrect="off" type="password" placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
+      <div className="relative">
+        <input
+          name="password"
+          autoComplete="current-password"
+          autoCapitalize="none"
+          autoCorrect="off"
+          type={showPassword ? "text" : "password"}
+          placeholder="Password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-20"
+          required
+        />
+        <button
+          type="button"
+          onClick={() => setShowPassword((current) => !current)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-xs font-semibold text-[#334155]"
+        >
+          {showPassword ? "Hide" : "Show"}
+        </button>
+      </div>
       {error ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</p> : null}
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
