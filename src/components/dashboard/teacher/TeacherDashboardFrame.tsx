@@ -9,7 +9,6 @@ import {
   FolderOpen,
   GraduationCap,
   LayoutDashboard,
-  Menu,
   NotebookPen,
   PenTool,
   PieChart,
@@ -100,38 +99,11 @@ export function TeacherDashboardFrame({
 
       <div className="section-container grid grid-cols-[64px_minmax(0,1fr)] gap-3 py-5 sm:gap-5 sm:py-6 xl:grid-cols-[250px_minmax(0,1fr)] xl:gap-6 xl:py-8">
         <aside className="sticky top-3 self-start xl:static">
-          <details className="group relative mb-3 xl:hidden">
-            <summary className="flex h-12 w-12 cursor-pointer list-none items-center justify-center rounded-2xl bg-[#22304a] text-white shadow-lg [&::-webkit-details-marker]:hidden">
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Open teacher menu</span>
-            </summary>
-            <div className="absolute left-0 z-50 mt-3 w-[min(280px,calc(100vw-1.5rem))] rounded-[24px] bg-[#22304a] p-3 text-white shadow-2xl">
-              <p className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f2c58f]">
-                Teaching suite
-              </p>
-              <div className="mt-1 space-y-1">
-                {navLinks.map(({ href, label, Icon }) => (
-                  <Link
-                    key={href}
-                    href={href}
-                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12"
-                  >
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span>{label}</span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </details>
-
           <div className="rounded-[22px] bg-[#22304a] p-2 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)] xl:rounded-[28px] xl:p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f]">
-              <span className="hidden xl:inline">Teaching suite</span>
-              <span className="xl:hidden">Menu</span>
+            <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f] xl:block">
+              Teaching suite
             </p>
-            <div className="mt-3 space-y-2 xl:mt-5">
+            <div className="space-y-2 xl:mt-5">
               {navLinks.map(({ href, label, Icon }) => (
                 <Link
                   key={href}
