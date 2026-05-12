@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Banknote, BookOpen, Eye, FileText, Home, RefreshCw, Users, UserSquare2, GraduationCap } from "lucide-react";
+import { Banknote, BookOpen, Eye, FileText, GraduationCap, Home, Menu, RefreshCw, Users, UserSquare2 } from "lucide-react";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
@@ -192,9 +192,9 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
 }
 
 function ChildDetailsList({
-  children,
+  items,
 }: {
-  children: Array<{
+  items: Array<{
     id: string;
     name: string;
     age: number | null;
@@ -202,13 +202,13 @@ function ChildDetailsList({
     programs: string[];
   }>;
 }) {
-  if (children.length === 0) {
+  if (items.length === 0) {
     return <p className="mt-2 text-sm text-[#617184]">No children linked yet.</p>;
   }
 
   return (
     <div className="mt-2 space-y-2">
-      {children.map((child) => (
+      {items.map((child) => (
         <div key={child.id} className="rounded-2xl border border-[#e6edf4] bg-white px-3 py-3">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
@@ -381,7 +381,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   }
 
   const params = searchParams ? await searchParams : {};
-  const activeTab = TABS.some((tab) => tab.key === params?.tab) ? params?.tab! : "home";
+  const activeTab = TABS.some((tab) => tab.key === params?.tab) && params.tab ? params.tab : "home";
 
   const filters: AdminDashboardFilters = {
     orderStatus: params?.orderStatus,
@@ -395,6 +395,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   };
 
   const data = await getAdminDashboardData(filters);
+  const adminNavItems = [
+    ...TABS.map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
+    { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
+    { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
+    { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },
+  ];
   const currentOrderHref = buildReturnHref("orders", {
     orderStatus: params?.orderStatus,
     orderPayment: params?.orderPayment,
@@ -422,50 +428,48 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <p className="text-lg font-semibold text-[#22304a]">Gen-Mumins</p>
                 <p className="text-sm text-[#647388]">Admin workspace</p>
               </div>
-              <div className="flex min-w-0 flex-nowrap gap-2 overflow-x-auto whitespace-nowrap md:ml-3">
-                {TABS.map((tab) => {
-                  const active = activeTab === tab.key;
-                  const Icon = tab.icon;
+              <details className="relative md:hidden">
+                <summary className="flex h-10 w-10 cursor-pointer list-none items-center justify-center rounded-full border border-[#d9e2eb] bg-white text-[#22304a] [&::-webkit-details-marker]:hidden">
+                  <Menu className="h-4 w-4" />
+                  <span className="sr-only">Open admin menu</span>
+                </summary>
+                <div className="absolute left-0 z-50 mt-3 w-[min(280px,calc(100vw-2rem))] rounded-[24px] bg-[#22304a] p-3 text-white shadow-2xl">
+                  <p className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f2c58f]">Admin menu</p>
+                  <div className="mt-1 space-y-1">
+                    {adminNavItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <Link key={item.key} href={item.href} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
+                            <Icon className="h-4 w-4" />
+                          </span>
+                          <span>{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              </details>
+              <div className="hidden min-w-0 flex-wrap gap-2 md:ml-3 md:flex">
+                {adminNavItems.map((item) => {
+                  const active = activeTab === item.key;
+                  const Icon = item.icon;
                   return (
                     <Link
-                      key={tab.key}
-                      href={tabHref(tab.key)}
-                      title={tab.label}
-                      className={`inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
+                      key={item.key}
+                      href={item.href}
+                      title={item.label}
+                      className={`group/nav relative inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
                         active
                           ? "bg-[#0f4d81] text-white shadow-sm"
                           : "border border-[#d9e2eb] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
                       }`}
                     >
                       <Icon className="h-4 w-4" />
-                      <span className="hidden xl:inline">{tab.label}</span>
+                      <span className="hidden 2xl:inline">{item.label}</span>
                     </Link>
                   );
                 })}
-                <Link
-                  href="/admin/classes"
-                  title="Live Classes"
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d9e2eb] bg-white px-3 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
-                >
-                  <BookOpen className="h-4 w-4" />
-                  <span className="hidden xl:inline">Live Classes</span>
-                </Link>
-                <Link
-                  href="/admin/teachers"
-                  title="Teacher Dashboards"
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d9e2eb] bg-white px-3 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
-                >
-                  <UserSquare2 className="h-4 w-4" />
-                  <span className="hidden 2xl:inline">Teacher Dashboards</span>
-                </Link>
-                <Link
-                  href="/admin/materials"
-                  title="Materials"
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[#d9e2eb] bg-white px-3 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
-                >
-                  <GraduationCap className="h-4 w-4" />
-                  <span className="hidden xl:inline">Materials</span>
-                </Link>
               </div>
             </div>
 
@@ -478,9 +482,6 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               >
                 <RefreshCw className="h-4 w-4" />
               </Link>
-              <div className="hidden rounded-full border border-[#d9e2eb] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] sm:block">
-                TGA Admin
-              </div>
               <AdminLogoutButton />
             </div>
           </div>
@@ -620,7 +621,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {order.childCount || order.childDetails.length}</p>
-                      <ChildDetailsList children={order.childDetails} />
+                      <ChildDetailsList items={order.childDetails} />
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Amount</p>
@@ -752,7 +753,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {student.childCount}</p>
-                      <ChildDetailsList children={student.childDetails} />
+                      <ChildDetailsList items={student.childDetails} />
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>

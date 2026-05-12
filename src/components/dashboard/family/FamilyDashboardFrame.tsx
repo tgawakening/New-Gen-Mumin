@@ -79,33 +79,33 @@ type DashboardVisualIcon =
   | "trophy"
   | "home";
 
-function getVisualIcon(icon?: DashboardVisualIcon) {
+function VisualIcon({ icon }: { icon?: DashboardVisualIcon }) {
   switch (icon) {
     case "book":
-      return BookOpen;
+      return <BookOpen className="h-5 w-5" />;
     case "calendar":
-      return CalendarDays;
+      return <CalendarDays className="h-5 w-5" />;
     case "check":
-      return CheckCircle2;
+      return <CheckCircle2 className="h-5 w-5" />;
     case "chart":
-      return ChartColumn;
+      return <ChartColumn className="h-5 w-5" />;
     case "profile":
-      return CircleUserRound;
+      return <CircleUserRound className="h-5 w-5" />;
     case "sparkles":
-      return Sparkles;
+      return <Sparkles className="h-5 w-5" />;
     case "star":
-      return Star;
+      return <Star className="h-5 w-5" />;
     case "sun":
-      return SunMedium;
+      return <SunMedium className="h-5 w-5" />;
     case "pen":
-      return PenSquare;
+      return <PenSquare className="h-5 w-5" />;
     case "gift":
-      return Gift;
+      return <Gift className="h-5 w-5" />;
     case "trophy":
-      return Trophy;
+      return <Trophy className="h-5 w-5" />;
     case "home":
     default:
-      return Home;
+      return <Home className="h-5 w-5" />;
   }
 }
 
@@ -139,14 +139,14 @@ export function FamilyDashboardFrame({
         <div className="pointer-events-none absolute left-[-40px] top-8 h-36 w-36 rounded-full bg-[#ffd7a8]/40 blur-3xl" />
         <div className="pointer-events-none absolute right-12 top-10 h-28 w-28 rounded-full bg-[#b9d8f7]/35 blur-3xl" />
         <div className="pointer-events-none absolute bottom-0 left-1/3 h-20 w-20 rounded-full bg-[#f5b5d1]/25 blur-2xl" />
-        <div className="section-container py-8">
+        <div className="section-container py-5 sm:py-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
                 {roleLabel}
               </p>
-              <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
-              <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
+              <h1 className="mt-3 text-3xl font-semibold text-[#22304a] sm:text-4xl">{title}</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-[#5f6b7a] sm:text-base sm:leading-8">{subtitle}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               {!hideSiteHeader ? (
@@ -164,15 +164,15 @@ export function FamilyDashboardFrame({
         </div>
       </div>
 
-      <div className="section-container grid gap-6 py-8 xl:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="space-y-5">
-          <div className="relative overflow-hidden rounded-[28px] bg-[#22304a] p-6 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)]">
+      <div className="section-container grid grid-cols-[64px_minmax(0,1fr)] gap-3 py-5 sm:gap-5 sm:py-6 xl:grid-cols-[250px_minmax(0,1fr)] xl:gap-6 xl:py-8">
+        <aside className="sticky top-3 self-start xl:static">
+          <div className="relative overflow-visible rounded-[22px] bg-[#22304a] p-2 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)] xl:overflow-hidden xl:rounded-[28px] xl:p-6">
             <div className="pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full bg-white/10" />
             <div className="pointer-events-none absolute bottom-6 right-6 h-12 w-12 rounded-full bg-[#f39f5f]/20 blur-xl" />
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f]">
+            <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f] xl:block">
               Dashboard map
             </p>
-            <div className="mt-5 space-y-2">
+            <div className="space-y-2 xl:mt-5">
               {navItems.map((item) => (
                 (() => {
                   const Icon = getNavIcon(item.icon);
@@ -180,12 +180,16 @@ export function FamilyDashboardFrame({
                     <Link
                       key={item.href}
                       href={item.href}
-                      className="flex items-center gap-3 rounded-2xl bg-white/8 px-4 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12"
+                      title={item.label}
+                      className="group/nav relative flex items-center justify-center gap-3 rounded-2xl bg-white/8 px-2 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12 xl:justify-start xl:px-4"
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
                         <Icon className="h-4 w-4" />
                       </span>
-                      <span>{item.label}</span>
+                      <span className="hidden xl:inline">{item.label}</span>
+                      <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-40 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#22304a] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-xl transition group-hover/nav:block group-hover/nav:opacity-100 xl:hidden">
+                        {item.label}
+                      </span>
                     </Link>
                   );
                 })()
@@ -194,7 +198,7 @@ export function FamilyDashboardFrame({
           </div>
         </aside>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-5 sm:space-y-6">
           {pendingReason ? <PendingAccessNotice message={pendingReason} /> : null}
           {children}
         </div>
@@ -229,20 +233,20 @@ export function MetricGrid({
   metrics: Array<{ label: string; value: string; hint: string }>;
 }) {
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
       {metrics.map((metric) => (
         (() => {
           const Icon = getMetricIcon(metric.label);
           return (
-            <div key={metric.label} className="relative overflow-hidden rounded-[24px] border border-[#eadfce] bg-white p-5 shadow-sm">
+            <div key={metric.label} className="relative overflow-hidden rounded-[18px] border border-[#eadfce] bg-white p-3 shadow-sm sm:rounded-[24px] sm:p-5">
               <div className="pointer-events-none absolute right-0 top-0 h-16 w-16 rounded-full bg-[#fff3df]" />
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm text-[#6d7785]">{metric.label}</p>
-                  <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metric.value}</p>
-                  <p className="mt-2 text-sm leading-6 text-[#8a94a3]">{metric.hint}</p>
+                  <p className="text-xs text-[#6d7785] sm:text-sm">{metric.label}</p>
+                  <p className="mt-1 text-xl font-semibold text-[#22304a] sm:mt-2 sm:text-3xl">{metric.value}</p>
+                  <p className="mt-2 hidden text-sm leading-6 text-[#8a94a3] sm:block">{metric.hint}</p>
                 </div>
-                <span className="relative z-10 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff0db] text-[#d7892f]">
+                <span className="relative z-10 hidden h-11 w-11 items-center justify-center rounded-2xl bg-[#fff0db] text-[#d7892f] sm:flex">
                   <Icon className="h-5 w-5" />
                 </span>
               </div>
@@ -267,18 +271,17 @@ export function SectionCard({
   action?: ReactNode;
   icon?: DashboardVisualIcon;
 }) {
-  const Icon = getVisualIcon(icon);
   return (
-    <section className="relative overflow-hidden rounded-[30px] border border-[#eadfce] bg-white p-6 shadow-sm">
+    <section className="relative overflow-hidden rounded-[22px] border border-[#eadfce] bg-white p-4 shadow-sm sm:rounded-[30px] sm:p-6">
       <div className="pointer-events-none absolute right-0 top-0 h-20 w-20 rounded-full bg-[#fff4e4]" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-start gap-4">
-          <span className="relative z-10 mt-1 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#fff0db] text-[#d7892f] shadow-sm">
-            <Icon className="h-5 w-5" />
+          <span className="relative z-10 mt-1 hidden h-11 w-11 items-center justify-center rounded-2xl bg-[#fff0db] text-[#d7892f] shadow-sm sm:flex">
+            <VisualIcon icon={icon} />
           </span>
           <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">{eyebrow}</p>
-          <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{title}</h2>
+          <h2 className="mt-2 text-xl font-semibold text-[#22304a] sm:text-2xl">{title}</h2>
           </div>
         </div>
         {action}
