@@ -9,12 +9,14 @@ import {
   FolderOpen,
   GraduationCap,
   LayoutDashboard,
+  Menu,
   NotebookPen,
   PenTool,
   PieChart,
   UserRound,
   Video,
 } from "lucide-react";
+import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 
 type NavItem = {
@@ -65,19 +67,24 @@ export function TeacherDashboardFrame({
   navItems: NavItem[];
   children: ReactNode;
 }) {
+  const navLinks = navItems.map((item) => {
+    const Icon = getTeacherNavIcon(item.icon);
+    return { ...item, Icon };
+  });
+
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#e8dccf] bg-[linear-gradient(180deg,#fff7ee_0%,#fffdf9_100%)]">
-        <div className="section-container py-8">
+        <div className="section-container py-5 sm:py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
                 Teacher Dashboard
               </p>
-              <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">{title}</h1>
-              <p className="mt-3 max-w-3xl text-base leading-8 text-[#5f6b7a]">{subtitle}</p>
+              <h1 className="mt-3 text-3xl font-semibold text-[#22304a] sm:text-4xl">{title}</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-[#5f6b7a] sm:text-base sm:leading-8">{subtitle}</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <Link
                 href="/"
                 className="rounded-full border border-[#e1d4c2] bg-white px-4 py-2 text-sm font-semibold text-[#4f5d71] transition hover:bg-[#fbf1e5]"
@@ -85,41 +92,67 @@ export function TeacherDashboardFrame({
                 Main site
               </Link>
               <NotificationBell />
+              <FamilyLogoutButton />
             </div>
           </div>
         </div>
       </div>
 
-      <div className="section-container grid gap-6 py-8 xl:grid-cols-[250px_minmax(0,1fr)]">
-        <aside className="space-y-5">
-          <div className="rounded-[28px] bg-[#22304a] p-6 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)]">
+      <div className="section-container grid grid-cols-[64px_minmax(0,1fr)] gap-3 py-5 sm:gap-5 sm:py-6 xl:grid-cols-[250px_minmax(0,1fr)] xl:gap-6 xl:py-8">
+        <aside className="sticky top-3 self-start xl:static">
+          <details className="group relative mb-3 xl:hidden">
+            <summary className="flex h-12 w-12 cursor-pointer list-none items-center justify-center rounded-2xl bg-[#22304a] text-white shadow-lg [&::-webkit-details-marker]:hidden">
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Open teacher menu</span>
+            </summary>
+            <div className="absolute left-0 z-50 mt-3 w-[min(280px,calc(100vw-1.5rem))] rounded-[24px] bg-[#22304a] p-3 text-white shadow-2xl">
+              <p className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f2c58f]">
+                Teaching suite
+              </p>
+              <div className="mt-1 space-y-1">
+                {navLinks.map(({ href, label, Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span>{label}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </details>
+
+          <div className="rounded-[22px] bg-[#22304a] p-2 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)] xl:rounded-[28px] xl:p-6">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f]">
-              Teaching suite
+              <span className="hidden xl:inline">Teaching suite</span>
+              <span className="xl:hidden">Menu</span>
             </p>
-            <div className="mt-5 space-y-2">
-              {navItems.map((item) => (
-                (() => {
-                  const Icon = getTeacherNavIcon(item.icon);
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      title={item.label}
-                      className="flex items-center gap-3 rounded-2xl bg-white/8 px-4 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })()
+            <div className="mt-3 space-y-2 xl:mt-5">
+              {navLinks.map(({ href, label, Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  title={label}
+                  className="group/nav relative flex items-center justify-center gap-3 rounded-2xl bg-white/8 px-2 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12 xl:justify-start xl:px-4"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="hidden xl:inline">{label}</span>
+                  <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-40 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#22304a] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-xl transition group-hover/nav:block group-hover/nav:opacity-100 xl:hidden">
+                    {label}
+                  </span>
+                </Link>
               ))}
             </div>
           </div>
         </aside>
 
-        <div className="space-y-6">{children}</div>
+        <div className="min-w-0 space-y-5 sm:space-y-6">{children}</div>
       </div>
     </div>
   );
