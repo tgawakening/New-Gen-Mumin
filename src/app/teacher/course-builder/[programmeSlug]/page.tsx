@@ -10,7 +10,7 @@ import { CourseBuilderWorkspace } from "../CourseBuilderWorkspace";
 
 type PageProps = {
   params: Promise<{ programmeSlug: string }>;
-  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; lessonComposer?: string }>;
 };
 
 export default async function TeacherProgrammeBuilderPage({ params, searchParams }: PageProps) {
@@ -54,6 +54,7 @@ export default async function TeacherProgrammeBuilderPage({ params, searchParams
         activeTab={resolvedSearch?.tab ?? "overview"}
         prefillWeekLabel={resolvedSearch?.weekLabel}
         prefillTopic={resolvedSearch?.topic}
+        lessonComposer={resolvedSearch?.lessonComposer === "1"}
       />
     </TeacherDashboardFrame>
   );

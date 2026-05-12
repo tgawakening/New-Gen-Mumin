@@ -9,7 +9,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { CourseBuilderWorkspace } from "./CourseBuilderWorkspace";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; lessonComposer?: string }>;
 };
 
 export default async function TeacherCourseBuilderPage({ searchParams }: PageProps) {
@@ -28,6 +28,9 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
       const query = new URLSearchParams();
       if (params?.success) query.set("success", params.success);
       if (params?.tab) query.set("tab", params.tab);
+      if (params?.weekLabel) query.set("weekLabel", params.weekLabel);
+      if (params?.topic) query.set("topic", params.topic);
+      if (params?.lessonComposer) query.set("lessonComposer", params.lessonComposer);
       redirect(`/teacher/course-builder/${programme.slug}${query.size ? `?${query.toString()}` : ""}`);
     }
   }
@@ -45,6 +48,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         activeTab={params?.tab ?? "overview"}
         prefillWeekLabel={params?.weekLabel}
         prefillTopic={params?.topic}
+        lessonComposer={params?.lessonComposer === "1"}
       />
     </TeacherDashboardFrame>
   );
