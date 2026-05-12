@@ -136,12 +136,12 @@ export function TeacherMetricGrid({
   metrics: Array<{ label: string; value: string; hint: string }>;
 }) {
   return (
-    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
       {metrics.map((metric) => (
-        <div key={metric.label} className="rounded-[24px] border border-[#eadfce] bg-white p-5 shadow-sm">
-          <p className="text-sm text-[#6d7785]">{metric.label}</p>
-          <p className="mt-2 text-3xl font-semibold text-[#22304a]">{metric.value}</p>
-          <p className="mt-2 text-sm leading-6 text-[#8a94a3]">{metric.hint}</p>
+        <div key={metric.label} className="rounded-[18px] border border-[#eadfce] bg-white p-3 shadow-sm sm:rounded-[24px] sm:p-5">
+          <p className="text-xs text-[#6d7785] sm:text-sm">{metric.label}</p>
+          <p className="mt-1 text-xl font-semibold text-[#22304a] sm:mt-2 sm:text-3xl">{metric.value}</p>
+          <p className="mt-2 hidden text-sm leading-6 text-[#8a94a3] sm:block">{metric.hint}</p>
         </div>
       ))}
     </section>
