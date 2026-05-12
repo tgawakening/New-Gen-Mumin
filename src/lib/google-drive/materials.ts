@@ -21,6 +21,15 @@ export type DriveMaterial = {
   visibility: string | null;
 };
 
+export type DriveUploadResult = {
+  id: string;
+  name: string;
+  mimeType: string;
+  webViewLink: string | null;
+  webContentLink: string | null;
+  thumbnailLink: string | null;
+};
+
 type DriveFile = {
   id: string;
   name: string;
@@ -122,6 +131,33 @@ export async function ensureChildFolder(parentFolderId: string, folderName: stri
   return created.id;
 }
 
+async function uploadFileToFolder(input: {
+  folderId: string;
+  file: File;
+  name: string;
+  appProperties?: Record<string, string>;
+}) {
+  const boundary = `genmumin-${Date.now()}`;
+  const metadata = {
+    name: input.name,
+    parents: [input.folderId],
+    appProperties: input.appProperties,
+  };
+  const bytes = Buffer.from(await input.file.arrayBuffer());
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Type: ${input.file.type || "application/octet-stream"}\r\n\r\n`),
+    bytes,
+    Buffer.from(`\r\n--${boundary}--`),
+  ]);
+
+  return driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
+    method: "POST",
+    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
+}
+
 export async function uploadTeacherMaterial(input: {
   programId: string;
   teacherUserId: string;
@@ -145,7 +181,6 @@ export async function uploadTeacherMaterial(input: {
   const programFolderId = await ensureProgramFolder(input.programId);
   const folderId = await ensureChildFolder(programFolderId, input.folderName ?? "");
   const folderName = input.folderName?.trim() || "General";
-  const boundary = `genmumin-${Date.now()}`;
   const metadata = {
     name: input.title || input.file.name,
     parents: [folderId],
@@ -161,18 +196,11 @@ export async function uploadTeacherMaterial(input: {
     },
   };
 
-  const bytes = Buffer.from(await input.file.arrayBuffer());
-  const body = Buffer.concat([
-    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`),
-    Buffer.from(`--${boundary}\r\nContent-Type: ${input.file.type || "application/octet-stream"}\r\n\r\n`),
-    bytes,
-    Buffer.from(`\r\n--${boundary}--`),
-  ]);
-
-  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
-    method: "POST",
-    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-    body,
+  const uploaded = await uploadFileToFolder({
+    folderId,
+    file: input.file,
+    name: metadata.name,
+    appProperties: metadata.appProperties,
   });
 
   const admins = await db.user.findMany({ where: { role: "ADMIN" } });
@@ -227,7 +255,6 @@ export async function uploadAdminMaterial(input: {
   const folderId = await ensureChildFolder(programFolderId, input.folderName ?? "");
   const folderName = input.folderName?.trim() || "General";
   const publish = input.publishToStudents !== false;
-  const boundary = `genmumin-${Date.now()}`;
   const metadata = {
     name: input.title || input.file.name,
     parents: [folderId],
@@ -245,18 +272,11 @@ export async function uploadAdminMaterial(input: {
     },
   };
 
-  const bytes = Buffer.from(await input.file.arrayBuffer());
-  const body = Buffer.concat([
-    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`),
-    Buffer.from(`--${boundary}\r\nContent-Type: ${input.file.type || "application/octet-stream"}\r\n\r\n`),
-    bytes,
-    Buffer.from(`\r\n--${boundary}--`),
-  ]);
-
-  const uploaded = await driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
-    method: "POST",
-    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
-    body,
+  const uploaded = await uploadFileToFolder({
+    folderId,
+    file: input.file,
+    name: metadata.name,
+    appProperties: metadata.appProperties,
   });
 
   if (publish) {
@@ -272,6 +292,56 @@ export async function uploadAdminMaterial(input: {
   if (publish) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title);
 
   return uploaded;
+}
+
+export async function uploadStudentSubmissionFile(input: {
+  studentId: string;
+  studentName: string;
+  programId: string;
+  programTitle: string;
+  assignmentId: string;
+  assignmentTitle: string;
+  submissionType: "task" | "homework" | "assignment";
+  file: File;
+}) {
+  const rootFolderId = getDriveRootFolderId();
+  const studentsFolderId = await ensureChildFolder(rootFolderId, "Gen-M students");
+  const safeStudentFolder = input.studentName.trim() || input.studentId;
+  const studentFolderId = await ensureChildFolder(studentsFolderId, safeStudentFolder);
+  const programFolderId = await ensureChildFolder(studentFolderId, folderNameForProgram(input.programTitle));
+  const typeFolderId = await ensureChildFolder(programFolderId, input.submissionType === "homework" ? "Homework" : input.submissionType === "assignment" ? "Assignments" : "Tasks");
+  const assignmentFolderId = await ensureChildFolder(typeFolderId, input.assignmentTitle);
+
+  const uploaded = await uploadFileToFolder({
+    folderId: assignmentFolderId,
+    file: input.file,
+    name: input.file.name,
+    appProperties: {
+      genMumin: "student-submission",
+      studentId: input.studentId,
+      studentName: input.studentName,
+      programId: input.programId,
+      programTitle: input.programTitle,
+      assignmentId: input.assignmentId,
+      assignmentTitle: input.assignmentTitle,
+      submissionType: input.submissionType,
+    },
+  });
+
+  await driveRequest(`/files/${uploaded.id}/permissions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "reader", type: "anyone" }),
+  });
+
+  return {
+    id: uploaded.id,
+    name: uploaded.name,
+    mimeType: uploaded.mimeType,
+    webViewLink: uploaded.webViewLink ?? null,
+    webContentLink: uploaded.webContentLink ?? null,
+    thumbnailLink: uploaded.thumbnailLink ?? null,
+  } satisfies DriveUploadResult;
 }
 
 function mapDriveFile(file: DriveFile): DriveMaterial {

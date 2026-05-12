@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
+import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, type GenMProgramSlug } from "@/lib/genm/curriculum";
 import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
@@ -261,6 +262,63 @@ export function CourseBuilderWorkspace({
     revalidatePath("/parent");
     revalidatePath("/parent/courses");
     revalidatePath("/student");
+    revalidatePath("/student/courses");
+    redirect(`${successRedirectPath}?tab=task&success=task`);
+  }
+
+  async function reviewSubmissionAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    const submissionId = String(formData.get("submissionId") || "");
+    const reviewStatus = String(formData.get("reviewStatus") || "REVIEWED");
+    const scoreRaw = String(formData.get("score") || "");
+    const feedback = String(formData.get("feedback") || "").trim();
+    const grade = String(formData.get("grade") || "");
+
+    const submission = await db.assignmentSubmission.findUnique({
+      where: { id: submissionId },
+      include: {
+        assignment: {
+          include: {
+            program: {
+              include: {
+                teacherAssignments: {
+                  include: { teacher: true },
+                },
+              },
+            },
+          },
+        },
+        student: { include: { user: true } },
+      },
+    });
+    if (!submission || !submission.assignment.program.teacherAssignments.some(({ teacher }) => teacher.userId === session.user.id)) {
+      throw new Error("Submission is not available for this teacher.");
+    }
+
+    const reviewed = await db.assignmentSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: reviewStatus === "PENDING" ? "SUBMITTED" : "REVIEWED",
+        grade: grade ? (grade as "EXCELLENT" | "GOOD" | "SATISFACTORY" | "NEEDS_IMPROVEMENT") : null,
+        score: scoreRaw ? Number(scoreRaw) : null,
+        feedback: feedback || null,
+        reviewedByUserId: session.user.id,
+      },
+    });
+
+    await db.notification.create({
+      data: {
+        userId: submission.student.user.id,
+        title: "Task reviewed",
+        body: `${submission.assignment.title} was marked ${reviewed.status.toLowerCase().replace(/_/g, " ")}${reviewed.score === null ? "." : ` with score ${reviewed.score}.`}`,
+        href: "/student/courses",
+      },
+    });
+
+    revalidatePath("/teacher/course-builder");
     revalidatePath("/student/courses");
     redirect(`${successRedirectPath}?tab=task&success=task`);
   }
@@ -754,7 +812,27 @@ export function CourseBuilderWorkspace({
                             <p>Status: {submission.status}</p>
                             <p>Submitted: {submission.submittedAt ? submission.submittedAt.toLocaleDateString("en-GB") : "Not submitted"}</p>
                             <p>Score: {submission.score ?? "Pending"} {submission.grade ? `- ${submission.grade}` : ""}</p>
+                            {submission.attachmentUrl ? <a href={submission.attachmentUrl} target="_blank" className="font-semibold text-[#2a76aa]">Open uploaded file</a> : null}
                             {submission.feedback ? <p>Feedback: {submission.feedback}</p> : null}
+                            <form action={reviewSubmissionAction} className="mt-3 grid gap-2 rounded-2xl bg-[#fbf6ef] p-3">
+                              <input type="hidden" name="submissionId" value={submission.id} />
+                              <div className="grid gap-2 sm:grid-cols-3">
+                                <select name="reviewStatus" className="rounded-xl border border-[#eadfce] px-3 py-2">
+                                  <option value="REVIEWED">Complete</option>
+                                  <option value="PENDING">Pending</option>
+                                </select>
+                                <select name="grade" defaultValue={submission.grade?.replace(/ /g, "_") ?? ""} className="rounded-xl border border-[#eadfce] px-3 py-2">
+                                  <option value="">No grade</option>
+                                  <option value="EXCELLENT">Excellent</option>
+                                  <option value="GOOD">Good</option>
+                                  <option value="SATISFACTORY">Satisfactory</option>
+                                  <option value="NEEDS_IMPROVEMENT">Needs improvement</option>
+                                </select>
+                                <input name="score" type="number" min="0" placeholder="Score" defaultValue={submission.score ?? ""} className="rounded-xl border border-[#eadfce] px-3 py-2" />
+                              </div>
+                              <textarea name="feedback" rows={2} placeholder="Feedback for student" defaultValue={submission.feedback ?? ""} className="rounded-xl border border-[#eadfce] px-3 py-2" />
+                              <button className="w-fit rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save review</button>
+                            </form>
                           </div>
                         ))}
                         {!task.submissionDetails.length ? (

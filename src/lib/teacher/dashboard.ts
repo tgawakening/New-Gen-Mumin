@@ -92,6 +92,7 @@ export type TeacherDashboardData = {
       grade: string | null;
       submittedAt: Date | null;
       feedback: string | null;
+      attachmentUrl: string | null;
     }>;
   }>;
   reports: Array<{
@@ -348,6 +349,7 @@ export async function getTeacherDashboardData(userId: string) {
           grade: submission.grade ? submission.grade.replace(/_/g, " ") : null,
           submittedAt: submission.submittedAt,
           feedback: submission.feedback,
+          attachmentUrl: submission.attachmentUrl,
         })),
       })),
     )

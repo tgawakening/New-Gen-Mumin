@@ -1,11 +1,14 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { FileText, ImageIcon, Video } from "lucide-react";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { listMaterials } from "@/lib/google-drive/materials";
+import { db } from "@/lib/db";
+import { listMaterials, uploadStudentSubmissionFile } from "@/lib/google-drive/materials";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
   FamilyDashboardFrame,
@@ -15,7 +18,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ course?: string }>;
+  searchParams?: Promise<{ course?: string; submitted?: string }>;
 };
 
 type Attachment = {
@@ -97,6 +100,98 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
     ? child.assignments.filter((assignment) => assignment.programTitle === selectedCourse.title)
     : child.assignments;
 
+  async function submitAssignmentAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "STUDENT") redirect("/auth/login");
+
+    const student = await db.studentProfile.findUnique({
+      where: { userId: currentSession.user.id },
+      include: { user: true },
+    });
+    if (!student) redirect("/auth/login");
+
+    const assignmentId = String(formData.get("assignmentId") || "");
+    const submissionText = String(formData.get("submissionText") || "").trim();
+    const submissionType = String(formData.get("submissionType") || "task") as "task" | "homework" | "assignment";
+    const file = formData.get("submissionFile");
+
+    const assignment = await db.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        program: {
+          include: {
+            teacherAssignments: { include: { teacher: { include: { user: true } } } },
+          },
+        },
+      },
+    });
+    if (!assignment) throw new Error("Assignment not found.");
+
+    const enrollment = await db.enrollment.findUnique({
+      where: { studentId_programId: { studentId: student.id, programId: assignment.programId } },
+    });
+    if (!enrollment) throw new Error("You are not enrolled in this program.");
+
+    let attachmentUrl: string | null = null;
+    if (file instanceof File && file.size > 0) {
+      const uploaded = await uploadStudentSubmissionFile({
+        studentId: student.id,
+        studentName: student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
+        programId: assignment.programId,
+        programTitle: assignment.program.title,
+        assignmentId: assignment.id,
+        assignmentTitle: assignment.title,
+        submissionType,
+        file,
+      });
+      attachmentUrl = uploaded.webViewLink;
+    }
+
+    const existing = await db.assignmentSubmission.findFirst({
+      where: { assignmentId: assignment.id, studentId: student.id },
+    });
+
+    const submission = existing
+      ? await db.assignmentSubmission.update({
+          where: { id: existing.id },
+          data: {
+            enrollmentId: enrollment.id,
+            submissionText,
+            attachmentUrl: attachmentUrl ?? existing.attachmentUrl,
+            status: "SUBMITTED",
+            submittedAt: new Date(),
+          },
+        })
+      : await db.assignmentSubmission.create({
+          data: {
+            assignmentId: assignment.id,
+            enrollmentId: enrollment.id,
+            studentId: student.id,
+            submissionText,
+            attachmentUrl,
+            status: "SUBMITTED",
+            submittedAt: new Date(),
+          },
+        });
+
+    if (assignment.program.teacherAssignments.length) {
+      await db.notification.createMany({
+        data: assignment.program.teacherAssignments.map(({ teacher }) => ({
+          userId: teacher.user.id,
+          title: "Student task submitted",
+          body: `${student.displayName || student.user.firstName} submitted ${assignment.title}.`,
+          href: "/teacher/course-builder?tab=task",
+        })),
+      });
+    }
+
+    revalidatePath("/student/courses");
+    revalidatePath("/teacher/course-builder");
+    redirect(`/student/courses?course=${assignment.programId}&submitted=${submission.id}`);
+  }
+
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
@@ -105,6 +200,8 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
+      <ActionToast message={params.submitted ? "Task submitted successfully. Your teacher has been notified." : undefined} />
+
       <MetricGrid
         metrics={[
           { label: "Enrolled courses", value: String(child.courses.length), hint: "Current programme load." },
@@ -316,6 +413,26 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                   </div>
                 ) : null}
                 {assignment.feedback ? <p>{assignment.feedback}</p> : null}
+                <form action={submitAssignmentAction} className="mt-4 grid gap-3 rounded-[18px] border border-[#eadfce] bg-white p-4">
+                  <input type="hidden" name="assignmentId" value={assignment.id} />
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Submission type
+                    <select name="submissionType" defaultValue="task" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                      <option value="task">Task</option>
+                      <option value="homework">Homework</option>
+                      <option value="assignment">Assignment</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Your answer / notes
+                    <textarea name="submissionText" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Write a short answer or note for your teacher." />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Upload evidence
+                    <input name="submissionFile" type="file" accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                  </label>
+                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">Submit task</button>
+                </form>
               </div>
             </details>
           ))}
