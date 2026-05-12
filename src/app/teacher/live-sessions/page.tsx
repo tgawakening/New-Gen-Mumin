@@ -14,6 +14,8 @@ type PageProps = {
   searchParams?: Promise<{
     notice?: string;
     tone?: string;
+    programId?: string;
+    title?: string;
   }>;
 };
 
@@ -34,6 +36,9 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   if (!dashboard) redirect("/teacher-registration");
 
   const params = searchParams ? await searchParams : {};
+  const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
+    ? params.programId
+    : dashboard.rosters[0]?.programId;
 
   async function requestSessionAction(formData: FormData) {
     "use server";
@@ -87,7 +92,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
         <form action={requestSessionAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Program
-            <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+            <select name="programId" required defaultValue={defaultProgramId} className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
               {dashboard.rosters.map((roster) => (
                 <option key={roster.programId} value={roster.programId}>
                   {roster.title}
@@ -98,8 +103,12 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
 
           <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-3">
             Session title
-            <input name="title" required placeholder="Revision circle - Week 3" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            <input name="title" required defaultValue={params.title ?? ""} placeholder="Revision circle - Week 3" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
           </label>
+
+          <div className="rounded-2xl border border-[#dce4ed] bg-[#f5fbff] px-4 py-3 text-sm font-semibold text-[#22304a] xl:col-span-4">
+            Recurrence: weekly Zoom session. Students and parents will see the same recurring join link in their schedules.
+          </div>
 
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Day

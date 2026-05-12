@@ -22,7 +22,10 @@ type CourseBuilderWorkspaceProps = {
   activeTab?: BuilderTab;
   prefillWeekLabel?: string;
   prefillTopic?: string;
+  prefillTermId?: string;
   lessonComposer?: boolean;
+  quizComposer?: boolean;
+  taskComposer?: boolean;
 };
 
 const builderTabs: Array<{ id: BuilderTab; label: string; icon: typeof Layers }> = [
@@ -127,7 +130,10 @@ export function CourseBuilderWorkspace({
   activeTab = "overview",
   prefillWeekLabel,
   prefillTopic,
+  prefillTermId,
   lessonComposer = false,
+  quizComposer = false,
+  taskComposer = false,
 }: CourseBuilderWorkspaceProps) {
   const selectedRoster = selectedProgrammeSlug
     ? dashboard.rosters.find((roster) => getGenMProgrammeByTitle(roster.title)?.slug === selectedProgrammeSlug) ?? null
@@ -149,11 +155,14 @@ export function CourseBuilderWorkspace({
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
-  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; lessonComposer?: boolean }) {
+  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
     if (options?.topic) query.set("topic", options.topic);
+    if (options?.termId) query.set("termId", options.termId);
     if (options?.lessonComposer) query.set("lessonComposer", "1");
+    if (options?.quizComposer) query.set("quizComposer", "1");
+    if (options?.taskComposer) query.set("taskComposer", "1");
     return `${tabBaseHref}?${query.toString()}`;
   }
 
@@ -292,6 +301,70 @@ export function CourseBuilderWorkspace({
     redirect(`${successRedirectPath}?tab=task&success=task`);
   }
 
+  async function createCurriculumQuizAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    const teacher = await db.teacherProfile.findUnique({
+      where: { userId: session.user.id },
+      include: { programAssignments: true },
+    });
+    if (!teacher) redirect("/teacher-registration");
+
+    const programId = String(formData.get("programId") || "");
+    if (!teacher.programAssignments.some((assignment) => assignment.programId === programId)) {
+      throw new Error("You can only create quizzes for assigned programmes.");
+    }
+
+    const title = String(formData.get("title") || "").trim();
+    if (!title) throw new Error("Quiz title is required.");
+    const weekLabel = cleanOptional(formData.get("weekLabel"));
+    const topic = cleanOptional(formData.get("topic"));
+    const description = [
+      weekLabel ? `Week: ${weekLabel}` : null,
+      topic ? `Lesson/topic: ${topic}` : null,
+      cleanOptional(formData.get("description")),
+    ].filter(Boolean).join("\n");
+
+    const quiz = await db.quiz.create({
+      data: {
+        programId,
+        title,
+        description: description || null,
+        type: String(formData.get("type") || "POST_LESSON") as "PRE_LESSON" | "POST_LESSON",
+        isPublished: formData.get("isPublished") === "on",
+        timeLimitSeconds: Number(formData.get("timeLimitMinutes") || 0) > 0 ? Number(formData.get("timeLimitMinutes")) * 60 : null,
+      },
+    });
+
+    for (let index = 1; index <= 3; index += 1) {
+      const prompt = String(formData.get(`question-${index}`) || "").trim();
+      if (!prompt) continue;
+      const answer = String(formData.get(`answer-${index}`) || "").trim();
+      const choices = String(formData.get(`choices-${index}`) || "")
+        .split(/\n|,/)
+        .map((choice) => choice.trim())
+        .filter(Boolean);
+
+      await db.quizQuestion.create({
+        data: {
+          quizId: quiz.id,
+          prompt,
+          type: String(formData.get(`type-${index}`) || "MCQ") as "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "FILL_IN_BLANK",
+          points: Math.max(1, Number(formData.get(`points-${index}`) || 1)),
+          sortOrder: index,
+          answerKey: answer ? { answer } : undefined,
+          meta: choices.length ? { choices } : undefined,
+        },
+      });
+    }
+
+    revalidatePath("/teacher/quizzes");
+    revalidatePath("/student/quizzes");
+    redirect(`${successRedirectPath}?tab=plan&success=quiz`);
+  }
+
   async function reviewSubmissionAction(formData: FormData) {
     "use server";
 
@@ -357,6 +430,8 @@ export function CourseBuilderWorkspace({
             ? "Lesson content published with resources."
             : success === "task"
               ? "Student task published with resources."
+              : success === "quiz"
+                ? "Quiz created and linked to this curriculum topic."
               : undefined
         }
       />
@@ -567,29 +642,24 @@ export function CourseBuilderWorkspace({
                         <div className="mt-4 space-y-3">
                           {highlights.map((highlight, index) => {
                             const weekLabel = `${term.title} Week ${index + 1}`;
-                            const quizHref = `/teacher/quizzes/create?programId=${selectedProgramId}&weekLabel=${encodeURIComponent(weekLabel)}&lessonTitle=${encodeURIComponent(highlight)}`;
-
                             return (
-                              <div key={highlight} className="rounded-[18px] border border-[#f0e5d7] bg-[#fffaf5] p-4">
-                                <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div key={highlight} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3">
+                                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                                   <div className="min-w-0">
-                                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekLabel}</p>
-                                    <h4 className="mt-1 text-base font-semibold text-[#22304a]">{highlight}</h4>
-                                    <p className="mt-2 text-sm leading-6 text-[#5f6b7a]">
-                                      Add one or more lessons for this week, then create its quiz, live class, or assignment from the same row.
-                                    </p>
+                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekLabel}</p>
+                                    <h4 className="mt-1 truncate text-sm font-semibold text-[#22304a] sm:text-base">{highlight}</h4>
                                   </div>
                                   <div className="flex flex-wrap gap-2">
-                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
+                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
                                       <FileText className="h-3.5 w-3.5" /> Lesson
                                     </Link>
-                                    <Link href={quizHref} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
                                       <HelpCircle className="h-3.5 w-3.5" /> Quiz
                                     </Link>
-                                    <Link href="/teacher/live-sessions" className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                    <Link href={`/teacher/live-sessions?programId=${encodeURIComponent(selectedProgramId)}&title=${encodeURIComponent(highlight)}`} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
                                       <Video className="h-3.5 w-3.5" /> Live
                                     </Link>
-                                    <Link href={buildBuilderHref("task", { weekLabel, topic: highlight })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
                                       <PenSquare className="h-3.5 w-3.5" /> Task
                                     </Link>
                                   </div>
@@ -608,8 +678,8 @@ export function CourseBuilderWorkspace({
                                       <span className="font-semibold text-[#22304a]">{parsed.weekLabel ?? "Lesson"}</span> - {parsed.topic || entry.topic}
                                     </span>
                                     <div className="flex flex-wrap gap-2">
-                                      <Link href={`/teacher/quizzes/create?programId=${selectedProgramId}&weekLabel=${encodeURIComponent(parsed.weekLabel ?? term.title)}&lessonTitle=${encodeURIComponent(parsed.topic || entry.topic)}`} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
-                                      <Link href={buildBuilderHref("task", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic })} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, quizComposer: true })} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, taskComposer: true })} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
                                     </div>
                                   </div>
                                 ))}
@@ -688,7 +758,7 @@ export function CourseBuilderWorkspace({
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Term
-                    <select name="termId" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]">
+                    <select name="termId" defaultValue={prefillTermId ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]">
                       <option value="">Select term</option>
                       {genMTerms.map((term) => (
                         <option key={term.id} value={term.id}>
@@ -802,6 +872,124 @@ export function CourseBuilderWorkspace({
                   Publish lesson update
                 </button>
               </form>
+              </div>
+            </div>
+          ) : null}
+
+          {quizComposer ? (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
+              <div className="mx-auto max-w-4xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Assessment</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Create quiz</h2>
+                    <p className="mt-1 text-sm text-[#617184]">{[prefillWeekLabel, prefillTopic].filter(Boolean).join(" - ")}</p>
+                  </div>
+                  <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">
+                    Close
+                  </Link>
+                </div>
+
+                <form action={createCurriculumQuizAction} className="grid gap-4">
+                  <input type="hidden" name="programId" value={selectedProgramId} />
+                  <input type="hidden" name="weekLabel" value={prefillWeekLabel ?? ""} />
+                  <input type="hidden" name="topic" value={prefillTopic ?? ""} />
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px_180px]">
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Quiz title
+                      <input name="title" required defaultValue={prefillTopic ? `${prefillTopic} quiz` : ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Type
+                      <select name="type" defaultValue="POST_LESSON" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        <option value="PRE_LESSON">Pre lesson</option>
+                        <option value="POST_LESSON">Post lesson</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Minutes
+                      <input name="timeLimitMinutes" type="number" min="0" defaultValue="10" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                  </div>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Short note
+                    <textarea name="description" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Optional instructions for students." />
+                  </label>
+
+                  <div className="grid gap-3 lg:grid-cols-3">
+                    {[1, 2, 3].map((index) => (
+                      <div key={index} className="rounded-[18px] bg-[#fbf6ef] p-4">
+                        <p className="text-sm font-semibold text-[#22304a]">Question {index}</p>
+                        <div className="mt-3 grid gap-2">
+                          <input name={`question-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Question" />
+                          <select name={`type-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm">
+                            <option value="MCQ">Multiple choice</option>
+                            <option value="TRUE_FALSE">True / false</option>
+                            <option value="FILL_IN_BLANK">Fill blank</option>
+                            <option value="SHORT_ANSWER">Short answer</option>
+                          </select>
+                          <input name={`answer-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Correct answer" />
+                          <textarea name={`choices-${index}`} rows={2} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="MCQ choices, comma or new line" />
+                          <input name={`points-${index}`} type="number" min="1" defaultValue="1" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <label className="flex items-center gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm font-semibold text-[#22304a]">
+                    <input name="isPublished" type="checkbox" defaultChecked />
+                    Publish to students
+                  </label>
+                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Create quiz</button>
+                </form>
+              </div>
+            </div>
+          ) : null}
+
+          {taskComposer ? (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
+              <div className="mx-auto max-w-4xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Student work</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Assign task</h2>
+                    <p className="mt-1 text-sm text-[#617184]">{[prefillWeekLabel, prefillTopic].filter(Boolean).join(" - ")}</p>
+                  </div>
+                  <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">
+                    Close
+                  </Link>
+                </div>
+
+                <form action={publishStudentTask} className="grid gap-4">
+                  <input type="hidden" name="programId" value={selectedProgramId} />
+                  <input type="hidden" name="taskWeekLabel" value={prefillWeekLabel ?? ""} />
+                  <input type="hidden" name="taskTermId" value={prefillTermId ?? ""} />
+                  <input type="hidden" name="taskProgrammeFocus" value={selectedProgramme.title} />
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_190px]">
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Task title
+                      <input name="title" required defaultValue={prefillTopic ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Due date
+                      <input type="date" name="dueDate" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                  </div>
+                  <textarea name="instructions" rows={4} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Clear task instructions for students and parents." />
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <input name="taskCategory" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Worksheet, recitation, project..." />
+                    <select name="evidenceMode" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                      <option value="">Evidence type</option>
+                      <option value="photo">Photo upload</option>
+                      <option value="video">Short video</option>
+                      <option value="document">Document/PPT</option>
+                      <option value="verbal">Verbal explanation</option>
+                    </select>
+                  </div>
+                  <input name="taskLinks" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Optional Drive, worksheet, or reference links" />
+                  <input name="taskFiles" type="file" multiple accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Publish task</button>
+                </form>
               </div>
             </div>
           ) : null}

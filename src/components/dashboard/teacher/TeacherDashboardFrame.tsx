@@ -73,20 +73,20 @@ export function TeacherDashboardFrame({
 
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
-      <div className="border-b border-[#e8dccf] bg-[linear-gradient(180deg,#fff7ee_0%,#fffdf9_100%)]">
+      <div className="border-b border-[#1c2b45] bg-[linear-gradient(135deg,#14243d_0%,#22304a_55%,#36536f_100%)] text-white shadow-[0_18px_50px_rgba(20,36,61,0.22)]">
         <div className="section-container py-5 sm:py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#f2c58f]">
                 Teacher Dashboard
               </p>
-              <h1 className="mt-3 text-3xl font-semibold text-[#22304a] sm:text-4xl">{title}</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-[#5f6b7a] sm:text-base sm:leading-8">{subtitle}</p>
+              <h1 className="mt-3 text-3xl font-semibold text-white sm:text-4xl">{title}</h1>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-[#d8e2ee] sm:text-base sm:leading-8">{subtitle}</p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <Link
                 href="/"
-                className="rounded-full border border-[#e1d4c2] bg-white px-4 py-2 text-sm font-semibold text-[#4f5d71] transition hover:bg-[#fbf1e5]"
+                className="rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/18"
               >
                 Main site
               </Link>
