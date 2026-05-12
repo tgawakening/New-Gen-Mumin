@@ -1,5 +1,6 @@
 import { env } from "@/lib/env";
 import { sendTransactionalEmail } from "@/lib/email/client";
+import { SITE } from "@/lib/config";
 import {
   emailTemplateCatalog,
   renderGenMuminsEmailTemplate,
@@ -287,10 +288,11 @@ export async function sendDashboardUnlockedEmail(input: {
       sections: [
         {
           label: "Next step",
-          value: "Log in to review your children, courses, attendance, schedule, and payment status.",
+          value: "Log in to review your children, courses, attendance, schedule, and payment status. Please also request to join the Batch-1 Gen-Mumin WhatsApp community for class updates.",
         },
       ],
       callToAction: { label: "Open your dashboard", href: resolveHref(input.dashboardUrl) },
+      secondaryCallToAction: { label: "Join Batch-1 Gen-Mumin community", href: SITE.batchOneCommunity.href },
     }),
   });
 }
@@ -319,8 +321,10 @@ export async function sendPaymentCompletedEmail(input: {
         { label: "Amount", value: `${input.currency} ${input.amount}` },
         { label: "Students", value: `${input.childCount ?? 1}` },
         { label: "Status", value: "Completed" },
+        { label: "Community", value: "Please request to join the Batch-1 Gen-Mumin WhatsApp community for class updates and announcements." },
       ],
       callToAction: { label: "Open your dashboard", href: resolveHref("/parent") },
+      secondaryCallToAction: { label: "Join Batch-1 Gen-Mumin community", href: SITE.batchOneCommunity.href },
     }),
   });
 }

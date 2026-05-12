@@ -9,6 +9,10 @@ export const SITE = {
   mainSite: "https://www.tga-awakening.com",
   globalAwakening: "https://globalawakening.co.uk",
   whatsapp: "https://chat.whatsapp.com/EX6fgdY6b4T9XRwpGNkfoU",
+  batchOneCommunity: {
+    label: "Batch-1 Gen-Mumin community",
+    href: "https://chat.whatsapp.com/DYyaPVxqZnpL9CcHd5jxkl",
+  },
   /** Logo image. Set to "/images/gen-mumins-logo.png" when you have the logo file. */
   logoUrl: "/images/logo.png",
 } as const;

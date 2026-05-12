@@ -4,6 +4,7 @@ type EmailTemplateInput = {
   intro: string;
   sections?: Array<{ label: string; value: string }>;
   callToAction?: { label: string; href: string };
+  secondaryCallToAction?: { label: string; href: string };
   closing?: string;
 };
 
@@ -59,8 +60,13 @@ export function renderGenMuminsEmailTemplate(input: EmailTemplateInput) {
                   </table>
                   ${
                     input.callToAction
-                      ? `<div style="margin-top:28px;">
+                      ? `<div style="margin-top:28px;display:flex;flex-wrap:wrap;gap:12px;">
                           <a href="${escapeHtml(input.callToAction.href)}" style="display:inline-block;padding:14px 22px;border-radius:999px;background:#22304a;color:#fff;text-decoration:none;font-size:14px;font-weight:700;">${escapeHtml(input.callToAction.label)}</a>
+                          ${
+                            input.secondaryCallToAction
+                              ? `<a href="${escapeHtml(input.secondaryCallToAction.href)}" style="display:inline-block;padding:14px 22px;border-radius:999px;background:#25d366;color:#0b2c17;text-decoration:none;font-size:14px;font-weight:700;">${escapeHtml(input.secondaryCallToAction.label)}</a>`
+                              : ""
+                          }
                         </div>`
                       : ""
                   }

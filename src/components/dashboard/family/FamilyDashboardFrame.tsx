@@ -17,6 +17,7 @@ import {
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { TopBar } from "@/components/TopBar";
+import { BatchCommunityButton } from "@/components/dashboard/family/BatchCommunityButton";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
@@ -157,6 +158,7 @@ export function FamilyDashboardFrame({
                   Main site
                 </Link>
               ) : null}
+              {roleLabel === "Student Dashboard" ? <BatchCommunityButton /> : null}
               <NotificationBell />
               <FamilyLogoutButton />
             </div>
