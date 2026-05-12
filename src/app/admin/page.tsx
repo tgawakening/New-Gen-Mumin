@@ -7,6 +7,7 @@ import { Banknote, BookOpen, Eye, FileText, GraduationCap, Home, Menu, RefreshCw
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
+import { OrderDetailsPopup } from "@/components/admin/OrderDetailsPopup";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -618,6 +619,23 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="mt-1 text-sm text-[#617184]">{order.parentEmail}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.phone}</p>
                       <p className="mt-2 text-sm text-[#22304a]">{order.orderNumber}</p>
+                      <div className="mt-3">
+                        <OrderDetailsPopup
+                          orderNumber={order.orderNumber}
+                          parentName={order.parentName || "Parent pending"}
+                          parentEmail={order.parentEmail}
+                          phone={order.phone}
+                          gateway={order.gateway}
+                          status={order.status}
+                          paymentStatus={order.paymentStatus}
+                          amountLabel={formatMoney(order.totalAmount, order.currency)}
+                          pricingLabel={order.pricingLabel}
+                          couponLabel={order.couponCode ? `${order.couponCode}${order.couponDiscountPercent ? ` - ${order.couponDiscountPercent}% off` : ""}` : null}
+                          programmes={order.programTitles}
+                          childDetails={order.childDetails}
+                          manualSubmission={order.manualSubmission}
+                        />
+                      </div>
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {order.childCount || order.childDetails.length}</p>
