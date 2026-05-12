@@ -467,7 +467,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       }`}
                     >
                       <Icon className="h-4 w-4" />
-                      <span className="hidden 2xl:inline">{item.label}</span>
+                      <span className="hidden lg:inline">{item.label}</span>
                     </Link>
                   );
                 })}
