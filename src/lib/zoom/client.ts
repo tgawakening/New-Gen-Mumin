@@ -22,6 +22,20 @@ type ZoomMeetingResponse = {
   start_url?: string;
 };
 
+async function readZoomError(response: Response) {
+  const body = await response.text();
+  if (!body) return response.statusText;
+
+  try {
+    const payload = JSON.parse(body) as { message?: string; error?: string; reason?: string; code?: number };
+    return [payload.message, payload.error, payload.reason, payload.code ? `code ${payload.code}` : null]
+      .filter(Boolean)
+      .join(" - ");
+  } catch {
+    return body;
+  }
+}
+
 function getZoomConfig() {
   if (!env.success) {
     throw new Error("Application environment is not configured.");
@@ -57,8 +71,8 @@ async function getZoomAccessToken() {
   });
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Zoom token request failed: ${body || response.statusText}`);
+    const details = await readZoomError(response);
+    throw new Error(`Zoom token request failed: ${details}`);
   }
 
   const payload = (await response.json()) as { access_token?: string };
@@ -123,8 +137,12 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
   );
 
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Zoom meeting creation failed: ${body || response.statusText}`);
+    const details = await readZoomError(response);
+    const guidance =
+      response.status === 401
+        ? " Check that the Zoom app is Server-to-Server OAuth, has meeting write scopes, is activated, and that ZOOM_HOST_USER_ID belongs to the same Zoom account."
+        : "";
+    throw new Error(`Zoom meeting creation failed: ${details}.${guidance}`);
   }
 
   return (await response.json()) as ZoomMeetingResponse;

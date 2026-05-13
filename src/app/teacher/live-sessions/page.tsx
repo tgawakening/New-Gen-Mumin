@@ -45,9 +45,11 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
 
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+    let successMessage = "Zoom live session created successfully. Admin has been notified.";
+    let successTone: "success" | "error" = "success";
 
     try {
-      await requestTeacherLiveClass(
+      const schedule = await requestTeacherLiveClass(
         {
           programId: String(formData.get("programId") || ""),
           title: String(formData.get("title") || ""),
@@ -64,11 +66,15 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       revalidatePath("/admin/classes");
       revalidatePath("/student/schedule");
       revalidatePath("/parent/schedule");
+      successMessage = schedule.meetingUrl
+        ? "Zoom live session created successfully. Admin has been notified."
+        : "Session saved. Zoom token was rejected, so admin can sync the Zoom link from Classes.";
+      successTone = schedule.meetingUrl ? "success" : "error";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to request this Zoom session.";
       redirect(noticeHref(message, "error"));
     }
-    redirect(noticeHref("Zoom live session created successfully. Admin has been notified."));
+    redirect(noticeHref(successMessage, successTone));
   }
 
   return (

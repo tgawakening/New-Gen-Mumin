@@ -32,6 +32,29 @@ function teacherDisplayName(teacher: { user: { firstName: string; lastName: stri
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
 }
 
+async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string) {
+  if (!input.createZoomMeeting) return null;
+
+  try {
+    return await createRecurringZoomMeeting({
+      topic: input.title,
+      agenda: `${programTitle} teacher-created live session`,
+      timezone: input.timezone,
+      startTime: toZoomLocalStartTime(nextWeeklyOccurrence(input.weekday, input.startTime)),
+      durationMinutes: durationMinutes(input.startTime, input.endTime),
+      weekday: input.weekday,
+      waitingRoom: input.waitingRoom,
+      joinBeforeHost: input.joinBeforeHost,
+      muteUponEntry: input.muteUponEntry,
+      autoRecording: input.autoRecording,
+      passcode: input.passcode,
+    });
+  } catch (error) {
+    console.error("Teacher Zoom meeting creation failed; saving session for admin sync.", error);
+    return null;
+  }
+}
+
 export async function createLiveClass(input: CreateLiveClassInput, createdByUserId?: string) {
   const teacherIds = input.teacherIds?.length ? input.teacherIds : input.teacherId ? [input.teacherId] : [];
   if (!teacherIds.length) throw new Error("Choose at least one teacher.");
@@ -127,21 +150,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
 
-  const meeting = input.createZoomMeeting
-    ? await createRecurringZoomMeeting({
-        topic: input.title,
-        agenda: `${program.title} teacher-created live session`,
-        timezone: input.timezone,
-        startTime: toZoomLocalStartTime(nextWeeklyOccurrence(input.weekday, input.startTime)),
-        durationMinutes: durationMinutes(input.startTime, input.endTime),
-        weekday: input.weekday,
-        waitingRoom: input.waitingRoom,
-        joinBeforeHost: input.joinBeforeHost,
-        muteUponEntry: input.muteUponEntry,
-        autoRecording: input.autoRecording,
-        passcode: input.passcode,
-      })
-    : null;
+  const meeting = await createZoomMeetingForTeacher(input, program.title);
 
   const schedule = await db.classSchedule.create({
     data: {
@@ -166,10 +175,10 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
     await db.notification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
-        title: meeting ? "Teacher scheduled a Zoom class" : "Zoom meeting approval needed",
+        title: meeting ? "Teacher scheduled a Zoom class" : "Zoom sync needed",
         body: meeting
           ? `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}.`
-          : `${teacherDisplayName(teacher)} requested ${input.title} for ${program.title}.`,
+          : `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}, but Zoom did not return a meeting link. Please sync it from Classes.`,
         href: "/admin/classes",
       })),
     });

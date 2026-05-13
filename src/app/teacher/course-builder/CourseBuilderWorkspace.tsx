@@ -268,7 +268,7 @@ export function CourseBuilderWorkspace({
     const session = await getCurrentSession();
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
 
-    await requestTeacherLiveClass(
+    const schedule = await requestTeacherLiveClass(
       {
         programId: String(formData.get("programId") || ""),
         title: String(formData.get("title") || ""),
@@ -289,7 +289,7 @@ export function CourseBuilderWorkspace({
     revalidatePath("/admin/classes");
     revalidatePath("/student/schedule");
     revalidatePath("/parent/schedule");
-    redirect(`${successRedirectPath}?tab=plan&success=live`);
+    redirect(`${successRedirectPath}?tab=plan&success=${schedule.meetingUrl ? "live" : "live_pending"}`);
   }
 
   async function publishStudentTask(formData: FormData) {
@@ -486,6 +486,8 @@ export function CourseBuilderWorkspace({
                 ? "Quiz created and linked to this curriculum topic."
                 : success === "live"
                   ? "Recurring Zoom live session created for this topic."
+                  : success === "live_pending"
+                    ? "Session saved. Zoom token was rejected, so admin can sync the Zoom link from Classes."
               : undefined
         }
       />
