@@ -487,7 +487,7 @@ export function CourseBuilderWorkspace({
                 : success === "live"
                   ? "Recurring Zoom live session created for this topic."
                   : success === "live_pending"
-                    ? "Session saved. Zoom token was rejected, so admin can sync the Zoom link from Classes."
+                    ? "Session saved successfully. Zoom join link is pending admin sync."
               : undefined
         }
       />

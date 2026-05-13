@@ -37,8 +37,8 @@ function statusNotice(status?: string) {
   }
   if (status === "zoom-pending") {
     return {
-      message: "Session saved. Admin can sync the Zoom link from Classes.",
-      tone: "error",
+      message: "Session saved successfully. Zoom join link is pending admin sync.",
+      tone: "success",
     };
   }
   return null;
@@ -178,7 +178,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                 {WEEKDAYS[entry.weekday]} {entry.startTime}-{entry.endTime} {entry.timezone}
               </p>
               <p className="mt-2 text-sm text-[#5f6b7a]">
-                {entry.meetingUrl ? "Linked to Zoom" : "Waiting for Zoom sync"}
+                {entry.meetingUrl ? "Linked to Zoom" : "Zoom link pending admin sync"}
               </p>
             </div>
           ))}

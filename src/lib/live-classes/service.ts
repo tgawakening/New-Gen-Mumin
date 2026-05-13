@@ -175,10 +175,10 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
     await db.notification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
-        title: meeting ? "Teacher scheduled a Zoom class" : "Zoom sync needed",
+        title: meeting ? "Teacher scheduled a Zoom class" : "Zoom link pending sync",
         body: meeting
           ? `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}.`
-          : `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}, but Zoom did not return a meeting link. Please sync it from Classes.`,
+          : `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}. Please sync the Zoom join link from Classes.`,
         href: "/admin/classes",
       })),
     });
