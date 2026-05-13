@@ -12,7 +12,7 @@ import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ notice?: string; tone?: string }>;
+  searchParams?: Promise<{ notice?: string; tone?: string; programId?: string; folderName?: string }>;
 };
 
 function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
@@ -34,6 +34,10 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const programIds = new Set(dashboard.rosters.map((roster) => roster.programId));
+  const defaultProgramId = params.programId && programIds.has(params.programId)
+    ? params.programId
+    : dashboard.rosters[0]?.programId;
+  const defaultFolderName = params.folderName?.trim() || "General";
   let driveError: string | null = null;
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   try {
@@ -108,7 +112,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
         <form action={uploadMaterialAction} className="grid gap-4 md:grid-cols-2">
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Program folder
-            <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+            <select name="programId" required defaultValue={defaultProgramId} className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
               {dashboard.rosters.map((roster) => (
                 <option key={roster.programId} value={roster.programId}>{roster.title}</option>
               ))}
@@ -120,7 +124,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
           </label>
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Folder / week
-            <input name="folderName" placeholder="Week 1, Homework, Recordings" defaultValue="General" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            <input name="folderName" placeholder="Week 1, Homework, Recordings" defaultValue={defaultFolderName} className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
           </label>
           <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
             <input name="publishToStudents" type="checkbox" defaultChecked className="h-4 w-4" />

@@ -718,8 +718,15 @@ export function CourseBuilderWorkspace({
                                       <span className="font-semibold text-[#22304a]">{parsed.weekLabel ?? "Lesson"}</span> - {parsed.topic || entry.topic}
                                     </span>
                                     <div className="flex flex-wrap gap-2">
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, quizComposer: true })} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, taskComposer: true })} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                                        <HelpCircle className="h-3.5 w-3.5" /> Quiz
+                                      </Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                                        <Video className="h-3.5 w-3.5" /> Live
+                                      </Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                                        <PenSquare className="h-3.5 w-3.5" /> Task
+                                      </Link>
                                     </div>
                                   </div>
                                 ))}
@@ -1187,7 +1194,7 @@ export function CourseBuilderWorkspace({
                 eyebrow="Materials kit"
                 title={`${selectedProgramme.title} resources to prepare`}
                 action={
-                  <Link href="/teacher/materials" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                  <Link href={`/teacher/materials?programId=${encodeURIComponent(selectedProgramId)}&folderName=${encodeURIComponent("Materials Kit")}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
                     Upload material
                   </Link>
                 }
