@@ -4,11 +4,12 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 export function ActionToast({ message, tone = "success" }: { message?: string; tone?: string }) {
-  const [visible, setVisible] = useState(Boolean(message));
+  const [dismissedMessage, setDismissedMessage] = useState<string | undefined>();
+  const visible = Boolean(message && dismissedMessage !== message);
 
   useEffect(() => {
     if (!message) return;
-    const timer = window.setTimeout(() => setVisible(false), 6000);
+    const timer = window.setTimeout(() => setDismissedMessage(message), 6000);
     return () => window.clearTimeout(timer);
   }, [message]);
 
@@ -30,7 +31,7 @@ export function ActionToast({ message, tone = "success" }: { message?: string; t
         <p className="leading-6">{message}</p>
         <button
           type="button"
-          onClick={() => setVisible(false)}
+          onClick={() => setDismissedMessage(message)}
           className="ml-auto rounded-full px-2 text-lg leading-none opacity-70 transition hover:opacity-100"
           aria-label="Dismiss notification"
         >

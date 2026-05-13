@@ -14,6 +14,7 @@ type PageProps = {
   searchParams?: Promise<{
     notice?: string;
     tone?: string;
+    status?: string;
     programId?: string;
     title?: string;
   }>;
@@ -25,6 +26,22 @@ const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh",
 function noticeHref(message: string, tone: "success" | "error" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
   return `/teacher/live-sessions?${params.toString()}`;
+}
+
+function statusNotice(status?: string) {
+  if (status === "zoom-linked") {
+    return {
+      message: "Zoom live session created successfully. Admin has been notified.",
+      tone: "success",
+    };
+  }
+  if (status === "zoom-pending") {
+    return {
+      message: "Session saved. Admin can sync the Zoom link from Classes.",
+      tone: "error",
+    };
+  }
+  return null;
 }
 
 export default async function TeacherLiveSessionsPage({ searchParams }: PageProps) {
@@ -39,14 +56,14 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
     ? params.programId
     : dashboard.rosters[0]?.programId;
+  const codedNotice = statusNotice(params.status);
 
   async function requestSessionAction(formData: FormData) {
     "use server";
 
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
-    let successMessage = "Zoom live session created successfully. Admin has been notified.";
-    let successTone: "success" | "error" = "success";
+    let successStatus = "zoom-linked";
 
     try {
       const schedule = await requestTeacherLiveClass(
@@ -66,15 +83,12 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       revalidatePath("/admin/classes");
       revalidatePath("/student/schedule");
       revalidatePath("/parent/schedule");
-      successMessage = schedule.meetingUrl
-        ? "Zoom live session created successfully. Admin has been notified."
-        : "Session saved. Zoom token was rejected, so admin can sync the Zoom link from Classes.";
-      successTone = schedule.meetingUrl ? "success" : "error";
+      successStatus = schedule.meetingUrl ? "zoom-linked" : "zoom-pending";
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to request this Zoom session.";
       redirect(noticeHref(message, "error"));
     }
-    redirect(noticeHref(successMessage, successTone));
+    redirect(`/teacher/live-sessions?status=${successStatus}`);
   }
 
   return (
@@ -83,7 +97,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       subtitle="Create Zoom sessions for your assigned programmes. Admin is notified automatically for monitoring."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.notice} tone={params.tone} />
+      <ActionToast message={params.notice ?? codedNotice?.message} tone={params.tone ?? codedNotice?.tone} />
 
       <TeacherMetricGrid
         metrics={[
