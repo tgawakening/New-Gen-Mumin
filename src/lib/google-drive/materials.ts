@@ -71,6 +71,21 @@ async function shareFileWithDashboardAdmins(fileId: string, admins: Array<{ emai
   await shareFileWithEmails(fileId, accessEmails, "writer");
 }
 
+async function getProgramTeacherEmails(programId: string) {
+  const assignments = await db.teacherProgram.findMany({
+    where: { programId },
+    include: {
+      teacher: {
+        include: {
+          user: true,
+        },
+      },
+    },
+  });
+
+  return assignments.map((assignment) => assignment.teacher.user.email);
+}
+
 export async function ensureProgramFolder(programId: string) {
   const program = await db.program.findUnique({ where: { id: programId } });
   if (!program) throw new Error("Program not found.");
@@ -181,6 +196,7 @@ export async function uploadTeacherMaterial(input: {
   const programFolderId = await ensureProgramFolder(input.programId);
   const folderId = await ensureChildFolder(programFolderId, input.folderName ?? "");
   const folderName = input.folderName?.trim() || "General";
+  const teacherEmails = await getProgramTeacherEmails(input.programId);
   const metadata = {
     name: input.title || input.file.name,
     parents: [folderId],
@@ -202,6 +218,10 @@ export async function uploadTeacherMaterial(input: {
     name: metadata.name,
     appProperties: metadata.appProperties,
   });
+
+  await shareFileWithEmails(programFolderId, [teacher.user.email, ...teacherEmails], "writer");
+  await shareFileWithEmails(folderId, [teacher.user.email, ...teacherEmails], "writer");
+  await shareFileWithEmails(uploaded.id, [teacher.user.email, ...teacherEmails], "writer");
 
   const admins = await db.user.findMany({ where: { role: "ADMIN" } });
   if (admins.length) {
