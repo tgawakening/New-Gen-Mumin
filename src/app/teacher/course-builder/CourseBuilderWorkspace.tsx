@@ -10,6 +10,7 @@ import { db } from "@/lib/db";
 import { genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, type GenMProgramSlug } from "@/lib/genm/curriculum";
 import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
 import { uploadTeacherMaterial } from "@/lib/google-drive/materials";
+import { requestTeacherLiveClass } from "@/lib/live-classes/service";
 import type { TeacherDashboardData } from "@/lib/teacher/dashboard";
 
 type BuilderTab = "overview" | "plan" | "lesson" | "task" | "materials";
@@ -26,7 +27,11 @@ type CourseBuilderWorkspaceProps = {
   lessonComposer?: boolean;
   quizComposer?: boolean;
   taskComposer?: boolean;
+  liveComposer?: boolean;
 };
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
 
 const builderTabs: Array<{ id: BuilderTab; label: string; icon: typeof Layers }> = [
   { id: "overview", label: "Overview", icon: Layers },
@@ -134,6 +139,7 @@ export function CourseBuilderWorkspace({
   lessonComposer = false,
   quizComposer = false,
   taskComposer = false,
+  liveComposer = false,
 }: CourseBuilderWorkspaceProps) {
   const selectedRoster = selectedProgrammeSlug
     ? dashboard.rosters.find((roster) => getGenMProgrammeByTitle(roster.title)?.slug === selectedProgrammeSlug) ?? null
@@ -155,7 +161,7 @@ export function CourseBuilderWorkspace({
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
-  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean }) {
+  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
     if (options?.topic) query.set("topic", options.topic);
@@ -163,6 +169,7 @@ export function CourseBuilderWorkspace({
     if (options?.lessonComposer) query.set("lessonComposer", "1");
     if (options?.quizComposer) query.set("quizComposer", "1");
     if (options?.taskComposer) query.set("taskComposer", "1");
+    if (options?.liveComposer) query.set("liveComposer", "1");
     return `${tabBaseHref}?${query.toString()}`;
   }
 
@@ -175,14 +182,12 @@ export function CourseBuilderWorkspace({
     const summary = String(formData.get("summary") || "").trim();
     const homework = cleanOptional(formData.get("homework"));
     const resourceLinks = cleanOptional(formData.get("resourceLinks"));
-    const mediaLink = cleanOptional(formData.get("mediaLink"));
-    const parentPrompt = cleanOptional(formData.get("parentPrompt"));
+    const videoUrl = cleanOptional(formData.get("videoUrl"));
     const weekLabel = cleanOptional(formData.get("weekLabel"));
     const termId = cleanOptional(formData.get("termId"));
-    const contentType = cleanOptional(formData.get("contentType"));
-    const materials = cleanOptional(formData.get("materials"));
-    const programmeFocus = cleanOptional(formData.get("programmeFocus"));
     const lessonObjective = cleanOptional(formData.get("lessonObjective"));
+    const thumbnailFiles = getUploadFiles(formData, "thumbnailFile");
+    const videoFiles = getUploadFiles(formData, "videoFile");
     const attachmentFiles = getUploadFiles(formData, "lessonFiles");
 
     if (!scheduleId || !lessonDateRaw || !topic || !summary) {
@@ -191,15 +196,32 @@ export function CourseBuilderWorkspace({
 
     const schedule = dashboard.classes.find((entry) => entry.id === scheduleId);
     if (!schedule) throw new Error("Choose a valid class schedule.");
-    const attachments = await uploadBuilderAttachments({
-      files: attachmentFiles,
-      programId: schedule.programId,
-      teacherUserId,
-      folderName: ["Lessons", weekLabel || topic].filter(Boolean).join(" / "),
-      titlePrefix: weekLabel || topic,
-    });
+    const lessonFolderName = ["Lessons", weekLabel || topic].filter(Boolean).join(" / ");
+    const attachments = [
+      ...(await uploadBuilderAttachments({
+        files: thumbnailFiles,
+        programId: schedule.programId,
+        teacherUserId,
+        folderName: `${lessonFolderName} / Thumbnail`,
+        titlePrefix: `${weekLabel || topic} thumbnail`,
+      })),
+      ...(await uploadBuilderAttachments({
+        files: videoFiles,
+        programId: schedule.programId,
+        teacherUserId,
+        folderName: `${lessonFolderName} / Video`,
+        titlePrefix: `${weekLabel || topic} video`,
+      })),
+      ...(await uploadBuilderAttachments({
+        files: attachmentFiles,
+        programId: schedule.programId,
+        teacherUserId,
+        folderName: lessonFolderName,
+        titlePrefix: weekLabel || topic,
+      })),
+    ];
 
-    const combinedResourceLinks = [mediaLink, resourceLinks].filter(Boolean).join("\n");
+    const combinedResourceLinks = [videoUrl, resourceLinks].filter(Boolean).join("\n");
     const finalHomework =
       [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
 
@@ -213,15 +235,15 @@ export function CourseBuilderWorkspace({
           topic,
           summary,
           instructorName: dashboard.teacherName,
-          programmeFocus,
+          programmeFocus: selectedProgramme?.title,
           lessonObjective,
           homework,
           resourceLinks: splitLinks(combinedResourceLinks),
-          parentPrompt,
+          parentPrompt: null,
           weekLabel,
           termId,
-          contentType,
-          materials,
+          contentType: "Lesson",
+          materials: null,
           attachments,
         }),
         homework: finalHomework,
@@ -237,7 +259,37 @@ export function CourseBuilderWorkspace({
     revalidatePath("/parent/courses");
     revalidatePath("/student");
     revalidatePath("/student/courses");
-    redirect(`${successRedirectPath}?tab=lesson&success=lesson`);
+    redirect(`${successRedirectPath}?tab=plan&success=lesson`);
+  }
+
+  async function createCurriculumLiveSessionAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+
+    await requestTeacherLiveClass(
+      {
+        programId: String(formData.get("programId") || ""),
+        title: String(formData.get("title") || ""),
+        weekday: Number(formData.get("weekday") || 0),
+        startTime: String(formData.get("startTime") || "16:00"),
+        endTime: String(formData.get("endTime") || "17:00"),
+        timezone: String(formData.get("timezone") || "Europe/London"),
+        createZoomMeeting: true,
+      },
+      session.user.id,
+    );
+
+    revalidatePath("/teacher/live-sessions");
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) {
+      revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    }
+    revalidatePath("/admin/classes");
+    revalidatePath("/student/schedule");
+    revalidatePath("/parent/schedule");
+    redirect(`${successRedirectPath}?tab=plan&success=live`);
   }
 
   async function publishStudentTask(formData: FormData) {
@@ -432,6 +484,8 @@ export function CourseBuilderWorkspace({
               ? "Student task published with resources."
               : success === "quiz"
                 ? "Quiz created and linked to this curriculum topic."
+                : success === "live"
+                  ? "Recurring Zoom live session created for this topic."
               : undefined
         }
       />
@@ -597,33 +651,19 @@ export function CourseBuilderWorkspace({
 
           {normalizedActiveTab === "plan" ? (
             <TeacherSection eyebrow="Publishing plan" title={`${selectedProgramme.title} term-by-term publishing plan`}>
-              <div className="space-y-5">
-                <div className="grid gap-4 xl:grid-cols-3">
-                  <div className="rounded-[18px] bg-[#fbf6ef] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Teacher team</p>
-                    <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                      {programmeTeachers.map((teacher) => (
-                        <li key={teacher.slug}>- {teacher.name} - {teacher.title}</li>
-                      ))}
-                    </ul>
+              <div className="space-y-4">
+                <div className="grid gap-3 rounded-[18px] bg-[#fbf6ef] p-3 text-sm text-[#5f6b7a] md:grid-cols-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">Team</p>
+                    <p className="mt-1 font-semibold text-[#22304a]">{programmeTeachers.length} teachers</p>
                   </div>
-
-                  <div className="rounded-[18px] bg-[#fbf6ef] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Upload focus</p>
-                    <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                      {selectedProgramme.uploadIdeas.map((item) => (
-                        <li key={item}>- {item}</li>
-                      ))}
-                    </ul>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">Upload focus</p>
+                    <p className="mt-1 line-clamp-1">{selectedProgramme.uploadIdeas.slice(0, 2).join(", ")}</p>
                   </div>
-
-                  <div className="rounded-[18px] bg-[#fbf6ef] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Learning outcomes</p>
-                    <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                      {selectedProgramme.outcomes.map((item) => (
-                        <li key={item}>- {item}</li>
-                      ))}
-                    </ul>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">Goal</p>
+                    <p className="mt-1 line-clamp-1">{selectedProgramme.outcomes[0]}</p>
                   </div>
                 </div>
 
@@ -656,7 +696,7 @@ export function CourseBuilderWorkspace({
                                     <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
                                       <HelpCircle className="h-3.5 w-3.5" /> Quiz
                                     </Link>
-                                    <Link href={`/teacher/live-sessions?programId=${encodeURIComponent(selectedProgramId)}&title=${encodeURIComponent(highlight)}`} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
+                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
                                       <Video className="h-3.5 w-3.5" /> Live
                                     </Link>
                                     <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
@@ -720,153 +760,74 @@ export function CourseBuilderWorkspace({
                 </div>
                 <form action={publishLessonContent} className="grid gap-4">
                   <div className="rounded-[18px] border border-[#d9e7f2] bg-[#f5fbff] p-3 text-sm leading-6 text-[#4d5a6b]">
-                  Add the weekly lesson update, then attach slides, images, PDFs, worksheets, or short videos. Uploaded files are saved in the programme Drive folder and shown inside the student course page.
+                    Add the lesson update, thumbnail, video, and supporting files. Everything uploads to the programme Drive folder and appears in the student course page.
                   </div>
-                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                  Class schedule
-                  <select
-                    name="scheduleId"
-                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                    required
-                  >
-                    <option value="">Select a class</option>
-                    {visibleClasses.map((entry) => (
-                      <option key={entry.id} value={entry.id}>
-                        {entry.title} - {entry.startTime}-{entry.endTime}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Lesson date
-                    <input type="date" name="lessonDate" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required />
-                  </label>
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Topic
-                    <input
-                      name="topic"
-                      defaultValue={prefillTopic ?? ""}
-                      className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                      placeholder="Week focus or lesson title"
-                      required
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Term
-                    <select name="termId" defaultValue={prefillTermId ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]">
-                      <option value="">Select term</option>
-                      {genMTerms.map((term) => (
-                        <option key={term.id} value={term.id}>
-                          {term.title} - {term.level}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Week label
-                    <input name="weekLabel" defaultValue={prefillWeekLabel ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Week 5 - Cave Hira" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Content type
-                    <input name="contentType" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Story, worksheet, listening task" />
-                  </label>
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Programme focus
-                    <input
-                      name="programmeFocus"
-                      defaultValue={selectedProgramme.title}
-                      className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                      placeholder="Makharij, Hijrah, dialogue practice"
-                    />
-                  </label>
-                </div>
-
-                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                  Teacher summary
-                  <textarea
-                    name="summary"
-                    rows={4}
-                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                    placeholder="What was covered today, what should parents know, and what should students focus on?"
-                    required
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                  Lesson objective
-                  <input
-                    name="lessonObjective"
-                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                    placeholder="What should learners understand or practise by the end of this lesson?"
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                  Homework / follow-up
-                  <textarea
-                    name="homework"
-                    rows={3}
-                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                    placeholder="Homework notes, practice guidance, or parent reminders"
-                  />
-                </label>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Thumbnail / video link
-                    <input
-                      name="mediaLink"
-                      className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                      placeholder="Paste lesson thumbnail, YouTube, Vimeo, or Drive video link"
-                    />
-                  </label>
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Resource links
-                    <input
-                      name="resourceLinks"
-                      className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                      placeholder="Paste Google Drive, PDF, video, or worksheet links"
-                    />
-                  </label>
-
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56] md:col-span-2">
-                    Materials or kit needed
-                    <input
-                      name="materials"
-                      className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                      placeholder="Flashcards, Ka'bah craft, plant tray, Tajweed poster"
-                    />
-                  </label>
-                </div>
-
-                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                  Parent prompt
-                  <textarea
-                    name="parentPrompt"
-                    rows={3}
-                    className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]"
-                    placeholder="How should parents follow up with this lesson at home?"
-                  />
-                </label>
-
-                <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                  Lesson files
-                  <div className="rounded-[18px] border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
-                    <input
-                      name="lessonFiles"
-                      type="file"
-                      multiple
-                      accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx"
-                      className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#2a76aa] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
-                    />
-                    <p className="mt-2 text-xs font-normal text-[#617184]">Slides, PDFs, images, worksheets, docs, and short videos are supported.</p>
+                  <input type="hidden" name="termId" value={prefillTermId ?? ""} />
+                  <input type="hidden" name="weekLabel" value={prefillWeekLabel ?? ""} />
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Class schedule
+                      <select name="scheduleId" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required>
+                        <option value="">Select a class</option>
+                        {visibleClasses.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.title} - {entry.startTime}-{entry.endTime}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Lesson date
+                      <input type="date" name="lessonDate" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required />
+                    </label>
                   </div>
-                </label>
+                  <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm text-[#5f6b7a]">
+                    <span className="font-semibold text-[#22304a]">{prefillWeekLabel || "Selected week"}</span>
+                    {prefillTopic ? ` - ${prefillTopic}` : ""}
+                  </div>
+                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                    Lesson title
+                    <input name="topic" defaultValue={prefillTopic ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Lesson title" required />
+                  </label>
+                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                    Lesson overview
+                    <textarea name="summary" rows={3} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Short lesson description or what students will learn." required />
+                  </label>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Learning objective
+                      <input name="lessonObjective" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="One clear objective" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Homework / follow-up
+                      <input name="homework" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Optional homework note" />
+                    </label>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Thumbnail image
+                      <input name="thumbnailFile" type="file" accept="image/*" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#2a76aa] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      YouTube / video URL
+                      <input name="videoUrl" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="https://youtube.com/..." />
+                    </label>
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Upload video
+                      <input name="videoFile" type="file" accept="video/*" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#2a76aa] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                      Extra resource links
+                      <input name="resourceLinks" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Optional Drive/PDF links" />
+                    </label>
+                  </div>
+                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
+                    Lesson documents
+                    <div className="rounded-[18px] border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
+                      <input name="lessonFiles" type="file" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx,image/*" className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#2a76aa] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                      <p className="mt-2 text-xs font-normal text-[#617184]">Slides, PDFs, worksheets, documents, and images.</p>
+                    </div>
+                  </label>
 
                 <button type="submit" className="inline-flex w-fit rounded-full bg-[#2a76aa] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#245f88]">
                   Publish lesson update
@@ -989,6 +950,63 @@ export function CourseBuilderWorkspace({
                   <input name="taskLinks" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Optional Drive, worksheet, or reference links" />
                   <input name="taskFiles" type="file" multiple accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
                   <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Publish task</button>
+                </form>
+              </div>
+            </div>
+          ) : null}
+
+          {liveComposer ? (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
+              <div className="mx-auto max-w-3xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Zoom session</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Create live session</h2>
+                    <p className="mt-1 text-sm text-[#617184]">{[prefillWeekLabel, prefillTopic].filter(Boolean).join(" - ")}</p>
+                  </div>
+                  <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">
+                    Close
+                  </Link>
+                </div>
+
+                <form action={createCurriculumLiveSessionAction} className="grid gap-4">
+                  <input type="hidden" name="programId" value={selectedProgramId} />
+                  <div className="rounded-[18px] border border-[#d9e7f2] bg-[#f5fbff] p-3 text-sm leading-6 text-[#4d5a6b]">
+                    This creates a weekly recurring Zoom session for the selected curriculum topic.
+                  </div>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Session title
+                    <input name="title" required defaultValue={prefillTopic ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                  </label>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Day
+                      <select name="weekday" defaultValue="6" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        {WEEKDAYS.map((weekday, index) => (
+                          <option key={weekday} value={index}>{weekday}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Timezone
+                      <select name="timezone" defaultValue="Europe/London" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        {TIMEZONES.map((timezone) => (
+                          <option key={timezone} value={timezone}>{timezone}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Start
+                      <input name="startTime" type="time" defaultValue="16:00" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      End
+                      <input name="endTime" type="time" defaultValue="17:00" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                  </div>
+                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">
+                    Create recurring Zoom session
+                  </button>
                 </form>
               </div>
             </div>
@@ -1165,7 +1183,15 @@ export function CourseBuilderWorkspace({
 
           {normalizedActiveTab === "materials" ? (
             <div className="grid gap-6 xl:grid-cols-2">
-              <TeacherSection eyebrow="Materials kit" title={`${selectedProgramme.title} resources to prepare`}>
+              <TeacherSection
+                eyebrow="Materials kit"
+                title={`${selectedProgramme.title} resources to prepare`}
+                action={
+                  <Link href="/teacher/materials" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                    Upload material
+                  </Link>
+                }
+              >
                 <TeacherInfoList
                   items={selectedProgramme.keyMaterials}
                   emptyLabel="Programme materials will appear here."

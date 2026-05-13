@@ -9,7 +9,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { CourseBuilderWorkspace } from "./CourseBuilderWorkspace";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; termId?: string; lessonComposer?: string; quizComposer?: string; taskComposer?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; termId?: string; lessonComposer?: string; quizComposer?: string; taskComposer?: string; liveComposer?: string }>;
 };
 
 export default async function TeacherCourseBuilderPage({ searchParams }: PageProps) {
@@ -34,6 +34,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
       if (params?.lessonComposer) query.set("lessonComposer", params.lessonComposer);
       if (params?.quizComposer) query.set("quizComposer", params.quizComposer);
       if (params?.taskComposer) query.set("taskComposer", params.taskComposer);
+      if (params?.liveComposer) query.set("liveComposer", params.liveComposer);
       redirect(`/teacher/course-builder/${programme.slug}${query.size ? `?${query.toString()}` : ""}`);
     }
   }
@@ -55,6 +56,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         lessonComposer={params?.lessonComposer === "1"}
         quizComposer={params?.quizComposer === "1"}
         taskComposer={params?.taskComposer === "1"}
+        liveComposer={params?.liveComposer === "1"}
       />
     </TeacherDashboardFrame>
   );
