@@ -1,59 +1,14 @@
 import Link from "next/link";
 import { ReactNode } from "react";
-import {
-  BookOpen,
-  CalendarDays,
-  CheckCircle2,
-  ClipboardList,
-  FileText,
-  FolderOpen,
-  GraduationCap,
-  LayoutDashboard,
-  NotebookPen,
-  PenTool,
-  PieChart,
-  UserRound,
-  Video,
-} from "lucide-react";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { TeacherNavLinkClient } from "@/components/dashboard/teacher/TeacherNavLinkClient";
 
 type NavItem = {
   label: string;
   href: string;
   icon?: string;
 };
-
-function getTeacherNavIcon(icon?: string) {
-  switch (icon) {
-    case "classes":
-      return GraduationCap;
-    case "video":
-      return Video;
-    case "check":
-      return CheckCircle2;
-    case "builder":
-      return PenTool;
-    case "folder":
-      return FolderOpen;
-    case "quiz":
-      return ClipboardList;
-    case "lesson":
-      return BookOpen;
-    case "journal":
-      return NotebookPen;
-    case "reports":
-      return PieChart;
-    case "calendar":
-      return CalendarDays;
-    case "profile":
-      return UserRound;
-    case "home":
-      return LayoutDashboard;
-    default:
-      return FileText;
-  }
-}
 
 export function TeacherDashboardFrame({
   title,
@@ -66,11 +21,6 @@ export function TeacherDashboardFrame({
   navItems: NavItem[];
   children: ReactNode;
 }) {
-  const navLinks = navItems.map((item) => {
-    const Icon = getTeacherNavIcon(item.icon);
-    return { ...item, Icon };
-  });
-
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#1c2b45] bg-[linear-gradient(135deg,#14243d_0%,#22304a_55%,#36536f_100%)] text-white shadow-[0_18px_50px_rgba(20,36,61,0.22)]">
@@ -104,21 +54,13 @@ export function TeacherDashboardFrame({
               Teaching suite
             </p>
             <div className="space-y-2 xl:mt-5">
-              {navLinks.map(({ href, label, Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  title={label}
-                  className="group/nav relative flex items-center justify-center gap-3 rounded-2xl bg-white/8 px-2 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12 xl:justify-start xl:px-4"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
-                    <Icon className="h-4 w-4" />
-                  </span>
-                  <span className="hidden xl:inline">{label}</span>
-                  <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-40 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#22304a] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-xl transition group-hover/nav:block group-hover/nav:opacity-100 xl:hidden">
-                    {label}
-                  </span>
-                </Link>
+              {navItems.map((item) => (
+                <TeacherNavLinkClient
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                />
               ))}
             </div>
           </div>
