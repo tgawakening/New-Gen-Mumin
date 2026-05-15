@@ -22,6 +22,7 @@ type OrderDetailsPopupProps = {
   orderNumber: string;
   parentName: string;
   parentEmail: string;
+  city?: string | null;
   phone: string;
   gateway: string;
   status: string;
@@ -63,6 +64,7 @@ export function OrderDetailsPopup({
   orderNumber,
   parentName,
   parentEmail,
+  city,
   phone,
   gateway,
   status,
@@ -116,6 +118,7 @@ export function OrderDetailsPopup({
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <DetailBlock label="Parent phone" value={phone} />
+              <DetailBlock label="City" value={city ?? null} />
               <DetailBlock label="Gateway" value={gateway} />
               <DetailBlock label="Order status" value={status.replace(/_/g, " ")} />
               <DetailBlock label="Payment status" value={paymentStatus.replace(/_/g, " ")} />

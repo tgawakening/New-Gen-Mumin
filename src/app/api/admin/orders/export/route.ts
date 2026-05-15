@@ -20,6 +20,14 @@ function formatProgramTitle(title?: string | null, slug?: string | null) {
   return title || "Program pending";
 }
 
+function extractNoteValue(notes: string | null | undefined, label: string) {
+  if (!notes) return null;
+  const entry = notes
+    .split(/\s*\|\s*|\r?\n/)
+    .find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return entry ? entry.split(":").slice(1).join(":").trim() : null;
+}
+
 function safeCsvValue(value: string | number | null | undefined) {
   const raw = String(value ?? "");
   const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
@@ -83,6 +91,7 @@ export async function GET() {
       "Parent name",
       "Parent email",
       "Parent phone",
+      "City",
       "Children count",
       "Children details",
       "Programs overview",
@@ -99,6 +108,7 @@ export async function GET() {
     const parentPhone = order.parent.user.phoneNumber
       ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
       : "Pending";
+    const city = extractNoteValue(registration?.notes, "City");
     const childDetails = registration?.students.map((child, index) => {
       const programs = registration.items
         .filter((item) => item.registrationStudentId === child.id)
@@ -120,6 +130,7 @@ export async function GET() {
       parentName || "Parent pending",
       order.parent.user.email,
       parentPhone,
+      city ?? "Pending",
       childDetails.length,
       childDetails.join("\n"),
       programsOverview,

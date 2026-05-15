@@ -27,6 +27,14 @@ function canMarkOrderPaid(order: { gateway: string; status: string; paymentStatu
   );
 }
 
+function extractNoteValue(notes: string | null | undefined, label: string) {
+  if (!notes) return null;
+  const entry = notes
+    .split(/\s*\|\s*|\r?\n/)
+    .find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return entry ? entry.split(":").slice(1).join(":").trim() : null;
+}
+
 export default async function AdminOrdersPage({
   searchParams,
 }: {
@@ -127,6 +135,7 @@ export default async function AdminOrdersPage({
             {orders.map((order) => {
               const latestPayment = order.payments[0] ?? null;
               const manualSubmission = latestPayment?.manualSubmission ?? null;
+              const city = extractNoteValue(order.registration?.notes, "City");
               const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
@@ -147,6 +156,7 @@ export default async function AdminOrdersPage({
                       {order.parent.user.firstName} {order.parent.user.lastName} •{" "}
                       {order.parent.user.email}
                     </p>
+                    <p className="mt-1 text-sm text-[#6d7785]">City: {city ?? "Pending"}</p>
                   </div>
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(order.status)}`}

@@ -94,7 +94,9 @@ type PriceBreakdown = {
 };
 
 const PRIVATE_STUDENT_COUPON_CODE = "PKSTUDENT";
-const PRIVATE_STUDENT_COUPON_AMOUNT_PKR = 1000;
+const PRIVATE_STUDENT_COUPON_AMOUNT_PKR = 2000;
+const PAKISTAN_SEERAH_LEADERSHIP_3K_COUPON_CODE = "PKBUNDLE3K";
+const PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR = 3000;
 const PRIVATE_STUDENT_COUPON_OFFER_SLUGS = new Set([
   SEERAH_SINGLE_OFFER_SLUG,
   SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
@@ -580,7 +582,20 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
     [children, normalizedCouponCode, selectedPhoneCountry.code],
   );
 
-  const couponEligibleForBundle = publicCouponEligibleForBundle || privateStudentCouponEligible;
+  const pakistanSeerahLeadership3kCouponEligible = useMemo(
+    () =>
+      normalizedCouponCode === PAKISTAN_SEERAH_LEADERSHIP_3K_COUPON_CODE &&
+      selectedPhoneCountry.code === "PK" &&
+      children.length === 1 &&
+      children[0]?.selectedOfferSlugs.length === 1 &&
+      children[0].selectedOfferSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+    [children, normalizedCouponCode, selectedPhoneCountry.code],
+  );
+
+  const couponEligibleForBundle =
+    publicCouponEligibleForBundle ||
+    privateStudentCouponEligible ||
+    pakistanSeerahLeadership3kCouponEligible;
   const effectiveCoupon = publicCouponEligibleForBundle ? appliedCoupon : null;
 
   const summary = useMemo(() => {
@@ -598,40 +613,69 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
         lines.push({ childLabel: child.fullName || `Child ${childIndex + 1}`, offerTitle: offer.title, price, multiChildDiscount: lineMultiChildDiscount });
       });
     });
+    const subtotalAfterMultiChild = subtotal - multiChildDiscount;
     const couponFixedAmount = getCouponFixedAmount(effectiveCoupon, selectedPhoneCountry.currency);
     const couponPercent = getCouponPercent(effectiveCoupon);
+    const privateStudentBundleTargetTotal =
+      children.length === 1 &&
+      children[0]?.selectedOfferSlugs.length === 1 &&
+      children[0].selectedOfferSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG &&
+      pakistanSeerahLeadership3kCouponEligible &&
+      selectedPhoneCountry.currency === "PKR"
+        ? PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR
+        : null;
+    const privateStudentBundleTargetDiscount =
+      privateStudentBundleTargetTotal === null
+        ? 0
+        : Math.max(0, subtotalAfterMultiChild - privateStudentBundleTargetTotal);
     const privateStudentCouponDiscount =
       privateStudentCouponEligible && selectedPhoneCountry.currency === "PKR"
-        ? PRIVATE_STUDENT_COUPON_AMOUNT_PKR
+        ? Math.max(PRIVATE_STUDENT_COUPON_AMOUNT_PKR, privateStudentBundleTargetDiscount)
         : 0;
     const rawCouponDiscount = couponFixedAmount
       ? couponFixedAmount
       : privateStudentCouponDiscount
         ? privateStudentCouponDiscount
       : effectiveCoupon
-        ? Math.round((subtotal - multiChildDiscount) * (couponPercent / 100))
+        ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
         : 0;
-    const couponDiscount = Math.min(rawCouponDiscount, subtotal - multiChildDiscount);
+    const couponDiscount =
+      privateStudentBundleTargetTotal === null
+        ? Math.min(rawCouponDiscount, subtotalAfterMultiChild)
+        : privateStudentBundleTargetDiscount;
+    const total =
+      privateStudentBundleTargetTotal === null
+        ? subtotalAfterMultiChild - couponDiscount
+        : privateStudentBundleTargetTotal;
     return {
       currency: selectedPhoneCountry.currency,
       subtotal,
       multiChildDiscount,
       couponDiscount,
       discount: multiChildDiscount + couponDiscount,
-      total: subtotal - multiChildDiscount - couponDiscount,
-      couponCode: effectiveCoupon?.code ?? (privateStudentCouponEligible ? normalizedCouponCode : null),
+      total,
+      couponCode:
+        effectiveCoupon?.code ??
+        (privateStudentCouponEligible || pakistanSeerahLeadership3kCouponEligible
+          ? normalizedCouponCode
+          : null),
       couponDiscountPercent: couponPercent,
-      couponFixedAmount: couponFixedAmount || privateStudentCouponDiscount,
+      couponFixedAmount:
+        couponFixedAmount || privateStudentCouponDiscount || privateStudentBundleTargetDiscount,
       lines,
     };
-  }, [children, effectiveCoupon, normalizedCouponCode, offerMap, privateStudentCouponEligible, selectedPhoneCountry]);
+  }, [children, effectiveCoupon, normalizedCouponCode, offerMap, pakistanSeerahLeadership3kCouponEligible, privateStudentCouponEligible, selectedPhoneCountry]);
 
   const couponFeedback = useMemo(() => {
     if (!couponCode.trim()) {
       return null;
     }
 
-    if (!appliedCoupon && normalizedCouponCode !== PRIVATE_STUDENT_COUPON_CODE) {
+    if (
+      !appliedCoupon &&
+      normalizedCouponCode !== PRIVATE_STUDENT_COUPON_CODE &&
+      normalizedCouponCode !== PAKISTAN_SEERAH_LEADERSHIP_3K_COUPON_CODE
+    ) {
       return {
         tone: "info" as const,
         message: "This code will be checked securely after submission.",
@@ -648,13 +692,13 @@ export function RegistrationForm({ offers, countries, autoOpen = false }: Props)
       return {
         tone: "success" as const,
         message:
-          privateStudentCouponEligible
-            ? `${formatMoney(PRIVATE_STUDENT_COUPON_AMOUNT_PKR, "PKR")} discount applied to this checkout.`
+          privateStudentCouponEligible || pakistanSeerahLeadership3kCouponEligible
+            ? `${formatMoney(summary.couponFixedAmount, "PKR")} discount applied to this checkout.`
             : getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency) > 0
             ? `${formatMoney(getCouponFixedAmount(appliedCoupon, selectedPhoneCountry.currency), selectedPhoneCountry.currency)} discount applied to this checkout.`
             : `${getCouponPercent(appliedCoupon)}% discount applied to this checkout.`,
       };
-  }, [appliedCoupon, couponCode, couponEligibleForBundle, normalizedCouponCode, privateStudentCouponEligible, selectedPhoneCountry.currency]);
+  }, [appliedCoupon, couponCode, couponEligibleForBundle, normalizedCouponCode, pakistanSeerahLeadership3kCouponEligible, privateStudentCouponEligible, selectedPhoneCountry.currency, summary.couponFixedAmount]);
 
   const isPakistan = selectedPhoneCountry.code === "PK";
   const isFreeEnrollment = summary.total <= 0 && summary.lines.length > 0;

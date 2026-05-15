@@ -14,8 +14,10 @@ import {
 import type { RegistrationPayload } from "@/lib/registration/schema";
 
 const BACKEND_ONLY_DISCOUNT_COUPONS = {
-  PKSTUDENT: { code: "PKSTUDENT", discountAmount: 1000, currency: "PKR" },
+  PKSTUDENT: { code: "PKSTUDENT", discountAmount: 2000, currency: "PKR" },
+  PKBUNDLE3K: { code: "PKBUNDLE3K", discountAmount: 2000, currency: "PKR" },
 } as const;
+const PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR = 3000;
 
 type RegistrationCoupon =
   | ReturnType<typeof getDiscountCoupon>
@@ -80,6 +82,15 @@ function isRegistrationCouponEligibleForSelection(
             offerSlugs[0],
           ),
       )
+    );
+  }
+
+  if (coupon.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKBUNDLE3K.code) {
+    return (
+      countryCode?.toUpperCase() === "PK" &&
+      selectedOfferSlugsByStudent.length === 1 &&
+      selectedOfferSlugsByStudent[0]?.length === 1 &&
+      selectedOfferSlugsByStudent[0][0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG
     );
   }
 
@@ -481,27 +492,49 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
 
     const subtotalAfterMultiChild = subtotalAmount - multiChildDiscountAmount;
     const effectiveFallbackCoupon = couponEligibleForSelection ? fallbackCoupon : null;
+    const privateStudentBundleTargetTotal =
+      effectiveFallbackCoupon?.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKBUNDLE3K.code &&
+      currency === "PKR" &&
+      selectedOfferSlugsByStudent.length === 1 &&
+      selectedOfferSlugsByStudent[0]?.length === 1 &&
+      selectedOfferSlugsByStudent[0][0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG
+        ? PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR
+        : null;
+    const privateStudentBundleTargetAmount =
+      privateStudentBundleTargetTotal === null
+        ? 0
+        : Math.max(0, subtotalAfterMultiChild - privateStudentBundleTargetTotal);
     const fallbackCouponAmount =
       effectiveFallbackCoupon &&
       "discountAmount" in effectiveFallbackCoupon &&
       effectiveFallbackCoupon.currency === currency
-        ? effectiveFallbackCoupon.discountAmount
+        ? Math.max(effectiveFallbackCoupon.discountAmount, privateStudentBundleTargetAmount)
         : 0;
     const fallbackCouponPercent =
       effectiveFallbackCoupon && "discountPercent" in effectiveFallbackCoupon
         ? effectiveFallbackCoupon.discountPercent
         : 0;
     const couponPercent = coupon?.discountPercent ?? fallbackCouponPercent;
-    const rawCouponAmount =
+    const persistedCouponAmount =
       coupon?.discountAmount && coupon.currency === currency
         ? coupon.discountAmount
-        : fallbackCouponAmount
-          ? fallbackCouponAmount
-          : couponPercent > 0
-            ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
-            : 0;
-    const couponAmount = Math.min(rawCouponAmount, subtotalAfterMultiChild);
+        : 0;
+    const fixedCouponAmount = Math.max(persistedCouponAmount, fallbackCouponAmount);
+    const rawCouponAmount =
+      fixedCouponAmount > 0
+        ? fixedCouponAmount
+        : couponPercent > 0
+          ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
+          : 0;
+    const couponAmount =
+      privateStudentBundleTargetTotal === null
+        ? Math.min(rawCouponAmount, subtotalAfterMultiChild)
+        : privateStudentBundleTargetAmount;
     const discountAmount = multiChildDiscountAmount + couponAmount;
+    const totalAmount =
+      privateStudentBundleTargetTotal === null
+        ? subtotalAmount - discountAmount
+        : privateStudentBundleTargetTotal;
 
     const updated = await tx.registration.update({
       where: { id: registration.id },
@@ -509,7 +542,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
         couponId: couponEligibleForSelection ? coupon?.id ?? null : null,
         subtotalAmount,
         discountAmount,
-        totalAmount: subtotalAmount - discountAmount,
+        totalAmount,
         pricingSnapshot: {
           currency,
           multiChildDiscountRule: "50% off for second child onwards",

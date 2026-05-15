@@ -10,6 +10,14 @@ function formatDate(value: Date) {
   }).format(value);
 }
 
+function extractNoteValue(notes: string | null | undefined, label: string) {
+  if (!notes) return null;
+  const entry = notes
+    .split(/\s*\|\s*|\r?\n/)
+    .find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return entry ? entry.split(":").slice(1).join(":").trim() : null;
+}
+
 export default async function AdminStudentsPage() {
   const students = await db.studentProfile.findMany({
     orderBy: { createdAt: "desc" },
@@ -30,6 +38,13 @@ export default async function AdminStudentsPage() {
           program: true,
         },
       },
+      registrationStudents: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: {
+          registration: true,
+        },
+      },
     },
   });
 
@@ -45,7 +60,10 @@ export default async function AdminStudentsPage() {
         </div>
 
         <div className="grid gap-4">
-          {students.map((student) => (
+          {students.map((student) => {
+            const city = extractNoteValue(student.registrationStudents[0]?.registration.notes, "City");
+
+            return (
             <div key={student.id} className="rounded-[1.6rem] border border-[#eadfce] bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -61,8 +79,9 @@ export default async function AdminStudentsPage() {
                 </span>
               </div>
 
-              <div className="mt-4 grid gap-3 text-sm text-[#556274] md:grid-cols-4">
+              <div className="mt-4 grid gap-3 text-sm text-[#556274] md:grid-cols-5">
                 <span>Age: {student.age ?? "Not set"}</span>
+                <span>City: {city ?? "Pending"}</span>
                 <span>Active enrollments: {student.enrollments.length}</span>
                 <span>Parents linked: {student.parents.length}</span>
                 <span>Created: {formatDate(student.createdAt)}</span>
@@ -90,7 +109,8 @@ export default async function AdminStudentsPage() {
                 <p className="mt-4 text-sm text-[#6d7785]">No active programme access yet.</p>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

@@ -49,6 +49,14 @@ function parseRegistrationNotes(notes?: string | null) {
     });
 }
 
+function extractNoteValue(notes: string | null | undefined, label: string) {
+  if (!notes) return null;
+  const entry = notes
+    .split(/\s*\|\s*|\r?\n/)
+    .find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return entry ? entry.split(":").slice(1).join(":").trim() : null;
+}
+
 function DetailBlock({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-[#eadfce] bg-white px-4 py-3 text-sm">
@@ -159,6 +167,7 @@ export default async function AdminRegistrationsPage() {
                   <p className="mt-1 text-sm text-[#6d7785]">
                     {registration.parentEmail} - {registration.selectedCountryName ?? "No country"}
                   </p>
+                  <p className="mt-1 text-sm text-[#6d7785]">City: {extractNoteValue(registration.notes, "City") ?? "Pending"}</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <RegistrationDetailsPopup registration={registration} />

@@ -3,10 +3,10 @@ import { convertAmountToGbp } from "@/lib/registration/catalog";
 
 function extractNoteValue(notes: string | null | undefined, label: string) {
   if (!notes) return null;
-  const line = notes
-    .split("\n")
+  const entry = notes
+    .split(/\s*\|\s*|\r?\n/)
     .find((entry) => entry.toLowerCase().startsWith(`${label.toLowerCase()}:`));
-  return line ? line.split(":").slice(1).join(":").trim() : null;
+  return entry ? entry.split(":").slice(1).join(":").trim() : null;
 }
 
 function extractPricingSnapshotValue(
@@ -217,6 +217,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const ordersView = orders.map((order) => {
     const latestPayment = order.payments[0] ?? null;
     const childDetails = buildRegistrationChildren(order.registration);
+    const city = extractNoteValue(order.registration?.notes, "City");
     const programTitles = Array.from(
       new Set(
         order.items.flatMap((item) => {
@@ -235,6 +236,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           ? formatPersonName(order.registration.parentFirstName, order.registration.parentLastName)
           : formatPersonName(order.parent.user.firstName, order.parent.user.lastName),
       parentEmail: order.parent.user.email,
+      city,
       phone: order.parent.user.phoneNumber
         ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
         : "Pending",
@@ -294,6 +296,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const studentsView = students.map((student) => {
     const latestOrder = student.parents[0]?.parent.orders[0] ?? null;
     const latestRegistration = student.registrationStudents[0]?.registration ?? null;
+    const city = extractNoteValue(latestRegistration?.notes, "City");
     const registrationParentName = latestRegistration
       ? formatPersonName(latestRegistration.parentFirstName, latestRegistration.parentLastName)
       : "";
@@ -314,6 +317,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       name:
         student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
       email: student.user.email,
+      city,
       phone: student.user.phoneNumber
         ? `${student.user.phoneCountryCode ?? ""} ${student.user.phoneNumber}`.trim()
         : "Pending",

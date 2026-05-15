@@ -110,6 +110,14 @@ function parseRegistrationNotes(notes?: string | null) {
     });
 }
 
+function extractNoteValue(notes: string | null | undefined, label: string) {
+  if (!notes) return null;
+  const entry = notes
+    .split(/\s*\|\s*|\r?\n/)
+    .find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
+  return entry ? entry.split(":").slice(1).join(":").trim() : null;
+}
+
 function RegistrationDetailsPopup({ registration }: { registration: RecentRegistration }) {
   const parentName = formatPersonName(registration.parentFirstName, registration.parentLastName) || "Parent pending";
   const notes = parseRegistrationNotes(registration.notes);
@@ -531,6 +539,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           <p className="mt-1 text-sm text-[#6d7785]">
                             {registration.parentEmail} - {registration.selectedCountryName ?? "Country pending"}
                           </p>
+                          <p className="mt-1 text-sm text-[#6d7785]">City: {extractNoteValue(registration.notes, "City") ?? "Pending"}</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <RegistrationDetailsPopup registration={registration} />
@@ -564,6 +573,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         <div>
                           <p className="font-semibold text-[#22304a]">{order.orderNumber}</p>
                           <p className="mt-1 text-sm text-[#6d7785]">{order.parentName}</p>
+                          <p className="mt-1 text-sm text-[#6d7785]">City: {order.city ?? "Pending"}</p>
                         </div>
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(order.status)}`}>
                           {order.status.replace(/_/g, " ")}
@@ -617,6 +627,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Parent</p>
                       <p className="mt-2 font-semibold text-[#22304a]">{order.parentName || "Parent pending"}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.parentEmail}</p>
+                      <p className="mt-1 text-sm text-[#617184]">City: {order.city ?? "Pending"}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.phone}</p>
                       <p className="mt-2 text-sm text-[#22304a]">{order.orderNumber}</p>
                       <div className="mt-3">
@@ -624,6 +635,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           orderNumber={order.orderNumber}
                           parentName={order.parentName || "Parent pending"}
                           parentEmail={order.parentEmail}
+                          city={order.city}
                           phone={order.phone}
                           gateway={order.gateway}
                           status={order.status}
@@ -767,6 +779,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Parent</p>
                       <p className="mt-2">{student.parentName}</p>
                       <p className="mt-1 text-[#617184]">{student.email}</p>
+                      <p className="mt-1 text-[#617184]">City: {student.city ?? "Pending"}</p>
                       <p className="mt-1 text-[#617184]">{student.phone}</p>
                     </div>
                     <div className="text-sm text-[#22304a]">
