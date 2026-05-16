@@ -180,6 +180,7 @@ export async function uploadTeacherMaterial(input: {
   title?: string;
   folderName?: string;
   publishToStudents?: boolean;
+  purpose?: "material" | "lesson" | "task";
 }) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: input.teacherUserId },
@@ -218,6 +219,7 @@ export async function uploadTeacherMaterial(input: {
     name: metadata.name,
     appProperties: metadata.appProperties,
   });
+  const purpose = input.purpose ?? "material";
 
   await shareFileWithEmails(programFolderId, [teacher.user.email, ...teacherEmails], "writer");
   await shareFileWithEmails(folderId, [teacher.user.email, ...teacherEmails], "writer");
@@ -229,9 +231,17 @@ export async function uploadTeacherMaterial(input: {
     await db.notification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
-        title: "New teacher material uploaded",
-        body: `${teacher.user.firstName} uploaded ${uploaded.name} for ${program.title}.`,
-        href: "/admin/materials",
+        title:
+          purpose === "task"
+            ? "New student task assigned"
+            : purpose === "lesson"
+              ? "New lesson resource uploaded"
+              : "New teacher material uploaded",
+        body:
+          purpose === "task"
+            ? `${teacher.user.firstName} assigned a task resource for ${program.title}.`
+            : `${teacher.user.firstName} uploaded ${uploaded.name} for ${program.title}.`,
+        href: purpose === "task" ? "/admin/classes" : "/admin/materials",
       })),
     });
   }
@@ -248,9 +258,9 @@ export async function uploadTeacherMaterial(input: {
   await db.notification.create({
     data: {
       userId: input.teacherUserId,
-      title: "Material uploaded",
+      title: purpose === "task" ? "Task resource uploaded" : purpose === "lesson" ? "Lesson resource uploaded" : "Material uploaded",
       body: `${uploaded.name} was uploaded to ${program.title}.`,
-      href: "/teacher/materials",
+      href: purpose === "task" ? "/teacher/course-builder?tab=task" : "/teacher/materials",
     },
   });
 

@@ -4,10 +4,12 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { requestTeacherLiveClass } from "@/lib/live-classes/service";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
@@ -38,6 +40,12 @@ function statusNotice(status?: string) {
   if (status === "zoom-pending") {
     return {
       message: "Session saved successfully. Zoom join link is pending admin sync.",
+      tone: "success",
+    };
+  }
+  if (status === "deleted") {
+    return {
+      message: "Live session removed successfully.",
       tone: "success",
     };
   }
@@ -89,6 +97,34 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       redirect(noticeHref(message, "error"));
     }
     redirect(`/teacher/live-sessions?status=${successStatus}`);
+  }
+
+  async function deleteSessionAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+
+    const teacher = await db.teacherProfile.findUnique({ where: { userId: currentSession.user.id } });
+    if (!teacher) redirect("/teacher-registration");
+
+    const schedule = await db.classSchedule.findFirst({
+      where: {
+        id: String(formData.get("scheduleId") || ""),
+        teacherId: teacher.id,
+      },
+    });
+
+    if (schedule) {
+      await db.classSchedule.delete({ where: { id: schedule.id } });
+    }
+
+    revalidatePath("/teacher/live-sessions");
+    revalidatePath("/teacher/schedule");
+    revalidatePath("/admin/classes");
+    revalidatePath("/student/schedule");
+    revalidatePath("/parent/schedule");
+    redirect("/teacher/live-sessions?status=deleted");
   }
 
   return (
@@ -158,9 +194,9 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
             </select>
           </label>
 
-          <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
+          <FormSubmitButton pendingLabel="Creating Zoom session..." className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 xl:col-span-4 xl:justify-self-start">
             Create Zoom session
-          </button>
+          </FormSubmitButton>
         </form>
       </TeacherSection>
 
@@ -180,6 +216,12 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {entry.meetingUrl ? "Linked to Zoom" : "Zoom link pending admin sync"}
               </p>
+              <form action={deleteSessionAction} className="mt-4">
+                <input type="hidden" name="scheduleId" value={entry.id} />
+                <FormSubmitButton pendingLabel="Removing..." className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646] disabled:cursor-wait disabled:opacity-70">
+                  Remove session
+                </FormSubmitButton>
+              </form>
             </div>
           ))}
         </div>

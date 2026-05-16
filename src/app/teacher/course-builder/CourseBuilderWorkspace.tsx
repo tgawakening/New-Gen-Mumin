@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BookOpen, ClipboardList, FileText, HelpCircle, Layers, PenSquare, PlusCircle, Video } from "lucide-react";
+import { BookOpen, ClipboardList, Edit3, FileText, HelpCircle, Layers, PenSquare, PlusCircle, Trash2, Video } from "lucide-react";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
+import { QuizQuestionBuilderClient } from "@/components/dashboard/teacher/QuizQuestionBuilderClient";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, type GenMProgramSlug } from "@/lib/genm/curriculum";
@@ -24,10 +26,12 @@ type CourseBuilderWorkspaceProps = {
   prefillWeekLabel?: string;
   prefillTopic?: string;
   prefillTermId?: string;
+  lessonId?: string;
   lessonComposer?: boolean;
   quizComposer?: boolean;
   taskComposer?: boolean;
   liveComposer?: boolean;
+  materialComposer?: boolean;
 };
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -63,6 +67,7 @@ async function uploadBuilderAttachments(input: {
   teacherUserId: string;
   folderName: string;
   titlePrefix: string;
+  purpose?: "material" | "lesson" | "task";
 }) {
   const attachments: PublishedAttachment[] = [];
 
@@ -73,6 +78,7 @@ async function uploadBuilderAttachments(input: {
       title: `${input.titlePrefix} - ${file.name}`,
       folderName: input.folderName,
       publishToStudents: true,
+      purpose: input.purpose,
       file,
     });
 
@@ -136,10 +142,12 @@ export function CourseBuilderWorkspace({
   prefillWeekLabel,
   prefillTopic,
   prefillTermId,
+  lessonId,
   lessonComposer = false,
   quizComposer = false,
   taskComposer = false,
   liveComposer = false,
+  materialComposer = false,
 }: CourseBuilderWorkspaceProps) {
   const selectedRoster = selectedProgrammeSlug
     ? dashboard.rosters.find((roster) => getGenMProgrammeByTitle(roster.title)?.slug === selectedProgrammeSlug) ?? null
@@ -152,6 +160,13 @@ export function CourseBuilderWorkspace({
   const visibleLessons = dashboard.lessonLogs.filter((entry) =>
     visibleClasses.some((course) => course.title === entry.title),
   );
+  const parsedVisibleLessons = visibleLessons.map((entry) => ({
+    entry,
+    parsed: parseLessonPayload(entry.summary, entry.homework),
+  }));
+  const editingLesson = lessonId
+    ? parsedVisibleLessons.find(({ entry }) => entry.id === lessonId)
+    : null;
 
   const selectedProgramme = selectedRoster ? getGenMProgrammeByTitle(selectedRoster.title) : null;
   const successRedirectPath = selectedProgrammeSlug ? `/teacher/course-builder/${selectedProgrammeSlug}` : "/teacher/course-builder";
@@ -161,15 +176,17 @@ export function CourseBuilderWorkspace({
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
-  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean }) {
+  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
     if (options?.topic) query.set("topic", options.topic);
     if (options?.termId) query.set("termId", options.termId);
+    if (options?.lessonId) query.set("lessonId", options.lessonId);
     if (options?.lessonComposer) query.set("lessonComposer", "1");
     if (options?.quizComposer) query.set("quizComposer", "1");
     if (options?.taskComposer) query.set("taskComposer", "1");
     if (options?.liveComposer) query.set("liveComposer", "1");
+    if (options?.materialComposer) query.set("materialComposer", "1");
     return `${tabBaseHref}?${query.toString()}`;
   }
 
@@ -185,6 +202,7 @@ export function CourseBuilderWorkspace({
     const videoUrl = cleanOptional(formData.get("videoUrl"));
     const weekLabel = cleanOptional(formData.get("weekLabel"));
     const termId = cleanOptional(formData.get("termId"));
+    const lessonLogId = cleanOptional(formData.get("lessonLogId"));
     const lessonObjective = cleanOptional(formData.get("lessonObjective"));
     const thumbnailFiles = getUploadFiles(formData, "thumbnailFile");
     const videoFiles = getUploadFiles(formData, "videoFile");
@@ -204,6 +222,7 @@ export function CourseBuilderWorkspace({
         teacherUserId,
         folderName: `${lessonFolderName} / Thumbnail`,
         titlePrefix: `${weekLabel || topic} thumbnail`,
+        purpose: "lesson",
       })),
       ...(await uploadBuilderAttachments({
         files: videoFiles,
@@ -211,6 +230,7 @@ export function CourseBuilderWorkspace({
         teacherUserId,
         folderName: `${lessonFolderName} / Video`,
         titlePrefix: `${weekLabel || topic} video`,
+        purpose: "lesson",
       })),
       ...(await uploadBuilderAttachments({
         files: attachmentFiles,
@@ -218,6 +238,7 @@ export function CourseBuilderWorkspace({
         teacherUserId,
         folderName: lessonFolderName,
         titlePrefix: weekLabel || topic,
+        purpose: "lesson",
       })),
     ];
 
@@ -225,30 +246,44 @@ export function CourseBuilderWorkspace({
     const finalHomework =
       [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
 
-    await db.lessonLog.create({
-      data: {
-        scheduleId,
-        teacherUserId,
-        lessonDate: new Date(lessonDateRaw),
+    const lessonPayload = {
+      scheduleId,
+      teacherUserId,
+      lessonDate: new Date(lessonDateRaw),
+      topic,
+      summary: buildLessonPayload({
         topic,
-        summary: buildLessonPayload({
-          topic,
-          summary,
-          instructorName: dashboard.teacherName,
-          programmeFocus: selectedProgramme?.title,
-          lessonObjective,
-          homework,
-          resourceLinks: splitLinks(combinedResourceLinks),
-          parentPrompt: null,
-          weekLabel,
-          termId,
-          contentType: "Lesson",
-          materials: null,
-          attachments,
-        }),
-        homework: finalHomework,
-      },
-    });
+        summary,
+        instructorName: dashboard.teacherName,
+        programmeFocus: selectedProgramme?.title,
+        lessonObjective,
+        homework,
+        resourceLinks: splitLinks(combinedResourceLinks),
+        parentPrompt: null,
+        weekLabel,
+        termId,
+        contentType: "Lesson",
+        materials: null,
+        attachments,
+      }),
+      homework: finalHomework,
+    };
+
+    if (lessonLogId) {
+      const existing = await db.lessonLog.findFirst({
+        where: {
+          id: lessonLogId,
+          teacherUserId,
+        },
+      });
+      if (!existing) throw new Error("Lesson is not available for this teacher.");
+      await db.lessonLog.update({
+        where: { id: lessonLogId },
+        data: lessonPayload,
+      });
+    } else {
+      await db.lessonLog.create({ data: lessonPayload });
+    }
 
     revalidatePath("/teacher");
     revalidatePath("/teacher/course-builder");
@@ -259,7 +294,26 @@ export function CourseBuilderWorkspace({
     revalidatePath("/parent/courses");
     revalidatePath("/student");
     revalidatePath("/student/courses");
-    redirect(`${successRedirectPath}?tab=plan&success=lesson`);
+    redirect(`${successRedirectPath}?tab=plan&success=${lessonLogId ? "lesson_updated" : "lesson"}`);
+  }
+
+  async function deleteLessonAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    const id = String(formData.get("lessonLogId") || "");
+    const existing = await db.lessonLog.findFirst({
+      where: { id, teacherUserId: session.user.id },
+    });
+    if (existing) {
+      await db.lessonLog.delete({ where: { id } });
+    }
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    revalidatePath("/student/courses");
+    revalidatePath("/parent/courses");
+    redirect(`${successRedirectPath}?tab=plan&success=lesson_deleted`);
   }
 
   async function createCurriculumLiveSessionAction(formData: FormData) {
@@ -306,6 +360,7 @@ export function CourseBuilderWorkspace({
     const familyNote = cleanOptional(formData.get("familyNote"));
     const programmeFocus = cleanOptional(formData.get("taskProgrammeFocus"));
     const taskCategory = cleanOptional(formData.get("taskCategory"));
+    const returnTab = String(formData.get("returnTab") || "task") === "plan" ? "plan" : "task";
     const attachmentFiles = getUploadFiles(formData, "taskFiles");
 
     if (!programId || !title || !instructions) {
@@ -318,6 +373,7 @@ export function CourseBuilderWorkspace({
       teacherUserId,
       folderName: ["Tasks", weekLabel || title].filter(Boolean).join(" / "),
       titlePrefix: weekLabel || title,
+      purpose: "task",
     });
 
     await db.assignment.create({
@@ -350,7 +406,38 @@ export function CourseBuilderWorkspace({
     revalidatePath("/parent/courses");
     revalidatePath("/student");
     revalidatePath("/student/courses");
-    redirect(`${successRedirectPath}?tab=task&success=task`);
+    redirect(`${successRedirectPath}?tab=${returnTab}&success=task`);
+  }
+
+  async function uploadMaterialKitAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+
+    const programId = String(formData.get("programId") || "");
+    const title = String(formData.get("title") || "").trim();
+    const folderName = String(formData.get("folderName") || "Materials Kit").trim();
+    const file = formData.get("file");
+
+    if (!(file instanceof File) || file.size === 0 || !programId) {
+      redirect(`${successRedirectPath}?tab=materials&success=material_error`);
+    }
+
+    await uploadTeacherMaterial({
+      programId,
+      teacherUserId: session.user.id,
+      title: title || file.name,
+      folderName: folderName || "Materials Kit",
+      publishToStudents: formData.get("publishToStudents") === "on",
+      file,
+    });
+
+    revalidatePath("/teacher/materials");
+    revalidatePath("/admin/materials");
+    revalidatePath("/student/courses");
+    revalidatePath("/parent/courses");
+    redirect(`${successRedirectPath}?tab=materials&success=material`);
   }
 
   async function createCurriculumQuizAction(formData: FormData) {
@@ -390,7 +477,7 @@ export function CourseBuilderWorkspace({
       },
     });
 
-    for (let index = 1; index <= 3; index += 1) {
+    for (let index = 1; index <= 10; index += 1) {
       const prompt = String(formData.get(`question-${index}`) || "").trim();
       if (!prompt) continue;
       const answer = String(formData.get(`answer-${index}`) || "").trim();
@@ -480,6 +567,10 @@ export function CourseBuilderWorkspace({
         message={
           success === "lesson"
             ? "Lesson content published with resources."
+            : success === "lesson_updated"
+              ? "Lesson updated successfully."
+              : success === "lesson_deleted"
+                ? "Lesson deleted successfully."
             : success === "task"
               ? "Student task published with resources."
               : success === "quiz"
@@ -488,8 +579,13 @@ export function CourseBuilderWorkspace({
                   ? "Recurring Zoom live session created for this topic."
                   : success === "live_pending"
                     ? "Session saved successfully. Zoom join link is pending admin sync."
+                    : success === "material"
+                      ? "Material kit file uploaded successfully."
+                      : success === "material_error"
+                        ? "Please choose a file before uploading material."
               : undefined
         }
+        tone={success === "material_error" ? "error" : "success"}
       />
 
       <TeacherSection eyebrow="Programme map" title={selectedProgramme ? `${selectedProgramme.title} builder` : "Choose your programme workspace"}>
@@ -672,69 +768,103 @@ export function CourseBuilderWorkspace({
                 <div className="space-y-3">
                   {genMTerms.map((term) => {
                     const highlights = getProgrammeHighlights(selectedProgramme.slug, term);
-                    const termLessons = visibleLessons
-                      .map((entry) => ({ entry, parsed: parseLessonPayload(entry.summary, entry.homework) }))
-                      .filter(({ parsed }) => parsed.termId === term.id);
+                    const termLessons = parsedVisibleLessons.filter(({ parsed }) => parsed.termId === term.id);
 
                     return (
                       <details key={term.id} className="rounded-[18px] border border-[#eadfce] bg-white p-4" open={term.id === "term-1"}>
-                        <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                          Modules / Chapters / Weeks - {term.title} - {term.level} - {term.window}
+                        <summary className="cursor-pointer list-none text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span>Modules / Chapters / Weeks - {term.title} - {term.level} - {term.window}</span>
+                            <Link href={buildBuilderHref("plan", { weekLabel: `${term.title} New Week`, topic: "New weekly topic", termId: term.id, lessonComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">
+                              <PlusCircle className="h-3.5 w-3.5" /> Add week/topic
+                            </Link>
+                          </div>
                         </summary>
                         <div className="mt-4 space-y-3">
                           {highlights.map((highlight, index) => {
                             const weekLabel = `${term.title} Week ${index + 1}`;
+                            const weekLessons = termLessons.filter(({ parsed }) => parsed.weekLabel === weekLabel);
                             return (
-                              <div key={highlight} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3">
-                                <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
-                                  <div className="min-w-0">
-                                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekLabel}</p>
-                                    <h4 className="mt-1 truncate text-sm font-semibold text-[#22304a] sm:text-base">{highlight}</h4>
-                                  </div>
-                                  <div className="flex flex-wrap gap-2">
-                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
-                                      <FileText className="h-3.5 w-3.5" /> Lesson
-                                    </Link>
-                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
-                                      <HelpCircle className="h-3.5 w-3.5" /> Quiz
-                                    </Link>
-                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
-                                      <Video className="h-3.5 w-3.5" /> Live
-                                    </Link>
-                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#2a76aa]">
-                                      <PenSquare className="h-3.5 w-3.5" /> Task
+                              <details key={highlight} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3" open={index === 0}>
+                                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+                                    <div className="min-w-0">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekLabel}</p>
+                                      <h4 className="mt-1 text-sm font-semibold text-[#22304a] sm:text-base">{highlight}</h4>
+                                      <p className="mt-1 text-xs text-[#617184]">{weekLessons.length} lesson{weekLessons.length === 1 ? "" : "s"} published under this week</p>
+                                    </div>
+                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, lessonComposer: true })} title="Add lesson" className="inline-flex items-center gap-2 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
+                                      <PlusCircle className="h-3.5 w-3.5" /> Add lesson
                                     </Link>
                                   </div>
+                                </summary>
+
+                                <div className="mt-3 space-y-2">
+                                  {weekLessons.map(({ entry, parsed }) => {
+                                    const lessonTopic = parsed.topic || entry.topic || highlight;
+                                    return (
+                                      <div key={entry.id} className="rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                          <div className="min-w-0">
+                                            <p className="font-semibold text-[#22304a]">{lessonTopic}</p>
+                                            <p className="mt-1 line-clamp-1 text-xs text-[#617184]">{parsed.summary || "Lesson content added."}</p>
+                                          </div>
+                                          <div className="flex flex-wrap gap-2">
+                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, lessonId: entry.id, lessonComposer: true })} title="Edit lesson" className="inline-flex items-center gap-1 rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">
+                                              <Edit3 className="h-3.5 w-3.5" /> Edit
+                                            </Link>
+                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                                              <HelpCircle className="h-3.5 w-3.5" /> Quiz
+                                            </Link>
+                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                                              <Video className="h-3.5 w-3.5" /> Live
+                                            </Link>
+                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                                              <PenSquare className="h-3.5 w-3.5" /> Task
+                                            </Link>
+                                            <form action={deleteLessonAction}>
+                                              <input type="hidden" name="lessonLogId" value={entry.id} />
+                                              <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646] transition disabled:opacity-60">
+                                                <Trash2 className="h-3.5 w-3.5" /> Delete
+                                              </FormSubmitButton>
+                                            </form>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {!weekLessons.length ? (
+                                    <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">No lessons yet. Use Add lesson to publish the first lesson for this week.</p>
+                                  ) : null}
                                 </div>
-                              </div>
+                              </details>
                             );
                           })}
 
-                          {termLessons.length ? (
-                            <div className="rounded-[18px] bg-[#f5fbff] p-4">
-                              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#2a76aa]">Lessons already published in this term</p>
-                              <div className="mt-3 space-y-2">
-                                {termLessons.map(({ entry, parsed }) => (
-                                  <div key={entry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
-                                    <span>
-                                      <span className="font-semibold text-[#22304a]">{parsed.weekLabel ?? "Lesson"}</span> - {parsed.topic || entry.topic}
-                                    </span>
+                          {termLessons.filter(({ parsed }) => parsed.weekLabel && !highlights.some((_, index) => parsed.weekLabel === `${term.title} Week ${index + 1}`)).map(({ entry, parsed }) => {
+                            const lessonTopic = parsed.topic || entry.topic || "Custom lesson";
+                            return (
+                              <details key={entry.id} className="rounded-[16px] border border-[#d9e7f2] bg-[#f5fbff] px-4 py-3">
+                                <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">{parsed.weekLabel} - custom week/topic</summary>
+                                <div className="mt-3 rounded-2xl bg-white px-4 py-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <div>
+                                      <p className="font-semibold text-[#22304a]">{lessonTopic}</p>
+                                      <p className="mt-1 text-xs text-[#617184]">{parsed.summary || "Lesson content added."}</p>
+                                    </div>
                                     <div className="flex flex-wrap gap-2">
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                                        <HelpCircle className="h-3.5 w-3.5" /> Quiz
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, lessonId: entry.id, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">
+                                        <Edit3 className="h-3.5 w-3.5" /> Edit
                                       </Link>
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                                        <Video className="h-3.5 w-3.5" /> Live
-                                      </Link>
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: parsed.topic || entry.topic, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                                        <PenSquare className="h-3.5 w-3.5" /> Task
-                                      </Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null}
+                                </div>
+                              </details>
+                            );
+                          })}
                         </div>
                       </details>
                     );
@@ -757,11 +887,12 @@ export function CourseBuilderWorkspace({
 
           {lessonComposer ? (
             <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
-              <div className="mx-auto max-w-5xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+              <Link href={buildBuilderHref("plan")} aria-label="Close lesson builder" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-5xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Weekly content</p>
-                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Create lesson</h2>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{editingLesson ? "Edit lesson" : "Create lesson"}</h2>
                   </div>
                   <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">
                     Close
@@ -773,10 +904,11 @@ export function CourseBuilderWorkspace({
                   </div>
                   <input type="hidden" name="termId" value={prefillTermId ?? ""} />
                   <input type="hidden" name="weekLabel" value={prefillWeekLabel ?? ""} />
+                  <input type="hidden" name="lessonLogId" value={editingLesson?.entry.id ?? ""} />
                   <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                       Class schedule
-                      <select name="scheduleId" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required>
+                      <select name="scheduleId" defaultValue={editingLesson?.entry.title ? visibleClasses.find((entry) => entry.title === editingLesson.entry.title)?.id : ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required>
                         <option value="">Select a class</option>
                         {visibleClasses.map((entry) => (
                           <option key={entry.id} value={entry.id}>
@@ -787,7 +919,7 @@ export function CourseBuilderWorkspace({
                     </label>
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                       Lesson date
-                      <input type="date" name="lessonDate" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required />
+                      <input type="date" name="lessonDate" defaultValue={editingLesson?.entry.lessonDate ? editingLesson.entry.lessonDate.toISOString().slice(0, 10) : ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required />
                     </label>
                   </div>
                   <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm text-[#5f6b7a]">
@@ -796,20 +928,20 @@ export function CourseBuilderWorkspace({
                   </div>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Lesson title
-                    <input name="topic" defaultValue={prefillTopic ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Lesson title" required />
+                    <input name="topic" defaultValue={editingLesson?.parsed.topic || prefillTopic || ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Lesson title" required />
                   </label>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                     Lesson overview
-                    <textarea name="summary" rows={3} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Short lesson description or what students will learn." required />
+                    <textarea name="summary" rows={3} defaultValue={editingLesson?.parsed.summary ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Short lesson description or what students will learn." required />
                   </label>
                   <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                       Learning objective
-                      <input name="lessonObjective" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="One clear objective" />
+                      <input name="lessonObjective" defaultValue={editingLesson?.parsed.lessonObjective ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="One clear objective" />
                     </label>
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                       Homework / follow-up
-                      <input name="homework" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Optional homework note" />
+                      <input name="homework" defaultValue={editingLesson?.parsed.homework ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Optional homework note" />
                     </label>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
@@ -827,7 +959,7 @@ export function CourseBuilderWorkspace({
                     </label>
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                       Extra resource links
-                      <input name="resourceLinks" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Optional Drive/PDF links" />
+                      <input name="resourceLinks" defaultValue={editingLesson?.parsed.resourceLinks.join("\n") ?? ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" placeholder="Optional Drive/PDF links" />
                     </label>
                   </div>
                   <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
@@ -838,9 +970,9 @@ export function CourseBuilderWorkspace({
                     </div>
                   </label>
 
-                <button type="submit" className="inline-flex w-fit rounded-full bg-[#2a76aa] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#245f88]">
-                  Publish lesson update
-                </button>
+                <FormSubmitButton pendingLabel={editingLesson ? "Updating lesson..." : "Publishing lesson..."} className="inline-flex w-fit rounded-full bg-[#2a76aa] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#245f88] disabled:cursor-wait disabled:opacity-70">
+                  {editingLesson ? "Update lesson" : "Publish lesson update"}
+                </FormSubmitButton>
               </form>
               </div>
             </div>
@@ -848,7 +980,8 @@ export function CourseBuilderWorkspace({
 
           {quizComposer ? (
             <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
-              <div className="mx-auto max-w-4xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+              <Link href={buildBuilderHref("plan")} aria-label="Close quiz builder" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-4xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Assessment</p>
@@ -886,31 +1019,13 @@ export function CourseBuilderWorkspace({
                     <textarea name="description" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Optional instructions for students." />
                   </label>
 
-                  <div className="grid gap-3 lg:grid-cols-3">
-                    {[1, 2, 3].map((index) => (
-                      <div key={index} className="rounded-[18px] bg-[#fbf6ef] p-4">
-                        <p className="text-sm font-semibold text-[#22304a]">Question {index}</p>
-                        <div className="mt-3 grid gap-2">
-                          <input name={`question-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Question" />
-                          <select name={`type-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm">
-                            <option value="MCQ">Multiple choice</option>
-                            <option value="TRUE_FALSE">True / false</option>
-                            <option value="FILL_IN_BLANK">Fill blank</option>
-                            <option value="SHORT_ANSWER">Short answer</option>
-                          </select>
-                          <input name={`answer-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Correct answer" />
-                          <textarea name={`choices-${index}`} rows={2} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="MCQ choices, comma or new line" />
-                          <input name={`points-${index}`} type="number" min="1" defaultValue="1" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <QuizQuestionBuilderClient />
 
                   <label className="flex items-center gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm font-semibold text-[#22304a]">
                     <input name="isPublished" type="checkbox" defaultChecked />
                     Publish to students
                   </label>
-                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Create quiz</button>
+                  <FormSubmitButton pendingLabel="Creating quiz..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">Create quiz</FormSubmitButton>
                 </form>
               </div>
             </div>
@@ -918,7 +1033,8 @@ export function CourseBuilderWorkspace({
 
           {taskComposer ? (
             <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
-              <div className="mx-auto max-w-4xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+              <Link href={buildBuilderHref("plan")} aria-label="Close task builder" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-4xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Student work</p>
@@ -935,6 +1051,7 @@ export function CourseBuilderWorkspace({
                   <input type="hidden" name="taskWeekLabel" value={prefillWeekLabel ?? ""} />
                   <input type="hidden" name="taskTermId" value={prefillTermId ?? ""} />
                   <input type="hidden" name="taskProgrammeFocus" value={selectedProgramme.title} />
+                  <input type="hidden" name="returnTab" value="plan" />
                   <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_190px]">
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Task title
@@ -958,7 +1075,7 @@ export function CourseBuilderWorkspace({
                   </div>
                   <input name="taskLinks" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Optional Drive, worksheet, or reference links" />
                   <input name="taskFiles" type="file" multiple accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
-                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Publish task</button>
+                  <FormSubmitButton pendingLabel="Publishing task..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">Publish task</FormSubmitButton>
                 </form>
               </div>
             </div>
@@ -966,7 +1083,8 @@ export function CourseBuilderWorkspace({
 
           {liveComposer ? (
             <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
-              <div className="mx-auto max-w-3xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+              <Link href={buildBuilderHref("plan")} aria-label="Close live session builder" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-3xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Zoom session</p>
@@ -1013,9 +1131,9 @@ export function CourseBuilderWorkspace({
                       <input name="endTime" type="time" defaultValue="17:00" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                     </label>
                   </div>
-                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">
+                  <FormSubmitButton pendingLabel="Creating session..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">
                     Create recurring Zoom session
-                  </button>
+                  </FormSubmitButton>
                 </form>
               </div>
             </div>
@@ -1025,6 +1143,7 @@ export function CourseBuilderWorkspace({
             <TeacherSection eyebrow="Student work" title="Assign a task with resources">
               <form action={publishStudentTask} className="grid gap-4">
                 <input type="hidden" name="programId" value={selectedRoster?.programId ?? ""} />
+                <input type="hidden" name="returnTab" value="task" />
 
                 <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm leading-7 text-[#5f6b7a]">
                   Publishing task for <span className="font-semibold text-[#22304a]">{selectedRoster?.title}</span>. Attach worksheets, examples, images, or files students need before starting.
@@ -1133,9 +1252,9 @@ export function CourseBuilderWorkspace({
                   />
                 </label>
 
-                <button type="submit" className="inline-flex w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1a2740]">
+                <FormSubmitButton pendingLabel="Publishing student task..." className="inline-flex w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1a2740] disabled:cursor-wait disabled:opacity-70">
                   Publish student task
-                </button>
+                </FormSubmitButton>
               </form>
 
               <div className="mt-8 border-t border-[#eadfce] pt-6">
@@ -1196,8 +1315,8 @@ export function CourseBuilderWorkspace({
                 eyebrow="Materials kit"
                 title={`${selectedProgramme.title} resources to prepare`}
                 action={
-                  <Link href={`/teacher/materials?programId=${encodeURIComponent(selectedProgramId)}&folderName=${encodeURIComponent("Materials Kit")}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                    Upload material
+                  <Link href={buildBuilderHref("materials", { materialComposer: true })} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                    Upload material kit
                   </Link>
                 }
               >
@@ -1227,6 +1346,49 @@ export function CourseBuilderWorkspace({
                   emptyLabel="Teaching guidance will appear here."
                 />
               </TeacherSection>
+            </div>
+          ) : null}
+
+          {materialComposer ? (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
+              <Link href={buildBuilderHref("materials")} aria-label="Close material kit uploader" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-3xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Materials kit</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Upload programme material</h2>
+                    <p className="mt-1 text-sm text-[#617184]">Files are saved in the programme Google Drive folder and can be shown in the student LMS.</p>
+                  </div>
+                  <Link href={buildBuilderHref("materials")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">
+                    Close
+                  </Link>
+                </div>
+
+                <form action={uploadMaterialKitAction} className="grid gap-4 md:grid-cols-2">
+                  <input type="hidden" name="programId" value={selectedProgramId} />
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Display title
+                    <input name="title" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Arabic Week 1 slides" />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Folder / kit area
+                    <input name="folderName" defaultValue="Materials Kit" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Materials Kit, Week 1, Slides" />
+                  </label>
+                  <label className="flex items-center gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm font-semibold text-[#22304a] md:col-span-2">
+                    <input name="publishToStudents" type="checkbox" defaultChecked />
+                    Show this material in student/parent dashboards
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a] md:col-span-2">
+                    Choose material file
+                    <div className="rounded-[18px] border border-dashed border-[#b9c6d6] bg-[#fbfdff] px-4 py-5">
+                      <input name="file" type="file" required accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx,.xls,.xlsx" className="w-full text-sm text-[#22304a] file:mr-4 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
+                    </div>
+                  </label>
+                  <FormSubmitButton pendingLabel="Uploading material..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 md:col-span-2">
+                    Upload material kit
+                  </FormSubmitButton>
+                </form>
+              </div>
             </div>
           ) : null}
         </>

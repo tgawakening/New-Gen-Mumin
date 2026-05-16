@@ -10,7 +10,7 @@ import { CourseBuilderWorkspace } from "../CourseBuilderWorkspace";
 
 type PageProps = {
   params: Promise<{ programmeSlug: string }>;
-  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; termId?: string; lessonComposer?: string; quizComposer?: string; taskComposer?: string; liveComposer?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; termId?: string; lessonId?: string; lessonComposer?: string; quizComposer?: string; taskComposer?: string; liveComposer?: string; materialComposer?: string }>;
 };
 
 export default async function TeacherProgrammeBuilderPage({ params, searchParams }: PageProps) {
@@ -55,10 +55,12 @@ export default async function TeacherProgrammeBuilderPage({ params, searchParams
         prefillWeekLabel={resolvedSearch?.weekLabel}
         prefillTopic={resolvedSearch?.topic}
         prefillTermId={resolvedSearch?.termId}
+        lessonId={resolvedSearch?.lessonId}
         lessonComposer={resolvedSearch?.lessonComposer === "1"}
         quizComposer={resolvedSearch?.quizComposer === "1"}
         taskComposer={resolvedSearch?.taskComposer === "1"}
         liveComposer={resolvedSearch?.liveComposer === "1"}
+        materialComposer={resolvedSearch?.materialComposer === "1"}
       />
     </TeacherDashboardFrame>
   );
