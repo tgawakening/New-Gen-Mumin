@@ -302,5 +302,6 @@ export function resolveOfferAmount(
     }
   }
 
-  return offer.basePriceGbp;
+  const targetRate = GBP_RATES[resolvedCurrency];
+  return targetRate ? Math.round(offer.basePriceGbp * targetRate) : offer.basePriceGbp;
 }

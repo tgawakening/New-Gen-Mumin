@@ -6,6 +6,7 @@ import { getManualPaymentDetails } from "@/lib/payments/config";
 import { markOrderPaid } from "@/lib/payments/fulfillment";
 import { createPayPalSubscription } from "@/lib/payments/paypal";
 import { createStripeCheckoutSession } from "@/lib/payments/stripe";
+import { resolveOfferAmount } from "@/lib/registration/catalog";
 import type { RegistrationCheckoutPayload } from "@/lib/registration/payment-schema";
 
 function createOrderNumber() {
@@ -29,6 +30,10 @@ export async function createCheckoutDraft(
           include: {
             offer: true,
           },
+          orderBy: { createdAt: "asc" },
+        },
+        students: {
+          orderBy: { createdAt: "asc" },
         },
       },
     });
@@ -43,6 +48,110 @@ export async function createCheckoutDraft(
 
     if (!registration.parentProfileId || !registration.parentProfile) {
       throw new Error("Parent profile is required before checkout.");
+    }
+
+    const pricingSnapshot =
+      typeof registration.pricingSnapshot === "object" &&
+      registration.pricingSnapshot &&
+      !Array.isArray(registration.pricingSnapshot)
+        ? (registration.pricingSnapshot as Record<string, unknown>)
+        : {};
+    const couponPercent =
+      typeof pricingSnapshot.couponDiscountPercent === "number"
+        ? pricingSnapshot.couponDiscountPercent
+        : 0;
+    const couponFixedAmount =
+      typeof pricingSnapshot.couponDiscountAmount === "number" &&
+      couponPercent === 0
+        ? pricingSnapshot.couponDiscountAmount
+        : 0;
+    const studentIndexLookup = new Map(registration.students.map((student, index) => [student.id, index]));
+    let recalculatedSubtotal = 0;
+    let recalculatedMultiChildDiscount = 0;
+    const recalculatedItems = registration.items.map((item) => {
+      const studentIndex = studentIndexLookup.get(item.registrationStudentId) ?? 0;
+      const baseAmount = resolveOfferAmount(
+        item.offer,
+        registration.selectedCountryCode,
+        registration.selectedCurrency,
+      );
+      const discountAmount = studentIndex === 0 ? 0 : Math.round(baseAmount * 0.5);
+      const finalAmount = baseAmount - discountAmount;
+      recalculatedSubtotal += baseAmount;
+      recalculatedMultiChildDiscount += discountAmount;
+      return { id: item.id, offerId: item.offerId, baseAmount, discountAmount, finalAmount };
+    });
+    const subtotalAfterMultiChild = recalculatedSubtotal - recalculatedMultiChildDiscount;
+    const couponAmount = Math.min(
+      subtotalAfterMultiChild,
+      couponFixedAmount > 0
+        ? couponFixedAmount
+        : couponPercent > 0
+          ? Math.round(subtotalAfterMultiChild * (couponPercent / 100))
+          : 0,
+    );
+    const recalculatedDiscount = recalculatedMultiChildDiscount + couponAmount;
+    const recalculatedTotal = Math.max(0, recalculatedSubtotal - recalculatedDiscount);
+    const pricingChanged =
+      recalculatedSubtotal !== registration.subtotalAmount ||
+      recalculatedDiscount !== registration.discountAmount ||
+      recalculatedTotal !== registration.totalAmount ||
+      recalculatedItems.some((item) => {
+        const existing = registration.items.find((entry) => entry.id === item.id);
+        return !existing || existing.baseAmount !== item.baseAmount || existing.discountAmount !== item.discountAmount || existing.finalAmount !== item.finalAmount;
+      });
+
+    if (pricingChanged) {
+      for (const item of recalculatedItems) {
+        await tx.registrationItem.update({
+          where: { id: item.id },
+          data: {
+            baseAmount: item.baseAmount,
+            discountAmount: item.discountAmount,
+            finalAmount: item.finalAmount,
+            currency: registration.selectedCurrency,
+            pricingSnapshot: {
+              ...(typeof registration.items.find((entry) => entry.id === item.id)?.pricingSnapshot === "object" &&
+              registration.items.find((entry) => entry.id === item.id)?.pricingSnapshot &&
+              !Array.isArray(registration.items.find((entry) => entry.id === item.id)?.pricingSnapshot)
+                ? registration.items.find((entry) => entry.id === item.id)?.pricingSnapshot as object
+                : {}),
+              currency: registration.selectedCurrency,
+              recalculatedAtCheckout: true,
+            },
+          },
+        });
+      }
+
+      await tx.registration.update({
+        where: { id: registration.id },
+        data: {
+          subtotalAmount: recalculatedSubtotal,
+          discountAmount: recalculatedDiscount,
+          totalAmount: recalculatedTotal,
+          pricingSnapshot: {
+            ...pricingSnapshot,
+            checkoutPricingResyncedAt: new Date().toISOString(),
+            couponDiscountAmount: couponAmount || null,
+          },
+        },
+      });
+
+      registration.subtotalAmount = recalculatedSubtotal;
+      registration.discountAmount = recalculatedDiscount;
+      registration.totalAmount = recalculatedTotal;
+      registration.items = registration.items.map((item) => {
+        const recalculated = recalculatedItems.find((entry) => entry.id === item.id);
+        return recalculated
+          ? {
+              ...item,
+              baseAmount: recalculated.baseAmount,
+              discountAmount: recalculated.discountAmount,
+              finalAmount: recalculated.finalAmount,
+              currency: registration.selectedCurrency,
+            }
+          : item;
+      });
     }
 
     let order = await tx.order.findFirst({
@@ -88,12 +197,40 @@ export async function createCheckoutDraft(
         where: { id: order.id },
         include: { items: true },
       });
-    } else if (order.gateway !== payload.gateway) {
+    } else if (
+      order.gateway !== payload.gateway ||
+      order.subtotalAmount !== registration.subtotalAmount ||
+      order.discountAmount !== registration.discountAmount ||
+      order.totalAmount !== registration.totalAmount ||
+      order.currency !== registration.selectedCurrency
+    ) {
       order = await tx.order.update({
         where: { id: order.id },
-        data: { gateway: payload.gateway },
+        data: {
+          gateway: payload.gateway,
+          currency: registration.selectedCurrency,
+          subtotalAmount: registration.subtotalAmount,
+          discountAmount: registration.discountAmount,
+          totalAmount: registration.totalAmount,
+        },
         include: { items: true },
       });
+    }
+
+    for (const item of recalculatedItems) {
+      const orderItem = order.items.find((entry) => entry.registrationItemId === item.id);
+      if (
+        orderItem &&
+        (orderItem.unitAmount !== item.finalAmount || orderItem.totalAmount !== item.finalAmount)
+      ) {
+        await tx.orderItem.update({
+          where: { id: orderItem.id },
+          data: {
+            unitAmount: item.finalAmount,
+            totalAmount: item.finalAmount,
+          },
+        });
+      }
     }
 
     const payment = await tx.paymentTransaction.create({
@@ -158,7 +295,7 @@ export async function createCheckoutDraft(
 
   let checkoutUrl: string | null = null;
   let providerReference: string | null = null;
-  let nextStep =
+  const nextStep =
     checkout.amount <= 0
       ? "Your discount covered the full amount. Enrollment can be completed immediately."
       : payload.gateway === "BANK_TRANSFER"
