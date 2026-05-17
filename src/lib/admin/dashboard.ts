@@ -1,6 +1,9 @@
 import { db } from "@/lib/db";
 import { convertAmountToGbp } from "@/lib/registration/catalog";
 
+const COMPLETED_ENROLLMENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
+const COMPLETED_ENROLLMENT_STATUS_LIST = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
+
 function extractNoteValue(notes: string | null | undefined, label: string) {
   if (!notes) return null;
   const entry = notes
@@ -23,6 +26,25 @@ function extractPricingSnapshotValue(
   }
 
   return value;
+}
+
+function extractManualPaidAmountAdjustment(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const adjustment = (metadata as Record<string, unknown>).manualPaidAmountAdjustment;
+  if (!adjustment || typeof adjustment !== "object" || Array.isArray(adjustment)) {
+    return null;
+  }
+
+  const record = adjustment as Record<string, unknown>;
+  return {
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    note: typeof record.note === "string" ? record.note : null,
+    adjustedAt: typeof record.adjustedAt === "string" ? record.adjustedAt : null,
+  };
 }
 
 export type AdminDashboardFilters = {
@@ -90,7 +112,6 @@ function buildRegistrationChildren(
 
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
   const [
-    totalStudents,
     activeEnrollments,
     pendingRegistrations,
     unreadMessages,
@@ -100,8 +121,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     students,
     feeWaiverApplications,
   ] = await Promise.all([
-    db.studentProfile.count(),
-    db.enrollment.count({ where: { status: "ACTIVE" } }),
+    db.enrollment.count({ where: { status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] } } }),
     db.registration.count({
       where: {
         status: { in: ["DRAFT", "SUBMITTED", "PENDING_PAYMENT", "PAYMENT_REVIEW"] },
@@ -163,7 +183,14 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     }),
     db.studentProfile.findMany({
       orderBy: { createdAt: "desc" },
-      take: 80,
+      take: 200,
+      where: {
+        enrollments: {
+          some: {
+            status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] },
+          },
+        },
+      },
       include: {
         user: true,
         parents: {
@@ -180,6 +207,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           },
         },
         enrollments: {
+          where: { status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] } },
           include: {
             program: true,
           },
@@ -218,6 +246,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const latestPayment = order.payments[0] ?? null;
     const childDetails = buildRegistrationChildren(order.registration);
     const city = extractNoteValue(order.registration?.notes, "City");
+    const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
     const programTitles = Array.from(
       new Set(
         order.items.flatMap((item) => {
@@ -258,6 +287,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
         hasDiscount(order.discountAmount)
           ? `${order.currency} ${order.totalAmount} after ${order.discountAmount} discount`
           : `${order.currency} ${order.totalAmount}`,
+      manualPaidAmountAdjustment,
       registrationStatus: order.registration?.status ?? "Pending",
       enrollmentStates: order.items
         .map((item) => item.enrollment?.status)
@@ -293,10 +323,11 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     return true;
   });
 
-  const studentsView = students.map((student) => {
+  const studentsViewRaw = students.map((student) => {
     const latestOrder = student.parents[0]?.parent.orders[0] ?? null;
     const latestRegistration = student.registrationStudents[0]?.registration ?? null;
     const city = extractNoteValue(latestRegistration?.notes, "City");
+    const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(latestOrder?.metadata);
     const registrationParentName = latestRegistration
       ? formatPersonName(latestRegistration.parentFirstName, latestRegistration.parentLastName)
       : "";
@@ -339,6 +370,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           : null,
       totalAmount: latestRegistration?.totalAmount ?? null,
       currency: latestRegistration?.selectedCurrency ?? null,
+      manualPaidAmountAdjustment,
       parentName: registrationParentName || linkedParentNames.join(", ") || "No parent linked",
       childCount: childNames.length || 1,
       childDetails: childDetails.length ? childDetails : [
@@ -358,6 +390,22 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       countryName: student.countryName,
     };
   });
+  const studentsView = Array.from(
+    new Map(
+      studentsViewRaw
+        .filter((student) => student.enrollments.some((enrollment) => COMPLETED_ENROLLMENT_STATUSES.has(enrollment.status)))
+        .map((student) => {
+          const primaryEnrollment = student.enrollments[0];
+          const dedupeKey = [
+            student.name.trim().toLowerCase(),
+            student.age ?? "",
+            student.parentName.trim().toLowerCase(),
+            primaryEnrollment?.programTitle.trim().toLowerCase() ?? "",
+          ].join("|");
+          return [dedupeKey, student] as const;
+        }),
+    ).values(),
+  );
 
   const filteredStudents = studentsView.filter((student) => {
     if (
@@ -404,7 +452,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
 
   return {
     metrics: {
-      totalStudents,
+      totalStudents: studentsView.length,
       activeEnrollments,
       pendingRegistrations,
       unreadMessages,

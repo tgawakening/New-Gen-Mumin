@@ -34,6 +34,12 @@ const WEEKDAYS = [
   "Friday",
   "Saturday",
 ];
+const AUDIENCE_OPTIONS = [
+  { value: "PK_UK", label: "Pakistan and UK students" },
+  { value: "US_CA", label: "USA and Canada students" },
+  { value: "AU", label: "Australia students" },
+  { value: "ALL", label: "All students" },
+];
 
 function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
@@ -86,6 +92,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
           endTime: String(formData.get("endTime") || "17:00"),
           timezone: String(formData.get("timezone") || "Europe/London"),
           createZoomMeeting: formData.get("createZoomMeeting") === "on",
+          audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
           waitingRoom: formData.get("waitingRoom") === "on",
           joinBeforeHost: formData.get("joinBeforeHost") === "on",
           muteUponEntry: formData.get("muteUponEntry") === "on",
@@ -291,6 +298,15 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                 <option value="cloud">Cloud recording</option>
                 <option value="local">Local recording</option>
                 <option value="none">No automatic recording</option>
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Student audience
+              <select name="audienceGroup" defaultValue="PK_UK" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+                {AUDIENCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
               </select>
             </label>
 

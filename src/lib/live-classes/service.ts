@@ -10,6 +10,8 @@ import { createRecurringZoomMeeting, isZoomConfigured } from "@/lib/zoom/client"
 
 export const WHOLE_GEN_MUMIN_PROGRAM_ID = "__whole_gen_mumin__";
 export const PENDING_ZOOM_PROVIDER = "Zoom Pending Approval";
+export const LIVE_CLASS_AUDIENCE_GROUPS = ["ALL", "PK_UK", "US_CA", "AU"] as const;
+export type LiveClassAudienceGroup = (typeof LIVE_CLASS_AUDIENCE_GROUPS)[number];
 
 export type CreateLiveClassInput = {
   programId: string;
@@ -26,7 +28,54 @@ export type CreateLiveClassInput = {
   muteUponEntry?: boolean;
   autoRecording?: "none" | "local" | "cloud";
   passcode?: string;
+  audienceGroup?: LiveClassAudienceGroup;
 };
+
+const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
+  ALL: "All students",
+  PK_UK: "Pakistan and UK students",
+  US_CA: "USA and Canada students",
+  AU: "Australia students",
+};
+
+function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
+  return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
+    ? (value as LiveClassAudienceGroup)
+    : "ALL";
+}
+
+function audienceTitleMarker(group: LiveClassAudienceGroup) {
+  return group === "ALL" ? "" : ` [Audience:${group}]`;
+}
+
+export function cleanLiveClassTitle(title: string) {
+  return title.replace(/\s*\[Audience:(PK_UK|US_CA|AU)\]\s*$/u, "").trim();
+}
+
+export function getLiveClassAudienceGroup(title: string): LiveClassAudienceGroup {
+  const match = title.match(/\[Audience:(PK_UK|US_CA|AU)\]\s*$/u);
+  return match ? (match[1] as LiveClassAudienceGroup) : "ALL";
+}
+
+export function getLiveClassAudienceLabel(titleOrGroup: string) {
+  const group = normalizeAudienceGroup(titleOrGroup) === "ALL" && !LIVE_CLASS_AUDIENCE_GROUPS.includes(titleOrGroup as LiveClassAudienceGroup)
+    ? getLiveClassAudienceGroup(titleOrGroup)
+    : normalizeAudienceGroup(titleOrGroup);
+  return AUDIENCE_LABELS[group];
+}
+
+function withAudienceMarker(title: string, group: LiveClassAudienceGroup) {
+  return `${cleanLiveClassTitle(title)}${audienceTitleMarker(group)}`;
+}
+
+function countryMatchesAudience(countryCode: string | null | undefined, group: LiveClassAudienceGroup) {
+  const code = (countryCode ?? "").trim().toUpperCase();
+  if (group === "ALL") return true;
+  if (group === "PK_UK") return ["PK", "PAK", "GB", "UK", "GBR"].includes(code);
+  if (group === "US_CA") return ["US", "USA", "CA", "CAN"].includes(code);
+  if (group === "AU") return ["AU", "AUS"].includes(code);
+  return true;
+}
 
 function teacherDisplayName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
@@ -56,6 +105,7 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
 }
 
 export async function createLiveClass(input: CreateLiveClassInput, createdByUserId?: string) {
+  const audienceGroup = normalizeAudienceGroup(input.audienceGroup);
   const teacherIds = input.teacherIds?.length ? input.teacherIds : input.teacherId ? [input.teacherId] : [];
   if (!teacherIds.length) throw new Error("Choose at least one teacher.");
 
@@ -99,7 +149,10 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
           programId: program.id,
           teacherId: teacher.id,
           createdByUserId,
-          title: input.programId === WHOLE_GEN_MUMIN_PROGRAM_ID ? `Whole Gen-Mumin: ${input.title}` : input.title,
+          title: withAudienceMarker(
+            input.programId === WHOLE_GEN_MUMIN_PROGRAM_ID ? `Whole Gen-Mumin: ${input.title}` : input.title,
+            audienceGroup,
+          ),
           weekday: input.weekday,
           startTime: input.startTime,
           endTime: input.endTime,
@@ -138,6 +191,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
 }
 
 export async function requestTeacherLiveClass(input: CreateLiveClassInput, teacherUserId: string) {
+  const audienceGroup = normalizeAudienceGroup(input.audienceGroup);
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: teacherUserId },
     include: { user: true, programAssignments: true },
@@ -157,7 +211,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
       programId: input.programId,
       teacherId: teacher.id,
       createdByUserId: teacherUserId,
-      title: input.title,
+      title: withAudienceMarker(input.title, audienceGroup),
       weekday: input.weekday,
       startTime: input.startTime,
       endTime: input.endTime,
@@ -177,8 +231,8 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
         userId: admin.id,
         title: meeting ? "Teacher scheduled a Zoom class" : "Zoom link pending sync",
         body: meeting
-          ? `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}.`
-          : `${teacherDisplayName(teacher)} scheduled ${input.title} for ${program.title}. Please sync the Zoom join link from Classes.`,
+          ? `${teacherDisplayName(teacher)} scheduled ${cleanLiveClassTitle(input.title)} for ${program.title} (${AUDIENCE_LABELS[audienceGroup]}).`
+          : `${teacherDisplayName(teacher)} scheduled ${cleanLiveClassTitle(input.title)} for ${program.title} (${AUDIENCE_LABELS[audienceGroup]}). Please sync the Zoom join link from Classes.`,
         href: "/admin/classes",
       })),
     });
@@ -188,7 +242,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
     teacherName: teacherDisplayName(teacher),
     teacherEmail: teacher.user.email,
     programTitle: program.title,
-    sessionTitle: input.title,
+    sessionTitle: cleanLiveClassTitle(input.title),
     schedule: `${input.startTime}-${input.endTime} ${input.timezone}`,
   });
 
@@ -327,10 +381,13 @@ export async function notifyEnrolledUsers(scheduleId: string) {
   });
   if (!schedule || !schedule.meetingUrl) return;
 
+  const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+  const visibleTitle = cleanLiveClassTitle(schedule.title);
   const users = new Map<string, { id: string; role: string }>();
   users.set(schedule.teacher.user.id, { id: schedule.teacher.user.id, role: "teacher" });
 
   for (const enrollment of schedule.program.enrollments) {
+    if (!countryMatchesAudience(enrollment.student.countryCode, audienceGroup)) continue;
     users.set(enrollment.student.user.id, { id: enrollment.student.user.id, role: "student" });
     if (enrollment.parent?.user.id) {
       users.set(enrollment.parent.user.id, { id: enrollment.parent.user.id, role: "parent" });
@@ -342,7 +399,7 @@ export async function notifyEnrolledUsers(scheduleId: string) {
       data: {
         userId: user.id,
         title: "Live class scheduled",
-        body: `${schedule.title} is now scheduled on Zoom. ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}.`,
+        body: `${visibleTitle} is now scheduled on Zoom. ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}.`,
         href:
           user.role === "teacher"
             ? "/teacher/schedule"

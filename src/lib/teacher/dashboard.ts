@@ -1,6 +1,9 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { cleanLiveClassTitle, getLiveClassAudienceLabel } from "@/lib/live-classes/service";
+
+const ACTIVE_STUDENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
 
 export type TeacherDashboardData = {
   teacherName: string;
@@ -28,6 +31,7 @@ export type TeacherDashboardData = {
     timezone: string;
     meetingUrl: string | null;
     provider: string | null;
+    audience: string;
     studentCount: number;
     activeEnrollments: number;
   }>;
@@ -116,6 +120,7 @@ export async function getTeacherDashboardData(userId: string) {
           program: {
             include: {
               enrollments: {
+                where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
                 include: {
                   student: {
                     include: {
@@ -156,6 +161,7 @@ export async function getTeacherDashboardData(userId: string) {
           program: {
             include: {
               enrollments: {
+                where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
                 include: {
                   student: {
                     include: {
@@ -250,31 +256,39 @@ export async function getTeacherDashboardData(userId: string) {
   const classes = teacherProfile.classSchedules.map((schedule) => ({
     id: schedule.id,
     programId: schedule.program.id,
-    title: schedule.title,
+    title: cleanLiveClassTitle(schedule.title),
     weekday: schedule.weekday,
     startTime: schedule.startTime,
     endTime: schedule.endTime,
     timezone: schedule.timezone,
     meetingUrl: schedule.meetingUrl,
     provider: schedule.meetingProvider,
-    studentCount: schedule.program.enrollments.length,
-    activeEnrollments: schedule.program.enrollments.filter((enrollment) =>
-      ["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status),
-    ).length,
+    audience: getLiveClassAudienceLabel(schedule.title),
+    studentCount: new Set(schedule.program.enrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size,
+    activeEnrollments: new Set(schedule.program.enrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size,
   }));
 
   const rosterPrograms = teacherProfile.programAssignments.map((assignment) => ({
     programId: assignment.program.id,
     title: assignment.program.title,
     assignmentCount: assignment.program.assignments.length,
-    students: assignment.program.enrollments.map((enrollment) => ({
-      id: enrollment.student.id,
-      name:
-        enrollment.student.displayName ||
-        `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim(),
-      email: enrollment.student.user.email,
-      enrollmentStatus: enrollment.status.replace(/_/g, " "),
-    })),
+    students: Array.from(
+      new Map(
+        assignment.program.enrollments
+          .filter((enrollment) => ACTIVE_STUDENT_STATUSES.has(enrollment.status))
+          .map((enrollment) => [
+            enrollment.student.user.email.toLowerCase(),
+            {
+              id: enrollment.student.id,
+              name:
+                enrollment.student.displayName ||
+                `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim(),
+              email: enrollment.student.user.email,
+              enrollmentStatus: enrollment.status.replace(/_/g, " "),
+            },
+          ]),
+      ).values(),
+    ),
   }));
 
   const quizLibrary = teacherProfile.programAssignments.flatMap((assignment) =>
@@ -365,7 +379,9 @@ export async function getTeacherDashboardData(userId: string) {
 
   const uniqueStudents = new Set(
     teacherProfile.programAssignments.flatMap((assignment) =>
-      assignment.program.enrollments.map((enrollment) => enrollment.studentId),
+      assignment.program.enrollments
+        .filter((enrollment) => ACTIVE_STUDENT_STATUSES.has(enrollment.status))
+        .map((enrollment) => enrollment.student.user.email.toLowerCase()),
     ),
   );
 

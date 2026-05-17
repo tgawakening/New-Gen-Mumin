@@ -5,6 +5,7 @@ import { BookOpen, ClipboardList, Edit3, FileText, HelpCircle, Layers, PenSquare
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
+import { UnsavedChangesGuard } from "@/components/dashboard/UnsavedChangesGuard";
 import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { QuizQuestionBuilderClient } from "@/components/dashboard/teacher/QuizQuestionBuilderClient";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -40,6 +41,12 @@ type CourseBuilderWorkspaceProps = {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
+const AUDIENCE_OPTIONS = [
+  { value: "PK_UK", label: "Pakistan and UK students" },
+  { value: "US_CA", label: "USA and Canada students" },
+  { value: "AU", label: "Australia students" },
+  { value: "ALL", label: "All students" },
+];
 
 const builderTabs: Array<{ id: BuilderTab; label: string; icon: typeof Layers }> = [
   { id: "overview", label: "Overview", icon: Layers },
@@ -63,6 +70,22 @@ function splitLinks(value: string | null) {
 
 function getUploadFiles(formData: FormData, fieldName: string) {
   return formData.getAll(fieldName).filter((entry): entry is File => entry instanceof File && entry.size > 0);
+}
+
+function DisabledLessonActions() {
+  return (
+    <div className="flex flex-wrap gap-2">
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f6] px-3 py-1.5 text-xs font-semibold text-[#8a96a5]" title="Create a lesson first">
+        <HelpCircle className="h-3.5 w-3.5" /> Quiz
+      </span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f6] px-3 py-1.5 text-xs font-semibold text-[#8a96a5]" title="Create a lesson first">
+        <Video className="h-3.5 w-3.5" /> Live
+      </span>
+      <span className="inline-flex items-center gap-1 rounded-full bg-[#eef2f6] px-3 py-1.5 text-xs font-semibold text-[#8a96a5]" title="Create a lesson first">
+        <PenSquare className="h-3.5 w-3.5" /> Task
+      </span>
+    </div>
+  );
 }
 
 async function uploadBuilderAttachments(input: {
@@ -173,10 +196,20 @@ export function CourseBuilderWorkspace({
     parsed: parseLessonPayload(entry.summary, entry.homework),
   }));
   const curriculumStructureLogs = parsedVisibleLogs.filter(({ parsed }) =>
-    parsed.contentType === "Module" || parsed.contentType === "WeekTopic",
+    ["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(parsed.contentType ?? ""),
+  );
+  const deletedTermIds = new Set(
+    curriculumStructureLogs
+      .filter(({ parsed }) => parsed.contentType === "DeletedModule" && parsed.termId)
+      .map(({ parsed }) => parsed.termId),
+  );
+  const deletedWeekKeys = new Set(
+    curriculumStructureLogs
+      .filter(({ parsed }) => parsed.contentType === "DeletedWeekTopic" && parsed.termId && parsed.weekLabel)
+      .map(({ parsed }) => `${parsed.termId}::${parsed.weekLabel}`),
   );
   const parsedVisibleLessons = parsedVisibleLogs.filter(({ parsed }) =>
-    parsed.contentType !== "Module" && parsed.contentType !== "WeekTopic",
+    !["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(parsed.contentType ?? ""),
   );
   const editingLesson = lessonId
     ? parsedVisibleLessons.find(({ entry }) => entry.id === lessonId)
@@ -348,7 +381,8 @@ export function CourseBuilderWorkspace({
 
     const scheduleId = String(formData.get("scheduleId") || "");
     const structureId = cleanOptional(formData.get("structureId"));
-    const contentType = String(formData.get("contentType") || "") === "Module" ? "Module" : "WeekTopic";
+    const requestedContentType = String(formData.get("contentType") || "");
+    const contentType = requestedContentType === "Module" ? "Module" : "WeekTopic";
     const termId = cleanOptional(formData.get("termId"));
     const weekLabel = cleanOptional(formData.get("weekLabel"));
     const title = String(formData.get("title") || "").trim();
@@ -401,11 +435,36 @@ export function CourseBuilderWorkspace({
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
 
     const structureId = String(formData.get("structureId") || "");
+    const scheduleId = String(formData.get("scheduleId") || "");
+    const termId = cleanOptional(formData.get("termId"));
+    const weekLabel = cleanOptional(formData.get("weekLabel"));
+    const title = String(formData.get("title") || "Deleted curriculum item").trim();
+    const deleteType = String(formData.get("deleteType") || "") === "Module" ? "DeletedModule" : "DeletedWeekTopic";
     const existing = await db.lessonLog.findFirst({
       where: { id: structureId, teacherUserId: session.user.id },
     });
     if (existing) {
       await db.lessonLog.delete({ where: { id: existing.id } });
+    } else if (scheduleId && termId) {
+      await db.lessonLog.create({
+        data: {
+          scheduleId,
+          teacherUserId: session.user.id,
+          lessonDate: new Date(),
+          topic: title,
+          summary: buildLessonPayload({
+            topic: title,
+            summary: "Deleted from teacher curriculum builder.",
+            instructorName: dashboard.teacherName,
+            programmeFocus: selectedProgramme?.title,
+            weekLabel,
+            termId,
+            contentType: deleteType,
+            attachments: [],
+          }),
+          homework: null,
+        },
+      });
     }
 
     revalidatePath("/teacher/course-builder");
@@ -428,6 +487,7 @@ export function CourseBuilderWorkspace({
         endTime: String(formData.get("endTime") || "17:00"),
         timezone: String(formData.get("timezone") || "Europe/London"),
         createZoomMeeting: true,
+        audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
       },
       session.user.id,
     );
@@ -851,7 +911,8 @@ export function CourseBuilderWorkspace({
 
           {normalizedActiveTab === "plan" ? (
             <TeacherSection eyebrow="Publishing plan" title={`${selectedProgramme.title} term-by-term publishing plan`}>
-              <div className="space-y-4">
+              <div id="teacher-curriculum-builder" className="space-y-4">
+                <UnsavedChangesGuard rootId="teacher-curriculum-builder" />
                 <div className="grid gap-3 rounded-[18px] bg-[#fbf6ef] p-3 text-sm text-[#5f6b7a] md:grid-cols-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">Team</p>
@@ -868,7 +929,7 @@ export function CourseBuilderWorkspace({
                 </div>
 
                 <div className="space-y-3">
-                  {genMTerms.map((term) => {
+                  {genMTerms.filter((term) => !deletedTermIds.has(term.id)).map((term) => {
                     const highlights = getProgrammeHighlights(selectedProgramme.slug, term);
                     const termLessons = parsedVisibleLessons.filter(({ parsed }) => parsed.termId === term.id);
                     const moduleOverride = curriculumStructureLogs.find(({ parsed }) => parsed.contentType === "Module" && parsed.termId === term.id);
@@ -884,19 +945,33 @@ export function CourseBuilderWorkspace({
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <span>{moduleTitle}</span>
                             <div className="flex flex-wrap gap-2">
-                              <Link href={buildBuilderHref("plan", { termId: term.id, moduleId: moduleOverride?.entry.id, topic: moduleTitle, moduleComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#fff7eb] px-3 py-2 text-xs font-semibold text-[#8a6326]">
-                                <Edit3 className="h-3.5 w-3.5" /> Edit module
-                              </Link>
-                            <Link href={buildBuilderHref("plan", { weekLabel: `${term.title} Week ${highlights.length + customWeeks.length + 1}`, topic: "New weekly topic", termId: term.id, weekComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">
-                              <PlusCircle className="h-3.5 w-3.5" /> Add week/topic
-                            </Link>
+                              <form action={deleteCurriculumStructureAction}>
+                                <input type="hidden" name="structureId" value={moduleOverride?.entry.id ?? ""} />
+                                <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                                <input type="hidden" name="termId" value={term.id} />
+                                <input type="hidden" name="title" value={moduleTitle} />
+                                <input type="hidden" name="deleteType" value="Module" />
+                                <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-2 text-xs font-semibold text-[#b24646]">
+                                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                                </FormSubmitButton>
+                              </form>
                             </div>
                           </div>
                         </summary>
                         <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#617184]">{moduleDescription}</p>
+                        <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 rounded-2xl border border-[#eadfce] bg-[#fffdf9] p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                          <input type="hidden" name="contentType" value="Module" />
+                          <input type="hidden" name="structureId" value={moduleOverride?.entry.id ?? ""} />
+                          <input type="hidden" name="termId" value={term.id} />
+                          <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                          <input name="title" defaultValue={moduleTitle} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Module title" />
+                          <input name="description" defaultValue={moduleDescription} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Module description" />
+                          <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                        </form>
                         <div className="mt-4 space-y-3">
                           {highlights.map((highlight, index) => {
                             const weekLabel = `${term.title} Week ${index + 1}`;
+                            if (deletedWeekKeys.has(`${term.id}::${weekLabel}`)) return null;
                             const weekOverride = weekOverrides.get(weekLabel);
                             const weekTitle = weekOverride?.parsed.topic || highlight;
                             const weekDescription = weekOverride?.parsed.summary || "Create lessons under this weekly topic, then attach quiz, live session, or task.";
@@ -912,15 +987,33 @@ export function CourseBuilderWorkspace({
                                       <p className="mt-1 text-xs text-[#617184]">{weekLessons.length} lesson{weekLessons.length === 1 ? "" : "s"} published under this week</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                      <Link href={buildBuilderHref("plan", { weekLabel, topic: weekTitle, termId: term.id, weekId: weekOverride?.entry.id, weekComposer: true })} title="Edit week/topic" className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#8a6326]">
-                                        <Edit3 className="h-3.5 w-3.5" /> Edit topic
-                                      </Link>
                                       <Link href={buildBuilderHref("plan", { weekLabel, topic: weekTitle, termId: term.id, lessonComposer: true })} title="Add lesson" className="inline-flex items-center gap-2 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
                                         <PlusCircle className="h-3.5 w-3.5" /> Add lesson
                                       </Link>
+                                      <form action={deleteCurriculumStructureAction}>
+                                        <input type="hidden" name="structureId" value={weekOverride?.entry.id ?? ""} />
+                                        <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                                        <input type="hidden" name="termId" value={term.id} />
+                                        <input type="hidden" name="weekLabel" value={weekLabel} />
+                                        <input type="hidden" name="title" value={weekTitle} />
+                                        <input type="hidden" name="deleteType" value="WeekTopic" />
+                                        <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-2 text-xs font-semibold text-[#b24646]">
+                                          <Trash2 className="h-3.5 w-3.5" /> Delete
+                                        </FormSubmitButton>
+                                      </form>
                                     </div>
                                   </div>
                                 </summary>
+                                <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 rounded-2xl border border-[#eadfce] bg-white p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                  <input type="hidden" name="contentType" value="WeekTopic" />
+                                  <input type="hidden" name="structureId" value={weekOverride?.entry.id ?? ""} />
+                                  <input type="hidden" name="termId" value={term.id} />
+                                  <input type="hidden" name="weekLabel" value={weekLabel} />
+                                  <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                                  <input name="title" defaultValue={weekTitle} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week topic title" />
+                                  <input name="description" defaultValue={weekDescription} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week topic description" />
+                                  <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                                </form>
 
                                 <div className="mt-3 space-y-2">
                                   {weekLessons.map(({ entry, parsed }) => {
@@ -957,7 +1050,10 @@ export function CourseBuilderWorkspace({
                                     );
                                   })}
                                   {!weekLessons.length ? (
-                                    <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">No lessons yet. Use Add lesson to publish the first lesson for this week.</p>
+                                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">
+                                      <span>No lessons yet. Use Add lesson to publish the first lesson for this week.</span>
+                                      <DisabledLessonActions />
+                                    </div>
                                   ) : null}
                                 </div>
                               </details>
@@ -965,6 +1061,7 @@ export function CourseBuilderWorkspace({
                           })}
 
                           {customWeeks.filter(({ parsed }) => parsed.weekLabel && !defaultWeekLabels.has(parsed.weekLabel)).map(({ entry, parsed }) => {
+                            if (deletedWeekKeys.has(`${term.id}::${parsed.weekLabel}`)) return null;
                             const lessonTopic = parsed.topic || entry.topic || "Custom lesson";
                             const customWeekLessons = termLessons.filter((lesson) => lesson.parsed.weekLabel === parsed.weekLabel);
                             return (
@@ -977,15 +1074,26 @@ export function CourseBuilderWorkspace({
                                       <p className="mt-1 text-xs text-[#617184]">{parsed.summary}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, weekId: entry.id, weekComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit topic</Link>
                                       <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#2a76aa] px-3 py-1.5 text-xs font-semibold text-white">Add lesson</Link>
                                       <form action={deleteCurriculumStructureAction}>
                                         <input type="hidden" name="structureId" value={entry.id} />
-                                        <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete topic</FormSubmitButton>
+                                        <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">
+                                          <Trash2 className="h-3.5 w-3.5" /> Delete
+                                        </FormSubmitButton>
                                       </form>
                                     </div>
                                   </div>
                                 </summary>
+                                <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 rounded-2xl border border-[#d9e7f2] bg-white p-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                  <input type="hidden" name="contentType" value="WeekTopic" />
+                                  <input type="hidden" name="structureId" value={entry.id} />
+                                  <input type="hidden" name="termId" value={term.id} />
+                                  <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                                  <input name="weekLabel" defaultValue={parsed.weekLabel ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week label" />
+                                  <input name="title" defaultValue={lessonTopic} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week topic title" />
+                                  <input name="description" defaultValue={parsed.summary ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week topic description" />
+                                  <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                                </form>
                                 <div className="mt-3 space-y-2">
                                   {customWeekLessons.map(({ entry: lessonEntry, parsed: lessonParsed }) => {
                                     const lessonTopicTitle = lessonParsed.topic || lessonEntry.topic;
@@ -998,15 +1106,40 @@ export function CourseBuilderWorkspace({
                                             <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, quizComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
                                             <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, liveComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
                                             <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, taskComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                            <form action={deleteLessonAction}>
+                                              <input type="hidden" name="lessonLogId" value={lessonEntry.id} />
+                                              <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+                                            </form>
                                           </div>
                                         </div>
                                       </div>
                                     );
                                   })}
+                                  {!customWeekLessons.length ? (
+                                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">
+                                      <span>No lessons yet. Create a lesson before attaching quiz, live session, or task.</span>
+                                      <DisabledLessonActions />
+                                    </div>
+                                  ) : null}
                                 </div>
                               </details>
                             );
                           })}
+                          <details className="rounded-[16px] border border-dashed border-[#d8c3ac] bg-[#fffaf5] px-4 py-3">
+                            <summary className="cursor-pointer list-none text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
+                              <span className="inline-flex items-center gap-2"><PlusCircle className="h-4 w-4" /> Add week/topic under this module</span>
+                            </summary>
+                            <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                              <input type="hidden" name="contentType" value="WeekTopic" />
+                              <input type="hidden" name="structureId" value="" />
+                              <input type="hidden" name="termId" value={term.id} />
+                              <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                              <input name="weekLabel" defaultValue={`${term.title} Week ${highlights.length + customWeeks.length + 1}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week label" />
+                              <input name="title" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Week/topic title" />
+                              <input name="description" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Short description" />
+                              <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                            </form>
+                          </details>
                         </div>
                       </details>
                     );
@@ -1021,16 +1154,23 @@ export function CourseBuilderWorkspace({
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               <span>{parsed.topic}</span>
                               <div className="flex flex-wrap gap-2">
-                                <Link href={buildBuilderHref("plan", { termId: parsed.termId ?? "", moduleId: entry.id, topic: parsed.topic, moduleComposer: true })} className="rounded-full bg-[#fff7eb] px-3 py-2 text-xs font-semibold text-[#8a6326]">Edit module</Link>
-                                <Link href={buildBuilderHref("plan", { termId: parsed.termId ?? "", weekLabel: `${parsed.topic} Week ${customModuleWeeks.length + 1}`, topic: "New weekly topic", weekComposer: true })} className="rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">Add week/topic</Link>
                                 <form action={deleteCurriculumStructureAction}>
                                   <input type="hidden" name="structureId" value={entry.id} />
-                                  <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-2 text-xs font-semibold text-[#b24646]">Delete module</FormSubmitButton>
+                                  <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-2 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
                                 </form>
                               </div>
                             </div>
                           </summary>
                           <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#617184]">{parsed.summary}</p>
+                          <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 rounded-2xl border border-[#d9e7f2] bg-[#f5fbff] p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                            <input type="hidden" name="contentType" value="Module" />
+                            <input type="hidden" name="structureId" value={entry.id} />
+                            <input type="hidden" name="termId" value={parsed.termId ?? ""} />
+                            <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                            <input name="title" defaultValue={parsed.topic ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Module title" />
+                            <input name="description" defaultValue={parsed.summary ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Module description" />
+                            <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                          </form>
                           <div className="mt-4 space-y-3">
                             {customModuleWeeks.map(({ entry: weekEntry, parsed: weekParsed }) => {
                               const weekLessons = parsedVisibleLessons.filter((lesson) => lesson.parsed.weekLabel === weekParsed.weekLabel);
@@ -1044,11 +1184,24 @@ export function CourseBuilderWorkspace({
                                         <p className="mt-1 text-xs text-[#617184]">{weekParsed.summary}</p>
                                       </div>
                                       <div className="flex flex-wrap gap-2">
-                                        <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: weekParsed.topic, weekId: weekEntry.id, weekComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit topic</Link>
                                         <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: weekParsed.topic, lessonComposer: true })} className="rounded-full bg-[#2a76aa] px-3 py-1.5 text-xs font-semibold text-white">Add lesson</Link>
+                                        <form action={deleteCurriculumStructureAction}>
+                                          <input type="hidden" name="structureId" value={weekEntry.id} />
+                                          <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+                                        </form>
                                       </div>
                                     </div>
                                   </summary>
+                                  <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 rounded-2xl border border-[#eadfce] bg-white p-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                    <input type="hidden" name="contentType" value="WeekTopic" />
+                                    <input type="hidden" name="structureId" value={weekEntry.id} />
+                                    <input type="hidden" name="termId" value={weekParsed.termId ?? ""} />
+                                    <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                                    <input name="weekLabel" defaultValue={weekParsed.weekLabel ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week label" />
+                                    <input name="title" defaultValue={weekParsed.topic ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week topic title" />
+                                    <input name="description" defaultValue={weekParsed.summary ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week topic description" />
+                                    <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                                  </form>
                                   <div className="mt-3 space-y-2">
                                     {weekLessons.map(({ entry: lessonEntry, parsed: lessonParsed }) => (
                                       <div key={lessonEntry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm">
@@ -1058,13 +1211,38 @@ export function CourseBuilderWorkspace({
                                           <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, quizComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
                                           <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, liveComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
                                           <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, taskComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                          <form action={deleteLessonAction}>
+                                            <input type="hidden" name="lessonLogId" value={lessonEntry.id} />
+                                            <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+                                          </form>
                                         </div>
                                       </div>
                                     ))}
+                                    {!weekLessons.length ? (
+                                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">
+                                        <span>No lessons yet. Create a lesson before attaching quiz, live session, or task.</span>
+                                        <DisabledLessonActions />
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </details>
                               );
                             })}
+                            <details className="rounded-[16px] border border-dashed border-[#d8c3ac] bg-[#fffaf5] px-4 py-3">
+                              <summary className="cursor-pointer list-none text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
+                                <span className="inline-flex items-center gap-2"><PlusCircle className="h-4 w-4" /> Add week/topic under this module</span>
+                              </summary>
+                              <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-3 grid gap-3 md:grid-cols-[160px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                                <input type="hidden" name="contentType" value="WeekTopic" />
+                                <input type="hidden" name="structureId" value="" />
+                                <input type="hidden" name="termId" value={parsed.termId ?? ""} />
+                                <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                                <input name="weekLabel" defaultValue={`${parsed.topic} Week ${customModuleWeeks.length + 1}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Week label" />
+                                <input name="title" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Week/topic title" />
+                                <input name="description" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Short description" />
+                                <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                              </form>
+                            </details>
                           </div>
                         </details>
                       );
@@ -1075,10 +1253,16 @@ export function CourseBuilderWorkspace({
                         <p className="font-semibold text-[#22304a]">Create a new term/module</p>
                         <p className="mt-1 text-sm text-[#5f6b7a]">Add a new module title first, then create weekly topics under it.</p>
                       </div>
-                      <Link href={buildBuilderHref("plan", { termId: "custom-module", topic: "New module", moduleComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                        <PlusCircle className="h-4 w-4" /> New module
-                      </Link>
                     </div>
+                    <form action={saveCurriculumStructureAction} data-curriculum-save className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+                      <input type="hidden" name="contentType" value="Module" />
+                      <input type="hidden" name="structureId" value="" />
+                      <input type="hidden" name="termId" value={`custom-module-${curriculumStructureLogs.length + 1}`} />
+                      <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                      <input name="title" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="New module title" />
+                      <input name="description" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Short module description" />
+                      <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                    </form>
                   </div>
                 </div>
               </div>
@@ -1374,6 +1558,14 @@ export function CourseBuilderWorkspace({
                     <input name="title" required defaultValue={prefillTopic ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                   </label>
                   <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a] md:col-span-2">
+                      Student audience
+                      <select name="audienceGroup" defaultValue="PK_UK" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        {AUDIENCE_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Day
                       <select name="weekday" defaultValue="6" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">

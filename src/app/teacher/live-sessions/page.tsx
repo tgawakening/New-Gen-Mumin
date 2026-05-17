@@ -24,6 +24,12 @@ type PageProps = {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
+const AUDIENCE_OPTIONS = [
+  { value: "PK_UK", label: "Pakistan and UK students" },
+  { value: "US_CA", label: "USA and Canada students" },
+  { value: "AU", label: "Australia students" },
+  { value: "ALL", label: "All students" },
+];
 
 function noticeHref(message: string, tone: "success" | "error" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
@@ -83,6 +89,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           endTime: String(formData.get("endTime") || "17:00"),
           timezone: String(formData.get("timezone") || "Europe/London"),
           createZoomMeeting: true,
+          audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
         },
         currentSession.user.id,
       );
@@ -166,6 +173,15 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
             Recurrence: weekly Zoom session. Students and parents will see the same recurring join link in their schedules.
           </div>
 
+          <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-4">
+            Student audience
+            <select name="audienceGroup" defaultValue="PK_UK" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+              {AUDIENCE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Day
             <select name="weekday" defaultValue="6" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
@@ -213,6 +229,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {WEEKDAYS[entry.weekday]} {entry.startTime}-{entry.endTime} {entry.timezone}
               </p>
+              <p className="mt-1 text-sm text-[#5f6b7a]">{entry.audience}</p>
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {entry.meetingUrl ? "Linked to Zoom" : "Zoom link pending admin sync"}
               </p>

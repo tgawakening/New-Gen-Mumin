@@ -3,6 +3,7 @@ import "server-only";
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { getLiveClassAudienceGroup } from "@/lib/live-classes/service";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 import {
   genMCoreOutcomes,
@@ -592,21 +593,32 @@ function studentHasDashboardAccess(student: any) {
   );
 }
 
-function mapScheduleEntries(enrollments: any[]): ChildScheduleSummary[] {
+function countryMatchesLiveAudience(countryCode: string | null | undefined, group: string) {
+  const code = (countryCode ?? "").trim().toUpperCase();
+  if (group === "ALL") return true;
+  if (group === "PK_UK") return ["PK", "PAK", "GB", "UK", "GBR"].includes(code);
+  if (group === "US_CA") return ["US", "USA", "CA", "CAN"].includes(code);
+  if (group === "AU") return ["AU", "AUS"].includes(code);
+  return true;
+}
+
+function mapScheduleEntries(enrollments: any[], childCountryCode?: string | null): ChildScheduleSummary[] {
   const entries = enrollments
     .flatMap((enrollment) =>
-      enrollment.program.schedules.map((schedule: any) => ({
-        id: schedule.id,
-        title: enrollment.program.title,
-        weekday: schedule.weekday,
-        startTime: schedule.startTime,
-        endTime: schedule.endTime,
-        timezone: schedule.timezone,
-        nextStartsAt: nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
-        meetingUrl: schedule.meetingUrl,
-        teacherName: buildTeacherName(schedule.teacher),
-        provider: schedule.meetingProvider,
-      })),
+      enrollment.program.schedules
+        .filter((schedule: any) => countryMatchesLiveAudience(childCountryCode, getLiveClassAudienceGroup(schedule.title)))
+        .map((schedule: any) => ({
+          id: schedule.id,
+          title: enrollment.program.title,
+          weekday: schedule.weekday,
+          startTime: schedule.startTime,
+          endTime: schedule.endTime,
+          timezone: schedule.timezone,
+          nextStartsAt: nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
+          meetingUrl: schedule.meetingUrl,
+          teacherName: buildTeacherName(schedule.teacher),
+          provider: schedule.meetingProvider,
+        })),
     );
 
   const deduped = new Map<string, ChildScheduleSummary>();
@@ -728,7 +740,7 @@ function mapLessonUpdates(enrollments: any[]) {
         }),
       ),
     )
-    .filter((update) => update.contentType !== "Module" && update.contentType !== "WeekTopic")
+    .filter((update) => !["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(update.contentType ?? ""))
     .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
     .slice(0, 8) satisfies ChildLessonUpdateSummary[];
 }
@@ -842,7 +854,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     child.enrollments.length,
   );
 
-  const schedule = mapScheduleEntries(child.enrollments);
+  const schedule = mapScheduleEntries(child.enrollments, child.countryCode);
   const programQuizzes = child.enrollments.flatMap((enrollment: any) => enrollment.program.quizzes);
   const quizzes = mapQuizSummaries(programQuizzes, child.quizAttempts);
   const assignments = mapAssignmentSummaries(child.enrollments, child.assignments);
