@@ -9,7 +9,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { CourseBuilderWorkspace } from "./CourseBuilderWorkspace";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; termId?: string; lessonId?: string; lessonComposer?: string; quizComposer?: string; taskComposer?: string; liveComposer?: string; materialComposer?: string }>;
+  searchParams?: Promise<{ success?: string; tab?: "overview" | "plan" | "lesson" | "task" | "materials"; weekLabel?: string; topic?: string; termId?: string; lessonId?: string; moduleId?: string; weekId?: string; moduleComposer?: string; weekComposer?: string; lessonComposer?: string; quizComposer?: string; taskComposer?: string; liveComposer?: string; materialComposer?: string }>;
 };
 
 export default async function TeacherCourseBuilderPage({ searchParams }: PageProps) {
@@ -32,6 +32,10 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
       if (params?.topic) query.set("topic", params.topic);
       if (params?.termId) query.set("termId", params.termId);
       if (params?.lessonId) query.set("lessonId", params.lessonId);
+      if (params?.moduleId) query.set("moduleId", params.moduleId);
+      if (params?.weekId) query.set("weekId", params.weekId);
+      if (params?.moduleComposer) query.set("moduleComposer", params.moduleComposer);
+      if (params?.weekComposer) query.set("weekComposer", params.weekComposer);
       if (params?.lessonComposer) query.set("lessonComposer", params.lessonComposer);
       if (params?.quizComposer) query.set("quizComposer", params.quizComposer);
       if (params?.taskComposer) query.set("taskComposer", params.taskComposer);
@@ -56,6 +60,10 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
         prefillTopic={params?.topic}
         prefillTermId={params?.termId}
         lessonId={params?.lessonId}
+        moduleId={params?.moduleId}
+        weekId={params?.weekId}
+        moduleComposer={params?.moduleComposer === "1"}
+        weekComposer={params?.weekComposer === "1"}
         lessonComposer={params?.lessonComposer === "1"}
         quizComposer={params?.quizComposer === "1"}
         taskComposer={params?.taskComposer === "1"}

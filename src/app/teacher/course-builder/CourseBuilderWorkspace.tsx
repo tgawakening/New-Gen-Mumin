@@ -27,6 +27,10 @@ type CourseBuilderWorkspaceProps = {
   prefillTopic?: string;
   prefillTermId?: string;
   lessonId?: string;
+  moduleComposer?: boolean;
+  moduleId?: string;
+  weekComposer?: boolean;
+  weekId?: string;
   lessonComposer?: boolean;
   quizComposer?: boolean;
   taskComposer?: boolean;
@@ -143,6 +147,10 @@ export function CourseBuilderWorkspace({
   prefillTopic,
   prefillTermId,
   lessonId,
+  moduleComposer = false,
+  moduleId,
+  weekComposer = false,
+  weekId,
   lessonComposer = false,
   quizComposer = false,
   taskComposer = false,
@@ -157,15 +165,27 @@ export function CourseBuilderWorkspace({
   const visibleProgramIds = new Set(visibleRosters.map((roster) => roster.programId));
   const visibleClasses = dashboard.classes.filter((entry) => visibleProgramIds.has(entry.programId));
   const visibleAssignments = dashboard.assignments.filter((entry) => visibleProgramIds.has(entry.programId));
-  const visibleLessons = dashboard.lessonLogs.filter((entry) =>
+  const visibleLessonLogs = dashboard.lessonLogs.filter((entry) =>
     visibleClasses.some((course) => course.title === entry.title),
   );
-  const parsedVisibleLessons = visibleLessons.map((entry) => ({
+  const parsedVisibleLogs = visibleLessonLogs.map((entry) => ({
     entry,
     parsed: parseLessonPayload(entry.summary, entry.homework),
   }));
+  const curriculumStructureLogs = parsedVisibleLogs.filter(({ parsed }) =>
+    parsed.contentType === "Module" || parsed.contentType === "WeekTopic",
+  );
+  const parsedVisibleLessons = parsedVisibleLogs.filter(({ parsed }) =>
+    parsed.contentType !== "Module" && parsed.contentType !== "WeekTopic",
+  );
   const editingLesson = lessonId
     ? parsedVisibleLessons.find(({ entry }) => entry.id === lessonId)
+    : null;
+  const editingModule = moduleId
+    ? curriculumStructureLogs.find(({ entry, parsed }) => entry.id === moduleId && parsed.contentType === "Module")
+    : null;
+  const editingWeek = weekId
+    ? curriculumStructureLogs.find(({ entry, parsed }) => entry.id === weekId && parsed.contentType === "WeekTopic")
     : null;
 
   const selectedProgramme = selectedRoster ? getGenMProgrammeByTitle(selectedRoster.title) : null;
@@ -176,12 +196,16 @@ export function CourseBuilderWorkspace({
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
-  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
+  function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; moduleId?: string; weekId?: string; moduleComposer?: boolean; weekComposer?: boolean; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
     if (options?.topic) query.set("topic", options.topic);
     if (options?.termId) query.set("termId", options.termId);
     if (options?.lessonId) query.set("lessonId", options.lessonId);
+    if (options?.moduleId) query.set("moduleId", options.moduleId);
+    if (options?.weekId) query.set("weekId", options.weekId);
+    if (options?.moduleComposer) query.set("moduleComposer", "1");
+    if (options?.weekComposer) query.set("weekComposer", "1");
     if (options?.lessonComposer) query.set("lessonComposer", "1");
     if (options?.quizComposer) query.set("quizComposer", "1");
     if (options?.taskComposer) query.set("taskComposer", "1");
@@ -314,6 +338,79 @@ export function CourseBuilderWorkspace({
     revalidatePath("/student/courses");
     revalidatePath("/parent/courses");
     redirect(`${successRedirectPath}?tab=plan&success=lesson_deleted`);
+  }
+
+  async function saveCurriculumStructureAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+
+    const scheduleId = String(formData.get("scheduleId") || "");
+    const structureId = cleanOptional(formData.get("structureId"));
+    const contentType = String(formData.get("contentType") || "") === "Module" ? "Module" : "WeekTopic";
+    const termId = cleanOptional(formData.get("termId"));
+    const weekLabel = cleanOptional(formData.get("weekLabel"));
+    const title = String(formData.get("title") || "").trim();
+    const description = String(formData.get("description") || "").trim();
+
+    if (!scheduleId || !termId || !title) {
+      throw new Error("Please add a title before saving.");
+    }
+
+    const schedule = dashboard.classes.find((entry) => entry.id === scheduleId);
+    if (!schedule) throw new Error("Choose a valid programme schedule first.");
+
+    const payload = {
+      scheduleId,
+      teacherUserId: session.user.id,
+      lessonDate: new Date(),
+      topic: title,
+      summary: buildLessonPayload({
+        topic: title,
+        summary: description || title,
+        instructorName: dashboard.teacherName,
+        programmeFocus: selectedProgramme?.title,
+        weekLabel,
+        termId,
+        contentType,
+        attachments: [],
+      }),
+      homework: null,
+    };
+
+    if (structureId) {
+      const existing = await db.lessonLog.findFirst({
+        where: { id: structureId, teacherUserId: session.user.id },
+      });
+      if (!existing) throw new Error("This curriculum item is not available for this teacher.");
+      await db.lessonLog.update({ where: { id: existing.id }, data: payload });
+    } else {
+      await db.lessonLog.create({ data: payload });
+    }
+
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    redirect(`${successRedirectPath}?tab=plan&success=${contentType === "Module" ? "module_saved" : "week_saved"}`);
+  }
+
+  async function deleteCurriculumStructureAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+
+    const structureId = String(formData.get("structureId") || "");
+    const existing = await db.lessonLog.findFirst({
+      where: { id: structureId, teacherUserId: session.user.id },
+    });
+    if (existing) {
+      await db.lessonLog.delete({ where: { id: existing.id } });
+    }
+
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    redirect(`${successRedirectPath}?tab=plan&success=curriculum_deleted`);
   }
 
   async function createCurriculumLiveSessionAction(formData: FormData) {
@@ -571,6 +668,12 @@ export function CourseBuilderWorkspace({
               ? "Lesson updated successfully."
               : success === "lesson_deleted"
                 ? "Lesson deleted successfully."
+                : success === "module_saved"
+                  ? "Module title updated successfully."
+                  : success === "week_saved"
+                    ? "Week/topic saved successfully."
+                    : success === "curriculum_deleted"
+                      ? "Curriculum item deleted successfully."
             : success === "task"
               ? "Student task published with resources."
               : success === "quiz"
@@ -689,8 +792,7 @@ export function CourseBuilderWorkspace({
 
               <TeacherSection eyebrow="Recent publishing" title="Latest lesson updates">
                 <TeacherInfoList
-                  items={visibleLessons.slice(0, 6).map((entry) => {
-                    const parsed = parseLessonPayload(entry.summary, entry.homework);
+                  items={parsedVisibleLessons.slice(0, 6).map(({ entry, parsed }) => {
                     const label = parsed.weekLabel ? `${parsed.weekLabel} - ` : "";
                     return `${entry.title} - ${label}${parsed.topic || entry.topic} - ${entry.lessonDate.toLocaleDateString("en-GB")}`;
                   })}
@@ -769,33 +871,54 @@ export function CourseBuilderWorkspace({
                   {genMTerms.map((term) => {
                     const highlights = getProgrammeHighlights(selectedProgramme.slug, term);
                     const termLessons = parsedVisibleLessons.filter(({ parsed }) => parsed.termId === term.id);
+                    const moduleOverride = curriculumStructureLogs.find(({ parsed }) => parsed.contentType === "Module" && parsed.termId === term.id);
+                    const moduleTitle = moduleOverride?.parsed.topic || `Modules / Chapters / Weeks - ${term.title} - ${term.level} - ${term.window}`;
+                    const moduleDescription = moduleOverride?.parsed.summary || "Open this term to manage weekly topics, lessons, quizzes, live sessions, and tasks.";
+                    const customWeeks = curriculumStructureLogs.filter(({ parsed }) => parsed.contentType === "WeekTopic" && parsed.termId === term.id);
+                    const weekOverrides = new Map(customWeeks.map((item) => [item.parsed.weekLabel, item]));
+                    const defaultWeekLabels = new Set(highlights.map((_, index) => `${term.title} Week ${index + 1}`));
 
                     return (
                       <details key={term.id} className="rounded-[18px] border border-[#eadfce] bg-white p-4" open={term.id === "term-1"}>
                         <summary className="cursor-pointer list-none text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <span>Modules / Chapters / Weeks - {term.title} - {term.level} - {term.window}</span>
-                            <Link href={buildBuilderHref("plan", { weekLabel: `${term.title} New Week`, topic: "New weekly topic", termId: term.id, lessonComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">
+                            <span>{moduleTitle}</span>
+                            <div className="flex flex-wrap gap-2">
+                              <Link href={buildBuilderHref("plan", { termId: term.id, moduleId: moduleOverride?.entry.id, topic: moduleTitle, moduleComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#fff7eb] px-3 py-2 text-xs font-semibold text-[#8a6326]">
+                                <Edit3 className="h-3.5 w-3.5" /> Edit module
+                              </Link>
+                            <Link href={buildBuilderHref("plan", { weekLabel: `${term.title} Week ${highlights.length + customWeeks.length + 1}`, topic: "New weekly topic", termId: term.id, weekComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">
                               <PlusCircle className="h-3.5 w-3.5" /> Add week/topic
                             </Link>
+                            </div>
                           </div>
                         </summary>
+                        <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#617184]">{moduleDescription}</p>
                         <div className="mt-4 space-y-3">
                           {highlights.map((highlight, index) => {
                             const weekLabel = `${term.title} Week ${index + 1}`;
+                            const weekOverride = weekOverrides.get(weekLabel);
+                            const weekTitle = weekOverride?.parsed.topic || highlight;
+                            const weekDescription = weekOverride?.parsed.summary || "Create lessons under this weekly topic, then attach quiz, live session, or task.";
                             const weekLessons = termLessons.filter(({ parsed }) => parsed.weekLabel === weekLabel);
                             return (
-                              <details key={highlight} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3" open={index === 0}>
+                              <details key={weekLabel} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3" open={index === 0}>
                                 <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                                   <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
                                     <div className="min-w-0">
                                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekLabel}</p>
-                                      <h4 className="mt-1 text-sm font-semibold text-[#22304a] sm:text-base">{highlight}</h4>
+                                      <h4 className="mt-1 text-sm font-semibold text-[#22304a] sm:text-base">{weekTitle}</h4>
+                                      <p className="mt-1 text-xs text-[#617184]">{weekDescription}</p>
                                       <p className="mt-1 text-xs text-[#617184]">{weekLessons.length} lesson{weekLessons.length === 1 ? "" : "s"} published under this week</p>
                                     </div>
-                                    <Link href={buildBuilderHref("plan", { weekLabel, topic: highlight, termId: term.id, lessonComposer: true })} title="Add lesson" className="inline-flex items-center gap-2 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
-                                      <PlusCircle className="h-3.5 w-3.5" /> Add lesson
-                                    </Link>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Link href={buildBuilderHref("plan", { weekLabel, topic: weekTitle, termId: term.id, weekId: weekOverride?.entry.id, weekComposer: true })} title="Edit week/topic" className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-semibold text-[#8a6326]">
+                                        <Edit3 className="h-3.5 w-3.5" /> Edit topic
+                                      </Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel, topic: weekTitle, termId: term.id, lessonComposer: true })} title="Add lesson" className="inline-flex items-center gap-2 rounded-full bg-[#2a76aa] px-3 py-2 text-xs font-semibold text-white">
+                                        <PlusCircle className="h-3.5 w-3.5" /> Add lesson
+                                      </Link>
+                                    </div>
                                   </div>
                                 </summary>
 
@@ -841,26 +964,45 @@ export function CourseBuilderWorkspace({
                             );
                           })}
 
-                          {termLessons.filter(({ parsed }) => parsed.weekLabel && !highlights.some((_, index) => parsed.weekLabel === `${term.title} Week ${index + 1}`)).map(({ entry, parsed }) => {
+                          {customWeeks.filter(({ parsed }) => parsed.weekLabel && !defaultWeekLabels.has(parsed.weekLabel)).map(({ entry, parsed }) => {
                             const lessonTopic = parsed.topic || entry.topic || "Custom lesson";
+                            const customWeekLessons = termLessons.filter((lesson) => lesson.parsed.weekLabel === parsed.weekLabel);
                             return (
                               <details key={entry.id} className="rounded-[16px] border border-[#d9e7f2] bg-[#f5fbff] px-4 py-3">
-                                <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">{parsed.weekLabel} - custom week/topic</summary>
-                                <div className="mt-3 rounded-2xl bg-white px-4 py-3">
+                                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
                                   <div className="flex flex-wrap items-center justify-between gap-3">
-                                    <div>
-                                      <p className="font-semibold text-[#22304a]">{lessonTopic}</p>
-                                      <p className="mt-1 text-xs text-[#617184]">{parsed.summary || "Lesson content added."}</p>
+                                    <div className="min-w-0">
+                                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2a76aa]">{parsed.weekLabel}</p>
+                                      <h4 className="mt-1 text-sm font-semibold text-[#22304a] sm:text-base">{lessonTopic}</h4>
+                                      <p className="mt-1 text-xs text-[#617184]">{parsed.summary}</p>
                                     </div>
                                     <div className="flex flex-wrap gap-2">
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, lessonId: entry.id, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">
-                                        <Edit3 className="h-3.5 w-3.5" /> Edit
-                                      </Link>
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
-                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, weekId: entry.id, weekComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit topic</Link>
+                                      <Link href={buildBuilderHref("plan", { weekLabel: parsed.weekLabel ?? term.title, topic: lessonTopic, termId: term.id, lessonComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#2a76aa] px-3 py-1.5 text-xs font-semibold text-white">Add lesson</Link>
+                                      <form action={deleteCurriculumStructureAction}>
+                                        <input type="hidden" name="structureId" value={entry.id} />
+                                        <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete topic</FormSubmitButton>
+                                      </form>
                                     </div>
                                   </div>
+                                </summary>
+                                <div className="mt-3 space-y-2">
+                                  {customWeekLessons.map(({ entry: lessonEntry, parsed: lessonParsed }) => {
+                                    const lessonTopicTitle = lessonParsed.topic || lessonEntry.topic;
+                                    return (
+                                      <div key={lessonEntry.id} className="rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                          <p className="font-semibold text-[#22304a]">{lessonTopicTitle}</p>
+                                          <div className="flex flex-wrap gap-2">
+                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, lessonId: lessonEntry.id, lessonComposer: true })} className="rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit lesson</Link>
+                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, quizComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
+                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, liveComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
+                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, taskComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </details>
                             );
@@ -869,20 +1011,146 @@ export function CourseBuilderWorkspace({
                       </details>
                     );
                   })}
+                  {curriculumStructureLogs
+                    .filter(({ parsed }) => parsed.contentType === "Module" && parsed.termId && !genMTerms.some((term) => term.id === parsed.termId))
+                    .map(({ entry, parsed }) => {
+                      const customModuleWeeks = curriculumStructureLogs.filter((item) => item.parsed.contentType === "WeekTopic" && item.parsed.termId === parsed.termId);
+                      return (
+                        <details key={entry.id} className="rounded-[18px] border border-[#d9e7f2] bg-white p-4">
+                          <summary className="cursor-pointer list-none text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <span>{parsed.topic}</span>
+                              <div className="flex flex-wrap gap-2">
+                                <Link href={buildBuilderHref("plan", { termId: parsed.termId ?? "", moduleId: entry.id, topic: parsed.topic, moduleComposer: true })} className="rounded-full bg-[#fff7eb] px-3 py-2 text-xs font-semibold text-[#8a6326]">Edit module</Link>
+                                <Link href={buildBuilderHref("plan", { termId: parsed.termId ?? "", weekLabel: `${parsed.topic} Week ${customModuleWeeks.length + 1}`, topic: "New weekly topic", weekComposer: true })} className="rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">Add week/topic</Link>
+                                <form action={deleteCurriculumStructureAction}>
+                                  <input type="hidden" name="structureId" value={entry.id} />
+                                  <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-2 text-xs font-semibold text-[#b24646]">Delete module</FormSubmitButton>
+                                </form>
+                              </div>
+                            </div>
+                          </summary>
+                          <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#617184]">{parsed.summary}</p>
+                          <div className="mt-4 space-y-3">
+                            {customModuleWeeks.map(({ entry: weekEntry, parsed: weekParsed }) => {
+                              const weekLessons = parsedVisibleLessons.filter((lesson) => lesson.parsed.weekLabel === weekParsed.weekLabel);
+                              return (
+                                <details key={weekEntry.id} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3">
+                                  <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                      <div>
+                                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#c27a2c]">{weekParsed.weekLabel}</p>
+                                        <h4 className="mt-1 text-sm font-semibold text-[#22304a]">{weekParsed.topic}</h4>
+                                        <p className="mt-1 text-xs text-[#617184]">{weekParsed.summary}</p>
+                                      </div>
+                                      <div className="flex flex-wrap gap-2">
+                                        <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: weekParsed.topic, weekId: weekEntry.id, weekComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit topic</Link>
+                                        <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: weekParsed.topic, lessonComposer: true })} className="rounded-full bg-[#2a76aa] px-3 py-1.5 text-xs font-semibold text-white">Add lesson</Link>
+                                      </div>
+                                    </div>
+                                  </summary>
+                                  <div className="mt-3 space-y-2">
+                                    {weekLessons.map(({ entry: lessonEntry, parsed: lessonParsed }) => (
+                                      <div key={lessonEntry.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm">
+                                        <p className="font-semibold text-[#22304a]">{lessonParsed.topic || lessonEntry.topic}</p>
+                                        <div className="flex flex-wrap gap-2">
+                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, lessonId: lessonEntry.id, lessonComposer: true })} className="rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit lesson</Link>
+                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, quizComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
+                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, liveComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
+                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, taskComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </details>
+                              );
+                            })}
+                          </div>
+                        </details>
+                      );
+                    })}
                   <div className="rounded-[18px] border border-dashed border-[#d8c3ac] bg-[#fffaf5] p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div>
-                        <p className="font-semibold text-[#22304a]">Create a new week / topic</p>
-                        <p className="mt-1 text-sm text-[#5f6b7a]">Use this when the programme needs an extra chapter, revision week, or special session.</p>
+                        <p className="font-semibold text-[#22304a]">Create a new term/module</p>
+                        <p className="mt-1 text-sm text-[#5f6b7a]">Add a new module title first, then create weekly topics under it.</p>
                       </div>
-                      <Link href={buildBuilderHref("plan", { weekLabel: "New week", topic: "New lesson topic", lessonComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                        <PlusCircle className="h-4 w-4" /> New lesson
+                      <Link href={buildBuilderHref("plan", { termId: "custom-module", topic: "New module", moduleComposer: true })} className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                        <PlusCircle className="h-4 w-4" /> New module
                       </Link>
                     </div>
                   </div>
                 </div>
               </div>
             </TeacherSection>
+          ) : null}
+
+          {moduleComposer ? (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
+              <Link href={buildBuilderHref("plan")} aria-label="Close module editor" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-2xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Term module</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{editingModule ? "Edit module title" : "Create module"}</h2>
+                  </div>
+                  <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">Close</Link>
+                </div>
+                <form action={saveCurriculumStructureAction} className="grid gap-4">
+                  <input type="hidden" name="contentType" value="Module" />
+                  <input type="hidden" name="structureId" value={editingModule?.entry.id ?? ""} />
+                  <input type="hidden" name="termId" value={prefillTermId ?? editingModule?.parsed.termId ?? ""} />
+                  <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Module / term title
+                    <input name="title" required defaultValue={editingModule?.parsed.topic || prefillTopic || ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Term 1 - Beginner Level - Months 1-6" />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Short description
+                    <textarea name="description" rows={3} defaultValue={editingModule?.parsed.summary ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="What this module covers." />
+                  </label>
+                  <FormSubmitButton pendingLabel="Saving module..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">
+                    Save module
+                  </FormSubmitButton>
+                </form>
+              </div>
+            </div>
+          ) : null}
+
+          {weekComposer ? (
+            <div className="fixed inset-0 z-50 overflow-y-auto bg-[#12213a]/55 px-3 py-6">
+              <Link href={buildBuilderHref("plan")} aria-label="Close week editor" className="fixed inset-0" />
+              <div className="relative mx-auto max-w-2xl rounded-[28px] bg-white p-4 shadow-2xl sm:p-6">
+                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Week / topic</p>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{editingWeek ? "Edit week/topic" : "Create week/topic"}</h2>
+                  </div>
+                  <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">Close</Link>
+                </div>
+                <form action={saveCurriculumStructureAction} className="grid gap-4">
+                  <input type="hidden" name="contentType" value="WeekTopic" />
+                  <input type="hidden" name="structureId" value={editingWeek?.entry.id ?? ""} />
+                  <input type="hidden" name="termId" value={prefillTermId ?? editingWeek?.parsed.termId ?? ""} />
+                  <input type="hidden" name="weekLabel" value={prefillWeekLabel ?? editingWeek?.parsed.weekLabel ?? ""} />
+                  <input type="hidden" name="scheduleId" value={visibleClasses[0]?.id ?? ""} />
+                  <div className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#617184]">
+                    {prefillWeekLabel || editingWeek?.parsed.weekLabel || "New weekly topic"}
+                  </div>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Week/topic title
+                    <input name="title" required defaultValue={editingWeek?.parsed.topic || prefillTopic || ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Alphabet mastery" />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Short description
+                    <textarea name="description" rows={3} defaultValue={editingWeek?.parsed.summary ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="What students will focus on this week/topic." />
+                  </label>
+                  <FormSubmitButton pendingLabel="Saving week..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">
+                    Save week/topic
+                  </FormSubmitButton>
+                </form>
+              </div>
+            </div>
           ) : null}
 
           {lessonComposer ? (

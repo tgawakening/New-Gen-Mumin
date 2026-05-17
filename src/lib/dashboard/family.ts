@@ -728,6 +728,7 @@ function mapLessonUpdates(enrollments: any[]) {
         }),
       ),
     )
+    .filter((update) => update.contentType !== "Module" && update.contentType !== "WeekTopic")
     .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
     .slice(0, 8) satisfies ChildLessonUpdateSummary[];
 }
