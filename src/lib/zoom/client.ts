@@ -23,6 +23,12 @@ type ZoomMeetingResponse = {
   start_url?: string;
 };
 
+type ZoomMeetingDetailsResponse = {
+  id: number;
+  join_url?: string;
+  start_url?: string;
+};
+
 async function readZoomError(response: Response) {
   const body = await response.text();
   if (!body) return response.statusText;
@@ -148,4 +154,31 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
   }
 
   return (await response.json()) as ZoomMeetingResponse;
+}
+
+export async function getZoomMeetingStartUrl(meetingId: string) {
+  const accessToken = await getZoomAccessToken();
+  const response = await fetch(`https://api.zoom.us/v2/meetings/${encodeURIComponent(meetingId)}`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const details = await readZoomError(response);
+    const guidance =
+      response.status === 401 || response.status === 403
+        ? " Check that the Zoom app has meeting:read:meeting and meeting:read:meeting:admin scopes and has been re-activated after adding scopes."
+        : "";
+    throw new Error(`Zoom meeting start link failed: ${details}.${guidance}`);
+  }
+
+  const meeting = (await response.json()) as ZoomMeetingDetailsResponse;
+  if (!meeting.start_url) {
+    throw new Error("Zoom did not return a teacher start link for this meeting.");
+  }
+
+  return meeting.start_url;
 }

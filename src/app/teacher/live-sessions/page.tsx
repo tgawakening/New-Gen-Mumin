@@ -274,12 +274,22 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
               <div className="mt-4 flex flex-wrap gap-2">
                 {entry.meetingUrl ? (
                   <a
-                    href={entry.meetingUrl}
+                    href={`/teacher/live-sessions/${entry.id}/start`}
                     target="_blank"
                     rel="noreferrer"
                     className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                   >
                     Start session
+                  </a>
+                ) : null}
+                {entry.meetingUrl ? (
+                  <a
+                    href={entry.meetingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
+                  >
+                    Copy/open public link
                   </a>
                 ) : null}
                 <form action={deleteSessionAction}>
