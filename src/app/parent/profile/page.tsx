@@ -40,7 +40,7 @@ export default async function ParentProfilePage({ searchParams }: PageProps) {
     >
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
-          children={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
+          learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
           selectedChildId={selectedChild?.id}
           basePath="/parent/profile"
         />

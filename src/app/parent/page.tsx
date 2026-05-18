@@ -9,6 +9,7 @@ import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import {
   ChildSelector,
+  CompactList,
   FamilyDashboardFrame,
   InfoList,
   MetricGrid,
@@ -74,7 +75,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         }
       >
         <ChildSelector
-          children={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
+          learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
           selectedChildId={selectedChild?.id}
           basePath="/parent"
         />
@@ -84,11 +85,12 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
           <div className="space-y-6">
             <SectionCard eyebrow="Courses" title={selectedChild.name} icon="book">
-              <InfoList
-                items={selectedChild.courses.map(
-                  (course) =>
-                    `${course.title} - By ${course.teachers.map((teacher) => teacher.name).slice(0, 2).join(", ") || "assigned teachers"} - ${course.meetingCount} weekly slots`,
-                )}
+              <CompactList
+                items={selectedChild.courses.map((course) => ({
+                  label: course.title,
+                  meta: `${course.teachers.map((teacher) => teacher.name).slice(0, 2).join(", ") || "Assigned teachers"} - ${course.meetingCount} weekly slots`,
+                  icon: "book",
+                }))}
                 emptyLabel="Courses will appear here once enrollment is active."
               />
             </SectionCard>
@@ -139,23 +141,14 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             </SectionCard>
 
             <SectionCard eyebrow="Weekly journal" title="Growth summary" icon="chart">
-              <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
-                <InfoList
-                  items={[
-                    `Most consistent trait - ${selectedChild.journalMonthlySummary.mostConsistentTrait}`,
-                    `Strongest skill area - ${selectedChild.journalMonthlySummary.strongestSkillArea}`,
-                    `Arabic fluency trend - ${selectedChild.journalMonthlySummary.arabicFluencyTrend}`,
-                  ]}
-                  emptyLabel="Monthly journal growth will appear here."
-                />
-                <InfoList
-                  items={[
-                    `Leadership score - ${selectedChild.journalMonthlySummary.leadershipDevelopmentScore}/5`,
-                    `Teacher summary - ${selectedChild.journalMonthlySummary.teacherSummary}`,
-                  ]}
-                  emptyLabel="Leadership and teacher summary will appear here."
-                />
-              </div>
+              <CompactList
+                items={[
+                  { label: selectedChild.journalMonthlySummary.mostConsistentTrait, meta: "Most consistent trait", icon: "star" },
+                  { label: selectedChild.journalMonthlySummary.strongestSkillArea, meta: "Strongest skill area", icon: "chart" },
+                  { label: `${selectedChild.journalMonthlySummary.leadershipDevelopmentScore}/5`, meta: "Leadership score", icon: "sparkles" },
+                ]}
+                emptyLabel="Monthly journal growth will appear here."
+              />
             </SectionCard>
           </div>
 
@@ -187,11 +180,12 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             </SectionCard>
 
             <SectionCard eyebrow="Recognition" title="Badges and certificates" icon="trophy">
-              <InfoList
-                items={selectedChild.badges.map(
-                  (badge) =>
-                    `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"} - ${badge.description}`,
-                )}
+              <CompactList
+                items={selectedChild.badges.slice(0, 3).map((badge) => ({
+                  label: badge.title,
+                  meta: badge.status === "earned" ? "Earned" : "In progress",
+                  icon: "trophy",
+                }))}
                 emptyLabel="Badges, gem-of-the-week, and certificates will appear here as student activity grows."
               />
             </SectionCard>

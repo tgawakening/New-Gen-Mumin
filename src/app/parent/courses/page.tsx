@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -14,7 +15,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string }>;
+  searchParams?: Promise<{ child?: string; course?: string }>;
 };
 
 export default async function ParentCoursesPage({ searchParams }: PageProps) {
@@ -34,7 +35,8 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : undefined;
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
-  const selectedProgramId = selectedChild.courses[0]?.id ?? null;
+  const selectedCourse = selectedChild.courses.find((course) => course.id === params?.course) ?? selectedChild.courses[0] ?? null;
+  const selectedProgramId = selectedCourse?.id ?? null;
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   if (selectedProgramId) {
     try {
@@ -60,7 +62,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
     >
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
-          children={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
+          learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
           selectedChildId={selectedChild?.id}
           basePath="/parent/courses"
         />
@@ -76,8 +78,21 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       />
 
       <SectionCard eyebrow="Programmes" title={`${selectedChild.name}'s courses`}>
-        <div className={`grid gap-4 lg:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           {selectedChild.courses.map((course) => (
+            <Link
+              key={`${course.id}-tab`}
+              href={`/parent/courses?child=${selectedChild.id}&course=${course.id}`}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${
+                selectedCourse?.id === course.id ? "bg-[#22304a] text-white" : "border border-[#eadfce] bg-white text-[#22304a]"
+              }`}
+            >
+              {course.title}
+            </Link>
+          ))}
+        </div>
+        <div className={`grid gap-4 lg:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+          {selectedChild.courses.filter((course) => course.id === selectedCourse?.id).map((course) => (
             <div key={course.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-xl font-semibold text-[#22304a]">{course.title}</h3>
@@ -238,8 +253,21 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       </SectionCard>
 
       <SectionCard eyebrow="Curriculum" title="Whole programme plan">
-        <div className={`space-y-5 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           {selectedChild.courses.map((course) => (
+            <Link
+              key={`${course.id}-curriculum-tab`}
+              href={`/parent/courses?child=${selectedChild.id}&course=${course.id}`}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${
+                selectedCourse?.id === course.id ? "bg-[#22304a] text-white" : "border border-[#eadfce] bg-white text-[#22304a]"
+              }`}
+            >
+              {course.title}
+            </Link>
+          ))}
+        </div>
+        <div className={`space-y-5 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+          {selectedChild.courses.filter((course) => course.id === selectedCourse?.id).map((course) => (
             <div key={`${course.id}-curriculum`} className="rounded-[24px] bg-[#fbf6ef] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h3 className="text-xl font-semibold text-[#22304a]">{course.title}</h3>

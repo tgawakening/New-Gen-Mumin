@@ -8,7 +8,7 @@ import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/l
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
   FamilyDashboardFrame,
-  InfoList,
+  CompactList,
   MetricGrid,
   SectionCard,
   formatWeekday,
@@ -64,21 +64,25 @@ export default async function StudentDashboardPage() {
 
           <SectionCard eyebrow="Learning" title="Courses and current work" icon="book">
             <div className={`grid gap-4 lg:grid-cols-3 ${child.accessLocked ? "opacity-60" : ""}`}>
-              <InfoList
-                items={child.courses.slice(0, 4).map((course) => `${course.title} - ${course.meetingCount} slots`)}
+              <CompactList
+                items={child.courses.slice(0, 4).map((course) => ({
+                  label: course.title,
+                  meta: `${course.meetingCount} weekly slots`,
+                  icon: "book",
+                }))}
                 emptyLabel="Courses will appear here once enrollment is active."
               />
-              <InfoList
+              <CompactList
                 items={child.assignments.slice(0, 4).map((assignment) => {
                   const due = assignment.dueDate ? assignment.dueDate.toLocaleDateString("en-GB") : "No due date";
-                  return `${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
+                  return { label: assignment.title, meta: `${assignment.status.replace(/_/g, " ")} - ${due}`, icon: "pen" };
                 })}
                 emptyLabel="Tasks will appear here."
               />
-              <InfoList
+              <CompactList
                 items={child.quizzes.slice(0, 4).map((quiz) => {
                   const score = quiz.latestScore === null ? "Awaiting score" : `${quiz.latestScore} pts`;
-                  return `${quiz.title} - ${score}`;
+                  return { label: quiz.title, meta: score, icon: "sparkles" };
                 })}
                 emptyLabel="Quizzes will appear here."
               />
@@ -135,19 +139,23 @@ export default async function StudentDashboardPage() {
           </SectionCard>
 
           <SectionCard eyebrow="Growth" title="Growth summary" icon="star">
-            <InfoList
+            <CompactList
               items={[
-                `Trait - ${child.journalMonthlySummary.mostConsistentTrait}`,
-                `Skill - ${child.journalMonthlySummary.strongestSkillArea}`,
-                `Leadership - ${child.journalMonthlySummary.leadershipDevelopmentScore}/5`,
+                { label: child.journalMonthlySummary.mostConsistentTrait, meta: "Trait", icon: "star" },
+                { label: child.journalMonthlySummary.strongestSkillArea, meta: "Skill", icon: "chart" },
+                { label: `${child.journalMonthlySummary.leadershipDevelopmentScore}/5`, meta: "Leadership", icon: "sparkles" },
               ]}
               emptyLabel="Growth summary will appear here."
             />
           </SectionCard>
 
           <SectionCard eyebrow="Recognition" title="Badges" icon="trophy">
-            <InfoList
-              items={child.badges.slice(0, 2).map((badge) => `${badge.title} - ${badge.status === "earned" ? "Earned" : "In progress"}`)}
+            <CompactList
+              items={child.badges.slice(0, 2).map((badge) => ({
+                label: badge.title,
+                meta: badge.status === "earned" ? "Earned" : "In progress",
+                icon: "trophy",
+              }))}
               emptyLabel="Badges will appear here."
             />
           </SectionCard>

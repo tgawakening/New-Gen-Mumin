@@ -376,6 +376,31 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                       <li key={highlight}>- {highlight}</li>
                     ))}
                   </ul>
+                  <div className="mt-3 space-y-2">
+                    {term.highlights.map((highlight, index) => {
+                      const weekLabel = `${term.title} Week ${index + 1}`;
+                      const weekLessons = selectedLessonUpdates.filter((update) => update.weekLabel === weekLabel);
+                      return (
+                        <details key={weekLabel} className="rounded-[16px] bg-[#fbf6ef] px-3 py-2">
+                          <summary className="cursor-pointer text-xs font-semibold text-[#22304a]">
+                            {weekLabel} - {highlight}
+                          </summary>
+                          <div className="mt-2 space-y-2">
+                            {weekLessons.map((lesson) => (
+                              <div key={lesson.id} className="rounded-[14px] bg-white px-3 py-2 text-sm">
+                                <p className="font-semibold text-[#22304a]">{lesson.topic}</p>
+                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#617184]">{lesson.summary}</p>
+                                <AttachmentGrid attachments={lesson.attachments} />
+                              </div>
+                            ))}
+                            {!weekLessons.length ? (
+                              <p className="text-xs leading-5 text-[#6d7785]">Lessons will appear here after teacher publishing.</p>
+                            ) : null}
+                          </div>
+                        </details>
+                      );
+                    })}
+                  </div>
                 </details>
               ))}
             </div>
