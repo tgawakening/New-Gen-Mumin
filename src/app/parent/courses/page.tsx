@@ -106,8 +106,18 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
               {course.strapline ? <p className="mt-2 text-sm text-[#5f6b7a]">{course.strapline}</p> : null}
               <div className="mt-3 grid gap-2 text-sm text-[#5f6b7a] sm:grid-cols-2">
                 <p>Started: {formatDate(course.startedAt)}</p>
-                <p>Weekly slots: {course.meetingCount}</p>
-              </div>
+              <p>Weekly slots: {course.meetingCount}</p>
+            </div>
+              {course.roomAssignment?.roomName || course.roomAssignment?.roomCode ? (
+                <div className="mt-4 rounded-[18px] border border-[#c7dff5] bg-[#eef6ff] p-4 text-sm text-[#2a4f72]">
+                  <p className="font-semibold text-[#22304a]">Zoom room/group for this child</p>
+                  <p className="mt-1">{course.roomAssignment.roomName ?? "Assigned room"}</p>
+                  {course.roomAssignment.roomCode ? <p className="mt-1">Room code: {course.roomAssignment.roomCode}</p> : null}
+                  {course.roomAssignment.teacherName ? <p className="mt-1">Teacher: {course.roomAssignment.teacherName}</p> : null}
+                  {course.roomAssignment.level ? <p className="mt-1">Level: {course.roomAssignment.level}</p> : null}
+                  {course.roomAssignment.instructions ? <p className="mt-2 leading-6">{course.roomAssignment.instructions}</p> : null}
+                </div>
+              ) : null}
               {course.upcomingSessions.length ? (
                 <div className="mt-4 rounded-[18px] bg-[#22304a] p-4 text-white">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">

@@ -4,6 +4,7 @@ import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { getLiveClassAudienceGroup } from "@/lib/live-classes/service";
+import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 import {
   genMCoreOutcomes,
@@ -64,6 +65,7 @@ type ChildCourseSummary = {
     weekLabel: string | null;
   }>;
   upcomingSessions: ChildScheduleSummary[];
+  roomAssignment: StudentRoomAssignment | null;
 };
 
 type ChildScheduleSummary = {
@@ -951,6 +953,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
         upcomingSessions: schedule
           .filter((entry) => entry.title === enrollment.program.title || entry.title.startsWith("Whole Gen-Mumin:"))
           .slice(0, 3),
+        roomAssignment: getStudentRoomAssignment(child.learningNotes, enrollment.program.id),
       })),
     schedule,
     nextClass: schedule[0] ?? null,

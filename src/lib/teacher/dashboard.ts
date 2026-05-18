@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { cleanLiveClassTitle, getLiveClassAudienceLabel } from "@/lib/live-classes/service";
+import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 
 const ACTIVE_STUDENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
 
@@ -44,6 +45,7 @@ export type TeacherDashboardData = {
       name: string;
       email: string;
       enrollmentStatus: string;
+      roomAssignment: StudentRoomAssignment | null;
     }>;
   }>;
   quizzes: Array<{
@@ -285,6 +287,7 @@ export async function getTeacherDashboardData(userId: string) {
                 `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim(),
               email: enrollment.student.user.email,
               enrollmentStatus: enrollment.status.replace(/_/g, " "),
+              roomAssignment: getStudentRoomAssignment(enrollment.student.learningNotes, assignment.program.id),
             },
           ]),
       ).values(),

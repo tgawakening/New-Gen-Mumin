@@ -246,6 +246,16 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
               <p>Started: {formatDate(selectedCourse.startedAt)}</p>
               <p>Weekly slots: {selectedCourse.meetingCount}</p>
             </div>
+            {selectedCourse.roomAssignment?.roomName || selectedCourse.roomAssignment?.roomCode ? (
+              <div className="mt-4 rounded-[18px] border border-[#c7dff5] bg-[#eef6ff] p-4 text-sm text-[#2a4f72]">
+                <p className="font-semibold text-[#22304a]">Your Zoom room/group</p>
+                <p className="mt-1">{selectedCourse.roomAssignment.roomName ?? "Assigned room"}</p>
+                {selectedCourse.roomAssignment.roomCode ? <p className="mt-1">Room code: {selectedCourse.roomAssignment.roomCode}</p> : null}
+                {selectedCourse.roomAssignment.teacherName ? <p className="mt-1">Teacher: {selectedCourse.roomAssignment.teacherName}</p> : null}
+                {selectedCourse.roomAssignment.level ? <p className="mt-1">Level: {selectedCourse.roomAssignment.level}</p> : null}
+                {selectedCourse.roomAssignment.instructions ? <p className="mt-2 leading-6">{selectedCourse.roomAssignment.instructions}</p> : null}
+              </div>
+            ) : null}
 
             {selectedCourse.upcomingSessions.length ? (
               <div className="mt-4 rounded-[18px] bg-[#22304a] p-4 text-white">

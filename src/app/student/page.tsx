@@ -25,6 +25,9 @@ export default async function StudentDashboardPage() {
   await ensureStudentLiveClassReminders(session.user.id);
   const notifications = await getUnreadNotifications(session.user.id, 3);
   const child = dashboard.child;
+  const nextClassRoom = child.nextClass
+    ? child.courses.find((course) => course.title === child.nextClass?.title)?.roomAssignment ?? null
+    : null;
 
   return (
     <FamilyDashboardFrame
@@ -123,6 +126,17 @@ export default async function StudentDashboardPage() {
                   meetingUrl={child.nextClass.meetingUrl}
                   accessLocked={child.accessLocked}
                 />
+                {nextClassRoom ? (
+                  <div className="mt-4 rounded-2xl bg-white/10 p-3 text-sm">
+                    <p className="font-semibold">Room/group</p>
+                    <p className="mt-1 text-white/80">
+                      {nextClassRoom.roomName}
+                      {nextClassRoom.roomCode
+                        ? ` - ${nextClassRoom.roomCode}`
+                        : ""}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <p className="text-sm leading-7 text-[#5f6b7a]">Your class schedule will appear here once assigned.</p>
