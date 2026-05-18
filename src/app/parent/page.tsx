@@ -119,37 +119,39 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
               </div>
             </SectionCard>
 
-            <SectionCard eyebrow="Teacher updates" title="Daily work and weekly tasks" icon="pen">
-              <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
-                <InfoList
-                  items={selectedChild.lessonUpdates.slice(0, 5).map(
-                    (update) =>
-                      `${update.programTitle} - ${update.topic} - ${formatWeekday(update.lessonDate.getDay())} - ${update.teacherName ?? "Teacher update"}`,
-                  )}
-                  emptyLabel="Teacher lesson updates will appear here once daily content starts being posted."
-                />
-                <InfoList
-                  items={selectedChild.assignments.slice(0, 5).map((assignment) => {
-                    const due = assignment.dueDate
-                      ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
-                      : "No due date yet";
-                    return `${assignment.programTitle} - ${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
-                  })}
-                  emptyLabel="Weekly tasks and homework will appear here once teachers publish them."
-                />
-              </div>
-            </SectionCard>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
+              <SectionCard eyebrow="Teacher updates" title="Daily work and weekly tasks" icon="pen">
+                <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+                  <InfoList
+                    items={selectedChild.lessonUpdates.slice(0, 5).map(
+                      (update) =>
+                        `${update.programTitle} - ${update.topic} - ${formatWeekday(update.lessonDate.getDay())} - ${update.teacherName ?? "Teacher update"}`,
+                    )}
+                    emptyLabel="Teacher lesson updates will appear here once daily content starts being posted."
+                  />
+                  <InfoList
+                    items={selectedChild.assignments.slice(0, 5).map((assignment) => {
+                      const due = assignment.dueDate
+                        ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
+                        : "No due date yet";
+                      return `${assignment.programTitle} - ${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
+                    })}
+                    emptyLabel="Weekly tasks and homework will appear here once teachers publish them."
+                  />
+                </div>
+              </SectionCard>
 
-            <SectionCard eyebrow="Weekly journal" title="Growth summary" icon="chart">
-              <CompactList
-                items={[
-                  { label: selectedChild.journalMonthlySummary.mostConsistentTrait, meta: "Most consistent trait", icon: "star" },
-                  { label: selectedChild.journalMonthlySummary.strongestSkillArea, meta: "Strongest skill area", icon: "chart" },
-                  { label: `${selectedChild.journalMonthlySummary.leadershipDevelopmentScore}/5`, meta: "Leadership score", icon: "sparkles" },
-                ]}
-                emptyLabel="Monthly journal growth will appear here."
-              />
-            </SectionCard>
+              <SectionCard eyebrow="Weekly journal" title="Growth summary" icon="chart">
+                <CompactList
+                  items={[
+                    { label: selectedChild.journalMonthlySummary.mostConsistentTrait, meta: "Most consistent trait", icon: "star" },
+                    { label: selectedChild.journalMonthlySummary.strongestSkillArea, meta: "Strongest skill area", icon: "chart" },
+                    { label: `${selectedChild.journalMonthlySummary.leadershipDevelopmentScore}/5`, meta: "Leadership score", icon: "sparkles" },
+                  ]}
+                  emptyLabel="Monthly journal growth will appear here."
+                />
+              </SectionCard>
+            </div>
           </div>
 
           <div className="space-y-6">
