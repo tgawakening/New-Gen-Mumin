@@ -93,7 +93,7 @@ function teacherDisplayName(teacher: { user: { firstName: string; lastName: stri
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
 }
 
-async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string) {
+async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string, teacherEmail: string) {
   if (!input.createZoomMeeting) return null;
 
   return createRecurringZoomMeeting({
@@ -108,6 +108,7 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
     muteUponEntry: input.muteUponEntry,
     autoRecording: input.autoRecording,
     passcode: input.passcode,
+    alternativeHosts: [teacherEmail],
   });
 }
 
@@ -144,6 +145,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
         muteUponEntry: input.muteUponEntry,
         autoRecording: input.autoRecording,
         passcode: input.passcode,
+        alternativeHosts: teachers.map((teacher) => teacher.user.email),
       })
     : null;
 
@@ -211,7 +213,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
 
-  const meeting = await createZoomMeetingForTeacher(input, program.title);
+  const meeting = await createZoomMeetingForTeacher(input, program.title, teacher.user.email);
 
   const schedule = await db.classSchedule.create({
     data: {

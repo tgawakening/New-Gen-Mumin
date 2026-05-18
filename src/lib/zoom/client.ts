@@ -14,6 +14,7 @@ type ZoomMeetingPayload = {
   muteUponEntry?: boolean;
   autoRecording?: "none" | "local" | "cloud";
   passcode?: string;
+  alternativeHosts?: string[];
 };
 
 type ZoomMeetingResponse = {
@@ -130,6 +131,7 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
           mute_upon_entry: payload.muteUponEntry ?? true,
           auto_recording: payload.autoRecording ?? "cloud",
           password: payload.passcode || undefined,
+          alternative_hosts: payload.alternativeHosts?.filter(Boolean).join(",") || undefined,
         },
       }),
       cache: "no-store",
