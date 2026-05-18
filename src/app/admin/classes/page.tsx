@@ -553,13 +553,22 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                   </div>
                   <div className="flex flex-wrap gap-2 xl:justify-end">
                     {schedule.meetingUrl ? (
-                      <Link
-                        href={schedule.meetingUrl}
-                        target="_blank"
-                        className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
-                      >
-                        Open link
-                      </Link>
+                      <>
+                        <Link
+                          href={`/admin/classes/${schedule.id}/start`}
+                          target="_blank"
+                          className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
+                        >
+                          Start as host
+                        </Link>
+                        <Link
+                          href={schedule.meetingUrl}
+                          target="_blank"
+                          className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
+                        >
+                          Public link
+                        </Link>
+                      </>
                     ) : null}
                     {!schedule.meetingUrl ? (
                       <form action={syncZoomAction}>
