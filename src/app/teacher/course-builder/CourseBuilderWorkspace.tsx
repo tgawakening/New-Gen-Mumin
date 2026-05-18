@@ -229,6 +229,57 @@ export function CourseBuilderWorkspace({
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
+  async function resolveBuilderScheduleId(input: {
+    scheduleId: string;
+    teacherUserId: string;
+    programId: string;
+    fallbackTitle: string;
+  }) {
+    const providedScheduleId = cleanOptional(input.scheduleId);
+    if (providedScheduleId) {
+      const schedule = await db.classSchedule.findFirst({
+        where: {
+          id: providedScheduleId,
+          teacher: { userId: input.teacherUserId },
+        },
+      });
+      if (schedule) return schedule.id;
+    }
+
+    const teacher = await db.teacherProfile.findUnique({
+      where: { userId: input.teacherUserId },
+      include: { user: true, programAssignments: true },
+    });
+    if (!teacher || !teacher.programAssignments.some((assignment) => assignment.programId === input.programId)) {
+      throw new Error("Choose a valid programme before saving.");
+    }
+
+    const existing = await db.classSchedule.findFirst({
+      where: {
+        programId: input.programId,
+        teacherId: teacher.id,
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    if (existing) return existing.id;
+
+    const created = await db.classSchedule.create({
+      data: {
+        programId: input.programId,
+        teacherId: teacher.id,
+        createdByUserId: input.teacherUserId,
+        title: input.fallbackTitle,
+        weekday: 6,
+        startTime: "16:00",
+        endTime: "17:00",
+        timezone: teacher.user.timezone ?? "Europe/London",
+        meetingProvider: "Course Builder",
+      },
+    });
+
+    return created.id;
+  }
+
   function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; moduleId?: string; weekId?: string; moduleComposer?: boolean; weekComposer?: boolean; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
@@ -265,12 +316,20 @@ export function CourseBuilderWorkspace({
     const videoFiles = getUploadFiles(formData, "videoFile");
     const attachmentFiles = getUploadFiles(formData, "lessonFiles");
 
-    if (!scheduleId || !lessonDateRaw || !topic || !summary) {
+    if (!lessonDateRaw || !topic || !summary) {
       throw new Error("Please complete class, lesson date, topic, and summary before publishing.");
     }
 
-    const schedule = dashboard.classes.find((entry) => entry.id === scheduleId);
-    if (!schedule) throw new Error("Choose a valid class schedule.");
+    const resolvedScheduleId = await resolveBuilderScheduleId({
+      scheduleId,
+      teacherUserId,
+      programId: selectedProgramId,
+      fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
+    });
+    const schedule = dashboard.classes.find((entry) => entry.id === resolvedScheduleId) ?? {
+      id: resolvedScheduleId,
+      programId: selectedProgramId,
+    };
     const lessonFolderName = ["Lessons", weekLabel || topic].filter(Boolean).join(" / ");
     const attachments = [
       ...(await uploadBuilderAttachments({
@@ -304,7 +363,7 @@ export function CourseBuilderWorkspace({
       [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
 
     const lessonPayload = {
-      scheduleId,
+      scheduleId: resolvedScheduleId,
       teacherUserId,
       lessonDate: new Date(lessonDateRaw),
       topic,
@@ -388,15 +447,19 @@ export function CourseBuilderWorkspace({
     const title = String(formData.get("title") || "").trim();
     const description = String(formData.get("description") || "").trim();
 
-    if (!scheduleId || !termId || !title) {
+    if (!termId || !title) {
       throw new Error("Please add a title before saving.");
     }
 
-    const schedule = dashboard.classes.find((entry) => entry.id === scheduleId);
-    if (!schedule) throw new Error("Choose a valid programme schedule first.");
+    const resolvedScheduleId = await resolveBuilderScheduleId({
+      scheduleId,
+      teacherUserId: session.user.id,
+      programId: selectedProgramId,
+      fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
+    });
 
     const payload = {
-      scheduleId,
+      scheduleId: resolvedScheduleId,
       teacherUserId: session.user.id,
       lessonDate: new Date(),
       topic: title,
