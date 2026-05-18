@@ -84,6 +84,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
         {
           programId: String(formData.get("programId") || ""),
           title: String(formData.get("title") || ""),
+          startDate: String(formData.get("startDate") || ""),
           weekday: Number(formData.get("weekday") || 0),
           startTime: String(formData.get("startTime") || "16:00"),
           endTime: String(formData.get("endTime") || "17:00"),
@@ -185,6 +186,11 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                 <option key={option.value} value={option.value}>{option.label}</option>
               ))}
             </select>
+          </label>
+
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Start date
+            <input name="startDate" type="date" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
           </label>
 
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">

@@ -482,6 +482,7 @@ export function CourseBuilderWorkspace({
       {
         programId: String(formData.get("programId") || ""),
         title: String(formData.get("title") || ""),
+        startDate: String(formData.get("startDate") || ""),
         weekday: Number(formData.get("weekday") || 0),
         startTime: String(formData.get("startTime") || "16:00"),
         endTime: String(formData.get("endTime") || "17:00"),
@@ -1582,6 +1583,10 @@ export function CourseBuilderWorkspace({
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Optional passcode
                       <input name="passcode" placeholder="Leave blank for Zoom default" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Start date
+                      <input name="startDate" type="date" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                     </label>
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Day

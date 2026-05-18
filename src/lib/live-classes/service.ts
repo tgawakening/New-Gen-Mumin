@@ -18,6 +18,7 @@ export type CreateLiveClassInput = {
   teacherId?: string;
   teacherIds?: string[];
   title: string;
+  startDate?: string;
   weekday: number;
   startTime: string;
   endTime: string;
@@ -68,6 +69,17 @@ function withAudienceMarker(title: string, group: LiveClassAudienceGroup) {
   return `${cleanLiveClassTitle(title)}${audienceTitleMarker(group)}`;
 }
 
+function getScheduleStartDate(input: Pick<CreateLiveClassInput, "weekday" | "startTime" | "startDate">) {
+  if (input.startDate) {
+    const parsed = new Date(`${input.startDate}T00:00:00`);
+    if (!Number.isNaN(parsed.getTime())) {
+      return nextWeeklyOccurrence(input.weekday, input.startTime, parsed);
+    }
+  }
+
+  return nextWeeklyOccurrence(input.weekday, input.startTime);
+}
+
 function countryMatchesAudience(countryCode: string | null | undefined, group: LiveClassAudienceGroup) {
   const code = (countryCode ?? "").trim().toUpperCase();
   if (group === "ALL") return true;
@@ -88,7 +100,7 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
     topic: cleanLiveClassTitle(input.title),
     agenda: `${programTitle} teacher-created live session`,
     timezone: input.timezone,
-    startTime: toZoomLocalStartTime(nextWeeklyOccurrence(input.weekday, input.startTime)),
+    startTime: toZoomLocalStartTime(getScheduleStartDate(input)),
     durationMinutes: durationMinutes(input.startTime, input.endTime),
     weekday: input.weekday,
     waitingRoom: input.waitingRoom,
@@ -124,7 +136,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
             ? "Whole Gen-Mumin live session"
             : `${programs[0].title} live class`,
         timezone: input.timezone,
-        startTime: toZoomLocalStartTime(nextWeeklyOccurrence(input.weekday, input.startTime)),
+        startTime: toZoomLocalStartTime(getScheduleStartDate(input)),
         durationMinutes: durationMinutes(input.startTime, input.endTime),
         weekday: input.weekday,
         waitingRoom: input.waitingRoom,
@@ -156,7 +168,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
           meetingUrl: meeting?.join_url ?? null,
           meetingId: meeting?.id ? String(meeting.id) : null,
           recurringSeriesId: meeting?.id ? String(meeting.id) : null,
-          startsOn: nextWeeklyOccurrence(input.weekday, input.startTime),
+          startsOn: getScheduleStartDate(input),
         },
       });
 
@@ -215,7 +227,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
       meetingUrl: meeting?.join_url ?? null,
       meetingId: meeting?.id ? String(meeting.id) : null,
       recurringSeriesId: meeting?.id ? String(meeting.id) : null,
-      startsOn: nextWeeklyOccurrence(input.weekday, input.startTime),
+      startsOn: getScheduleStartDate(input),
     },
   });
 
