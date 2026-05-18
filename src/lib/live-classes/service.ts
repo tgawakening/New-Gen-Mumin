@@ -107,10 +107,29 @@ function teacherDisplayName(teacher: { user: { firstName: string; lastName: stri
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
 }
 
+function isAlternativeHostLicenseError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("alternative host") && (message.includes("not licensed") || message.includes("code 1115"));
+}
+
+async function createZoomMeetingAllowingBasicUsers(payload: Parameters<typeof createRecurringZoomMeeting>[0]) {
+  try {
+    return await createRecurringZoomMeeting(payload);
+  } catch (error) {
+    if (!payload.alternativeHosts?.length || !isAlternativeHostLicenseError(error)) {
+      throw error;
+    }
+
+    const { alternativeHosts: _alternativeHosts, ...meetingWithoutAlternativeHosts } = payload;
+    return createRecurringZoomMeeting(meetingWithoutAlternativeHosts);
+  }
+}
+
 async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string, teacherEmail: string) {
   if (!input.createZoomMeeting) return null;
 
-  return createRecurringZoomMeeting({
+  return createZoomMeetingAllowingBasicUsers({
     topic: cleanLiveClassTitle(input.title),
     agenda: `${programTitle} teacher-created live session`,
     timezone: input.timezone,
@@ -144,7 +163,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
   if (!programs.length) throw new Error("Program not found.");
 
   const meeting = input.createZoomMeeting
-    ? await createRecurringZoomMeeting({
+    ? await createZoomMeetingAllowingBasicUsers({
         topic: cleanLiveClassTitle(input.title),
         agenda:
           input.programId === WHOLE_GEN_MUMIN_PROGRAM_ID
