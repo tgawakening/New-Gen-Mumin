@@ -72,6 +72,11 @@ function getUploadFiles(formData: FormData, fieldName: string) {
   return formData.getAll(fieldName).filter((entry): entry is File => entry instanceof File && entry.size > 0);
 }
 
+function errorRedirect(path: string, message: string) {
+  const query = new URLSearchParams({ tab: "plan", success: "curriculum_error", message });
+  return `${path}?${query.toString()}`;
+}
+
 function DisabledLessonActions() {
   return (
     <div className="flex flex-wrap gap-2">
@@ -437,57 +442,68 @@ export function CourseBuilderWorkspace({
 
     const session = await getCurrentSession();
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    let contentType: "Module" | "WeekTopic" = "WeekTopic";
 
-    const scheduleId = String(formData.get("scheduleId") || "");
-    const structureId = cleanOptional(formData.get("structureId"));
-    const requestedContentType = String(formData.get("contentType") || "");
-    const contentType = requestedContentType === "Module" ? "Module" : "WeekTopic";
-    const termId = cleanOptional(formData.get("termId"));
-    const weekLabel = cleanOptional(formData.get("weekLabel"));
-    const title = String(formData.get("title") || "").trim();
-    const description = String(formData.get("description") || "").trim();
+    try {
+      const scheduleId = String(formData.get("scheduleId") || "");
+      const structureId = cleanOptional(formData.get("structureId"));
+      const requestedContentType = String(formData.get("contentType") || "");
+      contentType = requestedContentType === "Module" ? "Module" : "WeekTopic";
+      const rawTermId = cleanOptional(formData.get("termId"));
+      const termId =
+        contentType === "Module" && !structureId && rawTermId?.startsWith("custom-module-")
+          ? `custom-module-${Date.now()}`
+          : rawTermId;
+      const weekLabel = cleanOptional(formData.get("weekLabel"));
+      const title = String(formData.get("title") || "").trim();
+      const description = String(formData.get("description") || "").trim();
 
-    if (!termId || !title) {
-      throw new Error("Please add a title before saving.");
-    }
+      if (!termId || !title) {
+        throw new Error("Please add a curriculum title before saving.");
+      }
 
-    const resolvedScheduleId = await resolveBuilderScheduleId({
-      scheduleId,
-      teacherUserId: session.user.id,
-      programId: selectedProgramId,
-      fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
-    });
-
-    const payload = {
-      scheduleId: resolvedScheduleId,
-      teacherUserId: session.user.id,
-      lessonDate: new Date(),
-      topic: title,
-      summary: buildLessonPayload({
-        topic: title,
-        summary: description || title,
-        instructorName: dashboard.teacherName,
-        programmeFocus: selectedProgramme?.title,
-        weekLabel,
-        termId,
-        contentType,
-        attachments: [],
-      }),
-      homework: null,
-    };
-
-    if (structureId) {
-      const existing = await db.lessonLog.findFirst({
-        where: { id: structureId, teacherUserId: session.user.id },
+      const resolvedScheduleId = await resolveBuilderScheduleId({
+        scheduleId,
+        teacherUserId: session.user.id,
+        programId: selectedProgramId,
+        fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
       });
-      if (!existing) throw new Error("This curriculum item is not available for this teacher.");
-      await db.lessonLog.update({ where: { id: existing.id }, data: payload });
-    } else {
-      await db.lessonLog.create({ data: payload });
+
+      const payload = {
+        scheduleId: resolvedScheduleId,
+        teacherUserId: session.user.id,
+        lessonDate: new Date(),
+        topic: title,
+        summary: buildLessonPayload({
+          topic: title,
+          summary: description || title,
+          instructorName: dashboard.teacherName,
+          programmeFocus: selectedProgramme?.title,
+          weekLabel,
+          termId,
+          contentType,
+          attachments: [],
+        }),
+        homework: null,
+      };
+
+      if (structureId) {
+        const existing = await db.lessonLog.findFirst({
+          where: { id: structureId, teacherUserId: session.user.id },
+        });
+        if (!existing) throw new Error("This curriculum item is not available for this teacher.");
+        await db.lessonLog.update({ where: { id: existing.id }, data: payload });
+      } else {
+        await db.lessonLog.create({ data: payload });
+      }
+
+      revalidatePath("/teacher/course-builder");
+      if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Curriculum changes could not be saved.";
+      redirect(errorRedirect(successRedirectPath, message));
     }
 
-    revalidatePath("/teacher/course-builder");
-    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
     redirect(`${successRedirectPath}?tab=plan&success=${contentType === "Module" ? "module_saved" : "week_saved"}`);
   }
 
@@ -802,8 +818,10 @@ export function CourseBuilderWorkspace({
                   ? "Module title updated successfully."
                   : success === "week_saved"
                     ? "Week/topic saved successfully."
-                    : success === "curriculum_deleted"
-                      ? "Curriculum item deleted successfully."
+            : success === "curriculum_deleted"
+              ? "Curriculum item deleted successfully."
+              : success === "curriculum_error"
+                ? "Curriculum changes could not be saved."
             : success === "task"
               ? "Student task published with resources."
               : success === "quiz"
@@ -818,7 +836,7 @@ export function CourseBuilderWorkspace({
                         ? "Please choose a file before uploading material."
               : undefined
         }
-        tone={success === "material_error" ? "error" : "success"}
+        tone={success === "material_error" || success === "curriculum_error" ? "error" : "success"}
       />
 
       <TeacherSection eyebrow="Programme map" title={selectedProgramme ? `${selectedProgramme.title} builder` : "Choose your programme workspace"}>
