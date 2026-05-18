@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { updateRoomAssignmentNotes } from "@/lib/live-classes/rooms";
@@ -13,13 +14,50 @@ import {
   formatWeekday,
 } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
-export default async function TeacherClassesPage() {
+type PageProps = {
+  searchParams?: Promise<{
+    notice?: string;
+    tone?: string;
+  }>;
+};
+
+function noticeHref(message: string, tone: "success" | "error" = "success") {
+  const params = new URLSearchParams({ notice: message, tone });
+  return `/teacher/classes?${params.toString()}`;
+}
+
+function parseCsvLine(line: string) {
+  const values: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export default async function TeacherClassesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
+  const params = searchParams ? await searchParams : {};
 
   async function saveRoomAssignmentAction(formData: FormData) {
     "use server";
@@ -71,12 +109,94 @@ export default async function TeacherClassesPage() {
     redirect("/teacher/classes?updated=room");
   }
 
+  async function importRoomAssignmentsAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+
+    const teacher = await db.teacherProfile.findUnique({
+      where: { userId: currentSession.user.id },
+      include: { user: true, programAssignments: true },
+    });
+    if (!teacher) redirect("/teacher-registration");
+
+    const programId = String(formData.get("programId") || "");
+    if (!teacher.programAssignments.some((assignment) => assignment.programId === programId)) {
+      redirect(noticeHref("You can only import rooms for your assigned programmes.", "error"));
+    }
+
+    const subject = String(formData.get("subject") || "");
+    const roomName = String(formData.get("roomName") || "");
+    const teacherName = String(formData.get("teacherName") || `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim());
+    const level = String(formData.get("level") || "");
+    const instructions = String(formData.get("instructions") || "");
+    const csv = String(formData.get("csv") || "");
+
+    const enrollments = await db.enrollment.findMany({
+      where: {
+        programId,
+        status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
+      },
+      include: {
+        student: { include: { user: true } },
+      },
+    });
+
+    let updated = 0;
+    const rows = csv
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const row of rows) {
+      const [serial, , , childName] = parseCsvLine(row);
+      if (!serial || !childName || serial.toLowerCase().includes("serial")) continue;
+
+      const targetName = normalizeText(childName);
+      const enrollment = enrollments.find((entry) => {
+        const names = [
+          entry.student.displayName,
+          `${entry.student.user.firstName} ${entry.student.user.lastName ?? ""}`,
+          entry.student.user.firstName,
+        ].map(normalizeText);
+        return names.some((name) => name === targetName || name.includes(targetName) || targetName.includes(name));
+      });
+      if (!enrollment) continue;
+
+      await db.studentProfile.update({
+        where: { id: enrollment.studentId },
+        data: {
+          learningNotes: updateRoomAssignmentNotes(enrollment.student.learningNotes, programId, {
+            subject,
+            roomName,
+            roomCode: serial,
+            teacherName,
+            level,
+            instructions,
+          }),
+        },
+      });
+      updated += 1;
+    }
+
+    revalidatePath("/teacher/classes");
+    revalidatePath("/admin/classes");
+    revalidatePath("/parent");
+    revalidatePath("/parent/courses");
+    revalidatePath("/student");
+    revalidatePath("/student/courses");
+    redirect(noticeHref(`Imported ${updated} room assignments.`));
+  }
+
   return (
     <TeacherDashboardFrame
       title="Classes"
       subtitle="See assigned programmes, student rosters, and class-specific teaching load."
       navItems={getTeacherNavItems()}
     >
+      <ActionToast message={params.notice} tone={params.tone} />
+
       <TeacherMetricGrid
         metrics={[
           { label: "Classes", value: String(dashboard.classes.length), hint: "Assigned timetable entries." },
@@ -85,6 +205,55 @@ export default async function TeacherClassesPage() {
           { label: "Upcoming", value: String(dashboard.metrics.upcomingLessons), hint: "Weekly upcoming sessions." },
         ]}
       />
+
+      <TeacherSection eyebrow="Student rooms" title="Bulk import Zoom room codes">
+        <p className="text-sm leading-6 text-[#617184]">
+          Paste spreadsheet rows as CSV: serial,parent/location,location,child name,age. The serial number becomes the room code shown to students.
+        </p>
+        <form action={importRoomAssignmentsAction} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Programme
+            <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+              {dashboard.rosters.map((roster) => (
+                <option key={roster.programId} value={roster.programId}>{roster.title}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Subject
+            <input name="subject" placeholder="Arabic / Tajweed" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Room name
+            <input name="roomName" required placeholder="Arabic 8:00pm Abubakar" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Teacher
+            <input name="teacherName" defaultValue={dashboard.teacherName} placeholder="Teacher name" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-2">
+            Level/group
+            <input name="level" placeholder="Beginner / Age 8-10 / Pakistan-UK group" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-2">
+            Student instructions
+            <input name="instructions" placeholder="Join the Zoom link, then use/request your assigned room code." className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
+          <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-4">
+            CSV rows
+            <textarea
+              name="csv"
+              rows={7}
+              required
+              placeholder={'GMB1-001,Nida & Asif,Scotland,Mustafa,12\nGMB1-002,Farah,Pakistan,Yashur Muhammad,10'}
+              className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm"
+            />
+          </label>
+          <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
+            Import room codes
+          </button>
+        </form>
+      </TeacherSection>
 
       <TeacherSection eyebrow="Class list" title="Assigned classes and rosters">
         <div className="space-y-4">
