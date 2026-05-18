@@ -1677,8 +1677,8 @@ export function CourseBuilderWorkspace({
                       <input name="endTime" type="time" defaultValue="17:00" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                     </label>
                     <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
-                      <input name="waitingRoom" type="checkbox" defaultChecked className="h-4 w-4" />
-                      Waiting room
+                      <input name="waitingRoom" type="checkbox" className="h-4 w-4" />
+                      Waiting room / admit manually
                     </label>
                     <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
                       <input name="muteUponEntry" type="checkbox" defaultChecked className="h-4 w-4" />
