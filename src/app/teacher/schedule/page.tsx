@@ -71,7 +71,7 @@ export default async function TeacherSchedulePage() {
                   target="_blank"
                   className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
                 >
-                  Open meeting
+                  Start session
                 </Link>
               ) : null}
             </div>

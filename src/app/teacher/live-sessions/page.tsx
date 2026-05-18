@@ -271,12 +271,24 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {entry.meetingUrl ? "Linked to Zoom" : "Zoom link unavailable. Please recreate after Zoom scopes are fixed."}
               </p>
-              <form action={deleteSessionAction} className="mt-4">
-                <input type="hidden" name="scheduleId" value={entry.id} />
-                <FormSubmitButton pendingLabel="Removing..." className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646] disabled:cursor-wait disabled:opacity-70">
-                  Remove session
-                </FormSubmitButton>
-              </form>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {entry.meetingUrl ? (
+                  <a
+                    href={entry.meetingUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Start session
+                  </a>
+                ) : null}
+                <form action={deleteSessionAction}>
+                  <input type="hidden" name="scheduleId" value={entry.id} />
+                  <FormSubmitButton pendingLabel="Removing..." className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646] disabled:cursor-wait disabled:opacity-70">
+                    Remove session
+                  </FormSubmitButton>
+                </form>
+              </div>
             </div>
           ))}
         </div>
