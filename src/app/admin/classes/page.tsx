@@ -126,6 +126,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
           muteUponEntry: formData.get("muteUponEntry") === "on",
           autoRecording: String(formData.get("autoRecording") || "cloud") as "none" | "local" | "cloud",
           passcode: String(formData.get("passcode") || ""),
+          showToStudents: formData.get("showToStudents") === "on",
         },
         currentSession.user.id,
       );
@@ -447,6 +448,10 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
             <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a] xl:col-span-4">
               <input name="createZoomMeeting" type="checkbox" defaultChecked className="h-4 w-4" />
               Create recurring Zoom meeting immediately
+            </label>
+            <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a] xl:col-span-4">
+              <input name="showToStudents" type="checkbox" defaultChecked className="h-4 w-4" />
+              Show this session in student and parent dashboards
             </label>
             <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
               <input name="waitingRoom" type="checkbox" defaultChecked className="h-4 w-4" />

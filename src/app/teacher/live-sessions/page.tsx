@@ -96,6 +96,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           muteUponEntry: formData.get("muteUponEntry") === "on",
           autoRecording: String(formData.get("autoRecording") || "cloud") as "none" | "local" | "cloud",
           passcode: String(formData.get("passcode") || ""),
+          showToStudents: formData.get("showToStudents") === "on",
         },
         currentSession.user.id,
       );
@@ -246,6 +247,10 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
             <input name="joinBeforeHost" type="checkbox" className="h-4 w-4" />
             Join before host
+          </label>
+          <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a] xl:col-span-4">
+            <input name="showToStudents" type="checkbox" defaultChecked className="h-4 w-4" />
+            Show this session in student and parent dashboards
           </label>
 
           <FormSubmitButton pendingLabel="Creating Zoom session..." className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 xl:col-span-4 xl:justify-self-start">

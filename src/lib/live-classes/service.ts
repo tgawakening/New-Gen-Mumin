@@ -30,6 +30,7 @@ export type CreateLiveClassInput = {
   autoRecording?: "none" | "local" | "cloud";
   passcode?: string;
   audienceGroup?: LiveClassAudienceGroup;
+  showToStudents?: boolean;
 };
 
 const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
@@ -38,6 +39,7 @@ const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
   US_CA: "USA and Canada students",
   AU: "Australia students",
 };
+const HIDDEN_FROM_STUDENTS_MARKER = "[Students:hidden]";
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -50,12 +52,20 @@ function audienceTitleMarker(group: LiveClassAudienceGroup) {
 }
 
 export function cleanLiveClassTitle(title: string) {
-  return title.replace(/\s*\[Audience:(PK_UK|US_CA|AU)\]\s*$/u, "").trim();
+  return title
+    .replace(/\s*\[Students:hidden\]\s*/gu, " ")
+    .replace(/\s*\[Audience:(PK_UK|US_CA|AU)\]\s*/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 export function getLiveClassAudienceGroup(title: string): LiveClassAudienceGroup {
-  const match = title.match(/\[Audience:(PK_UK|US_CA|AU)\]\s*$/u);
+  const match = title.match(/\[Audience:(PK_UK|US_CA|AU)\]/u);
   return match ? (match[1] as LiveClassAudienceGroup) : "ALL";
+}
+
+export function isLiveClassVisibleToStudents(title: string) {
+  return !title.includes(HIDDEN_FROM_STUDENTS_MARKER);
 }
 
 export function getLiveClassAudienceLabel(titleOrGroup: string) {
@@ -67,6 +77,10 @@ export function getLiveClassAudienceLabel(titleOrGroup: string) {
 
 function withAudienceMarker(title: string, group: LiveClassAudienceGroup) {
   return `${cleanLiveClassTitle(title)}${audienceTitleMarker(group)}`;
+}
+
+function withClassMarkers(title: string, group: LiveClassAudienceGroup, showToStudents = true) {
+  return `${withAudienceMarker(title, group)}${showToStudents ? "" : ` ${HIDDEN_FROM_STUDENTS_MARKER}`}`;
 }
 
 function getScheduleStartDate(input: Pick<CreateLiveClassInput, "weekday" | "startTime" | "startDate">) {
@@ -158,9 +172,10 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
           programId: program.id,
           teacherId: teacher.id,
           createdByUserId,
-          title: withAudienceMarker(
+          title: withClassMarkers(
             input.programId === WHOLE_GEN_MUMIN_PROGRAM_ID ? `Whole Gen-Mumin: ${input.title}` : input.title,
             audienceGroup,
+            input.showToStudents,
           ),
           weekday: input.weekday,
           startTime: input.startTime,
@@ -220,7 +235,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
       programId: input.programId,
       teacherId: teacher.id,
       createdByUserId: teacherUserId,
-      title: withAudienceMarker(input.title, audienceGroup),
+      title: withClassMarkers(input.title, audienceGroup, input.showToStudents),
       weekday: input.weekday,
       startTime: input.startTime,
       endTime: input.endTime,
@@ -386,7 +401,7 @@ export async function notifyEnrolledUsers(scheduleId: string) {
       teacher: { include: { user: true } },
     },
   });
-  if (!schedule || !schedule.meetingUrl) return;
+  if (!schedule || !schedule.meetingUrl || !isLiveClassVisibleToStudents(schedule.title)) return;
 
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
   const visibleTitle = cleanLiveClassTitle(schedule.title);

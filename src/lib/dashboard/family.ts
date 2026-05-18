@@ -3,7 +3,7 @@ import "server-only";
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { getLiveClassAudienceGroup } from "@/lib/live-classes/service";
+import { getLiveClassAudienceGroup, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 import {
@@ -608,7 +608,11 @@ function mapScheduleEntries(enrollments: any[], childCountryCode?: string | null
   const entries = enrollments
     .flatMap((enrollment) =>
       enrollment.program.schedules
-        .filter((schedule: any) => countryMatchesLiveAudience(childCountryCode, getLiveClassAudienceGroup(schedule.title)))
+        .filter(
+          (schedule: any) =>
+            isLiveClassVisibleToStudents(schedule.title) &&
+            countryMatchesLiveAudience(childCountryCode, getLiveClassAudienceGroup(schedule.title)),
+        )
         .map((schedule: any) => ({
           id: schedule.id,
           title: enrollment.program.title,
