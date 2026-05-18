@@ -40,6 +40,7 @@ const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
   AU: "Australia students",
 };
 const HIDDEN_FROM_STUDENTS_MARKER = "[Students:hidden]";
+const VISIBLE_TO_STUDENTS_MARKER = "[Students:visible]";
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -54,6 +55,7 @@ function audienceTitleMarker(group: LiveClassAudienceGroup) {
 export function cleanLiveClassTitle(title: string) {
   return title
     .replace(/\s*\[Students:hidden\]\s*/gu, " ")
+    .replace(/\s*\[Students:visible\]\s*/gu, " ")
     .replace(/\s*\[Audience:(PK_UK|US_CA|AU)\]\s*/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
@@ -65,7 +67,7 @@ export function getLiveClassAudienceGroup(title: string): LiveClassAudienceGroup
 }
 
 export function isLiveClassVisibleToStudents(title: string) {
-  return !title.includes(HIDDEN_FROM_STUDENTS_MARKER);
+  return title.includes(VISIBLE_TO_STUDENTS_MARKER) && !title.includes(HIDDEN_FROM_STUDENTS_MARKER);
 }
 
 export function getLiveClassAudienceLabel(titleOrGroup: string) {
@@ -80,7 +82,7 @@ function withAudienceMarker(title: string, group: LiveClassAudienceGroup) {
 }
 
 function withClassMarkers(title: string, group: LiveClassAudienceGroup, showToStudents = true) {
-  return `${withAudienceMarker(title, group)}${showToStudents ? "" : ` ${HIDDEN_FROM_STUDENTS_MARKER}`}`;
+  return `${withAudienceMarker(title, group)} ${showToStudents ? VISIBLE_TO_STUDENTS_MARKER : HIDDEN_FROM_STUDENTS_MARKER}`;
 }
 
 function getScheduleStartDate(input: Pick<CreateLiveClassInput, "weekday" | "startTime" | "startDate">) {
