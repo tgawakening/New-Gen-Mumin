@@ -279,7 +279,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                     rel="noreferrer"
                     className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Start session
+                    Start as host
                   </a>
                 ) : null}
                 {entry.meetingUrl ? (

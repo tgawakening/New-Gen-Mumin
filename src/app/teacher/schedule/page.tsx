@@ -66,13 +66,22 @@ export default async function TeacherSchedulePage() {
                 Students: {entry.activeEnrollments} active
               </p>
               {entry.meetingUrl ? (
-                <Link
-                  href={entry.meetingUrl}
-                  target="_blank"
-                  className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Start session
-                </Link>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Link
+                    href={`/teacher/live-sessions/${entry.id}/start`}
+                    target="_blank"
+                    className="inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
+                  >
+                    Start as host
+                  </Link>
+                  <Link
+                    href={entry.meetingUrl}
+                    target="_blank"
+                    className="inline-flex rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
+                  >
+                    Public link
+                  </Link>
+                </div>
               ) : null}
             </div>
           ))}

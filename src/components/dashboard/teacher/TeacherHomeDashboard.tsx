@@ -36,13 +36,38 @@ export function TeacherHomeDashboard({
             title="Upcoming classes"
             action={!adminPreview ? <Link href="/teacher/schedule" className={linkClass}>Open schedule</Link> : null}
           >
-            <TeacherInfoList
-              items={dashboard.classes.slice(0, 5).map(
-                (entry) =>
-                  `${entry.title} - ${formatWeekday(entry.weekday)} - ${entry.startTime}-${entry.endTime} - ${entry.activeEnrollments} active learners`,
-              )}
-              emptyLabel="Assigned classes will appear here after teacher onboarding."
-            />
+            {dashboard.classes.length ? (
+              <div className="space-y-3">
+                {dashboard.classes.slice(0, 5).map((entry) => (
+                  <div key={entry.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b]">
+                    <p className="font-semibold text-[#22304a]">{entry.title}</p>
+                    <p className="mt-1">
+                      {formatWeekday(entry.weekday)} - {entry.startTime}-{entry.endTime} - {entry.activeEnrollments} active learners
+                    </p>
+                    {!adminPreview && entry.meetingUrl ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link
+                          href={`/teacher/live-sessions/${entry.id}/start`}
+                          target="_blank"
+                          className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
+                        >
+                          Start as host
+                        </Link>
+                        <Link
+                          href={entry.meetingUrl}
+                          target="_blank"
+                          className="rounded-full border border-[#cdd9e4] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
+                        >
+                          Public link
+                        </Link>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <TeacherInfoList items={[]} emptyLabel="Assigned classes will appear here after teacher onboarding." />
+            )}
           </TeacherSection>
 
           <TeacherSection

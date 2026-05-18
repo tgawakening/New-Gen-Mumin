@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
@@ -263,9 +264,29 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
               <div key={roster.programId} className="rounded-[24px] bg-[#fbf6ef] p-5">
                 <h3 className="text-xl font-semibold text-[#22304a]">{roster.title}</h3>
                 {classInfo ? (
+                  <>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
                     {formatWeekday(classInfo.weekday)} • {classInfo.startTime}-{classInfo.endTime} • {classInfo.timezone}
                   </p>
+                    {classInfo.meetingUrl ? (
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link
+                          href={`/teacher/live-sessions/${classInfo.id}/start`}
+                          target="_blank"
+                          className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
+                        >
+                          Start as host
+                        </Link>
+                        <Link
+                          href={classInfo.meetingUrl}
+                          target="_blank"
+                          className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
+                        >
+                          Public link
+                        </Link>
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
                   {roster.students.map((student) => (
