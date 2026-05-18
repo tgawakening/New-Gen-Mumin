@@ -10,7 +10,9 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import {
   approveTeacherLiveClass,
+  cleanLiveClassTitle,
   createLiveClass,
+  getLiveClassAudienceLabel,
   PENDING_ZOOM_PROVIDER,
   rejectTeacherLiveClass,
   syncScheduleToZoom,
@@ -347,8 +349,9 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                 <div key={schedule.id} className="rounded-[20px] border border-[#efd9b6] bg-white p-5">
                   <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_auto] xl:items-center">
                     <div>
-                      <p className="font-semibold text-[#22304a]">{schedule.title}</p>
+                      <p className="font-semibold text-[#22304a]">{cleanLiveClassTitle(schedule.title)}</p>
                       <p className="mt-1 text-sm text-[#617184]">{schedule.program.title}</p>
+                      <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{getLiveClassAudienceLabel(schedule.title)}</p>
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p>{formatTeacherName(schedule.teacher)}</p>
@@ -384,8 +387,9 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
               <div key={schedule.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
                 <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_0.8fr_auto] xl:items-center">
                   <div>
-                    <p className="font-semibold text-[#22304a]">{schedule.title}</p>
+                    <p className="font-semibold text-[#22304a]">{cleanLiveClassTitle(schedule.title)}</p>
                     <p className="mt-1 text-sm text-[#617184]">{schedule.program.title}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{getLiveClassAudienceLabel(schedule.title)}</p>
                   </div>
                   <div className="text-sm text-[#22304a]">
                     <p>{formatTeacherName(schedule.teacher)}</p>

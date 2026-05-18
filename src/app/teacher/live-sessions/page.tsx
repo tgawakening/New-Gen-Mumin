@@ -39,14 +39,14 @@ function noticeHref(message: string, tone: "success" | "error" = "success") {
 function statusNotice(status?: string) {
   if (status === "zoom-linked") {
     return {
-      message: "Zoom live session created successfully. Admin has been notified.",
+      message: "Zoom live session created successfully. Admin has been notified for monitoring.",
       tone: "success",
     };
   }
   if (status === "zoom-pending") {
     return {
-      message: "Session saved successfully. Zoom join link is pending admin sync.",
-      tone: "success",
+      message: "Zoom session could not be created. Please check the Zoom app scopes and try again.",
+      tone: "error",
     };
   }
   if (status === "deleted") {
@@ -90,6 +90,11 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           timezone: String(formData.get("timezone") || "Europe/London"),
           createZoomMeeting: true,
           audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
+          waitingRoom: formData.get("waitingRoom") === "on",
+          joinBeforeHost: formData.get("joinBeforeHost") === "on",
+          muteUponEntry: formData.get("muteUponEntry") === "on",
+          autoRecording: String(formData.get("autoRecording") || "cloud") as "none" | "local" | "cloud",
+          passcode: String(formData.get("passcode") || ""),
         },
         currentSession.user.id,
       );
@@ -137,7 +142,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   return (
     <TeacherDashboardFrame
       title="Live Sessions"
-      subtitle="Create Zoom sessions for your assigned programmes. Admin is notified automatically for monitoring."
+      subtitle="Create Zoom sessions directly for your assigned programmes. Admin is notified automatically for monitoring."
       navItems={getTeacherNavItems()}
     >
       <ActionToast message={params.notice ?? codedNotice?.message} tone={params.tone ?? codedNotice?.tone} />
@@ -145,8 +150,8 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       <TeacherMetricGrid
         metrics={[
           { label: "Assigned programs", value: String(dashboard.rosters.length), hint: "Programmes you can request sessions for." },
-          { label: "Existing sessions", value: String(dashboard.classes.length), hint: "Approved or pending live classes." },
-          { label: "Students", value: String(dashboard.metrics.students), hint: "Learners reached after approval." },
+          { label: "Existing sessions", value: String(dashboard.classes.length), hint: "Live classes created from your dashboard." },
+          { label: "Students", value: String(dashboard.metrics.students), hint: "Learners reached by your sessions." },
           { label: "Publishing", value: "Direct", hint: "Admin receives a notification." },
         ]}
       />
@@ -210,6 +215,33 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
             </select>
           </label>
 
+          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+            Auto recording
+            <select name="autoRecording" defaultValue="cloud" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+              <option value="cloud">Cloud recording</option>
+              <option value="local">Local recording</option>
+              <option value="none">No automatic recording</option>
+            </select>
+          </label>
+
+          <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-3">
+            Optional passcode
+            <input name="passcode" placeholder="Leave blank for Zoom default" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+          </label>
+
+          <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+            <input name="waitingRoom" type="checkbox" defaultChecked className="h-4 w-4" />
+            Waiting room
+          </label>
+          <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+            <input name="muteUponEntry" type="checkbox" defaultChecked className="h-4 w-4" />
+            Mute on entry
+          </label>
+          <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+            <input name="joinBeforeHost" type="checkbox" className="h-4 w-4" />
+            Join before host
+          </label>
+
           <FormSubmitButton pendingLabel="Creating Zoom session..." className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70 xl:col-span-4 xl:justify-self-start">
             Create Zoom session
           </FormSubmitButton>
@@ -231,7 +263,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
               </p>
               <p className="mt-1 text-sm text-[#5f6b7a]">{entry.audience}</p>
               <p className="mt-2 text-sm text-[#5f6b7a]">
-                {entry.meetingUrl ? "Linked to Zoom" : "Zoom link pending admin sync"}
+                {entry.meetingUrl ? "Linked to Zoom" : "Zoom link unavailable. Please recreate after Zoom scopes are fixed."}
               </p>
               <form action={deleteSessionAction} className="mt-4">
                 <input type="hidden" name="scheduleId" value={entry.id} />

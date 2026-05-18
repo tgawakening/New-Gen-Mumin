@@ -140,7 +140,7 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
     const details = await readZoomError(response);
     const guidance =
       response.status === 401
-        ? " Check that the Zoom app is Server-to-Server OAuth, has meeting write scopes, is activated, and that ZOOM_HOST_USER_ID belongs to the same Zoom account."
+        ? " Check that the Zoom app is Server-to-Server OAuth, is activated, has scopes meeting:write:meeting and meeting:write:meeting:admin, and that ZOOM_HOST_USER_ID belongs to the same Zoom account."
         : "";
     throw new Error(`Zoom meeting creation failed: ${details}.${guidance}`);
   }

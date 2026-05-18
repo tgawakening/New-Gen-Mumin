@@ -488,6 +488,11 @@ export function CourseBuilderWorkspace({
         timezone: String(formData.get("timezone") || "Europe/London"),
         createZoomMeeting: true,
         audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
+        waitingRoom: formData.get("waitingRoom") === "on",
+        joinBeforeHost: formData.get("joinBeforeHost") === "on",
+        muteUponEntry: formData.get("muteUponEntry") === "on",
+        autoRecording: String(formData.get("autoRecording") || "cloud") as "none" | "local" | "cloud",
+        passcode: String(formData.get("passcode") || ""),
       },
       session.user.id,
     );
@@ -1567,6 +1572,18 @@ export function CourseBuilderWorkspace({
                       </select>
                     </label>
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Auto recording
+                      <select name="autoRecording" defaultValue="cloud" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        <option value="cloud">Cloud recording</option>
+                        <option value="local">Local recording</option>
+                        <option value="none">No automatic recording</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Optional passcode
+                      <input name="passcode" placeholder="Leave blank for Zoom default" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Day
                       <select name="weekday" defaultValue="6" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                         {WEEKDAYS.map((weekday, index) => (
@@ -1589,6 +1606,18 @@ export function CourseBuilderWorkspace({
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       End
                       <input name="endTime" type="time" defaultValue="17:00" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+                      <input name="waitingRoom" type="checkbox" defaultChecked className="h-4 w-4" />
+                      Waiting room
+                    </label>
+                    <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+                      <input name="muteUponEntry" type="checkbox" defaultChecked className="h-4 w-4" />
+                      Mute on entry
+                    </label>
+                    <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
+                      <input name="joinBeforeHost" type="checkbox" className="h-4 w-4" />
+                      Join before host
                     </label>
                   </div>
                   <FormSubmitButton pendingLabel="Creating session..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">
