@@ -8,6 +8,7 @@ import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { updateRoomAssignmentNotes } from "@/lib/live-classes/rooms";
 import {
   approveTeacherLiveClass,
   cleanLiveClassTitle,
@@ -52,6 +53,30 @@ function formatTeacherName(teacher: {
   user: { firstName: string; lastName: string | null; email: string };
 }) {
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
+}
+
+function parseCsvLine(line: string) {
+  const values: string[] = [];
+  let current = "";
+  let quoted = false;
+
+  for (const char of line) {
+    if (char === '"') {
+      quoted = !quoted;
+    } else if (char === "," && !quoted) {
+      values.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+
+  values.push(current.trim());
+  return values;
+}
+
+function normalizeText(value: string | null | undefined) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 export default async function AdminClassesPage({ searchParams }: PageProps) {
@@ -171,6 +196,76 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       redirect(noticeHref(message, "error"));
     }
     redirect(noticeHref("Teacher Zoom meeting request declined.", "danger"));
+  }
+
+  async function importRoomAssignmentsAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/classes");
+
+    const programId = String(formData.get("programId") || "");
+    const subject = String(formData.get("subject") || "");
+    const roomName = String(formData.get("roomName") || "");
+    const teacherName = String(formData.get("teacherName") || "");
+    const level = String(formData.get("level") || "");
+    const instructions = String(formData.get("instructions") || "");
+    const csv = String(formData.get("csv") || "");
+
+    const enrollments = await db.enrollment.findMany({
+      where: {
+        programId,
+        status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
+      },
+      include: {
+        student: { include: { user: true } },
+      },
+    });
+
+    let updated = 0;
+    const rows = csv
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const row of rows) {
+      const [serial, , , childName] = parseCsvLine(row);
+      if (!serial || !childName || serial.toLowerCase().includes("serial")) continue;
+
+      const targetName = normalizeText(childName);
+      const enrollment = enrollments.find((entry) => {
+        const names = [
+          entry.student.displayName,
+          `${entry.student.user.firstName} ${entry.student.user.lastName ?? ""}`,
+          entry.student.user.firstName,
+        ].map(normalizeText);
+        return names.some((name) => name === targetName || name.includes(targetName) || targetName.includes(name));
+      });
+      if (!enrollment) continue;
+
+      await db.studentProfile.update({
+        where: { id: enrollment.studentId },
+        data: {
+          learningNotes: updateRoomAssignmentNotes(enrollment.student.learningNotes, programId, {
+            subject,
+            roomName,
+            roomCode: serial,
+            teacherName,
+            level,
+            instructions,
+          }),
+        },
+      });
+      updated += 1;
+    }
+
+    revalidatePath("/admin/classes");
+    revalidatePath("/teacher/classes");
+    revalidatePath("/parent");
+    revalidatePath("/parent/courses");
+    revalidatePath("/student");
+    revalidatePath("/student/courses");
+    redirect(noticeHref(`Imported ${updated} room assignments.`));
   }
 
   const [programs, teachers, schedules] = await Promise.all([
@@ -342,6 +437,57 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
 
             <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
               Create live class
+            </button>
+          </form>
+        </section>
+
+        <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#6f7d8f]">Student rooms</p>
+          <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Bulk import Zoom room codes</h2>
+          <p className="mt-2 text-sm leading-6 text-[#617184]">
+            Paste spreadsheet rows as CSV: serial,parent/location,location,child name,age. The serial number becomes the LMS room code shown to the student.
+          </p>
+          <form action={importRoomAssignmentsAction} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Programme
+              <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
+                {programs.map((program) => (
+                  <option key={program.id} value={program.id}>{program.title}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Subject
+              <input name="subject" placeholder="Arabic / Tajweed" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Room name
+              <input name="roomName" required placeholder="Arabic 8:00pm Abubakar" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a]">
+              Teacher
+              <input name="teacherName" placeholder="Abubakar Sadique" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-2">
+              Level/group
+              <input name="level" placeholder="Beginner / Age 8-10 / Pakistan-UK group" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-2">
+              Student instructions
+              <input name="instructions" placeholder="Join the Zoom link, then enter/request your assigned room code." className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
+            </label>
+            <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-4">
+              CSV rows
+              <textarea
+                name="csv"
+                rows={8}
+                required
+                placeholder={'GMB1-001,Nida & Asif,Scotland,Mustafa,12\nGMB1-002,Farah,Pakistan,Yashur Muhammad,10'}
+                className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm"
+              />
+            </label>
+            <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
+              Import room codes
             </button>
           </form>
         </section>
