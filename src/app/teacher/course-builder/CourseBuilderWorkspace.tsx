@@ -125,6 +125,7 @@ async function uploadBuilderAttachments(input: {
       folderName: input.folderName,
       publishToStudents: true,
       purpose: input.purpose,
+      suppressNotifications: input.purpose === "lesson",
       file,
     });
 
@@ -228,6 +229,16 @@ async function resolveBuilderScheduleId(input: {
   });
 
   return created.id;
+}
+
+async function ensureLessonTextColumns() {
+  try {
+    await db.$executeRawUnsafe("ALTER TABLE `LessonLog` MODIFY `summary` LONGTEXT NOT NULL, MODIFY `homework` LONGTEXT NULL");
+    await db.$executeRawUnsafe("ALTER TABLE `Assignment` MODIFY `instructions` LONGTEXT NULL");
+  } catch {
+    // The deploy database may already have these column types or may restrict DDL.
+    // If it cannot be changed here, the normal Prisma error below still reports the publish failure.
+  }
 }
 
 export function CourseBuilderWorkspace({
@@ -387,6 +398,8 @@ export function CourseBuilderWorkspace({
       const finalHomework =
         [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
 
+      await ensureLessonTextColumns();
+
       const lessonPayload = {
         scheduleId: resolvedScheduleId,
         teacherUserId,
@@ -425,6 +438,36 @@ export function CourseBuilderWorkspace({
       } else {
         await db.lessonLog.create({ data: lessonPayload });
       }
+
+      const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+      const learnerUsers = await db.enrollment.findMany({
+        where: {
+          programId: schedule.programId,
+          status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
+        },
+        select: { student: { select: { userId: true } } },
+      });
+      const notifications = [
+        {
+          userId: teacherUserId,
+          title: lessonLogId ? "Lesson updated" : "Lesson published",
+          body: `${topic} is now saved in ${selectedProgramme?.title ?? selectedRoster?.title ?? "the programme"}.`,
+          href: `${successRedirectPath}?tab=plan`,
+        },
+        ...admins.map((admin) => ({
+          userId: admin.id,
+          title: lessonLogId ? "Teacher updated a lesson" : "Teacher published a lesson",
+          body: `${dashboard.teacherName} saved ${topic} for ${selectedProgramme?.title ?? selectedRoster?.title ?? "a programme"}.`,
+          href: "/admin/classes",
+        })),
+        ...learnerUsers.map((learner) => ({
+          userId: learner.student.userId,
+          title: "New lesson published",
+          body: `${topic} is available in ${selectedProgramme?.title ?? selectedRoster?.title ?? "your course"}.`,
+          href: "/parent/courses",
+        })),
+      ];
+      await db.notification.createMany({ data: notifications, skipDuplicates: true });
 
       revalidatePath("/teacher");
       revalidatePath("/teacher/course-builder");

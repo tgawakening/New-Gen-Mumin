@@ -181,6 +181,7 @@ export async function uploadTeacherMaterial(input: {
   folderName?: string;
   publishToStudents?: boolean;
   purpose?: "material" | "lesson" | "task";
+  suppressNotifications?: boolean;
 }) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: input.teacherUserId },
@@ -228,7 +229,7 @@ export async function uploadTeacherMaterial(input: {
   const admins = await db.user.findMany({ where: { role: "ADMIN" } });
   if (admins.length) {
     await shareFileWithDashboardAdmins(uploaded.id, admins);
-    await db.notification.createMany({
+    if (!input.suppressNotifications) await db.notification.createMany({
       data: admins.map((admin) => ({
         userId: admin.id,
         title:
@@ -252,10 +253,10 @@ export async function uploadTeacherMaterial(input: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "reader", type: "anyone" }),
     });
-    await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title);
+    if (!input.suppressNotifications) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title);
   }
 
-  await db.notification.create({
+  if (!input.suppressNotifications) await db.notification.create({
     data: {
       userId: input.teacherUserId,
       title: purpose === "task" ? "Task resource uploaded" : purpose === "lesson" ? "Lesson resource uploaded" : "Material uploaded",

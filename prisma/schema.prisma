@@ -548,8 +548,8 @@ model LessonLog {
   teacherUserId String
   lessonDate    DateTime
   topic         String
-  summary       String
-  homework      String?
+  summary       String   @db.LongText
+  homework      String?  @db.LongText
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -627,7 +627,7 @@ model Assignment {
   id           String   @id @default(cuid())
   programId    String
   title        String
-  instructions String?
+  instructions String?  @db.LongText
   dueDate      DateTime?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
