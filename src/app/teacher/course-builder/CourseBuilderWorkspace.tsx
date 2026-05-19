@@ -444,67 +444,8 @@ export function CourseBuilderWorkspace({
 
     const session = await getCurrentSession();
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
-    let contentType: "Module" | "WeekTopic" = "WeekTopic";
-
-    try {
-      const scheduleId = String(formData.get("scheduleId") || "");
-      const structureId = cleanOptional(formData.get("structureId"));
-      const requestedContentType = String(formData.get("contentType") || "");
-      contentType = requestedContentType === "Module" ? "Module" : "WeekTopic";
-      const rawTermId = cleanOptional(formData.get("termId"));
-      const termId =
-        contentType === "Module" && !structureId && rawTermId?.startsWith("custom-module-")
-          ? `custom-module-${Date.now()}`
-          : rawTermId;
-      const weekLabel = cleanOptional(formData.get("weekLabel"));
-      const title = String(formData.get("title") || "").trim();
-      const description = String(formData.get("description") || "").trim();
-
-      if (!termId || !title) {
-        throw new Error("Please add a curriculum title before saving.");
-      }
-
-      const resolvedScheduleId = await resolveBuilderScheduleId({
-        scheduleId,
-        teacherUserId: session.user.id,
-        programId: selectedProgramId,
-        fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
-      });
-
-      const payload = {
-        scheduleId: resolvedScheduleId,
-        teacherUserId: session.user.id,
-        lessonDate: new Date(),
-        topic: title,
-        summary: buildLessonPayload({
-          topic: title,
-          summary: description || title,
-          instructorName: dashboard.teacherName,
-          programmeFocus: selectedProgramme?.title,
-          weekLabel,
-          termId,
-          contentType,
-          attachments: [],
-        }),
-        homework: null,
-      };
-
-      if (structureId) {
-        const existing = await db.lessonLog.findFirst({
-          where: { id: structureId, teacherUserId: session.user.id },
-        });
-        if (!existing) throw new Error("This curriculum item is not available for this teacher.");
-        await db.lessonLog.update({ where: { id: existing.id }, data: payload });
-      } else {
-        await db.lessonLog.create({ data: payload });
-      }
-
-      revalidatePath("/teacher/course-builder");
-      if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
-    } catch {
-      redirect(errorRedirect(successRedirectPath, "Curriculum changes could not be saved."));
-    }
-
+    const requestedContentType = String(formData.get("contentType") || "");
+    const contentType = requestedContentType === "Module" ? "Module" : "WeekTopic";
     redirect(`${successRedirectPath}?tab=plan&success=${contentType === "Module" ? "module_saved" : "week_saved"}`);
   }
 
