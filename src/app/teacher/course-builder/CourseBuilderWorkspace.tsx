@@ -331,99 +331,104 @@ export function CourseBuilderWorkspace({
     const attachmentFiles = getUploadFiles(formData, "lessonFiles");
 
     if (!lessonDateRaw || !topic || !summary) {
-      throw new Error("Please complete class, lesson date, topic, and summary before publishing.");
+      redirect(errorRedirect(successRedirectPath, "Please complete lesson date, title, and overview before publishing."));
     }
 
-    const resolvedScheduleId = await resolveBuilderScheduleId({
-      scheduleId,
-      teacherUserId,
-      programId: selectedProgramId,
-      fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
-    });
-    const schedule = dashboard.classes.find((entry) => entry.id === resolvedScheduleId) ?? {
-      id: resolvedScheduleId,
-      programId: selectedProgramId,
-    };
-    const lessonFolderName = ["Lessons", weekLabel || topic].filter(Boolean).join(" / ");
-    const attachments = [
-      ...(await uploadBuilderAttachments({
-        files: thumbnailFiles,
-        programId: schedule.programId,
+    try {
+      const resolvedScheduleId = await resolveBuilderScheduleId({
+        scheduleId,
         teacherUserId,
-        folderName: `${lessonFolderName} / Thumbnail`,
-        titlePrefix: `${weekLabel || topic} thumbnail`,
-        purpose: "lesson",
-      })),
-      ...(await uploadBuilderAttachments({
-        files: videoFiles,
-        programId: schedule.programId,
-        teacherUserId,
-        folderName: `${lessonFolderName} / Video`,
-        titlePrefix: `${weekLabel || topic} video`,
-        purpose: "lesson",
-      })),
-      ...(await uploadBuilderAttachments({
-        files: attachmentFiles,
-        programId: schedule.programId,
-        teacherUserId,
-        folderName: lessonFolderName,
-        titlePrefix: weekLabel || topic,
-        purpose: "lesson",
-      })),
-    ];
-
-    const combinedResourceLinks = [videoUrl, resourceLinks].filter(Boolean).join("\n");
-    const finalHomework =
-      [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
-
-    const lessonPayload = {
-      scheduleId: resolvedScheduleId,
-      teacherUserId,
-      lessonDate: new Date(lessonDateRaw),
-      topic,
-      summary: buildLessonPayload({
-        topic,
-        summary,
-        instructorName: dashboard.teacherName,
-        programmeFocus: selectedProgramme?.title,
-        lessonObjective,
-        homework,
-        resourceLinks: splitLinks(combinedResourceLinks),
-        parentPrompt: null,
-        weekLabel,
-        termId,
-        contentType: "Lesson",
-        materials: null,
-        attachments,
-      }),
-      homework: finalHomework,
-    };
-
-    if (lessonLogId) {
-      const existing = await db.lessonLog.findFirst({
-        where: {
-          id: lessonLogId,
+        programId: selectedProgramId,
+        fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
+      });
+      const schedule = dashboard.classes.find((entry) => entry.id === resolvedScheduleId) ?? {
+        id: resolvedScheduleId,
+        programId: selectedProgramId,
+      };
+      const lessonFolderName = ["Lessons", weekLabel || topic].filter(Boolean).join(" / ");
+      const attachments = [
+        ...(await uploadBuilderAttachments({
+          files: thumbnailFiles,
+          programId: schedule.programId,
           teacherUserId,
-        },
-      });
-      if (!existing) throw new Error("Lesson is not available for this teacher.");
-      await db.lessonLog.update({
-        where: { id: lessonLogId },
-        data: lessonPayload,
-      });
-    } else {
-      await db.lessonLog.create({ data: lessonPayload });
+          folderName: `${lessonFolderName} / Thumbnail`,
+          titlePrefix: `${weekLabel || topic} thumbnail`,
+          purpose: "lesson",
+        })),
+        ...(await uploadBuilderAttachments({
+          files: videoFiles,
+          programId: schedule.programId,
+          teacherUserId,
+          folderName: `${lessonFolderName} / Video`,
+          titlePrefix: `${weekLabel || topic} video`,
+          purpose: "lesson",
+        })),
+        ...(await uploadBuilderAttachments({
+          files: attachmentFiles,
+          programId: schedule.programId,
+          teacherUserId,
+          folderName: lessonFolderName,
+          titlePrefix: weekLabel || topic,
+          purpose: "lesson",
+        })),
+      ];
+
+      const combinedResourceLinks = [videoUrl, resourceLinks].filter(Boolean).join("\n");
+      const finalHomework =
+        [homework, combinedResourceLinks ? `Resources: ${combinedResourceLinks}` : null].filter(Boolean).join("\n\n") || null;
+
+      const lessonPayload = {
+        scheduleId: resolvedScheduleId,
+        teacherUserId,
+        lessonDate: new Date(lessonDateRaw),
+        topic,
+        summary: buildLessonPayload({
+          topic,
+          summary,
+          instructorName: dashboard.teacherName,
+          programmeFocus: selectedProgramme?.title,
+          lessonObjective,
+          homework,
+          resourceLinks: splitLinks(combinedResourceLinks),
+          parentPrompt: null,
+          weekLabel,
+          termId,
+          contentType: "Lesson",
+          materials: null,
+          attachments,
+        }),
+        homework: finalHomework,
+      };
+
+      if (lessonLogId) {
+        const existing = await db.lessonLog.findFirst({
+          where: {
+            id: lessonLogId,
+            teacherUserId,
+          },
+        });
+        if (!existing) throw new Error("Lesson is not available for this teacher.");
+        await db.lessonLog.update({
+          where: { id: lessonLogId },
+          data: lessonPayload,
+        });
+      } else {
+        await db.lessonLog.create({ data: lessonPayload });
+      }
+
+      revalidatePath("/teacher");
+      revalidatePath("/teacher/course-builder");
+      if (selectedProgrammeSlug) {
+        revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+      }
+      revalidatePath("/parent");
+      revalidatePath("/parent/courses");
+      revalidatePath("/student");
+      revalidatePath("/student/courses");
+    } catch {
+      redirect(errorRedirect(successRedirectPath, "Lesson could not be published. Please try without large files first."));
     }
 
-    revalidatePath("/teacher");
-    revalidatePath("/teacher/course-builder");
-    if (selectedProgrammeSlug) {
-      revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
-    }
-    revalidatePath("/parent");
-    revalidatePath("/parent/courses");
-    revalidatePath("/student");
-    revalidatePath("/student/courses");
     redirect(`${successRedirectPath}?tab=plan&success=${lessonLogId ? "lesson_updated" : "lesson"}`);
   }
 
