@@ -18,7 +18,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ course?: string; submitted?: string }>;
+  searchParams?: Promise<{ course?: string; lesson?: string; submitted?: string }>;
 };
 
 type Attachment = {
@@ -96,6 +96,8 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
   const selectedLessonUpdates = selectedCourse
     ? child.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
     : [];
+  const selectedLesson =
+    selectedLessonUpdates.find((lesson) => lesson.id === params.lesson) ?? selectedLessonUpdates[0] ?? null;
   const selectedAssignments = selectedCourse
     ? child.assignments.filter((assignment) => assignment.programTitle === selectedCourse.title)
     : child.assignments;
@@ -258,7 +260,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
             ) : null}
 
             {selectedCourse.upcomingSessions.length ? (
-              <div className="mt-4 rounded-[18px] bg-[#22304a] p-4 text-white">
+              <div id="student-live-classes" className="mt-4 rounded-[18px] bg-[#22304a] p-4 text-white">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">Upcoming sessions</p>
                 <div className="mt-3 grid gap-3 lg:grid-cols-2">
                   {selectedCourse.upcomingSessions.map((session) => (
@@ -356,69 +358,99 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
 
       {selectedCourse ? (
         <SectionCard eyebrow="Gen-Mumins plan" title={`${selectedCourse.title} curriculum`}>
-          <div className={`rounded-[24px] bg-[#fbf6ef] p-5 ${child.accessLocked ? "opacity-60" : ""}`}>
-            <details className="rounded-[20px] bg-white p-4" open>
-              <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                Quick programme view
-              </summary>
-              <div className="mt-3 grid gap-4 text-sm leading-7 text-[#5f6b7a] xl:grid-cols-2">
-                <ul className="space-y-2">
-                  {selectedCourse.outcomes.slice(0, 4).map((outcome) => (
-                    <li key={outcome}>- {outcome}</li>
-                  ))}
-                </ul>
-                <ul className="space-y-2">
-                  {selectedCourse.weeklySchedule.slice(0, 5).map((item) => (
-                    <li key={item}>- {item}</li>
-                  ))}
-                </ul>
+          <div className={`grid gap-4 rounded-[24px] bg-[#fbf6ef] p-4 lg:grid-cols-[320px_minmax(0,1fr)] ${child.accessLocked ? "opacity-60" : ""}`}>
+            <aside className="max-h-[760px] overflow-y-auto rounded-[20px] bg-white p-3">
+              <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Curriculum tree</p>
+              <div className="mt-3 space-y-2">
+                {selectedCourse.termPlans.map((term) => (
+                  <details key={term.id} className="rounded-[16px] border border-[#eef2f5] bg-[#fffdf9] p-3" open>
+                    <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                      {term.title}
+                      <span className="mt-1 block text-xs font-medium text-[#6d7785]">{term.level} - {term.window}</span>
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {term.highlights.map((highlight, index) => {
+                        const weekLabel = `${term.title} Week ${index + 1}`;
+                        const weekLessons = selectedLessonUpdates.filter((update) => update.weekLabel === weekLabel);
+                        return (
+                          <details key={weekLabel} className="rounded-[14px] bg-[#fbf6ef] p-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-[#22304a]">
+                              {weekLabel}
+                              <span className="mt-1 block font-medium text-[#6d7785]">{highlight}</span>
+                            </summary>
+                            <div className="mt-2 space-y-1">
+                              {weekLessons.map((lesson) => (
+                                <Link
+                                  key={lesson.id}
+                                  href={`/student/courses?course=${selectedCourse.id}&lesson=${lesson.id}`}
+                                  className={`block rounded-xl px-3 py-2 text-xs font-semibold ${
+                                    selectedLesson?.id === lesson.id ? "bg-[#22304a] text-white" : "bg-white text-[#2a76aa]"
+                                  }`}
+                                >
+                                  {lesson.topic}
+                                </Link>
+                              ))}
+                              {!weekLessons.length ? <p className="px-2 py-1 text-xs leading-5 text-[#8a94a3]">No lesson yet</p> : null}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ))}
               </div>
-            </details>
+            </aside>
 
-            <div className="mt-3 grid gap-3 xl:grid-cols-2">
-              {selectedCourse.termPlans.map((term) => (
-                <details key={term.id} className="rounded-[20px] bg-white p-4">
-                  <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                    {term.title} - {term.level} - {term.window}
-                  </summary>
-                  <ul className="mt-3 space-y-2 text-sm leading-7 text-[#5f6b7a]">
-                    {term.highlights.slice(0, 4).map((highlight) => (
-                      <li key={highlight}>- {highlight}</li>
-                    ))}
-                  </ul>
-                  <div className="mt-3 space-y-2">
-                    {term.highlights.map((highlight, index) => {
-                      const weekLabel = `${term.title} Week ${index + 1}`;
-                      const weekLessons = selectedLessonUpdates.filter((update) => update.weekLabel === weekLabel);
-                      return (
-                        <details key={weekLabel} className="rounded-[16px] bg-[#fbf6ef] px-3 py-2">
-                          <summary className="cursor-pointer text-xs font-semibold text-[#22304a]">
-                            {weekLabel} - {highlight}
-                          </summary>
-                          <div className="mt-2 space-y-2">
-                            {weekLessons.map((lesson) => (
-                              <div key={lesson.id} className="rounded-[14px] bg-white px-3 py-2 text-sm">
-                                <p className="font-semibold text-[#22304a]">{lesson.topic}</p>
-                                <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#617184]">{lesson.summary}</p>
-                                <AttachmentGrid attachments={lesson.attachments} />
-                              </div>
-                            ))}
-                            {!weekLessons.length ? (
-                              <p className="text-xs leading-5 text-[#6d7785]">Lessons will appear here after teacher publishing.</p>
-                            ) : null}
-                          </div>
-                        </details>
-                      );
-                    })}
+            <div className="min-w-0 rounded-[20px] bg-white p-4">
+              {selectedLesson ? (
+                <article>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                        {selectedLesson.weekLabel ?? "Lesson"}
+                      </p>
+                      <h3 className="mt-2 text-2xl font-semibold text-[#22304a]">{selectedLesson.topic}</h3>
+                      <p className="mt-2 text-sm text-[#6d7785]">
+                        {formatDate(selectedLesson.lessonDate)} - {selectedLesson.teacherName ?? "Teacher update"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link href="/student/quizzes" className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quizzes</Link>
+                      <a href="#student-assignments" className="rounded-full bg-[#fff4e8] px-3 py-1.5 text-xs font-semibold text-[#b46b1e]">Tasks</a>
+                      <a href="#student-live-classes" className="rounded-full bg-[#eef8f0] px-3 py-1.5 text-xs font-semibold text-[#2c7a48]">Live</a>
+                    </div>
                   </div>
-                </details>
-              ))}
+                  <p className="mt-5 text-sm leading-7 text-[#4d5a6b]">{selectedLesson.summary}</p>
+                  {selectedLesson.lessonObjective ? <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm font-semibold text-[#22304a]">{selectedLesson.lessonObjective}</p> : null}
+                  <AttachmentGrid attachments={selectedLesson.attachments} />
+                  {selectedLesson.resourceLinks.length ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {selectedLesson.resourceLinks.map((resource) => (
+                        <a key={resource} href={resource} target="_blank" className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                          Open resource
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                  {selectedLesson.homework ? (
+                    <div className="mt-4 rounded-[18px] border border-[#eadfce] bg-[#fffdf9] p-4 text-sm leading-7 text-[#4d5a6b]">
+                      <p className="font-semibold text-[#22304a]">Homework / follow-up</p>
+                      <p className="mt-2">{selectedLesson.homework}</p>
+                    </div>
+                  ) : null}
+                </article>
+              ) : (
+                <div className="rounded-[18px] bg-[#fbf6ef] p-5 text-sm leading-7 text-[#5f6b7a]">
+                  Select a lesson from the curriculum tree. Published lessons, thumbnails, videos, slides, and worksheets will open here.
+                </div>
+              )}
             </div>
           </div>
         </SectionCard>
       ) : null}
 
       <SectionCard eyebrow="Assignments" title="Coursework and submissions">
+        <div id="student-assignments" />
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
           {selectedAssignments.map((assignment) => (
             <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5">

@@ -16,7 +16,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; course?: string }>;
+  searchParams?: Promise<{ child?: string; course?: string; lesson?: string }>;
 };
 
 type Attachment = {
@@ -87,6 +87,8 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const selectedLessonUpdates = selectedCourse
     ? selectedChild.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
     : [];
+  const selectedLesson =
+    selectedLessonUpdates.find((lesson) => lesson.id === params?.lesson) ?? selectedLessonUpdates[0] ?? null;
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   if (selectedProgramId) {
     try {
@@ -325,6 +327,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       </SectionCard>
 
       <SectionCard eyebrow="Assignments" title="Coursework tracking">
+        <div id="parent-assignments" />
         <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
           {selectedChild.assignments.map((assignment) => (
             <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
@@ -351,6 +354,99 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         </div>
       </SectionCard>
 
+      {selectedCourse ? (
+        <SectionCard eyebrow="Curriculum" title={`${selectedCourse.title} LMS viewer`}>
+          <div className={`grid gap-4 rounded-[24px] bg-[#fbf6ef] p-4 lg:grid-cols-[320px_minmax(0,1fr)] ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+            <aside className="max-h-[760px] overflow-y-auto rounded-[20px] bg-white p-3">
+              <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Curriculum tree</p>
+              <div className="mt-3 space-y-2">
+                {selectedCourse.termPlans.map((term) => (
+                  <details key={term.id} className="rounded-[16px] border border-[#eef2f5] bg-[#fffdf9] p-3" open>
+                    <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                      {term.title}
+                      <span className="mt-1 block text-xs font-medium text-[#6d7785]">{term.level} - {term.window}</span>
+                    </summary>
+                    <div className="mt-3 space-y-2">
+                      {term.highlights.map((highlight, index) => {
+                        const weekLabel = `${term.title} Week ${index + 1}`;
+                        const weekLessons = selectedLessonUpdates.filter((update) => update.weekLabel === weekLabel);
+                        return (
+                          <details key={weekLabel} className="rounded-[14px] bg-[#fbf6ef] p-2">
+                            <summary className="cursor-pointer text-xs font-semibold text-[#22304a]">
+                              {weekLabel}
+                              <span className="mt-1 block font-medium text-[#6d7785]">{highlight}</span>
+                            </summary>
+                            <div className="mt-2 space-y-1">
+                              {weekLessons.map((lesson) => (
+                                <Link
+                                  key={lesson.id}
+                                  href={`/parent/courses?child=${selectedChild.id}&course=${selectedCourse.id}&lesson=${lesson.id}`}
+                                  className={`block rounded-xl px-3 py-2 text-xs font-semibold ${
+                                    selectedLesson?.id === lesson.id ? "bg-[#22304a] text-white" : "bg-white text-[#2a76aa]"
+                                  }`}
+                                >
+                                  {lesson.topic}
+                                </Link>
+                              ))}
+                              {!weekLessons.length ? <p className="px-2 py-1 text-xs leading-5 text-[#8a94a3]">No lesson yet</p> : null}
+                            </div>
+                          </details>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </aside>
+
+            <div className="min-w-0 rounded-[20px] bg-white p-4">
+              {selectedLesson ? (
+                <article>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                        {selectedLesson.weekLabel ?? "Lesson"}
+                      </p>
+                      <h3 className="mt-2 text-2xl font-semibold text-[#22304a]">{selectedLesson.topic}</h3>
+                      <p className="mt-2 text-sm text-[#6d7785]">
+                        {formatDate(selectedLesson.lessonDate)} - {selectedLesson.teacherName ?? "Teacher update"}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Link href={`/parent/quizzes?child=${selectedChild.id}`} className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quizzes</Link>
+                      <a href="#parent-assignments" className="rounded-full bg-[#fff4e8] px-3 py-1.5 text-xs font-semibold text-[#b46b1e]">Tasks</a>
+                    </div>
+                  </div>
+                  <p className="mt-5 text-sm leading-7 text-[#4d5a6b]">{selectedLesson.summary}</p>
+                  {selectedLesson.lessonObjective ? <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm font-semibold text-[#22304a]">{selectedLesson.lessonObjective}</p> : null}
+                  <AttachmentGrid attachments={selectedLesson.attachments} />
+                  {selectedLesson.resourceLinks.length ? (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {selectedLesson.resourceLinks.map((resource) => (
+                        <a key={resource} href={resource} target="_blank" className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                          Open resource
+                        </a>
+                      ))}
+                    </div>
+                  ) : null}
+                  {selectedLesson.homework ? (
+                    <div className="mt-4 rounded-[18px] border border-[#eadfce] bg-[#fffdf9] p-4 text-sm leading-7 text-[#4d5a6b]">
+                      <p className="font-semibold text-[#22304a]">Homework / follow-up</p>
+                      <p className="mt-2">{selectedLesson.homework}</p>
+                    </div>
+                  ) : null}
+                </article>
+              ) : (
+                <div className="rounded-[18px] bg-[#fbf6ef] p-5 text-sm leading-7 text-[#5f6b7a]">
+                  Select a lesson from the curriculum tree. Published lessons, thumbnails, videos, slides, and worksheets will open here.
+                </div>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {false ? (
       <SectionCard eyebrow="Curriculum" title="Whole programme plan">
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           {selectedChild.courses.map((course) => (
@@ -409,6 +505,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           ))}
         </div>
       </SectionCard>
+      ) : null}
     </FamilyDashboardFrame>
   );
 }
