@@ -11,6 +11,7 @@ export type TeacherDashboardData = {
   profile: {
     bio: string | null;
     specialties: string[];
+    curriculumOverrides: Record<string, { title: string; description: string; weekLabel?: string | null }>;
     timezone: string | null;
     email: string;
     phone: string | null;
@@ -392,13 +393,32 @@ export async function getTeacherDashboardData(userId: string) {
     ),
   );
 
+  const specialtyList = Array.isArray(teacherProfile.specialties)
+    ? teacherProfile.specialties.map(String)
+    : teacherProfile.specialties &&
+        typeof teacherProfile.specialties === "object" &&
+        !Array.isArray(teacherProfile.specialties) &&
+        "list" in teacherProfile.specialties &&
+        Array.isArray(teacherProfile.specialties.list)
+      ? teacherProfile.specialties.list.map(String)
+      : [];
+  const curriculumOverrides =
+    teacherProfile.specialties &&
+    typeof teacherProfile.specialties === "object" &&
+    !Array.isArray(teacherProfile.specialties) &&
+    "curriculumOverrides" in teacherProfile.specialties &&
+    teacherProfile.specialties.curriculumOverrides &&
+    typeof teacherProfile.specialties.curriculumOverrides === "object" &&
+    !Array.isArray(teacherProfile.specialties.curriculumOverrides)
+      ? (teacherProfile.specialties.curriculumOverrides as Record<string, { title: string; description: string; weekLabel?: string | null }>)
+      : {};
+
   return {
     teacherName: `${teacherProfile.user.firstName} ${teacherProfile.user.lastName}`.trim(),
     profile: {
       bio: teacherProfile.bio,
-      specialties: Array.isArray(teacherProfile.specialties)
-        ? teacherProfile.specialties.map(String)
-        : [],
+      specialties: specialtyList,
+      curriculumOverrides,
       timezone: teacherProfile.user.timezone,
       email: teacherProfile.user.email,
       phone:

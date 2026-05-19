@@ -77,6 +77,10 @@ function errorRedirect(path: string, message: string) {
   return `${path}?${query.toString()}`;
 }
 
+function curriculumOverrideKey(programId: string, termId: string, weekLabel: string | null, type: "Module" | "WeekTopic") {
+  return [programId, type, termId, weekLabel ?? ""].join("::");
+}
+
 function DisabledLessonActions() {
   return (
     <div className="flex flex-wrap gap-2">
@@ -446,6 +450,48 @@ export function CourseBuilderWorkspace({
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
     const requestedContentType = String(formData.get("contentType") || "");
     const contentType = requestedContentType === "Module" ? "Module" : "WeekTopic";
+    const termId = cleanOptional(formData.get("termId"));
+    const weekLabel = cleanOptional(formData.get("weekLabel"));
+    const title = String(formData.get("title") || "").trim();
+    const description = String(formData.get("description") || "").trim();
+
+    if (termId && title) {
+      const teacher = await db.teacherProfile.findUnique({
+        where: { userId: session.user.id },
+        select: { specialties: true },
+      });
+      const existingSpecialties = Array.isArray(teacher?.specialties) ? teacher.specialties.map(String) : [];
+      const existingOverrides =
+        teacher?.specialties &&
+        typeof teacher.specialties === "object" &&
+        !Array.isArray(teacher.specialties) &&
+        "curriculumOverrides" in teacher.specialties &&
+        teacher.specialties.curriculumOverrides &&
+        typeof teacher.specialties.curriculumOverrides === "object" &&
+        !Array.isArray(teacher.specialties.curriculumOverrides)
+          ? (teacher.specialties.curriculumOverrides as Record<string, { title: string; description: string; weekLabel?: string | null }>)
+          : {};
+
+      await db.teacherProfile.update({
+        where: { userId: session.user.id },
+        data: {
+          specialties: {
+            list: existingSpecialties,
+            curriculumOverrides: {
+              ...existingOverrides,
+              [curriculumOverrideKey(selectedProgramId, termId, contentType === "WeekTopic" ? weekLabel : null, contentType)]: {
+                title,
+                description,
+                weekLabel,
+              },
+            },
+          },
+        },
+      });
+    }
+
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
     redirect(`${successRedirectPath}?tab=plan&success=${contentType === "Module" ? "module_saved" : "week_saved"}`);
   }
 
@@ -963,8 +1009,9 @@ export function CourseBuilderWorkspace({
                     const highlights = getProgrammeHighlights(selectedProgramme.slug, term);
                     const termLessons = parsedVisibleLessons.filter(({ parsed }) => parsed.termId === term.id);
                     const moduleOverride = curriculumStructureLogs.find(({ parsed }) => parsed.contentType === "Module" && parsed.termId === term.id);
-                    const moduleTitle = moduleOverride?.parsed.topic || `Modules / Chapters / Weeks - ${term.title} - ${term.level} - ${term.window}`;
-                    const moduleDescription = moduleOverride?.parsed.summary || "Open this term to manage weekly topics, lessons, quizzes, live sessions, and tasks.";
+                    const savedModuleOverride = dashboard.profile.curriculumOverrides[curriculumOverrideKey(selectedProgramId, term.id, null, "Module")];
+                    const moduleTitle = savedModuleOverride?.title || moduleOverride?.parsed.topic || `Modules / Chapters / Weeks - ${term.title} - ${term.level} - ${term.window}`;
+                    const moduleDescription = savedModuleOverride?.description || moduleOverride?.parsed.summary || "Open this term to manage weekly topics, lessons, quizzes, live sessions, and tasks.";
                     const customWeeks = curriculumStructureLogs.filter(({ parsed }) => parsed.contentType === "WeekTopic" && parsed.termId === term.id);
                     const weekOverrides = new Map(customWeeks.map((item) => [item.parsed.weekLabel, item]));
                     const defaultWeekLabels = new Set(highlights.map((_, index) => `${term.title} Week ${index + 1}`));
@@ -1003,8 +1050,9 @@ export function CourseBuilderWorkspace({
                             const weekLabel = `${term.title} Week ${index + 1}`;
                             if (deletedWeekKeys.has(`${term.id}::${weekLabel}`)) return null;
                             const weekOverride = weekOverrides.get(weekLabel);
-                            const weekTitle = weekOverride?.parsed.topic || highlight;
-                            const weekDescription = weekOverride?.parsed.summary || "Create lessons under this weekly topic, then attach quiz, live session, or task.";
+                            const savedWeekOverride = dashboard.profile.curriculumOverrides[curriculumOverrideKey(selectedProgramId, term.id, weekLabel, "WeekTopic")];
+                            const weekTitle = savedWeekOverride?.title || weekOverride?.parsed.topic || highlight;
+                            const weekDescription = savedWeekOverride?.description || weekOverride?.parsed.summary || "Create lessons under this weekly topic, then attach quiz, live session, or task.";
                             const weekLessons = termLessons.filter(({ parsed }) => parsed.weekLabel === weekLabel);
                             return (
                               <details key={weekLabel} className="rounded-[16px] border border-[#f0e5d7] bg-[#fffaf5] px-4 py-3" open={index === 0}>
