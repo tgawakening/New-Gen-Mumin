@@ -201,9 +201,10 @@ export function CourseBuilderWorkspace({
       return [];
     }
   });
-  const curriculumStructureLogs = parsedVisibleLogs.filter(({ parsed }) =>
+  const savedCurriculumStructureLogs = parsedVisibleLogs.filter(({ parsed }) =>
     ["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(parsed.contentType ?? ""),
   );
+  const curriculumStructureLogs: typeof savedCurriculumStructureLogs = [];
   const deletedTermIds = new Set(
     curriculumStructureLogs
       .filter(({ parsed }) => parsed.contentType === "DeletedModule" && parsed.termId)
