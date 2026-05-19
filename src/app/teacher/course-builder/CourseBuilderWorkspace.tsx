@@ -179,6 +179,57 @@ function getProgrammeHighlights(programmeSlug: GenMProgramSlug, term: (typeof ge
   return term.lifeSkills;
 }
 
+async function resolveBuilderScheduleId(input: {
+  scheduleId: string;
+  teacherUserId: string;
+  programId: string;
+  fallbackTitle: string;
+}) {
+  const providedScheduleId = cleanOptional(input.scheduleId);
+  if (providedScheduleId) {
+    const schedule = await db.classSchedule.findFirst({
+      where: {
+        id: providedScheduleId,
+        teacher: { userId: input.teacherUserId },
+      },
+    });
+    if (schedule) return schedule.id;
+  }
+
+  const teacher = await db.teacherProfile.findUnique({
+    where: { userId: input.teacherUserId },
+    include: { user: true, programAssignments: true },
+  });
+  if (!teacher || !teacher.programAssignments.some((assignment) => assignment.programId === input.programId)) {
+    throw new Error("Choose a valid programme before saving.");
+  }
+
+  const existing = await db.classSchedule.findFirst({
+    where: {
+      programId: input.programId,
+      teacherId: teacher.id,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existing) return existing.id;
+
+  const created = await db.classSchedule.create({
+    data: {
+      programId: input.programId,
+      teacherId: teacher.id,
+      createdByUserId: input.teacherUserId,
+      title: input.fallbackTitle,
+      weekday: 6,
+      startTime: "16:00",
+      endTime: "17:00",
+      timezone: teacher.user.timezone ?? "Europe/London",
+      meetingProvider: "Course Builder",
+    },
+  });
+
+  return created.id;
+}
+
 export function CourseBuilderWorkspace({
   dashboard,
   teacherUserId,
@@ -252,57 +303,6 @@ export function CourseBuilderWorkspace({
   const selectedProgramId = selectedRoster?.programId ?? visibleRosters[0]?.programId ?? "";
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
-
-  async function resolveBuilderScheduleId(input: {
-    scheduleId: string;
-    teacherUserId: string;
-    programId: string;
-    fallbackTitle: string;
-  }) {
-    const providedScheduleId = cleanOptional(input.scheduleId);
-    if (providedScheduleId) {
-      const schedule = await db.classSchedule.findFirst({
-        where: {
-          id: providedScheduleId,
-          teacher: { userId: input.teacherUserId },
-        },
-      });
-      if (schedule) return schedule.id;
-    }
-
-    const teacher = await db.teacherProfile.findUnique({
-      where: { userId: input.teacherUserId },
-      include: { user: true, programAssignments: true },
-    });
-    if (!teacher || !teacher.programAssignments.some((assignment) => assignment.programId === input.programId)) {
-      throw new Error("Choose a valid programme before saving.");
-    }
-
-    const existing = await db.classSchedule.findFirst({
-      where: {
-        programId: input.programId,
-        teacherId: teacher.id,
-      },
-      orderBy: { createdAt: "asc" },
-    });
-    if (existing) return existing.id;
-
-    const created = await db.classSchedule.create({
-      data: {
-        programId: input.programId,
-        teacherId: teacher.id,
-        createdByUserId: input.teacherUserId,
-        title: input.fallbackTitle,
-        weekday: 6,
-        startTime: "16:00",
-        endTime: "17:00",
-        timezone: teacher.user.timezone ?? "Europe/London",
-        meetingProvider: "Course Builder",
-      },
-    });
-
-    return created.id;
-  }
 
   function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; moduleId?: string; weekId?: string; moduleComposer?: boolean; weekComposer?: boolean; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
