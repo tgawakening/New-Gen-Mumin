@@ -123,20 +123,20 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
               <SectionCard eyebrow="Teacher updates" title="Daily work and weekly tasks" icon="pen">
-                <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+                <div className={`grid gap-3 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                   <InfoList
-                    items={selectedChild.lessonUpdates.slice(0, 5).map(
-                      (update) =>
-                        `${update.programTitle} - ${update.topic} - ${formatWeekday(update.lessonDate.getDay())} - ${update.teacherName ?? "Teacher update"}`,
-                    )}
+                    items={selectedChild.lessonUpdates.slice(0, 3).map((update) => {
+                      const topic = update.topic.length > 58 ? `${update.topic.slice(0, 58)}...` : update.topic;
+                      return `${update.programTitle}: ${topic} - ${formatWeekday(update.lessonDate.getDay())}`;
+                    })}
                     emptyLabel="Teacher lesson updates will appear here once daily content starts being posted."
                   />
                   <InfoList
-                    items={selectedChild.assignments.slice(0, 5).map((assignment) => {
+                    items={selectedChild.assignments.slice(0, 3).map((assignment) => {
                       const due = assignment.dueDate
                         ? `Due ${assignment.dueDate.toLocaleDateString("en-GB")}`
                         : "No due date yet";
-                      return `${assignment.programTitle} - ${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${due}`;
+                      return `${assignment.programTitle}: ${assignment.title} - ${due}`;
                     })}
                     emptyLabel="Weekly tasks and homework will appear here once teachers publish them."
                   />

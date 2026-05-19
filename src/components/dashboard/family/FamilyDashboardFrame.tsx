@@ -257,13 +257,13 @@ export function SectionCard({
   icon?: DashboardVisualIcon;
 }) {
   return (
-    <section className="rounded-[22px] border border-[#eadfce] bg-white p-4 shadow-sm sm:rounded-[26px] sm:p-5">
+    <section className="min-w-0 rounded-[22px] border border-[#eadfce] bg-white p-4 shadow-sm sm:rounded-[26px] sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-start gap-4">
+        <div className="flex min-w-0 items-start gap-4">
           <span className="mt-1 hidden h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#fff0db] text-[#d7892f] shadow-sm sm:flex">
             <VisualIcon icon={icon} />
           </span>
-          <div>
+          <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">{eyebrow}</p>
           <h2 className="mt-1.5 text-lg font-semibold text-[#22304a] sm:text-xl">{title}</h2>
           </div>
@@ -289,12 +289,12 @@ export function CompactList({
   return (
     <div className="grid gap-2">
       {items.map((item) => (
-        <div key={`${item.label}-${item.meta ?? ""}`} className="flex items-center gap-3 rounded-2xl bg-[#fbf6ef] px-3 py-2.5 text-sm text-[#4d5a6b]">
+        <div key={`${item.label}-${item.meta ?? ""}`} className="flex min-w-0 items-center gap-3 rounded-2xl bg-[#fbf6ef] px-3 py-2.5 text-sm text-[#4d5a6b]">
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white text-[#d7892f]">
             <VisualIcon icon={item.icon ?? "check"} />
           </span>
           <div className="min-w-0">
-            <p className="truncate font-semibold text-[#22304a]">{item.label}</p>
+            <p className="break-words font-semibold leading-5 text-[#22304a]">{item.label}</p>
             {item.meta ? <p className="truncate text-xs text-[#6d7785]">{item.meta}</p> : null}
           </div>
         </div>
@@ -317,11 +317,11 @@ export function InfoList({
   return (
     <ul className="space-y-3">
       {items.map((item) => (
-        <li key={item} className="flex items-start gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
+        <li key={item} className="flex min-w-0 items-start gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
           <span className="mt-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white text-[#d7892f] shadow-sm">
             <Star className="h-3 w-3" />
           </span>
-          <span>{item}</span>
+          <span className="min-w-0 break-words">{item}</span>
         </li>
       ))}
     </ul>
