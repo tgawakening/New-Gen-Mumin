@@ -193,13 +193,14 @@ export function CourseBuilderWorkspace({
   const visibleProgramIds = new Set(visibleRosters.map((roster) => roster.programId));
   const visibleClasses = dashboard.classes.filter((entry) => visibleProgramIds.has(entry.programId));
   const visibleAssignments = dashboard.assignments.filter((entry) => visibleProgramIds.has(entry.programId));
-  const visibleLessonLogs = dashboard.lessonLogs.filter((entry) =>
-    visibleClasses.some((course) => course.title === entry.title),
-  );
-  const parsedVisibleLogs = visibleLessonLogs.map((entry) => ({
-    entry,
-    parsed: parseLessonPayload(entry.summary, entry.homework),
-  }));
+  const visibleLessonLogs = dashboard.lessonLogs.filter((entry) => visibleProgramIds.has(entry.programId));
+  const parsedVisibleLogs = visibleLessonLogs.flatMap((entry) => {
+    try {
+      return [{ entry, parsed: parseLessonPayload(entry.summary, entry.homework) }];
+    } catch {
+      return [];
+    }
+  });
   const curriculumStructureLogs = parsedVisibleLogs.filter(({ parsed }) =>
     ["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(parsed.contentType ?? ""),
   );
@@ -499,9 +500,8 @@ export function CourseBuilderWorkspace({
 
       revalidatePath("/teacher/course-builder");
       if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Curriculum changes could not be saved.";
-      redirect(errorRedirect(successRedirectPath, message));
+    } catch {
+      redirect(errorRedirect(successRedirectPath, "Curriculum changes could not be saved."));
     }
 
     redirect(`${successRedirectPath}?tab=plan&success=${contentType === "Module" ? "module_saved" : "week_saved"}`);

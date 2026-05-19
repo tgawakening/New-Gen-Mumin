@@ -76,6 +76,8 @@ export type TeacherDashboardData = {
   }>;
   lessonLogs: Array<{
     id: string;
+    scheduleId: string;
+    programId: string;
     title: string;
     lessonDate: Date;
     topic: string;
@@ -336,6 +338,8 @@ export async function getTeacherDashboardData(userId: string) {
     .flatMap((schedule) =>
       schedule.lessonLogs.map((log) => ({
         id: log.id,
+        scheduleId: schedule.id,
+        programId: schedule.program.id,
         title: schedule.title,
         lessonDate: log.lessonDate,
         topic: log.topic,
