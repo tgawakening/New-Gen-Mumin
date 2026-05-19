@@ -211,6 +211,17 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
         <p className="text-sm leading-6 text-[#617184]">
           Paste spreadsheet rows as CSV: serial,parent/location,location,child name,age. The serial number becomes the room code shown to students.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {dashboard.rosters.map((roster) => (
+            <Link
+              key={roster.programId}
+              href={`/api/classes/breakout-csv?programId=${roster.programId}`}
+              className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-xs font-semibold text-[#0f4d81]"
+            >
+              Export Zoom CSV - {roster.title}
+            </Link>
+          ))}
+        </div>
         <form action={importRoomAssignmentsAction} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Programme
