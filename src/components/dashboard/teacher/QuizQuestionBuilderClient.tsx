@@ -64,20 +64,38 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
                 </button>
               ) : null}
             </summary>
-            <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.5fr)_150px_90px]">
-              <input name={`question-${index}`} defaultValue={initialQuestions[position]?.prompt ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Question prompt" />
-              <select name={`type-${index}`} defaultValue={initialQuestions[position]?.type ?? "MCQ"} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm">
-                <option value="MCQ">MCQ</option>
-                <option value="TRUE_FALSE">True / false</option>
-                <option value="FILL_IN_BLANK">Fill blank</option>
-                <option value="SHORT_ANSWER">Short answer</option>
-              </select>
+            <div className="mt-3 grid gap-3">
               <label className="grid gap-1 text-xs font-semibold text-[#617184]">
-                Points
-                <input name={`points-${index}`} type="number" min="1" defaultValue={initialQuestions[position]?.points ?? 1} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
+                Question prompt
+                <input name={`question-${index}`} defaultValue={initialQuestions[position]?.prompt ?? ""} className="min-h-11 rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Write the question students will answer" />
               </label>
-              <input name={`answer-${index}`} defaultValue={initialQuestions[position]?.answer ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm lg:col-span-2" placeholder="Correct answer" />
-              <textarea name={`choices-${index}`} defaultValue={initialQuestions[position]?.choices ?? ""} rows={1} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="MCQ choices" />
+
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_120px]">
+                <label className="grid gap-1 text-xs font-semibold text-[#617184]">
+                  Question type
+                  <select name={`type-${index}`} defaultValue={initialQuestions[position]?.type ?? "MCQ"} className="min-h-11 rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm">
+                    <option value="MCQ">MCQ</option>
+                    <option value="TRUE_FALSE">True / false</option>
+                    <option value="FILL_IN_BLANK">Fill blank</option>
+                    <option value="SHORT_ANSWER">Short answer</option>
+                  </select>
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-[#617184]">
+                  Points
+                  <input name={`points-${index}`} type="number" min="1" defaultValue={initialQuestions[position]?.points ?? 1} className="min-h-11 rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
+                </label>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <label className="grid gap-1 text-xs font-semibold text-[#617184]">
+                  Correct answer
+                  <input name={`answer-${index}`} defaultValue={initialQuestions[position]?.answer ?? ""} className="min-h-11 rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Exact answer or selected option" />
+                </label>
+                <label className="grid gap-1 text-xs font-semibold text-[#617184]">
+                  MCQ choices
+                  <textarea name={`choices-${index}`} defaultValue={initialQuestions[position]?.choices ?? ""} rows={2} className="min-h-11 resize-y rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Choice A, Choice B, Choice C" />
+                </label>
+              </div>
             </div>
           </details>
         ))}
