@@ -7,17 +7,12 @@ import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
+import { QuizQuestionBuilderClient } from "@/components/dashboard/teacher/QuizQuestionBuilderClient";
 
 type PageProps = {
-  searchParams?: Promise<{ success?: string; error?: string; programId?: string; weekLabel?: string; lessonTitle?: string }>;
+  searchParams?: Promise<{ success?: string; error?: string; programId?: string; weekLabel?: string; lessonTitle?: string; editId?: string }>;
 };
-
-const QUESTION_TYPES = [
-  { value: "MCQ", label: "Multiple choice" },
-  { value: "TRUE_FALSE", label: "True / false" },
-  { value: "SHORT_ANSWER", label: "Short answer" },
-  { value: "FILL_IN_BLANK", label: "Fill in blank" },
-];
 
 export default async function TeacherQuizCreatePage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
@@ -30,9 +25,16 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
   const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
     ? params.programId
     : dashboard.rosters[0]?.programId;
-  const defaultTitle = params.lessonTitle || (params.weekLabel ? `${params.weekLabel} quiz` : "");
+  const assignedProgramIds = dashboard.rosters.map((roster) => roster.programId);
+  const editingQuiz = params.editId
+    ? await db.quiz.findFirst({
+        where: { id: params.editId, programId: { in: assignedProgramIds } },
+        include: { questions: { orderBy: { sortOrder: "asc" } } },
+      })
+    : null;
+  const defaultTitle = editingQuiz?.title || params.lessonTitle || (params.weekLabel ? `${params.weekLabel} quiz` : "");
 
-  async function createQuizAction(formData: FormData) {
+  async function saveQuizAction(formData: FormData) {
     "use server";
 
     const currentSession = await getCurrentSession();
@@ -50,19 +52,31 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
 
     const title = String(formData.get("title") || "").trim();
     if (!title) throw new Error("Quiz title is required.");
+    const quizId = String(formData.get("quizId") || "");
+    if (quizId) {
+      const existing = await db.quiz.findUnique({ where: { id: quizId } });
+      if (!existing || !teacher.programAssignments.some((assignment) => assignment.programId === existing.programId)) {
+        throw new Error("Quiz is not available for this teacher.");
+      }
+    }
+    const quizPayload = {
+      programId,
+      title,
+      description: String(formData.get("description") || "").trim() || null,
+      type: String(formData.get("type") || "PRE_LESSON") as "PRE_LESSON" | "POST_LESSON",
+      isPublished: formData.get("isPublished") === "on",
+      timeLimitSeconds: Number(formData.get("timeLimitMinutes") || 0) > 0 ? Number(formData.get("timeLimitMinutes")) * 60 : null,
+    };
 
-    const quiz = await db.quiz.create({
-      data: {
-        programId,
-        title,
-        description: String(formData.get("description") || "").trim() || null,
-        type: String(formData.get("type") || "PRE_LESSON") as "PRE_LESSON" | "POST_LESSON",
-        isPublished: formData.get("isPublished") === "on",
-        timeLimitSeconds: Number(formData.get("timeLimitMinutes") || 0) > 0 ? Number(formData.get("timeLimitMinutes")) * 60 : null,
-      },
-    });
+    const quiz = quizId
+      ? await db.quiz.update({ where: { id: quizId }, data: quizPayload })
+      : await db.quiz.create({ data: quizPayload });
 
-    for (let index = 1; index <= 5; index += 1) {
+    if (quizId) {
+      await db.quizQuestion.deleteMany({ where: { quizId: quiz.id } });
+    }
+
+    for (let index = 1; index <= 10; index += 1) {
       const prompt = String(formData.get(`question-${index}`) || "").trim();
       if (!prompt) continue;
       const type = String(formData.get(`type-${index}`) || "MCQ");
@@ -88,7 +102,8 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
 
     revalidatePath("/teacher/quizzes");
     revalidatePath("/student/quizzes");
-    redirect("/teacher/quizzes/create?success=1");
+    revalidatePath("/parent/quizzes");
+    redirect(`/teacher/quizzes?${quizId ? "updated=1" : "created=1"}`);
   }
 
   return (
@@ -97,10 +112,11 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
       subtitle="Prepare pre-lesson and post-lesson assessments with objective and written question types."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.success ? "Quiz created successfully." : params.error} tone={params.error ? "error" : "success"} />
+      <ActionToast message={params.success ? "Quiz saved successfully." : params.error} tone={params.error ? "error" : "success"} />
 
-      <TeacherSection eyebrow="Quiz builder" title="Create a student quiz">
-        <form action={createQuizAction} className="grid gap-4">
+      <TeacherSection eyebrow="Quiz builder" title={editingQuiz ? "Edit student quiz" : "Create a student quiz"}>
+        <form action={saveQuizAction} className="grid gap-4">
+          <input type="hidden" name="quizId" value={editingQuiz?.id ?? ""} />
           <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr]">
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Title
@@ -108,7 +124,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Program
-              <select name="programId" required defaultValue={defaultProgramId} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+              <select name="programId" required defaultValue={editingQuiz?.programId ?? defaultProgramId} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                 {dashboard.rosters.map((roster) => (
                   <option key={roster.programId} value={roster.programId}>{roster.title}</option>
                 ))}
@@ -116,7 +132,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Quiz type
-              <select name="type" defaultValue="PRE_LESSON" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+              <select name="type" defaultValue={editingQuiz?.type ?? "PRE_LESSON"} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                 <option value="PRE_LESSON">Pre lesson</option>
                 <option value="POST_LESSON">Post lesson</option>
               </select>
@@ -125,38 +141,35 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_210px_210px]">
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Description
-              <textarea name="description" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Short instructions for students." />
+              <textarea name="description" rows={2} defaultValue={editingQuiz?.description ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Short instructions for students." />
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Time limit minutes
-              <input name="timeLimitMinutes" type="number" min="0" defaultValue="10" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              <input name="timeLimitMinutes" type="number" min="0" defaultValue={editingQuiz?.timeLimitSeconds ? Math.round(editingQuiz.timeLimitSeconds / 60) : 10} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             </label>
             <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
-              <input name="isPublished" type="checkbox" defaultChecked />
+              <input name="isPublished" type="checkbox" defaultChecked={editingQuiz?.isPublished ?? true} />
               Publish to students
             </label>
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-2">
-            {[1, 2, 3, 4, 5].map((index) => (
-              <div key={index} className="min-w-0 rounded-[22px] bg-[#fbf6ef] p-4">
-                <p className="font-semibold text-[#22304a]">Question {index}</p>
-                <div className="mt-3 grid gap-3">
-                  <input name={`question-${index}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Question prompt" />
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px] lg:grid-cols-[minmax(0,1fr)_90px] 2xl:grid-cols-[minmax(0,1fr)_90px_minmax(0,1fr)]">
-                    <select name={`type-${index}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                      {QUESTION_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
-                    </select>
-                    <input name={`points-${index}`} type="number" min="1" defaultValue="1" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Points" />
-                    <input name={`answer-${index}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Correct answer" />
-                  </div>
-                  <textarea name={`choices-${index}`} rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Choices for MCQ, separated by comma or new line" />
-                </div>
-              </div>
-            ))}
-          </div>
+          <QuizQuestionBuilderClient
+            initialQuestions={editingQuiz?.questions.map((question) => {
+              const answerKey = question.answerKey as { answer?: string } | null;
+              const meta = question.meta as { choices?: string[] } | null;
+              return {
+                prompt: question.prompt,
+                type: question.type,
+                answer: answerKey?.answer ?? "",
+                choices: Array.isArray(meta?.choices) ? meta.choices.join(", ") : "",
+                points: question.points,
+              };
+            })}
+          />
 
-          <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Create quiz</button>
+          <FormSubmitButton pendingLabel={editingQuiz ? "Updating quiz..." : "Creating quiz..."} className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:opacity-70">
+            {editingQuiz ? "Update quiz" : "Create quiz"}
+          </FormSubmitButton>
         </form>
       </TeacherSection>
     </TeacherDashboardFrame>

@@ -98,8 +98,10 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             <SectionCard eyebrow="Learning" title="Quizzes, assignments, and journal" icon="sparkles">
               <div className={`grid gap-4 xl:grid-cols-3 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                 <InfoList
-                  items={selectedChild.quizzes.slice(0, 4).map(
-                    (quiz) => `${quiz.title} - ${quiz.type} - ${quiz.latestScore ?? "Pending"} pts`,
+                  items={selectedChild.quizzes.slice(0, 4).map((quiz) =>
+                    quiz.latestSubmittedAt
+                      ? `${quiz.title} - ${quiz.type} - ${quiz.latestScore ?? "Pending review"} pts`
+                      : `${quiz.title} - ${quiz.type} - Not attempted yet`,
                   )}
                   emptyLabel="Published quizzes will appear here."
                 />

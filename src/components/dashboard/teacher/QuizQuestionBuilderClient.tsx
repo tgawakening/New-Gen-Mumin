@@ -5,8 +5,17 @@ import { useState } from "react";
 
 const MAX_QUESTIONS = 10;
 
-export function QuizQuestionBuilderClient() {
-  const [questions, setQuestions] = useState([1, 2]);
+type InitialQuestion = {
+  prompt?: string;
+  type?: string;
+  answer?: string;
+  choices?: string;
+  points?: number;
+};
+
+export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQuestions?: InitialQuestion[] }) {
+  const initialSlots = initialQuestions.length ? initialQuestions.map((_, index) => index + 1) : [1];
+  const [questions, setQuestions] = useState(initialSlots);
 
   function addQuestion() {
     setQuestions((current) => {
@@ -36,9 +45,9 @@ export function QuizQuestionBuilderClient() {
         </button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid items-start gap-3">
         {questions.map((index, position) => (
-          <details key={index} className="rounded-[18px] bg-[#fbf6ef] p-4" open={position === 0}>
+          <details key={index} className="rounded-[18px] border border-[#eadfce] bg-[#fbf6ef] p-3" open={position === 0}>
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
               <span>Question {position + 1}</span>
               {questions.length > 1 ? (
@@ -55,17 +64,20 @@ export function QuizQuestionBuilderClient() {
                 </button>
               ) : null}
             </summary>
-            <div className="mt-3 grid gap-2">
-              <input name={`question-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Question" />
-              <select name={`type-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm">
-                <option value="MCQ">Multiple choice</option>
+            <div className="mt-3 grid gap-2 lg:grid-cols-[minmax(0,1.5fr)_150px_90px]">
+              <input name={`question-${index}`} defaultValue={initialQuestions[position]?.prompt ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Question prompt" />
+              <select name={`type-${index}`} defaultValue={initialQuestions[position]?.type ?? "MCQ"} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm">
+                <option value="MCQ">MCQ</option>
                 <option value="TRUE_FALSE">True / false</option>
                 <option value="FILL_IN_BLANK">Fill blank</option>
                 <option value="SHORT_ANSWER">Short answer</option>
               </select>
-              <input name={`answer-${index}`} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="Correct answer" />
-              <textarea name={`choices-${index}`} rows={2} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="MCQ choices, comma or new line" />
-              <input name={`points-${index}`} type="number" min="1" defaultValue="1" className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
+              <label className="grid gap-1 text-xs font-semibold text-[#617184]">
+                Points
+                <input name={`points-${index}`} type="number" min="1" defaultValue={initialQuestions[position]?.points ?? 1} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
+              </label>
+              <input name={`answer-${index}`} defaultValue={initialQuestions[position]?.answer ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm lg:col-span-2" placeholder="Correct answer" />
+              <textarea name={`choices-${index}`} defaultValue={initialQuestions[position]?.choices ?? ""} rows={1} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" placeholder="MCQ choices" />
             </div>
           </details>
         ))}

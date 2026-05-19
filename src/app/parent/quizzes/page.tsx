@@ -30,6 +30,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : undefined;
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const totalAttempts = selectedChild?.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0) ?? 0;
+  const bestScore = selectedChild?.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore;
 
   return (
     <FamilyDashboardFrame
@@ -53,8 +54,8 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
             metrics={[
               { label: "Quizzes", value: String(selectedChild.quizzes.length), hint: "Published assessments for the learner." },
               { label: "Attempts", value: String(totalAttempts), hint: "Total attempt history recorded." },
-              { label: "Best score", value: selectedChild.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore?.toString() ?? "Pending", hint: "Highest recorded score." },
-              { label: "Question types", value: "5", hint: "MCQ, multiple select, true/false, short answer, fill-in-blank." },
+              { label: "Best score", value: bestScore === undefined ? "Pending" : String(bestScore), hint: "Highest recorded score." },
+              { label: "Question types", value: "4", hint: "MCQ, true/false, short answer, and fill-in-blank." },
             ]}
           />
 
@@ -64,20 +65,32 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
                 <div key={quiz.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
                   <h3 className="text-lg font-semibold text-[#22304a]">{quiz.title}</h3>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {quiz.type} • {quiz.questionCount} questions • {quiz.totalPoints} total points
+                    {quiz.type} - {quiz.questionCount} questions - {quiz.totalPoints} total points
                   </p>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    Latest: {quiz.latestScore ?? "Pending"} pts • {formatDate(quiz.latestSubmittedAt)}
+                    {quiz.latestSubmittedAt
+                      ? `Latest score: ${quiz.latestScore ?? "Pending review"} pts - ${formatDate(quiz.latestSubmittedAt)}`
+                      : "Published and ready. Not attempted yet."}
                   </p>
                   <div className="mt-4 space-y-2">
                     {quiz.attempts.map((attempt) => (
                       <div key={attempt.id} className="rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
-                        Attempt {attempt.attemptNumber} • {attempt.score ?? "Pending"} pts • {formatDate(attempt.submittedAt)}
+                        Attempt {attempt.attemptNumber} - {attempt.score ?? "Pending review"} pts - {formatDate(attempt.submittedAt)}
                       </div>
                     ))}
+                    {!quiz.attempts.length ? (
+                      <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">
+                        Attempts will appear here after the student submits this quiz.
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               ))}
+              {!selectedChild.quizzes.length ? (
+                <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
+                  Published quizzes will appear here.
+                </p>
+              ) : null}
             </div>
           </SectionCard>
         </>

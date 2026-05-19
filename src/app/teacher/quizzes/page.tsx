@@ -10,7 +10,7 @@ import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection, formatDate } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ reviewed?: string; error?: string }>;
+  searchParams?: Promise<{ reviewed?: string; created?: string; updated?: string; deleted?: string; error?: string }>;
 };
 
 export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
@@ -22,6 +22,15 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const assignedProgramIds = dashboard.rosters.map((roster) => roster.programId);
+  const quizLibrary = await db.quiz.findMany({
+    where: { programId: { in: assignedProgramIds } },
+    include: {
+      questions: true,
+      attempts: true,
+      program: true,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
   const reviewAttempts = await db.quizAttempt.findMany({
     where: {
       submittedAt: { not: null },
@@ -98,13 +107,50 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
     redirect("/teacher/quizzes?reviewed=1");
   }
 
+  async function deleteQuizAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+    const teacher = await db.teacherProfile.findUnique({
+      where: { userId: currentSession.user.id },
+      include: { programAssignments: true },
+    });
+    if (!teacher) redirect("/teacher-registration");
+
+    const quizId = String(formData.get("quizId") || "");
+    const quiz = await db.quiz.findUnique({ where: { id: quizId } });
+    if (!quiz || !teacher.programAssignments.some((assignment) => assignment.programId === quiz.programId)) {
+      throw new Error("Quiz is not available for this teacher.");
+    }
+
+    await db.quiz.delete({ where: { id: quiz.id } });
+    revalidatePath("/teacher/quizzes");
+    revalidatePath("/student/quizzes");
+    revalidatePath("/parent/quizzes");
+    redirect("/teacher/quizzes?deleted=1");
+  }
+
   return (
     <TeacherDashboardFrame
       title="Quizzes"
       subtitle="Manage published quizzes, review attempts, and prepare the next assessment cycle."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.reviewed ? "Quiz review saved and student notified." : params.error} tone={params.error ? "error" : "success"} />
+      <ActionToast
+        message={
+          params.reviewed
+            ? "Quiz review saved and student notified."
+            : params.created
+              ? "Quiz created successfully."
+              : params.updated
+                ? "Quiz updated successfully."
+                : params.deleted
+                  ? "Quiz deleted successfully."
+                  : params.error
+        }
+        tone={params.error ? "error" : "success"}
+      />
 
       <TeacherMetricGrid
         metrics={[
@@ -125,25 +171,36 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
         }
       >
         <div className="space-y-4">
-          {dashboard.quizzes.map((quiz) => (
+          {quizLibrary.map((quiz) => (
             <div key={quiz.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-[#22304a]">{quiz.title}</h3>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {quiz.type} - {quiz.questionCount} questions - {quiz.attempts} attempts
+                    {quiz.program.title} - {quiz.type.replace(/_/g, " ")} - {quiz.questions.length} questions - {quiz.attempts.length} attempts
                   </p>
                 </div>
-                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
-                  {quiz.published ? "Published" : "Draft"}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
+                    {quiz.isPublished ? "Published" : "Draft"}
+                  </span>
+                  <Link href={`/teacher/quizzes/create?editId=${quiz.id}`} className="rounded-full bg-[#22304a] px-3 py-1.5 text-xs font-semibold text-white">
+                    Edit
+                  </Link>
+                  <form action={deleteQuizAction}>
+                    <input type="hidden" name="quizId" value={quiz.id} />
+                    <button className="rounded-full border border-[#d8a6a6] bg-white px-3 py-1.5 text-xs font-semibold text-[#a94444]">
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </div>
               <p className="mt-3 text-sm text-[#5f6b7a]">
-                Pending manual review: {quiz.pendingManualReview}
+                Pending manual review: {quiz.attempts.filter((attempt) => attempt.submittedAt && attempt.manualScore === null).length}
               </p>
             </div>
           ))}
-          {!dashboard.quizzes.length ? (
+          {!quizLibrary.length ? (
             <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
               Create the first quiz for your assigned programme.
             </p>
