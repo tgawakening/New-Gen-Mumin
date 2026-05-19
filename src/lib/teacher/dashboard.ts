@@ -51,7 +51,9 @@ export type TeacherDashboardData = {
   }>;
   quizzes: Array<{
     id: string;
+    programId: string;
     title: string;
+    description: string | null;
     type: string;
     questionCount: number;
     published: boolean;
@@ -300,7 +302,9 @@ export async function getTeacherDashboardData(userId: string) {
   const quizLibrary = teacherProfile.programAssignments.flatMap((assignment) =>
     assignment.program.quizzes.map((quiz) => ({
       id: quiz.id,
+      programId: assignment.program.id,
       title: quiz.title,
+      description: quiz.description,
       type: quiz.type.replace(/_/g, " "),
       questionCount: quiz.questions.length,
       published: quiz.isPublished,

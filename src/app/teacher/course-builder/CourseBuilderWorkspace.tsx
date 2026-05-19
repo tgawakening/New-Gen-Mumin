@@ -315,6 +315,96 @@ export function CourseBuilderWorkspace({
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
+  function textMatchesLesson(value: string | null | undefined, weekLabel: string | null | undefined, lessonTopic: string) {
+    const haystack = String(value ?? "").toLowerCase();
+    const topic = lessonTopic.toLowerCase();
+    const week = String(weekLabel ?? "").toLowerCase();
+    return Boolean((topic && haystack.includes(topic)) || (week && haystack.includes(week)));
+  }
+
+  function getLessonPackage(lessonTopic: string, weekLabel: string | null | undefined) {
+    const quiz = dashboard.quizzes.find(
+      (item) =>
+        item.programId === selectedProgramId &&
+        textMatchesLesson(`${item.title}\n${item.description ?? ""}`, weekLabel, lessonTopic),
+    );
+    const task = visibleAssignments.find((item) => {
+      const parsed = parseTaskPayload(item.instructions);
+      return textMatchesLesson(`${item.title}\n${parsed.weekLabel ?? ""}\n${parsed.instructions ?? ""}`, weekLabel, lessonTopic);
+    });
+    const live = visibleClasses.find(
+      (item) =>
+        item.programId === selectedProgramId &&
+        item.provider === "Zoom" &&
+        textMatchesLesson(item.title, weekLabel, lessonTopic),
+    );
+    return { quiz, task, live };
+  }
+
+  function LessonPackageControls({
+    lessonTopic,
+    weekLabel,
+    termId,
+  }: {
+    lessonTopic: string;
+    weekLabel: string | null | undefined;
+    termId: string;
+  }) {
+    const pack = getLessonPackage(lessonTopic, weekLabel);
+    return (
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <div className="rounded-2xl border border-[#dbe8f3] bg-[#f5fbff] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2a76aa]">Quiz</p>
+          {pack.quiz ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-sm font-semibold text-[#22304a]">{pack.quiz.title}</p>
+              <p className="text-xs text-[#617184]">{pack.quiz.questionCount} questions - {pack.quiz.published ? "Published" : "Draft"}</p>
+              <div className="flex flex-wrap gap-2">
+                <Link href={`/teacher/quizzes/create?editId=${pack.quiz.id}`} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Edit</Link>
+                <form action={deleteCurriculumQuizAction}>
+                  <input type="hidden" name="quizId" value={pack.quiz.id} />
+                  <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+                </form>
+              </div>
+            </div>
+          ) : (
+            <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, quizComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Create quiz</Link>
+          )}
+        </div>
+        <div className="rounded-2xl border border-[#dbe8f3] bg-[#f5fbff] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2a76aa]">Live session</p>
+          {pack.live ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-sm font-semibold text-[#22304a]">{pack.live.title}</p>
+              <p className="text-xs text-[#617184]">{pack.live.startTime}-{pack.live.endTime} {pack.live.timezone}</p>
+              <form action={deleteCurriculumLiveSessionAction}>
+                <input type="hidden" name="scheduleId" value={pack.live.id} />
+                <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+              </form>
+            </div>
+          ) : (
+            <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, liveComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Create live</Link>
+          )}
+        </div>
+        <div className="rounded-2xl border border-[#dbe8f3] bg-[#f5fbff] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2a76aa]">Task</p>
+          {pack.task ? (
+            <div className="mt-2 space-y-2">
+              <p className="text-sm font-semibold text-[#22304a]">{pack.task.title}</p>
+              <p className="text-xs text-[#617184]">{pack.task.submissions} submissions</p>
+              <form action={deleteCurriculumTaskAction}>
+                <input type="hidden" name="taskId" value={pack.task.id} />
+                <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+              </form>
+            </div>
+          ) : (
+            <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, taskComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Create task</Link>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; moduleId?: string; weekId?: string; moduleComposer?: boolean; weekComposer?: boolean; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
@@ -796,6 +886,76 @@ export function CourseBuilderWorkspace({
     redirect(`${successRedirectPath}?tab=plan&success=quiz`);
   }
 
+  async function deleteCurriculumQuizAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    const teacher = await db.teacherProfile.findUnique({
+      where: { userId: session.user.id },
+      include: { programAssignments: true },
+    });
+    if (!teacher) redirect("/teacher-registration");
+
+    const quizId = String(formData.get("quizId") || "");
+    const quiz = await db.quiz.findUnique({ where: { id: quizId } });
+    if (quiz && teacher.programAssignments.some((assignment) => assignment.programId === quiz.programId)) {
+      await db.quiz.delete({ where: { id: quiz.id } });
+    }
+
+    revalidatePath("/teacher/quizzes");
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    revalidatePath("/student/quizzes");
+    revalidatePath("/parent/quizzes");
+    redirect(`${successRedirectPath}?tab=plan&success=quiz_deleted`);
+  }
+
+  async function deleteCurriculumTaskAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    const teacher = await db.teacherProfile.findUnique({
+      where: { userId: session.user.id },
+      include: { programAssignments: true },
+    });
+    if (!teacher) redirect("/teacher-registration");
+
+    const taskId = String(formData.get("taskId") || "");
+    const task = await db.assignment.findUnique({ where: { id: taskId } });
+    if (task && teacher.programAssignments.some((assignment) => assignment.programId === task.programId)) {
+      await db.assignment.delete({ where: { id: task.id } });
+    }
+
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    revalidatePath("/student/courses");
+    revalidatePath("/parent/courses");
+    redirect(`${successRedirectPath}?tab=plan&success=task_deleted`);
+  }
+
+  async function deleteCurriculumLiveSessionAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+    const scheduleId = String(formData.get("scheduleId") || "");
+    const schedule = await db.classSchedule.findFirst({
+      where: { id: scheduleId, teacher: { userId: session.user.id } },
+    });
+    if (schedule) {
+      await db.classSchedule.delete({ where: { id: schedule.id } });
+    }
+
+    revalidatePath("/teacher/live-sessions");
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    revalidatePath("/student/schedule");
+    revalidatePath("/parent/schedule");
+    redirect(`${successRedirectPath}?tab=plan&success=live_deleted`);
+  }
+
   async function reviewSubmissionAction(formData: FormData) {
     "use server";
 
@@ -873,16 +1033,22 @@ export function CourseBuilderWorkspace({
                 ? "Curriculum changes could not be saved."
             : success === "task"
               ? "Student task published with resources."
+              : success === "task_deleted"
+                ? "Task deleted from this lesson."
               : success === "quiz"
                 ? "Quiz created and linked to this curriculum topic."
-                : success === "live"
-                  ? "Recurring Zoom live session created for this topic."
-                  : success === "live_pending"
-                    ? "Session saved successfully. Zoom join link is pending admin sync."
-                    : success === "material"
-                      ? "Material kit file uploaded successfully."
-                      : success === "material_error"
-                        ? "Please choose a file before uploading material."
+                : success === "quiz_deleted"
+                  ? "Quiz deleted from this lesson."
+                  : success === "live"
+                    ? "Recurring Zoom live session created for this topic."
+                    : success === "live_deleted"
+                      ? "Live session deleted from this lesson."
+                      : success === "live_pending"
+                        ? "Session saved successfully. Zoom join link is pending admin sync."
+                        : success === "material"
+                          ? "Material kit file uploaded successfully."
+                          : success === "material_error"
+                            ? "Please choose a file before uploading material."
               : undefined
         }
         tone={success === "material_error" || success === "curriculum_error" ? "error" : "success"}
@@ -1166,15 +1332,6 @@ export function CourseBuilderWorkspace({
                                             <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, lessonId: entry.id, lessonComposer: true })} title="Edit lesson" className="inline-flex items-center gap-1 rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">
                                               <Edit3 className="h-3.5 w-3.5" /> Edit
                                             </Link>
-                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, quizComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                                              <HelpCircle className="h-3.5 w-3.5" /> Quiz
-                                            </Link>
-                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, liveComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                                              <Video className="h-3.5 w-3.5" /> Live
-                                            </Link>
-                                            <Link href={buildBuilderHref("plan", { weekLabel, topic: lessonTopic, termId: term.id, taskComposer: true })} className="inline-flex items-center gap-1 rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                                              <PenSquare className="h-3.5 w-3.5" /> Task
-                                            </Link>
                                             <form action={deleteLessonAction}>
                                               <input type="hidden" name="lessonLogId" value={entry.id} />
                                               <FormSubmitButton pendingLabel="Deleting..." className="inline-flex items-center gap-1 rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646] transition disabled:opacity-60">
@@ -1183,6 +1340,7 @@ export function CourseBuilderWorkspace({
                                             </form>
                                           </div>
                                         </div>
+                                        <LessonPackageControls lessonTopic={lessonTopic} weekLabel={weekLabel} termId={term.id} />
                                       </div>
                                     );
                                   })}
@@ -1240,15 +1398,13 @@ export function CourseBuilderWorkspace({
                                           <p className="font-semibold text-[#22304a]">{lessonTopicTitle}</p>
                                           <div className="flex flex-wrap gap-2">
                                             <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, lessonId: lessonEntry.id, lessonComposer: true })} className="rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit lesson</Link>
-                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, quizComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
-                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, liveComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
-                                            <Link href={buildBuilderHref("plan", { weekLabel: lessonParsed.weekLabel ?? parsed.weekLabel ?? term.title, topic: lessonTopicTitle, termId: term.id, taskComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
                                             <form action={deleteLessonAction}>
                                               <input type="hidden" name="lessonLogId" value={lessonEntry.id} />
                                               <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
                                             </form>
                                           </div>
                                         </div>
+                                        <LessonPackageControls lessonTopic={lessonTopicTitle} weekLabel={lessonParsed.weekLabel ?? parsed.weekLabel} termId={term.id} />
                                       </div>
                                     );
                                   })}
@@ -1345,14 +1501,12 @@ export function CourseBuilderWorkspace({
                                         <p className="font-semibold text-[#22304a]">{lessonParsed.topic || lessonEntry.topic}</p>
                                         <div className="flex flex-wrap gap-2">
                                           <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, lessonId: lessonEntry.id, lessonComposer: true })} className="rounded-full bg-[#fff7eb] px-3 py-1.5 text-xs font-semibold text-[#8a6326]">Edit lesson</Link>
-                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, quizComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quiz</Link>
-                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, liveComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Live</Link>
-                                          <Link href={buildBuilderHref("plan", { termId: weekParsed.termId ?? "", weekLabel: weekParsed.weekLabel ?? "", topic: lessonParsed.topic || lessonEntry.topic, taskComposer: true })} className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Task</Link>
                                           <form action={deleteLessonAction}>
                                             <input type="hidden" name="lessonLogId" value={lessonEntry.id} />
                                             <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
                                           </form>
                                         </div>
+                                        <LessonPackageControls lessonTopic={lessonParsed.topic || lessonEntry.topic} weekLabel={weekParsed.weekLabel} termId={weekParsed.termId ?? ""} />
                                       </div>
                                     ))}
                                     {!weekLessons.length ? (
