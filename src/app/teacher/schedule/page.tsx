@@ -67,13 +67,14 @@ export default async function TeacherSchedulePage() {
               </p>
               {entry.meetingUrl ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
+                  <a
                     href={`/teacher/live-sessions/${entry.id}/start`}
                     target="_blank"
+                    rel="noreferrer"
                     className="inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
                   >
                     Start as host
-                  </Link>
+                  </a>
                   <Link
                     href={entry.meetingUrl}
                     target="_blank"

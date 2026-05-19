@@ -281,13 +281,14 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
                   </p>
                     {classInfo.meetingUrl ? (
                       <div className="mt-4 flex flex-wrap gap-2">
-                        <Link
+                        <a
                           href={`/teacher/live-sessions/${classInfo.id}/start`}
                           target="_blank"
+                          rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                         >
                           Start as host
-                        </Link>
+                        </a>
                         <Link
                           href={classInfo.meetingUrl}
                           target="_blank"

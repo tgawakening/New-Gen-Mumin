@@ -46,13 +46,14 @@ export function TeacherHomeDashboard({
                     </p>
                     {!adminPreview && entry.meetingUrl ? (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Link
+                        <a
                           href={`/teacher/live-sessions/${entry.id}/start`}
                           target="_blank"
+                          rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
                         >
                           Start as host
-                        </Link>
+                        </a>
                         <Link
                           href={entry.meetingUrl}
                           target="_blank"

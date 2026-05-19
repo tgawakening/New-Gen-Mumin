@@ -596,13 +596,14 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                   <div className="flex flex-wrap gap-2 xl:justify-end">
                     {schedule.meetingUrl ? (
                       <>
-                        <Link
+                        <a
                           href={`/admin/classes/${schedule.id}/start`}
                           target="_blank"
+                          rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                         >
                           Start as host
-                        </Link>
+                        </a>
                         <Link
                           href={schedule.meetingUrl}
                           target="_blank"
