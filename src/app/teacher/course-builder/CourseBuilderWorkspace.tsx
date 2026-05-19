@@ -225,6 +225,9 @@ export function CourseBuilderWorkspace({
   const editingLesson = lessonId
     ? parsedVisibleLessons.find(({ entry }) => entry.id === lessonId)
     : null;
+  const defaultLessonScheduleId = editingLesson
+    ? editingLesson.entry.scheduleId
+    : visibleClasses[0]?.id ?? "";
   const editingModule = moduleId
     ? curriculumStructureLogs.find(({ entry, parsed }) => entry.id === moduleId && parsed.contentType === "Module")
     : null;
@@ -1435,21 +1438,16 @@ export function CourseBuilderWorkspace({
                   <input type="hidden" name="termId" value={prefillTermId ?? ""} />
                   <input type="hidden" name="weekLabel" value={prefillWeekLabel ?? ""} />
                   <input type="hidden" name="lessonLogId" value={editingLesson?.entry.id ?? ""} />
+                  <input type="hidden" name="scheduleId" value={defaultLessonScheduleId} />
                   <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
-                    <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                      Class schedule
-                      <select name="scheduleId" defaultValue={editingLesson?.entry.title ? visibleClasses.find((entry) => entry.title === editingLesson.entry.title)?.id : ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required>
-                        <option value="">Select a class</option>
-                        {visibleClasses.map((entry) => (
-                          <option key={entry.id} value={entry.id}>
-                            {entry.title} - {entry.startTime}-{entry.endTime}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <div className="rounded-[18px] border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm text-[#4d5a6b]">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#c27a2c]">Programme workspace</p>
+                      <p className="mt-1 font-semibold text-[#22304a]">{selectedRoster?.title ?? selectedProgramme?.title ?? "Selected programme"}</p>
+                      <p className="mt-1 text-xs">Lesson will be saved under this course builder automatically.</p>
+                    </div>
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
                       Lesson date
-                      <input type="date" name="lessonDate" defaultValue={editingLesson?.entry.lessonDate ? editingLesson.entry.lessonDate.toISOString().slice(0, 10) : ""} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required />
+                      <input type="date" name="lessonDate" defaultValue={editingLesson?.entry.lessonDate ? editingLesson.entry.lessonDate.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10)} className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" required />
                     </label>
                   </div>
                   <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm text-[#5f6b7a]">
