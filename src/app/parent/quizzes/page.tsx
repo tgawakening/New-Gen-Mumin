@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { db } from "@/lib/db";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -12,7 +15,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string }>;
+  searchParams?: Promise<{ child?: string; submitted?: string }>;
 };
 
 export default async function ParentQuizzesPage({ searchParams }: PageProps) {
@@ -31,6 +34,117 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const totalAttempts = selectedChild?.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0) ?? 0;
   const bestScore = selectedChild?.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore;
+  const quizForms = selectedChild
+    ? await db.quiz.findMany({
+        where: {
+          isPublished: true,
+          program: {
+            enrollments: {
+              some: {
+                studentId: selectedChild.id,
+                status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
+              },
+            },
+          },
+        },
+        include: {
+          program: true,
+          questions: { orderBy: { sortOrder: "asc" } },
+          attempts: {
+            where: { studentId: selectedChild.id },
+            orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+      })
+    : [];
+
+  async function submitParentQuizAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "PARENT") redirect("/auth/login");
+    const parent = await db.parentProfile.findUnique({ where: { userId: currentSession.user.id } });
+    if (!parent) redirect("/registration");
+
+    const childId = String(formData.get("childId") || "");
+    const parentChild = await db.parentStudent.findUnique({
+      where: { parentId_studentId: { parentId: parent.id, studentId: childId } },
+      include: { student: { include: { user: true } } },
+    });
+    if (!parentChild) throw new Error("This learner is not linked to your parent dashboard.");
+
+    const quizId = String(formData.get("quizId") || "");
+    const quiz = await db.quiz.findUnique({
+      where: { id: quizId },
+      include: { questions: { orderBy: { sortOrder: "asc" } }, program: true },
+    });
+    if (!quiz || !quiz.isPublished) throw new Error("Quiz is not available.");
+
+    const enrollment = await db.enrollment.findUnique({
+      where: { studentId_programId: { studentId: childId, programId: quiz.programId } },
+    });
+    if (!enrollment || !["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status)) {
+      throw new Error("This learner is not enrolled in this quiz programme.");
+    }
+
+    const attemptCount = await db.quizAttempt.count({ where: { quizId, studentId: childId } });
+    let autoScore = 0;
+    let hasManual = false;
+    const attempt = await db.quizAttempt.create({
+      data: {
+        quizId,
+        studentId: childId,
+        attemptNumber: attemptCount + 1,
+        submittedAt: new Date(),
+      },
+    });
+
+    for (const question of quiz.questions) {
+      const answer = String(formData.get(`answer-${question.id}`) || "").trim();
+      const answerKey = question.answerKey as { answer?: string } | null;
+      const correctAnswer = answerKey?.answer?.trim().toLowerCase();
+      const isObjective = ["MCQ", "TRUE_FALSE", "FILL_IN_BLANK"].includes(question.type);
+      const isCorrect = Boolean(isObjective && correctAnswer && answer.toLowerCase() === correctAnswer);
+      if (isObjective && isCorrect) autoScore += question.points;
+      if (!isObjective) hasManual = true;
+
+      await db.quizAnswer.create({
+        data: {
+          attemptId: attempt.id,
+          questionId: question.id,
+          answer: { value: answer },
+          isCorrect: isObjective ? isCorrect : null,
+          earnedPoints: isObjective ? (isCorrect ? question.points : 0) : null,
+        },
+      });
+    }
+
+    await db.quizAttempt.update({
+      where: { id: attempt.id },
+      data: { autoScore, manualScore: hasManual ? null : autoScore },
+    });
+
+    const teachers = await db.teacherProgram.findMany({
+      where: { programId: quiz.programId },
+      include: { teacher: { include: { user: true } } },
+    });
+    if (teachers.length) {
+      await db.notification.createMany({
+        data: teachers.map(({ teacher }) => ({
+          userId: teacher.user.id,
+          title: "Quiz submitted",
+          body: `${parentChild.student.displayName ?? parentChild.student.user.firstName} submitted ${quiz.title}.`,
+          href: "/teacher/quizzes",
+        })),
+      });
+    }
+
+    revalidatePath("/parent/quizzes");
+    revalidatePath("/student/quizzes");
+    revalidatePath("/teacher/quizzes");
+    redirect(`/parent/quizzes?child=${childId}&submitted=1`);
+  }
 
   return (
     <FamilyDashboardFrame
@@ -40,6 +154,8 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
+      <ActionToast message={params?.submitted ? "Quiz submitted successfully. Teacher has been notified." : undefined} />
+
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
           learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
@@ -61,32 +177,70 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
 
           <SectionCard eyebrow="Assessment overview" title={`${selectedChild.name}'s quiz activity`}>
             <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
-              {selectedChild.quizzes.map((quiz) => (
+              {quizForms.map((quiz) => {
+                const summary = selectedChild.quizzes.find((item) => item.id === quiz.id);
+                const latestAttempt = quiz.attempts[0] ?? null;
+                const latestScore = latestAttempt?.manualScore ?? latestAttempt?.autoScore ?? null;
+                return (
                 <div key={quiz.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
                   <h3 className="text-lg font-semibold text-[#22304a]">{quiz.title}</h3>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {quiz.type} - {quiz.questionCount} questions - {quiz.totalPoints} total points
+                    {quiz.program.title} - {quiz.type.replace(/_/g, " ")} - {quiz.questions.length} questions - {quiz.questions.reduce((sum, question) => sum + question.points, 0)} total points
                   </p>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {quiz.latestSubmittedAt
-                      ? `Latest score: ${quiz.latestScore ?? "Pending review"} pts - ${formatDate(quiz.latestSubmittedAt)}`
+                    {latestAttempt?.submittedAt
+                      ? `Latest score: ${latestScore ?? "Pending review"} pts - ${formatDate(latestAttempt.submittedAt)}`
                       : "Published and ready. Not attempted yet."}
                   </p>
                   <div className="mt-4 space-y-2">
-                    {quiz.attempts.map((attempt) => (
+                    {summary?.attempts.map((attempt) => (
                       <div key={attempt.id} className="rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
                         Attempt {attempt.attemptNumber} - {attempt.score ?? "Pending review"} pts - {formatDate(attempt.submittedAt)}
                       </div>
                     ))}
-                    {!quiz.attempts.length ? (
+                    {!summary?.attempts.length ? (
                       <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#617184]">
                         Attempts will appear here after the student submits this quiz.
                       </p>
                     ) : null}
                   </div>
+                  <details className="mt-4 rounded-[18px] bg-white p-4">
+                    <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                      Start quiz for {selectedChild.name}
+                    </summary>
+                    <form action={submitParentQuizAction} className="mt-4 space-y-3">
+                      <input type="hidden" name="childId" value={selectedChild.id} />
+                      <input type="hidden" name="quizId" value={quiz.id} />
+                      {quiz.questions.map((question) => {
+                        const meta = question.meta as { choices?: string[] } | null;
+                        return (
+                          <label key={question.id} className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                            {question.prompt}
+                            {question.type === "MCQ" && meta?.choices?.length ? (
+                              <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                                <option value="">Select answer</option>
+                                {meta.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+                              </select>
+                            ) : question.type === "TRUE_FALSE" ? (
+                              <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                                <option value="">Select answer</option>
+                                <option value="true">True</option>
+                                <option value="false">False</option>
+                              </select>
+                            ) : (
+                              <input name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Type answer" />
+                            )}
+                          </label>
+                        );
+                      })}
+                      <button disabled={selectedChild.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                        Submit quiz
+                      </button>
+                    </form>
+                  </details>
                 </div>
-              ))}
-              {!selectedChild.quizzes.length ? (
+              )})}
+              {!quizForms.length ? (
                 <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
                   Published quizzes will appear here.
                 </p>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { FileText, ImageIcon, Video } from "lucide-react";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
@@ -17,6 +18,52 @@ import {
 type PageProps = {
   searchParams?: Promise<{ child?: string; course?: string }>;
 };
+
+type Attachment = {
+  id: string;
+  name: string;
+  url: string | null;
+  mimeType: string | null;
+  thumbnailUrl?: string | null;
+};
+
+function getAttachmentIcon(mimeType: string | null) {
+  if (mimeType?.startsWith("image/")) return ImageIcon;
+  if (mimeType?.startsWith("video/")) return Video;
+  return FileText;
+}
+
+function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
+  if (!attachments.length) return null;
+
+  return (
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      {attachments.map((attachment) => {
+        const Icon = getAttachmentIcon(attachment.mimeType);
+        return (
+          <a
+            key={attachment.id}
+            href={attachment.url ?? "#"}
+            target="_blank"
+            className="overflow-hidden rounded-[18px] border border-[#eadfce] bg-white text-sm shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <div className="flex aspect-video items-center justify-center bg-[#f5efe6]">
+              {attachment.thumbnailUrl ? (
+                <img src={attachment.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <Icon className="h-8 w-8 text-[#c27a2c]" />
+              )}
+            </div>
+            <div className="p-3">
+              <p className="line-clamp-2 font-semibold text-[#22304a]">{attachment.name}</p>
+              <p className="mt-1 text-xs text-[#617184]">{attachment.mimeType ?? "Course file"}</p>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  );
+}
 
 export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
@@ -37,6 +84,9 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const selectedCourse = selectedChild.courses.find((course) => course.id === params?.course) ?? selectedChild.courses[0] ?? null;
   const selectedProgramId = selectedCourse?.id ?? null;
+  const selectedLessonUpdates = selectedCourse
+    ? selectedChild.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
+    : [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   if (selectedProgramId) {
     try {
@@ -206,6 +256,45 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           ))}
         </div>
       </SectionCard>
+
+      {selectedCourse ? (
+        <SectionCard eyebrow="Weekly lessons" title={`${selectedCourse.title} lesson content`}>
+          <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+            {selectedLessonUpdates.map((update) => (
+              <article key={update.id} className="rounded-[22px] bg-[#fbf6ef] p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
+                      {update.weekLabel ?? update.contentType ?? "Lesson"}
+                    </p>
+                    <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{update.topic}</h3>
+                    <p className="mt-2 text-sm leading-7 text-[#5f6b7a]">{update.summary}</p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
+                    {formatDate(update.lessonDate)}
+                  </span>
+                </div>
+                {update.lessonObjective ? <p className="mt-3 text-sm font-semibold text-[#22304a]">{update.lessonObjective}</p> : null}
+                <AttachmentGrid attachments={update.attachments} />
+                {update.resourceLinks.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {update.resourceLinks.map((resource) => (
+                      <a key={resource} href={resource} target="_blank" className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
+                        Resource link
+                      </a>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+            {!selectedLessonUpdates.length ? (
+              <p className="rounded-[20px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
+                Weekly lessons and attached resources will appear here after the teacher publishes them.
+              </p>
+            ) : null}
+          </div>
+        </SectionCard>
+      ) : null}
 
       <SectionCard eyebrow="Course library" title="Approved materials">
         <div className="space-y-4">

@@ -173,32 +173,37 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
               <p className="mt-3 text-sm text-[#5f6b7a]">
                 Latest score: {latestAttempt?.manualScore ?? latestAttempt?.autoScore ?? "Not attempted"}
               </p>
-              <form action={submitQuizAction} className="mt-4 space-y-3 rounded-[18px] bg-white p-4">
-                <input type="hidden" name="quizId" value={quiz.id} />
-                {quiz.questions.map((question) => {
-                  const meta = question.meta as { choices?: string[] } | null;
-                  return (
-                    <label key={question.id} className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                      {question.prompt}
-                      {question.type === "MCQ" && meta?.choices?.length ? (
-                        <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                          <option value="">Select answer</option>
-                          {meta.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-                        </select>
-                      ) : question.type === "TRUE_FALSE" ? (
-                        <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                          <option value="">Select answer</option>
-                          <option value="true">True</option>
-                          <option value="false">False</option>
-                        </select>
-                      ) : (
-                        <input name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Type your answer" />
-                      )}
-                    </label>
-                  );
-                })}
-                <button disabled={child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Submit quiz</button>
-              </form>
+              <details className="mt-4 rounded-[18px] bg-white p-4">
+                <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
+                  Start quiz
+                </summary>
+                <form action={submitQuizAction} className="mt-4 space-y-3">
+                  <input type="hidden" name="quizId" value={quiz.id} />
+                  {quiz.questions.map((question) => {
+                    const meta = question.meta as { choices?: string[] } | null;
+                    return (
+                      <label key={question.id} className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                        {question.prompt}
+                        {question.type === "MCQ" && meta?.choices?.length ? (
+                          <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                            <option value="">Select answer</option>
+                            {meta.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
+                          </select>
+                        ) : question.type === "TRUE_FALSE" ? (
+                          <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                            <option value="">Select answer</option>
+                            <option value="true">True</option>
+                            <option value="false">False</option>
+                          </select>
+                        ) : (
+                          <input name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Type your answer" />
+                        )}
+                      </label>
+                    );
+                  })}
+                  <button disabled={child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Submit quiz</button>
+                </form>
+              </details>
             </div>
           )})}
           {!quizForms.length ? (
