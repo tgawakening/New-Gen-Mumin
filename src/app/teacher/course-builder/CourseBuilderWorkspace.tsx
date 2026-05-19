@@ -17,6 +17,7 @@ import { requestTeacherLiveClass } from "@/lib/live-classes/service";
 import type { TeacherDashboardData } from "@/lib/teacher/dashboard";
 
 type BuilderTab = "overview" | "plan" | "lesson" | "task" | "materials";
+type BuilderIconName = "layers" | "book" | "clipboard" | "plus" | "file" | "help";
 
 type CourseBuilderWorkspaceProps = {
   dashboard: TeacherDashboardData;
@@ -48,12 +49,21 @@ const AUDIENCE_OPTIONS = [
   { value: "ALL", label: "All students" },
 ];
 
-const builderTabs: Array<{ id: BuilderTab; label: string; icon: typeof Layers }> = [
-  { id: "overview", label: "Overview", icon: Layers },
-  { id: "plan", label: "Curriculum", icon: BookOpen },
-  { id: "task", label: "Assign Homework", icon: ClipboardList },
-  { id: "materials", label: "Materials Kit", icon: PlusCircle },
+const builderTabs: Array<{ id: BuilderTab; label: string; icon: BuilderIconName }> = [
+  { id: "overview", label: "Overview", icon: "layers" },
+  { id: "plan", label: "Curriculum", icon: "book" },
+  { id: "task", label: "Assign Homework", icon: "clipboard" },
+  { id: "materials", label: "Materials Kit", icon: "plus" },
 ];
+
+function BuilderIcon({ icon, className = "h-4 w-4" }: { icon: BuilderIconName; className?: string }) {
+  if (icon === "book") return <BookOpen className={className} />;
+  if (icon === "clipboard") return <ClipboardList className={className} />;
+  if (icon === "plus") return <PlusCircle className={className} />;
+  if (icon === "file") return <FileText className={className} />;
+  if (icon === "help") return <HelpCircle className={className} />;
+  return <Layers className={className} />;
+}
 
 function cleanOptional(value: FormDataEntryValue | null) {
   const text = String(value ?? "").trim();
@@ -855,7 +865,6 @@ export function CourseBuilderWorkspace({
               <div className="mt-5 flex flex-wrap gap-3">
                 {builderTabs.map((tab) => {
                   const isActive = normalizedActiveTab === tab.id;
-                  const Icon = tab.icon;
                   return (
                     <Link
                       key={tab.id}
@@ -864,7 +873,7 @@ export function CourseBuilderWorkspace({
                         isActive ? "bg-[#22304a] text-white" : "bg-white text-[#2a76aa] hover:bg-[#eef5fb]"
                       }`}
                     >
-                      <Icon className="h-4 w-4" />
+                      <BuilderIcon icon={tab.icon} />
                       {tab.label}
                     </Link>
                   );
@@ -915,16 +924,15 @@ export function CourseBuilderWorkspace({
               <TeacherSection eyebrow="Course builder" title="Build this programme from one place">
                 <div className="grid gap-3 sm:grid-cols-2">
                   {[
-                    { label: "Curriculum", href: buildBuilderHref("plan"), icon: BookOpen, body: "View term plans, week focus, and lesson actions." },
-                    { label: "Create lesson", href: buildBuilderHref("plan", { lessonComposer: true }), icon: FileText, body: "Publish title, summary, thumbnail/video links, and files." },
-                    { label: "Assign task", href: buildBuilderHref("task"), icon: ClipboardList, body: "Create homework with Drive resources and submission tracking." },
-                    { label: "Quiz builder", href: `/teacher/quizzes/create?programId=${selectedProgramId}`, icon: HelpCircle, body: "Create checks linked to this programme." },
+                    { label: "Curriculum", href: buildBuilderHref("plan"), icon: "book" as const, body: "View term plans, week focus, and lesson actions." },
+                    { label: "Create lesson", href: buildBuilderHref("plan", { lessonComposer: true }), icon: "file" as const, body: "Publish title, summary, thumbnail/video links, and files." },
+                    { label: "Assign task", href: buildBuilderHref("task"), icon: "clipboard" as const, body: "Create homework with Drive resources and submission tracking." },
+                    { label: "Quiz builder", href: `/teacher/quizzes/create?programId=${selectedProgramId}`, icon: "help" as const, body: "Create checks linked to this programme." },
                   ].map((item) => {
-                    const Icon = item.icon;
                     return (
                       <Link key={item.label} href={item.href} className="rounded-[20px] bg-[#fbf6ef] p-4 transition hover:-translate-y-0.5 hover:shadow-sm">
                         <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-[#c27a2c]">
-                          <Icon className="h-5 w-5" />
+                          <BuilderIcon icon={item.icon} className="h-5 w-5" />
                         </span>
                         <p className="mt-3 font-semibold text-[#22304a]">{item.label}</p>
                         <p className="mt-1 text-xs leading-5 text-[#617184]">{item.body}</p>
