@@ -13,6 +13,9 @@ export type FamilyNavIcon =
 export function getStudentNavItems() {
   return [
     { label: "Dashboard", href: "/student", icon: "home" as const },
+    { label: "Missions", href: "/student/missions", icon: "sparkles" as const },
+    { label: "Community", href: "/student/community", icon: "sun" as const },
+    { label: "Feedback", href: "/student/feedback", icon: "journal" as const },
     { label: "Courses", href: "/student/courses", icon: "book" as const },
     { label: "Attendance", href: "/student/attendance", icon: "check" as const },
     { label: "Schedule", href: "/student/schedule", icon: "calendar" as const },
@@ -29,6 +32,7 @@ export function getParentNavItems(childId?: string) {
 
   return [
     { label: "Dashboard", href: `/parent${suffix}`, icon: "home" as const },
+    { label: "Feedback", href: `/parent/feedback${suffix}`, icon: "journal" as const },
     { label: "Courses", href: `/parent/courses${suffix}`, icon: "book" as const },
     { label: "Attendance", href: `/parent/attendance${suffix}`, icon: "check" as const },
     { label: "Schedule", href: `/parent/schedule${suffix}`, icon: "calendar" as const },

@@ -16,6 +16,7 @@ import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/d
 import {
   markOrderCancelled,
   markOrderPaid,
+  recordManualPaidAmount,
   resendOrderCompletionEmails,
 } from "@/lib/payments/fulfillment";
 
@@ -358,6 +359,29 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Order cancelled successfully&tone=danger`);
   }
 
+  async function adjustManualPaidAmount(formData: FormData) {
+    "use server";
+    const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
+    const amount = Number(formData.get("manualPaidAmount"));
+    const note = String(formData.get("manualPaidNote") || "");
+    if (!orderId || !Number.isFinite(amount) || amount < 0) {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Enter a valid manual paid amount&tone=error`);
+    }
+
+    try {
+      await recordManualPaidAmount(orderId, { amount, note });
+      revalidatePath("/admin");
+      revalidatePath("/admin/orders");
+      revalidatePath("/admin/registrations");
+      revalidatePath("/parent");
+      revalidatePath("/student");
+    } catch {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to update manual paid amount right now&tone=error`);
+    }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Manual paid amount updated&tone=success`);
+  }
+
   async function deleteStudent(formData: FormData) {
     "use server";
     const userId = String(formData.get("userId") || "");
@@ -407,6 +431,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const adminNavItems = [
     ...TABS.map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
     { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
+    { key: "community", label: "Community", href: "/admin/community", icon: Users },
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
     { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },
   ];
@@ -643,6 +668,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           amountLabel={formatMoney(order.totalAmount, order.currency)}
                           pricingLabel={order.pricingLabel}
                           couponLabel={order.couponCode ? `${order.couponCode}${order.couponDiscountPercent ? ` - ${order.couponDiscountPercent}% off` : ""}` : null}
+                          manualPaidAmountAdjustment={order.manualPaidAmountAdjustment}
                           programmes={order.programTitles}
                           childDetails={order.childDetails}
                           manualSubmission={order.manualSubmission}
@@ -664,6 +690,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         <p className="mt-1 text-[#2f6b4b]">
                           Coupon {order.couponCode}
                           {order.couponDiscountPercent ? ` - ${order.couponDiscountPercent}% off` : ""}
+                        </p>
+                      ) : null}
+                      {order.manualPaidAmountAdjustment ? (
+                        <p className="mt-1 text-[#8a6326]">
+                          Manual record: {formatMoney(order.manualPaidAmountAdjustment.amount ?? order.totalAmount, order.manualPaidAmountAdjustment.currency ?? order.currency)}
+                          {order.manualPaidAmountAdjustment.note ? ` - ${order.manualPaidAmountAdjustment.note}` : ""}
                         </p>
                       ) : null}
                     </div>
@@ -735,6 +767,32 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           Cancelled
                         </div>
                       )}
+                      {order.gateway === "BANK_TRANSFER" ? (
+                        <form action={adjustManualPaidAmount} className="rounded-2xl border border-[#e6edf4] bg-white p-3">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnUrl" value={currentOrderHref} />
+                          <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">
+                            Manual paid amount
+                          </label>
+                          <input
+                            name="manualPaidAmount"
+                            type="number"
+                            min="0"
+                            step="1"
+                            defaultValue={order.totalAmount}
+                            className="mt-2 w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm text-[#22304a]"
+                          />
+                          <textarea
+                            name="manualPaidNote"
+                            defaultValue={order.manualPaidAmountAdjustment?.note ?? ""}
+                            placeholder="Note, e.g. paid discounted amount manually"
+                            className="mt-2 min-h-16 w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm text-[#22304a]"
+                          />
+                          <button className="mt-2 w-full rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                            Save record
+                          </button>
+                        </form>
+                      ) : null}
                     </div>
                   </div>
                 </div>

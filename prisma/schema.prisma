@@ -129,37 +129,96 @@ enum ReminderType {
   RENEWAL
 }
 
+enum MissionKind {
+  DAILY
+  WEEKLY
+  TEAM_BATTLE
+  REFLECTION
+}
+
+enum MissionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MissionQuestionType {
+  MCQ
+  TRUE_FALSE
+  FILL_IN_BLANK
+  SHORT_REFLECTION
+}
+
+enum FeedbackAudience {
+  STUDENT
+  PARENT
+  TEACHER
+}
+
+enum CommunityRoomType {
+  CLASS_ROOM
+  BOYS_CIRCLE
+  GIRLS_CIRCLE
+  PROJECT_TEAM
+  MENTOR_QA
+  ANNOUNCEMENT
+  PARENT_NOTICE
+}
+
+enum CommunityRoomVisibility {
+  STUDENTS
+  PARENTS
+  TEACHERS
+  MIXED_APPROVED
+}
+
+enum CommunityMessageStatus {
+  VISIBLE
+  HIDDEN
+  FLAGGED
+}
+
+enum ModerationFlagStatus {
+  OPEN
+  REVIEWED
+  ESCALATED
+  DISMISSED
+}
+
 model User {
-  id               String      @id @default(cuid())
-  email            String      @unique
+  id               String     @id @default(cuid())
+  email            String     @unique
   passwordHash     String?
   role             UserRole
-  status           UserStatus  @default(INVITED)
+  status           UserStatus @default(INVITED)
   firstName        String
   lastName         String
   phoneCountryCode String?
   phoneNumber      String?
-  timezone         String?     @default("Europe/London")
+  timezone         String?    @default("Europe/London")
   avatarUrl        String?
   emailVerifiedAt  DateTime?
   lastLoginAt      DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 
   parentProfile     ParentProfile?
   studentProfile    StudentProfile?
   teacherProfile    TeacherProfile?
   adminProfile      AdminProfile?
   sessions          Session[]
-  programsCreated   Program[]              @relation("ProgramCreatedBy")
-  schedulesCreated  ClassSchedule[]        @relation("ScheduleCreatedBy")
+  programsCreated   Program[]                @relation("ProgramCreatedBy")
+  schedulesCreated  ClassSchedule[]          @relation("ScheduleCreatedBy")
   lessonLogs        LessonLog[]
-  attendancesMarked AttendanceRecord[]     @relation("AttendanceMarkedBy")
+  attendancesMarked AttendanceRecord[]       @relation("AttendanceMarkedBy")
   quizAttempts      QuizAttempt[]
-  assignmentReviews AssignmentSubmission[] @relation("AssignmentReviewedBy")
-  journalReviews    JournalEntry[]         @relation("JournalReviewedBy")
+  assignmentReviews AssignmentSubmission[]   @relation("AssignmentReviewedBy")
+  journalReviews    JournalEntry[]           @relation("JournalReviewedBy")
   notifications     Notification[]
   emailLogs         EmailLog[]
+  communityMessages CommunityMessage[]
+  moderationActions ModerationAction[]       @relation("ModerationActionActor")
+  feedbackResponses WeeklyFeedbackResponse[]
 }
 
 model ParentProfile {
@@ -171,7 +230,7 @@ model ParentProfile {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   students      ParentStudent[]
   registrations Registration[]
   enrollments   Enrollment[]
@@ -192,18 +251,18 @@ model ParentStudent {
 }
 
 model StudentProfile {
-  id                     String   @id @default(cuid())
-  userId                 String   @unique
-  displayName            String?
-  dateOfBirth            DateTime?
-  age                    Int?
-  countryCode            String?
-  countryName            String?
-  currentGrade           String?
-  learningNotes          String?
-  onboardingCompleted    Boolean  @default(false)
-  createdAt              DateTime @default(now())
-  updatedAt              DateTime @updatedAt
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  displayName         String?
+  dateOfBirth         DateTime?
+  age                 Int?
+  countryCode         String?
+  countryName         String?
+  currentGrade        String?
+  learningNotes       String?
+  onboardingCompleted Boolean   @default(false)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   parents                 ParentStudent[]
@@ -215,6 +274,13 @@ model StudentProfile {
   journalEntries          JournalEntry[]
   progressReports         ProgressReport[]
   scholarshipApplications ScholarshipApplication[]
+  houseMembership         HouseMembership?
+  missionAttempts         MissionAttempt[]
+  housePointLedger        HousePointLedger[]
+  feedbackResponses       WeeklyFeedbackResponse[]
+  projectMemberships      ProjectMember[]
+  projectSubmissions      ProjectSubmission[]
+  communityMemberships    CommunityMembership[]
 }
 
 model TeacherProfile {
@@ -291,21 +357,24 @@ model Program {
   quizzes            Quiz[]
   assignments        Assignment[]
   progressReports    ProgressReport[]
+  missions           Mission[]
+  projects           TeamProject[]
+  communityRooms     CommunityRoom[]
 }
 
 model Offer {
-  id                      String   @id @default(cuid())
-  slug                    String   @unique
-  title                   String
-  description             String?
-  kind                    OfferKind
-  billingInterval         String   @default("MONTHLY")
-  basePriceGbp            Int
-  basePricePkr            Int?
-  isActive                Boolean  @default(true)
-  sortOrder               Int      @default(0)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  title           String
+  description     String?
+  kind            OfferKind
+  billingInterval String    @default("MONTHLY")
+  basePriceGbp    Int
+  basePricePkr    Int?
+  isActive        Boolean   @default(true)
+  sortOrder       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   programs                OfferProgram[]
   pricingRules            PricingRule[]
@@ -329,19 +398,19 @@ model OfferProgram {
 }
 
 model PricingRule {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   offerId          String
   countryCode      String?
   countryName      String?
   currency         String
   amount           Int
   compareAtAmount  Int?
-  isDefault        Boolean  @default(false)
-  isSouthAsiaPrice Boolean  @default(false)
+  isDefault        Boolean   @default(false)
+  isSouthAsiaPrice Boolean   @default(false)
   startsAt         DateTime?
   endsAt           DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   offer Offer @relation(fields: [offerId], references: [id], onDelete: Cascade)
 
@@ -349,19 +418,19 @@ model PricingRule {
 }
 
 model Coupon {
-  id              String   @id @default(cuid())
-  code            String   @unique
+  id              String    @id @default(cuid())
+  code            String    @unique
   offerId         String?
-  discountPercent Int?     @db.SmallInt
+  discountPercent Int?      @db.SmallInt
   discountAmount  Int?
   currency        String?
   maxRedemptions  Int?
-  redemptionCount Int      @default(0)
+  redemptionCount Int       @default(0)
   startsAt        DateTime?
   endsAt          DateTime?
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   offer         Offer?         @relation(fields: [offerId], references: [id], onDelete: SetNull)
   registrations Registration[]
@@ -382,13 +451,13 @@ model AcademicTerm {
 }
 
 model ClassSchedule {
-  id                String   @id @default(cuid())
+  id                String    @id @default(cuid())
   programId         String
   teacherId         String
   termId            String?
   createdByUserId   String?
   title             String
-  timezone          String   @default("Europe/London")
+  timezone          String    @default("Europe/London")
   weekday           Int
   startTime         String
   endTime           String
@@ -398,13 +467,13 @@ model ClassSchedule {
   recurringSeriesId String?
   startsOn          DateTime?
   endsOn            DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  program     Program          @relation(fields: [programId], references: [id], onDelete: Cascade)
-  teacher     TeacherProfile   @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  term        AcademicTerm?    @relation(fields: [termId], references: [id], onDelete: SetNull)
-  createdBy   User?            @relation("ScheduleCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  program     Program            @relation(fields: [programId], references: [id], onDelete: Cascade)
+  teacher     TeacherProfile     @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  term        AcademicTerm?      @relation(fields: [termId], references: [id], onDelete: SetNull)
+  createdBy   User?              @relation("ScheduleCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   attendances AttendanceRecord[]
   lessonLogs  LessonLog[]
 }
@@ -449,7 +518,7 @@ model Registration {
 }
 
 model RegistrationStudent {
-  id                   String   @id @default(cuid())
+  id                   String    @id @default(cuid())
   registrationId       String
   studentProfileId     String?
   firstName            String
@@ -460,14 +529,14 @@ model RegistrationStudent {
   gender               String?
   countryCode          String?
   countryName          String?
-  timezone             String?  @default("Europe/London")
-  needsArabicPlacement Boolean  @default(false)
+  timezone             String?   @default("Europe/London")
+  needsArabicPlacement Boolean   @default(false)
   notes                String?
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  registration   Registration    @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-  studentProfile StudentProfile? @relation(fields: [studentProfileId], references: [id], onDelete: SetNull)
+  registration   Registration       @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  studentProfile StudentProfile?    @relation(fields: [studentProfileId], references: [id], onDelete: SetNull)
   items          RegistrationItem[]
 
   @@index([registrationId, createdAt])
@@ -497,22 +566,22 @@ model RegistrationItem {
 }
 
 model Enrollment {
-  id                   String           @id @default(cuid())
-  studentId            String
-  parentId             String
-  programId            String
-  registrationItemId   String?          @unique
-  status               EnrollmentStatus @default(PENDING)
-  scholarshipPercent   Int?             @db.SmallInt
-  startedAt            DateTime?
-  completedAt          DateTime?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  id                 String           @id @default(cuid())
+  studentId          String
+  parentId           String
+  programId          String
+  registrationItemId String?          @unique
+  status             EnrollmentStatus @default(PENDING)
+  scholarshipPercent Int?             @db.SmallInt
+  startedAt          DateTime?
+  completedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
-  student               StudentProfile    @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  parent                ParentProfile     @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  program               Program           @relation(fields: [programId], references: [id], onDelete: Restrict)
-  registrationItem      RegistrationItem? @relation(fields: [registrationItemId], references: [id], onDelete: SetNull)
+  student               StudentProfile         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  parent                ParentProfile          @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  program               Program                @relation(fields: [programId], references: [id], onDelete: Restrict)
+  registrationItem      RegistrationItem?      @relation(fields: [registrationItemId], references: [id], onDelete: SetNull)
   orderItems            OrderItem[]
   attendanceRecords     AttendanceRecord[]
   assignmentSubmissions AssignmentSubmission[]
@@ -523,7 +592,7 @@ model Enrollment {
 }
 
 model AttendanceRecord {
-  id             String   @id @default(cuid())
+  id             String           @id @default(cuid())
   enrollmentId   String
   studentId      String
   scheduleId     String?
@@ -531,8 +600,8 @@ model AttendanceRecord {
   status         AttendanceStatus
   note           String?
   markedByUserId String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   enrollment Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -574,33 +643,33 @@ model Quiz {
 }
 
 model QuizQuestion {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   quizId    String
   prompt    String
   type      QuestionType
-  points    Int      @default(1)
-  sortOrder Int      @default(0)
+  points    Int          @default(1)
+  sortOrder Int          @default(0)
   answerKey Json?
   meta      Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
 
   quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
 }
 
 model QuizAttempt {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   quizId        String
   studentId     String
   teacherUserId String?
-  attemptNumber Int      @default(1)
-  startedAt     DateTime @default(now())
+  attemptNumber Int       @default(1)
+  startedAt     DateTime  @default(now())
   submittedAt   DateTime?
   autoScore     Int?
   manualScore   Int?
   feedback      String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   quiz    Quiz           @relation(fields: [quizId], references: [id], onDelete: Cascade)
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
@@ -624,13 +693,13 @@ model QuizAnswer {
 }
 
 model Assignment {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   programId    String
   title        String
-  instructions String?  @db.LongText
+  instructions String?   @db.LongText
   dueDate      DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   program     Program                @relation(fields: [programId], references: [id], onDelete: Cascade)
   submissions AssignmentSubmission[]
@@ -679,7 +748,7 @@ model JournalEntry {
 }
 
 model ProgressReport {
-  id            String   @id @default(cuid())
+  id            String      @id @default(cuid())
   studentId     String
   programId     String
   reportPeriod  String
@@ -687,8 +756,8 @@ model ProgressReport {
   grade         GradeLevel?
   strengths     String?
   nextSteps     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
 
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   program Program        @relation(fields: [programId], references: [id], onDelete: Cascade)
@@ -697,25 +766,25 @@ model ProgressReport {
 }
 
 model Order {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   parentId          String
-  registrationId    String?       @unique
-  orderNumber       String        @unique
+  registrationId    String?        @unique
+  orderNumber       String         @unique
   gateway           PaymentGateway
   currency          String
   subtotalAmount    Int
-  discountAmount    Int           @default(0)
+  discountAmount    Int            @default(0)
   totalAmount       Int
-  status            PaymentStatus @default(INITIATED)
-  providerOrderId   String?       @unique
+  status            PaymentStatus  @default(INITIATED)
+  providerOrderId   String?        @unique
   providerReference String?
   paidAt            DateTime?
   metadata          Json?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  parent       ParentProfile       @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  registration Registration?       @relation(fields: [registrationId], references: [id], onDelete: SetNull)
+  parent       ParentProfile        @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  registration Registration?        @relation(fields: [registrationId], references: [id], onDelete: SetNull)
   items        OrderItem[]
   payments     PaymentTransaction[]
   reminders    ReminderLog[]
@@ -741,23 +810,23 @@ model OrderItem {
 }
 
 model PaymentTransaction {
-  id                String        @id @default(cuid())
+  id                String         @id @default(cuid())
   orderId           String
   gateway           PaymentGateway
-  status            PaymentStatus @default(INITIATED)
+  status            PaymentStatus  @default(INITIATED)
   amount            Int
   currency          String
-  providerOrderId   String?       @unique
-  providerPaymentId String?       @unique
+  providerOrderId   String?        @unique
+  providerPaymentId String?        @unique
   providerReference String?
   verificationToken String?
   rawPayload        Json?
   failureReason     String?
   paidAt            DateTime?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
-  order            Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order            Order                    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   manualSubmission ManualPaymentSubmission?
   webhookEvents    GatewayWebhookEvent[]
 
@@ -783,14 +852,14 @@ model ManualPaymentSubmission {
 }
 
 model GatewayWebhookEvent {
-  id                   String        @id @default(cuid())
+  id                   String         @id @default(cuid())
   paymentTransactionId String?
   gateway              PaymentGateway
   eventType            String
   eventId              String?
   status               PaymentStatus?
   payload              Json
-  receivedAt           DateTime      @default(now())
+  receivedAt           DateTime       @default(now())
   processedAt          DateTime?
 
   paymentTransaction PaymentTransaction? @relation(fields: [paymentTransactionId], references: [id], onDelete: SetNull)
@@ -867,19 +936,19 @@ model ReminderLog {
   createdAt      DateTime     @default(now())
 
   registration Registration? @relation(fields: [registrationId], references: [id], onDelete: SetNull)
-  order        Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
 
   @@index([type, scheduledFor])
 }
 
 model Notification {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   title     String
   body      String
   href      String?
   readAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -887,7 +956,7 @@ model Notification {
 }
 
 model EmailLog {
-  id         String   @id @default(cuid())
+  id         String    @id @default(cuid())
   userId     String?
   toEmail    String
   template   String
@@ -897,10 +966,293 @@ model EmailLog {
   error      String?
   payload    Json?
   sentAt     DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId, template])
+}
+
+model House {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  virtue      String
+  description String?
+  color       String?
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships HouseMembership[]
+  pointLedger HousePointLedger[]
+}
+
+model HouseMembership {
+  id        String   @id @default(cuid())
+  houseId   String
+  studentId String   @unique
+  joinedAt  DateTime @default(now())
+
+  house   House          @relation(fields: [houseId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([houseId])
+}
+
+model HousePointLedger {
+  id         String   @id @default(cuid())
+  houseId    String
+  studentId  String
+  points     Int
+  reason     String
+  sourceType String
+  sourceId   String?
+  awardedAt  DateTime @default(now())
+
+  house   House          @relation(fields: [houseId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([houseId, awardedAt])
+  @@index([studentId, awardedAt])
+}
+
+model Mission {
+  id               String        @id @default(cuid())
+  programId        String?
+  title            String
+  description      String?
+  kind             MissionKind   @default(DAILY)
+  status           MissionStatus @default(DRAFT)
+  opensAt          DateTime?
+  closesAt         DateTime?
+  basePoints       Int           @default(25)
+  timeLimitSeconds Int?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  program   Program?          @relation(fields: [programId], references: [id], onDelete: SetNull)
+  questions MissionQuestion[]
+  attempts  MissionAttempt[]
+
+  @@index([programId, status])
+  @@index([status, opensAt, closesAt])
+}
+
+model MissionQuestion {
+  id        String              @id @default(cuid())
+  missionId String
+  prompt    String
+  type      MissionQuestionType @default(MCQ)
+  points    Int                 @default(1)
+  sortOrder Int                 @default(0)
+  answerKey Json?
+  meta      Json?
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+
+  mission Mission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  answers MissionAnswer[]
+}
+
+model MissionAttempt {
+  id            String    @id @default(cuid())
+  missionId     String
+  studentId     String
+  attemptNumber Int       @default(1)
+  score         Int?
+  pointsAwarded Int       @default(0)
+  reflection    String?
+  submittedAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  mission Mission         @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  student StudentProfile  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers MissionAnswer[]
+
+  @@index([studentId, submittedAt])
+  @@index([missionId, studentId])
+}
+
+model MissionAnswer {
+  id           String   @id @default(cuid())
+  attemptId    String
+  questionId   String
+  answer       Json
+  isCorrect    Boolean?
+  earnedPoints Int?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attempt  MissionAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question MissionQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+model WeeklyFeedbackResponse {
+  id            String           @id @default(cuid())
+  audience      FeedbackAudience
+  studentId     String?
+  teacherUserId String?
+  submittedById String
+  weekLabel     String
+  moodRating    Int?
+  confidence    Int?
+  workload      Int?
+  wins          String?          @db.LongText
+  concerns      String?          @db.LongText
+  supportNeeded String?          @db.LongText
+  rawPayload    Json?
+  submittedAt   DateTime         @default(now())
+
+  student     StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  submittedBy User            @relation(fields: [submittedById], references: [id], onDelete: Cascade)
+
+  @@index([studentId, audience, submittedAt])
+  @@index([submittedById, submittedAt])
+}
+
+model CommunityRoom {
+  id          String                  @id @default(cuid())
+  programId   String?
+  title       String
+  description String?
+  type        CommunityRoomType
+  visibility  CommunityRoomVisibility @default(STUDENTS)
+  ageBand     String?
+  genderScope String?
+  isReadOnly  Boolean                 @default(false)
+  isActive    Boolean                 @default(true)
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @updatedAt
+
+  program     Program?              @relation(fields: [programId], references: [id], onDelete: SetNull)
+  memberships CommunityMembership[]
+  messages    CommunityMessage[]
+  projects    TeamProject[]
+
+  @@index([programId, type, isActive])
+}
+
+model CommunityMembership {
+  id         String    @id @default(cuid())
+  roomId     String
+  studentId  String
+  role       String    @default("MEMBER")
+  joinedAt   DateTime  @default(now())
+  mutedUntil DateTime?
+
+  room    CommunityRoom  @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, studentId])
+  @@index([studentId])
+}
+
+model CommunityMessage {
+  id           String                 @id @default(cuid())
+  roomId       String
+  authorUserId String
+  body         String                 @db.LongText
+  status       CommunityMessageStatus @default(VISIBLE)
+  flagReason   String?
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  room   CommunityRoom    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  author User             @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  flags  ModerationFlag[]
+
+  @@index([roomId, createdAt])
+  @@index([authorUserId, createdAt])
+}
+
+model ModerationFlag {
+  id         String               @id @default(cuid())
+  messageId  String
+  reason     String
+  status     ModerationFlagStatus @default(OPEN)
+  createdAt  DateTime             @default(now())
+  reviewedAt DateTime?
+
+  message CommunityMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+}
+
+model ModerationAction {
+  id          String   @id @default(cuid())
+  actorUserId String
+  targetType  String
+  targetId    String
+  action      String
+  note        String?
+  createdAt   DateTime @default(now())
+
+  actor User @relation("ModerationActionActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+}
+
+model TeamProject {
+  id          String    @id @default(cuid())
+  programId   String?
+  roomId      String?
+  title       String
+  description String?   @db.LongText
+  dueDate     DateTime?
+  status      String    @default("ACTIVE")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  program     Program?            @relation(fields: [programId], references: [id], onDelete: SetNull)
+  room        CommunityRoom?      @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  members     ProjectMember[]
+  tasks       ProjectTask[]
+  submissions ProjectSubmission[]
+
+  @@index([programId, status])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  projectId String
+  studentId String
+  role      String   @default("MEMBER")
+  joinedAt  DateTime @default(now())
+
+  project TeamProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, studentId])
+}
+
+model ProjectTask {
+  id          String    @id @default(cuid())
+  projectId   String
+  title       String
+  description String?
+  isComplete  Boolean   @default(false)
+  dueDate     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project TeamProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ProjectSubmission {
+  id                 String   @id @default(cuid())
+  projectId          String
+  studentId          String
+  submissionText     String?  @db.LongText
+  attachmentUrl      String?
+  mentorFeedback     String?  @db.LongText
+  isShowcaseApproved Boolean  @default(false)
+  submittedAt        DateTime @default(now())
+
+  project TeamProject    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, submittedAt])
 }

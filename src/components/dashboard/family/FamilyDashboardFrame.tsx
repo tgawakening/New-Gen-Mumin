@@ -74,6 +74,7 @@ type DashboardVisualIcon =
   | "sparkles"
   | "star"
   | "sun"
+  | "journal"
   | "pen"
   | "gift"
   | "trophy"
@@ -97,6 +98,8 @@ function VisualIcon({ icon }: { icon?: DashboardVisualIcon }) {
       return <Star className="h-5 w-5" />;
     case "sun":
       return <SunMedium className="h-5 w-5" />;
+    case "journal":
+      return <PenSquare className="h-5 w-5" />;
     case "pen":
       return <PenSquare className="h-5 w-5" />;
     case "gift":
