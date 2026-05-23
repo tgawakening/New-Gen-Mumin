@@ -28,6 +28,18 @@ function extractNoteValue(notes: string | null | undefined, label: string) {
   return entry ? entry.split(":").slice(1).join(":").trim() : null;
 }
 
+function extractManualPaidAmountAdjustment(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const adjustment = (metadata as Record<string, unknown>).manualPaidAmountAdjustment;
+  if (!adjustment || typeof adjustment !== "object" || Array.isArray(adjustment)) return null;
+  const record = adjustment as Record<string, unknown>;
+  return {
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    note: typeof record.note === "string" ? record.note : null,
+  };
+}
+
 function safeCsvValue(value: string | number | null | undefined) {
   const raw = String(value ?? "");
   const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
@@ -96,6 +108,7 @@ export async function GET() {
       "Children details",
       "Programs overview",
       "Amount paid",
+      "Manual revenue note",
       "Payment method",
     ],
   ];
@@ -109,6 +122,7 @@ export async function GET() {
       ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
       : "Pending";
     const city = extractNoteValue(registration?.notes, "City");
+    const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
     const childDetails = registration?.students.map((child, index) => {
       const programs = registration.items
         .filter((item) => item.registrationStudentId === child.id)
@@ -135,6 +149,14 @@ export async function GET() {
       childDetails.join("\n"),
       programsOverview,
       formatAmountPaid(order.totalAmount, order.currency, order.discountAmount),
+      manualPaidAmountAdjustment
+        ? [
+            manualPaidAmountAdjustment.amount !== null
+              ? `${manualPaidAmountAdjustment.currency ?? order.currency} ${manualPaidAmountAdjustment.amount}`
+              : null,
+            manualPaidAmountAdjustment.note,
+          ].filter(Boolean).join(" - ")
+        : "",
       formatPaymentMethod(order.gateway),
     ]);
   }

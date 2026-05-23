@@ -30,6 +30,12 @@ type OrderDetailsPopupProps = {
   amountLabel: string;
   pricingLabel: string;
   couponLabel?: string | null;
+  manualPaidAmountAdjustment?: {
+    amount: number | null;
+    currency: string | null;
+    note: string | null;
+    adjustedAt: string | null;
+  } | null;
   programmes: string[];
   childDetails: Array<{
     id: string;
@@ -72,6 +78,7 @@ export function OrderDetailsPopup({
   amountLabel,
   pricingLabel,
   couponLabel,
+  manualPaidAmountAdjustment,
   programmes,
   childDetails,
   manualSubmission,
@@ -124,6 +131,17 @@ export function OrderDetailsPopup({
               <DetailBlock label="Payment status" value={paymentStatus.replace(/_/g, " ")} />
               <DetailBlock label="Amount" value={amountLabel} />
               <DetailBlock label="Pricing" value={pricingLabel} />
+              {manualPaidAmountAdjustment ? (
+                <DetailBlock
+                  label="Manual revenue note"
+                  value={[
+                    manualPaidAmountAdjustment.amount !== null && manualPaidAmountAdjustment.currency
+                      ? `${manualPaidAmountAdjustment.currency} ${manualPaidAmountAdjustment.amount}`
+                      : null,
+                    manualPaidAmountAdjustment.note,
+                  ].filter(Boolean).join(" - ")}
+                />
+              ) : null}
               {couponLabel ? <DetailBlock label="Coupon" value={couponLabel} /> : null}
             </div>
 
