@@ -106,6 +106,131 @@ export async function markOrderPaid(
   }
 }
 
+export async function recordManualPaidAmount(
+  orderId: string,
+  input: {
+    amount: number;
+    note?: string | null;
+  },
+) {
+  if (!Number.isFinite(input.amount) || input.amount < 0) {
+    throw new Error("Manual paid amount must be zero or greater.");
+  }
+
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      registration: true,
+      payments: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        include: {
+          manualSubmission: true,
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new Error("Order not found.");
+  }
+
+  if (order.gateway !== "BANK_TRANSFER") {
+    throw new Error("Manual paid amount adjustments are available only for manual payment orders.");
+  }
+
+  const payment = order.payments[0] ?? null;
+  const amount = Math.round(input.amount);
+  const note = input.note?.trim() || null;
+  const originalTotalAmount =
+    typeof order.metadata === "object" &&
+    order.metadata &&
+    !Array.isArray(order.metadata) &&
+    typeof (order.metadata as Record<string, unknown>).originalTotalAmount === "number"
+      ? Number((order.metadata as Record<string, unknown>).originalTotalAmount)
+      : order.totalAmount;
+  const adjustedDiscountAmount = Math.max(0, order.subtotalAmount - amount);
+  const adjustedAt = new Date();
+  const metadataBase =
+    typeof order.metadata === "object" && order.metadata && !Array.isArray(order.metadata)
+      ? (order.metadata as Record<string, unknown>)
+      : {};
+  const metadata = {
+    ...metadataBase,
+    originalTotalAmount,
+    manualPaidAmountAdjustment: {
+      amount,
+      currency: order.currency,
+      note,
+      adjustedAt: adjustedAt.toISOString(),
+    },
+  };
+
+  await db.$transaction(async (tx) => {
+    await tx.order.update({
+      where: { id: order.id },
+      data: {
+        totalAmount: amount,
+        discountAmount: adjustedDiscountAmount,
+        metadata,
+      },
+    });
+
+    if (payment) {
+      await tx.paymentTransaction.update({
+        where: { id: payment.id },
+        data: {
+          amount,
+          rawPayload: toJsonValue({
+            ...(typeof payment.rawPayload === "object" && payment.rawPayload && !Array.isArray(payment.rawPayload)
+              ? (payment.rawPayload as Record<string, unknown>)
+              : {}),
+            manualPaidAmountAdjustment: {
+              amount,
+              currency: order.currency,
+              note,
+              adjustedAt: adjustedAt.toISOString(),
+            },
+          }),
+        },
+      });
+
+      if (payment.manualSubmission) {
+        await tx.manualPaymentSubmission.update({
+          where: { id: payment.manualSubmission.id },
+          data: {
+            reviewNote: note,
+            reviewedAt: adjustedAt,
+          },
+        });
+      }
+    }
+
+    if (order.registrationId) {
+      await tx.registration.update({
+        where: { id: order.registrationId },
+        data: {
+          totalAmount: amount,
+          discountAmount: adjustedDiscountAmount,
+          pricingSnapshot: toJsonValue({
+            ...(typeof order.registration?.pricingSnapshot === "object" &&
+            order.registration.pricingSnapshot &&
+            !Array.isArray(order.registration.pricingSnapshot)
+              ? (order.registration.pricingSnapshot as Record<string, unknown>)
+              : {}),
+            manualPaidAmountAdjustment: {
+              amount,
+              currency: order.currency,
+              note,
+              adjustedAt: adjustedAt.toISOString(),
+            },
+          }),
+        },
+      });
+    }
+  });
+}
+
 export async function resendOrderCompletionEmails(
   orderId: string,
   gatewayOverride?: "STRIPE" | "PAYPAL" | "BANK_TRANSFER" | "NAYAPAY" | "SCHOLARSHIP" | "FREE",
