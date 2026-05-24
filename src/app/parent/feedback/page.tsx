@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { FeedbackAudience } from "@prisma/client";
+import type { ReactNode } from "react";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentFeedbackSummary, submitWeeklyFeedback } from "@/lib/community/feedback";
@@ -47,13 +49,50 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
       audience: FeedbackAudience.PARENT,
       submittedById: currentSession.user.id,
       studentId: child.id,
-      weekLabel: String(formData.get("weekLabel") || ""),
-      moodRating: Number(formData.get("moodRating") || 0) || null,
+      weekLabel: String(formData.get("weekLabel") || `Week of ${new Date().toLocaleDateString("en-GB")}`),
+      moodRating: Number(formData.get("satisfaction") || 0) || null,
       confidence: Number(formData.get("confidence") || 0) || null,
-      workload: Number(formData.get("workload") || 0) || null,
-      wins: String(formData.get("wins") || ""),
-      concerns: String(formData.get("concerns") || ""),
-      supportNeeded: String(formData.get("supportNeeded") || ""),
+      workload: null,
+      wins: String(formData.get("goingWell") || ""),
+      concerns: String(formData.get("concern") || ""),
+      supportNeeded: String(formData.get("improvement") || ""),
+      rawPayload: {
+        parentName: String(formData.get("parentName") || ""),
+        childName: String(formData.get("childName") || ""),
+        childAgeGroup: String(formData.get("childAgeGroup") || ""),
+        programmes: formData.getAll("programmes").map(String),
+        enjoying: String(formData.get("enjoying") || ""),
+        understanding: String(formData.get("understanding") || ""),
+        homePractice: String(formData.get("homePractice") || ""),
+        confidence: String(formData.get("confidence") || ""),
+        goingWell: String(formData.get("goingWell") || ""),
+        improvement: String(formData.get("improvement") || ""),
+        concern: String(formData.get("concern") || ""),
+        contactRequest: String(formData.get("contactRequest") || ""),
+        satisfaction: String(formData.get("satisfaction") || ""),
+      },
+    });
+
+    const teachers = await db.teacherProgram.findMany({
+      where: { program: { title: { in: formData.getAll("programmes").map(String) } } },
+      select: { teacher: { select: { userId: true } } },
+    });
+    await db.notification.createMany({
+      data: [
+        {
+          userId: currentSession.user.id,
+          title: "Weekly feedback submitted",
+          body: `Your feedback for ${child.name} has been saved.`,
+          href: `/parent/feedback?child=${child.id}`,
+        },
+        ...teachers.map((teacher) => ({
+          userId: teacher.teacher.userId,
+          title: "Parent feedback received",
+          body: `${child.name}'s parent submitted weekly feedback.`,
+          href: "/teacher/feedback",
+        })),
+      ],
+      skipDuplicates: true,
     });
 
     revalidatePath("/parent/feedback");
@@ -89,37 +128,70 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
 
       {selectedChild ? (
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <SectionCard eyebrow="Parent form" title={`Submit for ${selectedChild.name}`} icon="journal">
-            <form action={submitParentFeedback} className="grid gap-4">
+          <SectionCard eyebrow="Parent pulse" title={`Submit for ${selectedChild.name}`} icon="journal">
+            <form action={submitParentFeedback} className="grid gap-5">
               <input type="hidden" name="childId" value={selectedChild.id} />
-              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                Week label
-                <input name="weekLabel" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-              </label>
-              <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  ["moodRating", "Mood"],
-                  ["confidence", "Confidence"],
-                  ["workload", "Workload"],
-                ].map(([name, label]) => (
-                  <label key={name} className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                    {label}
-                    <input name={name} type="number" min="1" max="5" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-                  </label>
-                ))}
-              </div>
-              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                Wins noticed at home
-                <textarea name="wins" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                Concerns
-                <textarea name="concerns" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-              </label>
-              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                Support needed
-                <textarea name="supportNeeded" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-              </label>
+              <input type="hidden" name="weekLabel" value={`Week of ${new Date().toLocaleDateString("en-GB")}`} />
+              <FeedbackSection step="Section 1 of 3" title="Gen Mu'min Parent Pulse Feedback">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Parent Name">
+                    <input name="parentName" required defaultValue={dashboard.parentName} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                  </Field>
+                  <Field label="Child Name">
+                    <input name="childName" required defaultValue={selectedChild.name} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                  </Field>
+                  <Field label="Child Age Group">
+                    <select name="childAgeGroup" required defaultValue={selectedChild.profile.age && selectedChild.profile.age <= 8 ? "6-8" : selectedChild.profile.age && selectedChild.profile.age <= 12 ? "9-12" : selectedChild.profile.age ? "13-17" : "Mixed / Not sure"} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                      {["6-8", "9-12", "13-17", "Mixed / Not sure"].map((option) => <option key={option}>{option}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Program / Class">
+                    <div className="grid gap-2 rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 text-sm">
+                      {selectedChild.courses.map((course) => (
+                        <label key={course.id} className="flex items-center gap-2">
+                          <input name="programmes" type="checkbox" value={course.title} defaultChecked />
+                          {course.title}
+                        </label>
+                      ))}
+                      {selectedChild.courses.length > 1 ? (
+                        <label className="flex items-center gap-2">
+                          <input name="programmes" type="checkbox" value="Full Gen Mu'min Program" />
+                          Full Gen Mu&apos;min Program
+                        </label>
+                      ) : null}
+                    </div>
+                  </Field>
+                </div>
+              </FeedbackSection>
+
+              <FeedbackSection step="Section 2 of 3" title="Child Learning Experience">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Choice name="enjoying" label="Is your child enjoying the classes?" options={["Yes", "Somewhat", "No", "Not sure yet"]} />
+                  <Choice name="understanding" label="Is your child understanding the lessons?" options={["Yes", "Somewhat", "No", "Not sure yet"]} />
+                  <Choice name="homePractice" label="Is your child practicing or discussing anything at home?" options={["Often", "Sometimes", "Rarely", "Not yet"]} />
+                  <Field label="How confident does your child feel?">
+                    <input name="confidence" type="range" min="1" max="5" defaultValue="3" className="w-full accent-[#f39f5f]" />
+                  </Field>
+                </div>
+              </FeedbackSection>
+
+              <FeedbackSection step="Section 3 of 3" title="Feedback & Support">
+                <Field label="What is going well?">
+                  <textarea name="goingWell" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                </Field>
+                <Field label="What can be improved?">
+                  <textarea name="improvement" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                </Field>
+                <Field label="Any concern you want us to know?">
+                  <textarea name="concern" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                </Field>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Choice name="contactRequest" label="Would you like management to contact you?" options={["No", "Yes", "Only if needed"]} />
+                  <Field label="Overall satisfaction">
+                    <input name="satisfaction" type="range" min="1" max="5" defaultValue="4" className="w-full accent-[#f39f5f]" />
+                  </Field>
+                </div>
+              </FeedbackSection>
               <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">
                 Submit parent feedback
               </button>
@@ -145,5 +217,34 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
         </div>
       ) : null}
     </FamilyDashboardFrame>
+  );
+}
+
+function FeedbackSection({ step, title, children }: { step: string; title: string; children: ReactNode }) {
+  return (
+    <div className="rounded-[22px] border border-[#f0d4bb] bg-[#fff8f0] p-4">
+      <span className="rounded-lg bg-[#f39f5f] px-3 py-1 text-xs font-semibold text-white">{step}</span>
+      <h3 className="mt-3 text-lg font-semibold text-[#22304a]">{title}</h3>
+      <div className="mt-4 grid gap-4">{children}</div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return <label className="grid gap-2 text-sm font-semibold text-[#22304a]">{label}{children}</label>;
+}
+
+function Choice({ name, label, options }: { name: string; label: string; options: string[] }) {
+  return (
+    <Field label={label}>
+      <div className="grid gap-2 rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 text-sm font-medium text-[#4d5a6b]">
+        {options.map((option, index) => (
+          <label key={option} className="flex items-center gap-2">
+            <input name={name} type="radio" value={option} required={index === 0} />
+            {option}
+          </label>
+        ))}
+      </div>
+    </Field>
   );
 }

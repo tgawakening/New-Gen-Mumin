@@ -81,39 +81,32 @@ function AvatarCharacter({
 }) {
   const isGirl = variant === "girl";
   const isBoy = variant === "boy";
-  const scarf = isGirl ? "bg-[#d8c7aa]" : isBoy ? "bg-[#3d5d4b]" : "bg-[#5d7da3]";
   const robe = isGirl ? "bg-[#17243a]" : isBoy ? "bg-[#263f34]" : "bg-[#245d85]";
 
   return (
     <div className="relative mx-auto h-[190px] w-[170px] sm:h-[220px] sm:w-[190px]" aria-hidden="true">
-      <div className="absolute bottom-0 left-1/2 h-28 w-28 -translate-x-1/2 rounded-[38px_38px_28px_28px] bg-[#22304a]/10 blur-xl" />
-      <div
-        className={`absolute bottom-3 left-1/2 -translate-x-1/2 ${robe} shadow-[0_18px_30px_rgba(34,48,74,0.24)] ${
-          isGirl ? "h-32 w-28 rounded-[46px_46px_18px_18px]" : "h-28 w-24 rounded-[34px_34px_24px_24px]"
-        }`}
-      />
-      <div
-        className={`absolute left-1/2 -translate-x-1/2 ${scarf} shadow-sm ${
-          isGirl
-            ? "bottom-[80px] h-28 w-28 rounded-[54px_54px_26px_26px]"
-            : "bottom-[86px] h-16 w-24 rounded-[40px_40px_22px_22px]"
-        }`}
-      />
+      <div className="absolute bottom-0 left-1/2 h-28 w-32 -translate-x-1/2 rounded-[38px_38px_28px_28px] bg-[#22304a]/10 blur-xl" />
+      <div className={`absolute bottom-4 left-1/2 h-28 w-24 -translate-x-1/2 rounded-[34px_34px_22px_22px] ${robe} shadow-[0_18px_30px_rgba(34,48,74,0.24)]`} />
       {isGirl ? (
-        <div className="absolute bottom-[75px] left-1/2 h-12 w-24 -translate-x-1/2 rounded-b-[42px] bg-[#d8c7aa]" />
+        <>
+          <div className="absolute left-1/2 top-8 h-28 w-28 -translate-x-1/2 rounded-[56px_56px_30px_30px] bg-[#d8c7aa] shadow-sm" />
+          <div className="absolute left-1/2 top-[102px] h-10 w-24 -translate-x-1/2 rounded-b-[40px] bg-[#d8c7aa]" />
+        </>
       ) : (
-        <div className="absolute bottom-[151px] left-1/2 h-9 w-24 -translate-x-1/2 rounded-[30px_30px_12px_12px] bg-[#2c2527]" />
+        <div className="absolute left-1/2 top-9 h-9 w-24 -translate-x-1/2 rounded-[30px_30px_12px_12px] bg-[#2c2527]" />
       )}
       {isBoy ? (
-        <div className="absolute bottom-[150px] left-[52px] h-8 w-20 -rotate-12 rounded-full border-y-4 border-[#e9eef4] bg-[#26334d]" />
+        <div className="absolute left-[52px] top-8 h-8 w-20 -rotate-12 rounded-full border-y-4 border-[#e9eef4] bg-[#26334d]" />
       ) : null}
-      <div className={`absolute left-1/2 h-20 w-20 -translate-x-1/2 rounded-full bg-[#f2c79e] shadow-[inset_0_-8px_0_rgba(165,94,58,0.12)] ${isGirl ? "bottom-[92px]" : "bottom-[88px]"}`} />
-      <div className="absolute bottom-[119px] left-[59px] h-3 w-3 rounded-full bg-[#26334d]" />
-      <div className="absolute bottom-[119px] right-[59px] h-3 w-3 rounded-full bg-[#26334d]" />
-      <div className="absolute bottom-[103px] left-1/2 h-2 w-8 -translate-x-1/2 rounded-full border-b-2 border-[#9b5b43]" />
-      <div className={`absolute h-12 w-6 rounded-full bg-[#f2c79e] ${isGirl ? "bottom-[49px] left-8 rotate-[-10deg]" : "bottom-[42px] left-7 rotate-[-18deg]"}`} />
-      <div className={`absolute h-12 w-6 rounded-full bg-[#f2c79e] ${isGirl ? "bottom-[49px] right-8 rotate-[10deg]" : "bottom-[42px] right-7 rotate-[18deg]"}`} />
-      <div className={`absolute left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-2xl border border-white/70 bg-white text-lg font-bold text-[#22304a] shadow-lg ${isGirl ? "bottom-7" : "bottom-9"}`}>
+      <div className="absolute left-1/2 top-[58px] h-20 w-20 -translate-x-1/2 rounded-full bg-[#f2c79e] shadow-[inset_0_-8px_0_rgba(165,94,58,0.12)]" />
+      <div className="absolute left-[61px] top-[89px] h-3 w-3 rounded-full bg-[#26334d]" />
+      <div className="absolute right-[61px] top-[89px] h-3 w-3 rounded-full bg-[#26334d]" />
+      <div className="absolute left-[60px] top-[84px] h-1 w-4 rounded-full bg-[#2c2527]/70" />
+      <div className="absolute right-[60px] top-[84px] h-1 w-4 rounded-full bg-[#2c2527]/70" />
+      <div className="absolute left-1/2 top-[108px] h-2 w-8 -translate-x-1/2 rounded-full border-b-2 border-[#9b5b43]" />
+      <div className="absolute bottom-[48px] left-8 h-12 w-6 rotate-[-12deg] rounded-full bg-[#f2c79e]" />
+      <div className="absolute bottom-[48px] right-8 h-12 w-6 rotate-[12deg] rounded-full bg-[#f2c79e]" />
+      <div className="absolute bottom-7 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-2xl border border-white/70 bg-white text-lg font-bold text-[#22304a] shadow-lg">
         {initials(name)}
       </div>
     </div>
