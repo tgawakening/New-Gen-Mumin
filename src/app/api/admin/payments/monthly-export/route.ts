@@ -36,7 +36,7 @@ function extractNoteValue(notes: string | null | undefined, label: string) {
   return entry ? entry.split(":").slice(1).join(":").trim() : null;
 }
 
-function escapeHtml(value: string | number | null | undefined) {
+function escapeXml(value: string | number | null | undefined) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -77,6 +77,189 @@ function monthWindow(monthParam: string | null) {
   const end = new Date(Date.UTC(year, month, 1));
 
   return { key: normalized, start, end };
+}
+
+type SheetCell = {
+  value: string | number;
+  style?: number;
+};
+
+const CRC_TABLE = new Uint32Array(256);
+for (let index = 0; index < 256; index += 1) {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+  }
+  CRC_TABLE[index] = value >>> 0;
+}
+
+function crc32(buffer: Buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) {
+    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function dosDateTime(date = new Date()) {
+  const year = Math.max(1980, date.getFullYear());
+  const dosTime = (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+  const dosDate = ((year - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
+  return { dosDate, dosTime };
+}
+
+function buildZip(files: Array<{ name: string; content: string | Buffer }>) {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+  const { dosDate, dosTime } = dosDateTime();
+
+  for (const file of files) {
+    const name = Buffer.from(file.name);
+    const content = Buffer.isBuffer(file.content) ? file.content : Buffer.from(file.content, "utf8");
+    const crc = crc32(content);
+    const localHeader = Buffer.alloc(30);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(0, 8);
+    localHeader.writeUInt16LE(dosTime, 10);
+    localHeader.writeUInt16LE(dosDate, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(content.length, 18);
+    localHeader.writeUInt32LE(content.length, 22);
+    localHeader.writeUInt16LE(name.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    localParts.push(localHeader, name, content);
+
+    const centralHeader = Buffer.alloc(46);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(0, 10);
+    centralHeader.writeUInt16LE(dosTime, 12);
+    centralHeader.writeUInt16LE(dosDate, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(content.length, 20);
+    centralHeader.writeUInt32LE(content.length, 24);
+    centralHeader.writeUInt16LE(name.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    centralParts.push(centralHeader, name);
+    offset += localHeader.length + name.length + content.length;
+  }
+
+  const centralDirectory = Buffer.concat(centralParts);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(0, 4);
+  end.writeUInt16LE(0, 6);
+  end.writeUInt16LE(files.length, 8);
+  end.writeUInt16LE(files.length, 10);
+  end.writeUInt32LE(centralDirectory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  end.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localParts, centralDirectory, end]);
+}
+
+function columnName(index: number) {
+  let value = index;
+  let name = "";
+  while (value > 0) {
+    const remainder = (value - 1) % 26;
+    name = String.fromCharCode(65 + remainder) + name;
+    value = Math.floor((value - 1) / 26);
+  }
+  return name;
+}
+
+function cellXml(cell: SheetCell | null, rowIndex: number, columnIndex: number) {
+  const reference = `${columnName(columnIndex)}${rowIndex}`;
+  if (!cell) return `<c r="${reference}" />`;
+  const style = cell.style ? ` s="${cell.style}"` : "";
+  return `<c r="${reference}" t="inlineStr"${style}><is><t>${escapeXml(cell.value)}</t></is></c>`;
+}
+
+function rowXml(cells: Array<SheetCell | null>, rowIndex: number) {
+  return `<row r="${rowIndex}">${cells.map((cell, index) => cellXml(cell, rowIndex, index + 1)).join("")}</row>`;
+}
+
+function buildWorkbook(rows: Array<Array<SheetCell | null>>, merges: string[]) {
+  const sheetRows = rows.map((row, index) => rowXml(row, index + 1)).join("");
+  const mergeXml = merges.length
+    ? `<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}" />`).join("")}</mergeCells>`
+    : "";
+  const worksheet = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <cols>
+    ${Array.from({ length: 12 }, (_, index) => `<col min="${index + 1}" max="${index + 1}" width="${[24, 24, 18, 32][index % 4]}" customWidth="1" />`).join("")}
+  </cols>
+  <sheetData>${sheetRows}</sheetData>
+  ${mergeXml}
+</worksheet>`;
+
+  const styles = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="4">
+    <font><sz val="11" /><color rgb="FF22304A" /><name val="Arial" /></font>
+    <font><b /><sz val="18" /><color rgb="FFFFFFFF" /><name val="Arial" /></font>
+    <font><b /><sz val="11" /><color rgb="FF0F4D81" /><name val="Arial" /></font>
+    <font><b /><sz val="11" /><color rgb="FF2F6B4B" /><name val="Arial" /></font>
+  </fonts>
+  <fills count="7">
+    <fill><patternFill patternType="none" /></fill>
+    <fill><patternFill patternType="gray125" /></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF22304A" /><bgColor indexed="64" /></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEEF6FF" /><bgColor indexed="64" /></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF39F5F" /><bgColor indexed="64" /></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFF8F0" /><bgColor indexed="64" /></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFEFFAF3" /><bgColor indexed="64" /></patternFill></fill>
+  </fills>
+  <borders count="2">
+    <border><left /><right /><top /><bottom /><diagonal /></border>
+    <border><left style="thin"><color rgb="FFCBD9E8" /></left><right style="thin"><color rgb="FFCBD9E8" /></right><top style="thin"><color rgb="FFCBD9E8" /></top><bottom style="thin"><color rgb="FFCBD9E8" /></bottom><diagonal /></border>
+  </borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" /></cellStyleXfs>
+  <cellXfs count="9">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="top" /></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" /></xf>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" /></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment vertical="center" /></xf>
+    <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" /></xf>
+    <xf numFmtId="0" fontId="2" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" /></xf>
+    <xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" /></xf>
+    <xf numFmtId="0" fontId="3" fillId="6" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment wrapText="1" vertical="top" /></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1" /></xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0" /></cellStyles>
+</styleSheet>`;
+
+  return buildZip([
+    {
+      name: "[Content_Types].xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" /><Default Extension="xml" ContentType="application/xml" /><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml" /><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml" /><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml" /></Types>`,
+    },
+    {
+      name: "_rels/.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml" /></Relationships>`,
+    },
+    {
+      name: "xl/workbook.xml",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Payment Records" sheetId="1" r:id="rId1" /></sheets></workbook>`,
+    },
+    {
+      name: "xl/_rels/workbook.xml.rels",
+      content: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml" /><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml" /></Relationships>`,
+    },
+    { name: "xl/styles.xml", content: styles },
+    { name: "xl/worksheets/sheet1.xml", content: worksheet },
+  ]);
 }
 
 export async function GET(request: Request) {
@@ -150,85 +333,65 @@ export async function GET(request: Request) {
       return sum + (match ? Number(match[1]) : 0);
     }, 0),
   }));
-  const bodyRows = Array.from({ length: Math.max(maxRows, 1) }, (_, index) => `
-    <tr>
-      ${groupTotals.map((group) => {
-        const row = group.rows[index];
-        if (!row) {
-          return `
-            <td class="empty" colspan="4">${index === 0 && group.rows.length === 0 ? "No completed payments found" : ""}</td>
-          `;
-        }
+  const rows: Array<Array<SheetCell | null>> = [
+    [{ value: exportAll ? "Gen-Mumin Full Payment Records" : "Gen-Mumin Monthly Payment Records", style: 1 }],
+    [{ value: "Report Scope", style: 2 }, null, null, { value: exportAll ? "All completed payments" : window.key, style: 3 }],
+    [{ value: "Total Payment Received Yet", style: 2 }, null, null, { value: formatGbp(allTimeTotalGbp), style: 3 }],
+    [{ value: exportAll ? "Total In This Export" : "Total Received This Month", style: 2 }, null, null, { value: formatGbp(scopedTotalGbp), style: 3 }],
+    [],
+    groupTotals.flatMap((group) => [{ value: group.label, style: 4 }, null, null, null]),
+    groupTotals.flatMap((group) => [{ value: paymentTotalLabel(group.totalGbp, group.rows.length), style: 5 }, null, null, null]),
+    groupTotals.flatMap(() => [
+      { value: "Parent Name", style: 6 },
+      { value: "Paid Amount", style: 6 },
+      { value: "Children", style: 6 },
+      { value: "Programmes", style: 6 },
+    ]),
+  ];
 
-        return `
-          <td>${escapeHtml(row.parent)}</td>
-          <td class="amount">${escapeHtml(row.payment)}</td>
-          <td>${escapeHtml(row.overview)}</td>
-          <td>${escapeHtml(row.programmes)}</td>
-        `;
-      }).join("")}
-    </tr>
-  `).join("");
+  for (let index = 0; index < Math.max(maxRows, 1); index += 1) {
+    rows.push(groupTotals.flatMap((group) => {
+      const row = group.rows[index];
+      if (!row) {
+        return [
+          { value: index === 0 && group.rows.length === 0 ? "No completed payments found" : "", style: 8 },
+          null,
+          null,
+          null,
+        ];
+      }
 
-  const workbook = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    body { font-family: Arial, sans-serif; color: #22304a; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #cbd9e8; padding: 10px; vertical-align: top; font-size: 12px; }
-    .title { background: #22304a; color: #ffffff; font-size: 22px; font-weight: 700; text-align: center; padding: 16px; }
-    .summary-label { background: #eef6ff; color: #0f4d81; font-weight: 700; }
-    .summary-value { background: #ffffff; font-weight: 700; }
-    .method { background: #f39f5f; color: #ffffff; font-size: 16px; font-weight: 700; text-align: center; }
-    .method-total { background: #fff8f0; color: #8a6326; font-weight: 700; text-align: center; }
-    .subhead { background: #edf2f6; color: #22304a; font-weight: 700; }
-    .amount { background: #effaf3; color: #2f6b4b; font-weight: 700; }
-    .empty { background: #fbfdff; color: #8a94a3; text-align: center; font-style: italic; }
-  </style>
-</head>
-<body>
-  <table>
-    <tr><th class="title" colspan="12">${escapeHtml(exportAll ? "Gen-Mumin Full Payment Records" : "Gen-Mumin Monthly Payment Records")}</th></tr>
-    <tr>
-      <td class="summary-label" colspan="3">Report Scope</td>
-      <td class="summary-value" colspan="9">${escapeHtml(exportAll ? "All completed payments" : window.key)}</td>
-    </tr>
-    <tr>
-      <td class="summary-label" colspan="3">Total Payment Received Yet</td>
-      <td class="summary-value" colspan="9">${escapeHtml(formatGbp(allTimeTotalGbp))}</td>
-    </tr>
-    <tr>
-      <td class="summary-label" colspan="3">${escapeHtml(exportAll ? "Total In This Export" : "Total Received This Month")}</td>
-      <td class="summary-value" colspan="9">${escapeHtml(formatGbp(scopedTotalGbp))}</td>
-    </tr>
-    <tr><td colspan="12"></td></tr>
-    <tr>
-      ${groupTotals.map((group) => `<th class="method" colspan="4">${escapeHtml(group.label)}</th>`).join("")}
-    </tr>
-    <tr>
-      ${groupTotals.map((group) => `<td class="method-total" colspan="4">${escapeHtml(paymentTotalLabel(group.totalGbp, group.rows.length))}</td>`).join("")}
-    </tr>
-    <tr>
-      ${groupTotals.map(() => `
-        <th class="subhead">Parent Name</th>
-        <th class="subhead">Paid Amount</th>
-        <th class="subhead">Children</th>
-        <th class="subhead">Programmes</th>
-      `).join("")}
-    </tr>
-    ${bodyRows}
-  </table>
-</body>
-</html>`;
+      return [
+        { value: row.parent },
+        { value: row.payment, style: 7 },
+        { value: row.overview },
+        { value: row.programmes },
+      ];
+    }));
+  }
+
+  const workbook = buildWorkbook(rows, [
+    "A1:L1",
+    "A2:C2",
+    "D2:L2",
+    "A3:C3",
+    "D3:L3",
+    "A4:C4",
+    "D4:L4",
+    "A6:D6",
+    "E6:H6",
+    "I6:L6",
+    "A7:D7",
+    "E7:H7",
+    "I7:L7",
+  ]);
   const filename = exportAll
-    ? `gen-mumin-all-completed-payments.xls`
-    : `gen-mumin-monthly-payments-${window.key}.xls`;
+    ? `gen-mumin-all-completed-payments.xlsx`
+    : `gen-mumin-monthly-payments-${window.key}.xlsx`;
 
   return new NextResponse(workbook, {
     headers: {
-      "Content-Type": "application/vnd.ms-excel; charset=utf-8",
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "no-store",
     },
