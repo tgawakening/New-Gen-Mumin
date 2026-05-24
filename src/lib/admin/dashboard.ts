@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { completedOrderWhere } from "@/lib/payments/completed-orders";
 import { convertAmountToGbp } from "@/lib/registration/catalog";
 
 const COMPLETED_ENROLLMENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
@@ -129,7 +130,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     }),
     db.contactMessage.count({ where: { status: "NEW" } }),
     db.order.findMany({
-      where: { status: "SUCCEEDED" },
+      where: completedOrderWhere,
       select: {
         gateway: true,
         totalAmount: true,

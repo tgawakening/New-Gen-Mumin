@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { completedOrderWhere } from "@/lib/payments/completed-orders";
 
 export const dynamic = "force-dynamic";
 
@@ -71,9 +72,7 @@ export async function GET() {
   }
 
   const orders = await db.order.findMany({
-    where: {
-      status: "SUCCEEDED",
-    },
+    where: completedOrderWhere,
     orderBy: { paidAt: "desc" },
     include: {
       parent: {

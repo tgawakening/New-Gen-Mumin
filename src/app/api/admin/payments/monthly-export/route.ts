@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { completedOrderWhere } from "@/lib/payments/completed-orders";
 import { convertAmountToGbp } from "@/lib/registration/catalog";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +53,16 @@ function formatPayment(amount: number, currency: string) {
   return `${currency} ${amount} (${formatGbp(gbp)})`;
 }
 
+function completedAt(order: {
+  paidAt: Date | null;
+  updatedAt: Date;
+  createdAt: Date;
+  payments: Array<{ status: string; paidAt: Date | null; updatedAt: Date; createdAt: Date }>;
+}) {
+  const successfulPayment = order.payments.find((payment) => payment.status === "SUCCEEDED");
+  return order.paidAt ?? successfulPayment?.paidAt ?? successfulPayment?.updatedAt ?? order.updatedAt ?? order.createdAt;
+}
+
 function paymentTotalLabel(totalGbp: number, count: number) {
   return `${formatGbp(totalGbp)} received from ${count} payment${count === 1 ? "" : "s"}`;
 }
@@ -79,10 +90,14 @@ export async function GET(request: Request) {
   const exportAll = searchParams.get("all") === "1";
   const window = monthWindow(searchParams.get("month"));
   const orders = await db.order.findMany({
-    where: { status: "SUCCEEDED" },
+    where: completedOrderWhere,
     orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
     include: {
       parent: { include: { user: true } },
+      payments: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      },
       registration: {
         include: {
           students: true,
@@ -96,7 +111,7 @@ export async function GET(request: Request) {
     return sum + convertAmountToGbp(order.totalAmount, order.currency);
   }, 0);
   const scopedOrders = exportAll ? orders : orders.filter((order) => {
-    const paidDate = order.paidAt ?? order.createdAt;
+    const paidDate = completedAt(order);
     return paidDate >= window.start && paidDate < window.end;
   });
   const scopedTotalGbp = scopedOrders.reduce((sum, order) => {
