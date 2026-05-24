@@ -13,6 +13,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "db:apply-community": "node scripts/apply-community-migration.mjs",
     "prisma:studio": "prisma studio",
     "prisma:seed": "node prisma/seed.mjs"
   },
