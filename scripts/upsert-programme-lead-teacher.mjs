@@ -9,10 +9,12 @@ const teacher = {
   firstName: "Programme",
   lastName: "Lead",
   password: process.env.PROGRAMME_LEAD_PASSWORD || "GenM-ProgrammeLead2026!",
-  bio: "Founder & Director of TGA Platform and Gen-Mumin Programme Lead Coordinator. PGDE in Primary Education from the University of Dundee, BA (Hons) in E-Commerce from Glasgow Caledonian University, and student of Tafsir, Tajweed, and Seerah An-Nabawiyyah.",
+  bio: "Founder & Director of TGA Platform and Gen-Mumin Programme Lead Coordinator.",
   specialties: {
     list: [
       "Whole programme coordination",
+      "PGDE in Primary Education - University of Dundee",
+      "BA (Hons) in E-Commerce - Glasgow Caledonian University",
       "Primary education",
       "Tafsir, Tajweed, and Seerah learning",
       "Curriculum quality assurance",
