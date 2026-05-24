@@ -96,12 +96,22 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
         title="Choose a learner"
         icon="star"
         action={
-          <Link
-            href="/parent?addChild=1"
-            className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
-          >
-            Add another child
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {selectedChild ? (
+              <Link
+                href={`/parent/student-view?child=${selectedChild.id}`}
+                className="cursor-pointer rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#17243a]"
+              >
+                Open student dashboard
+              </Link>
+            ) : null}
+            <Link
+              href="/parent?addChild=1"
+              className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
+            >
+              Add another child
+            </Link>
+          </div>
         }
       >
         <ChildSelector
