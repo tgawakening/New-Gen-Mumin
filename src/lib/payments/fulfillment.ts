@@ -114,7 +114,7 @@ export async function recordManualPaidAmount(
   },
 ) {
   if (!Number.isFinite(input.amount) || input.amount < 0) {
-    throw new Error("Manual paid amount must be zero or greater.");
+    throw new Error("Recorded paid amount must be zero or greater.");
   }
 
   const order = await db.order.findUnique({
@@ -133,10 +133,6 @@ export async function recordManualPaidAmount(
 
   if (!order) {
     throw new Error("Order not found.");
-  }
-
-  if (order.gateway !== "BANK_TRANSFER") {
-    throw new Error("Manual paid amount adjustments are available only for manual payment orders.");
   }
 
   const payment = order.payments[0] ?? null;

@@ -108,7 +108,7 @@ export async function GET() {
       "Children details",
       "Programs overview",
       "Amount paid",
-      "Manual revenue note",
+      "Payment adjustment note",
       "Payment method",
     ],
   ];

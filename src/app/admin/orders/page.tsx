@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { db } from "@/lib/db";
-import { markOrderPaid, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
+import { markOrderPaid, recordManualPaidAmount, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
 
 function statusClass(status: string) {
   if (status === "SUCCEEDED") return "bg-[#effaf3] text-[#2f6b4b]";
@@ -33,6 +33,18 @@ function extractNoteValue(notes: string | null | undefined, label: string) {
     .split(/\s*\|\s*|\r?\n/)
     .find((item) => item.toLowerCase().startsWith(`${label.toLowerCase()}:`));
   return entry ? entry.split(":").slice(1).join(":").trim() : null;
+}
+
+function extractManualPaidAmountAdjustment(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const adjustment = (metadata as Record<string, unknown>).manualPaidAmountAdjustment;
+  if (!adjustment || typeof adjustment !== "object" || Array.isArray(adjustment)) return null;
+  const record = adjustment as Record<string, unknown>;
+  return {
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    note: typeof record.note === "string" ? record.note : null,
+  };
 }
 
 export default async function AdminOrdersPage({
@@ -94,6 +106,28 @@ export default async function AdminOrdersPage({
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
   }
 
+  async function adjustManualPaidAmount(formData: FormData) {
+    "use server";
+
+    const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin/orders");
+    const amount = Number(formData.get("manualPaidAmount"));
+    const note = String(formData.get("manualPaidNote") || "");
+    if (!orderId || !Number.isFinite(amount) || amount < 0) {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Enter a valid paid amount&tone=error`);
+    }
+
+    try {
+      await recordManualPaidAmount(orderId, { amount, note });
+      revalidatePath("/admin/orders");
+      revalidatePath("/admin");
+      revalidatePath("/admin/registrations");
+    } catch {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to update the paid amount right now&tone=error`);
+    }
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Paid amount record updated&tone=success`);
+  }
+
   const params = searchParams ? await searchParams : undefined;
 
   const orders = await db.order.findMany({
@@ -136,6 +170,7 @@ export default async function AdminOrdersPage({
               const latestPayment = order.payments[0] ?? null;
               const manualSubmission = latestPayment?.manualSubmission ?? null;
               const city = extractNoteValue(order.registration?.notes, "City");
+              const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
               const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
@@ -172,6 +207,12 @@ export default async function AdminOrdersPage({
                   </span>
                   {order.discountAmount > 0 ? (
                     <span>Saved {order.currency} {order.discountAmount}</span>
+                  ) : null}
+                  {manualPaidAmountAdjustment ? (
+                    <span>
+                      Payment record: {manualPaidAmountAdjustment.currency ?? order.currency} {manualPaidAmountAdjustment.amount ?? order.totalAmount}
+                      {manualPaidAmountAdjustment.note ? ` - ${manualPaidAmountAdjustment.note}` : ""}
+                    </span>
                   ) : null}
                   <span>{order.payments.length} payment records</span>
                   {typeof order.registration?.pricingSnapshot === "object" &&
@@ -245,6 +286,30 @@ export default async function AdminOrdersPage({
                       </button>
                     </form>
                   </div>
+                ) : null}
+                {["BANK_TRANSFER", "STRIPE", "PAYPAL"].includes(order.gateway) ? (
+                  <form action={adjustManualPaidAmount} className="mt-4 grid gap-3 rounded-[22px] border border-[#eadfce] bg-[#fbfdff] p-4 text-sm md:grid-cols-[180px_1fr_auto]">
+                    <input type="hidden" name="orderId" value={order.id} />
+                    <input type="hidden" name="returnUrl" value="/admin/orders" />
+                    <input
+                      name="manualPaidAmount"
+                      type="number"
+                      min="0"
+                      step="1"
+                      defaultValue={order.totalAmount}
+                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
+                      aria-label="Recorded paid amount"
+                    />
+                    <input
+                      name="manualPaidNote"
+                      defaultValue={manualPaidAmountAdjustment?.note ?? ""}
+                      placeholder="Note, e.g. manual refund or corrected gateway amount"
+                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
+                    />
+                    <button className="rounded-full bg-[#22304a] px-5 py-2 font-semibold text-white">
+                      Save record
+                    </button>
+                  </form>
                 ) : null}
               </div>
             );

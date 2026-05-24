@@ -133,7 +133,7 @@ export function OrderDetailsPopup({
               <DetailBlock label="Pricing" value={pricingLabel} />
               {manualPaidAmountAdjustment ? (
                 <DetailBlock
-                  label="Manual revenue note"
+                  label="Payment adjustment note"
                   value={[
                     manualPaidAmountAdjustment.amount !== null && manualPaidAmountAdjustment.currency
                       ? `${manualPaidAmountAdjustment.currency} ${manualPaidAmountAdjustment.amount}`

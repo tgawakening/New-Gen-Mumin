@@ -131,6 +131,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     db.order.findMany({
       where: { status: "SUCCEEDED" },
       select: {
+        gateway: true,
         totalAmount: true,
         currency: true,
       },
@@ -449,6 +450,17 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const revenueGbp = paidOrders.reduce((sum, order) => {
     return sum + convertAmountToGbp(order.totalAmount, order.currency);
   }, 0);
+  const revenueByGateway = ["STRIPE", "PAYPAL", "BANK_TRANSFER"].map((gateway) => {
+    const totalGbp = paidOrders
+      .filter((order) => order.gateway === gateway)
+      .reduce((sum, order) => sum + convertAmountToGbp(order.totalAmount, order.currency), 0);
+
+    return {
+      gateway,
+      totalGbp: Math.round(totalGbp * 100) / 100,
+      orderCount: paidOrders.filter((order) => order.gateway === gateway).length,
+    };
+  });
 
   return {
     metrics: {
@@ -458,6 +470,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       unreadMessages,
       revenueGbp: Math.round(revenueGbp * 100) / 100,
     },
+    revenueByGateway,
     recentRegistrations,
     orders: filteredOrders,
     students: filteredStudents,
