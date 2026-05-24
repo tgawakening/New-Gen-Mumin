@@ -2,12 +2,12 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
   ChildSelector,
   CompactList,
   FamilyDashboardFrame,
   InfoList,
-  MetricGrid,
   SectionCard,
   formatGrade,
   formatWeekday,
@@ -98,6 +98,23 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
   const dailyMission = buildDailyMission(selectedChild);
   const classCircle = currentCircle(selectedChild);
   const projectTask = selectedChild.assignments[0] ?? null;
+  const dashboardMetrics = [
+    { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
+    { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
+    { label: "House points", value: String(stats.housePoints), hint: "Calculated from learning activity." },
+    { label: "Attendance", value: `${selectedChild.attendanceRate}%`, hint: "Recent class presence." },
+  ];
+  const badgeItems = selectedChild.badges.length
+    ? selectedChild.badges.slice(0, 4).map((badge, index) => ({
+        label: badge.title,
+        meta: badge.status === "earned" ? "Earned badge" : "In progress",
+        tone: (["coral", "blue", "mint", "violet"] as const)[index % 4],
+      }))
+    : [
+        { label: "Mission Starter", meta: "Complete the first quest", tone: "coral" as const },
+        { label: "Circle Ready", meta: "Mentor-supervised spaces", tone: "blue" as const },
+        { label: "Adab Builder", meta: "Weekly reflection", tone: "mint" as const },
+      ];
 
   return (
     <FamilyDashboardFrame
@@ -127,16 +144,38 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
         />
       </SectionCard>
 
-      <MetricGrid
-        metrics={[
-          { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
-          { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-          { label: "House points", value: String(stats.housePoints), hint: "Calculated from learning activity." },
-          { label: "Attendance", value: `${selectedChild.attendanceRate}%`, hint: "Recent class presence." },
+      <StudentQuestHub
+        studentName={selectedChild.name}
+        roleLabel="Student Home"
+        mission={dailyMission}
+        houseName="House path"
+        houseVirtue="Amanah"
+        metrics={dashboardMetrics}
+        badges={badgeItems}
+        actions={[
+          { label: "Review missions", href: `/parent/quizzes?child=${selectedChild.id}` },
+          { label: "Weekly feedback", href: `/parent/feedback?child=${selectedChild.id}`, variant: "secondary" },
         ]}
+        nextClassLabel={
+          selectedChild.nextClass
+            ? `${selectedChild.nextClass.title} on ${formatWeekday(selectedChild.nextClass.weekday)}`
+            : "Schedule appears once assigned."
+        }
+        circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
+        avatarVariant={selectedChild.profile.age && selectedChild.profile.age < 9 ? "neutral" : "girl"}
       />
 
-      <section className="overflow-hidden rounded-[28px] border border-[#eadfce] bg-white shadow-sm">
+      <div className="sr-only">
+        <ul>
+          {dashboardMetrics.map((metric) => (
+            <li key={metric.label}>
+              {metric.label}: {metric.value}. {metric.hint}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <section className="hidden overflow-hidden rounded-[28px] border border-[#eadfce] bg-white shadow-sm">
         <div className="grid gap-0 xl:grid-cols-[minmax(0,1.25fr)_360px]">
           <div className="bg-[#17243a] p-5 text-white sm:p-7">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f]">Today&apos;s mission</p>

@@ -8,10 +8,10 @@ import { getStudentQuestData } from "@/lib/community/quest";
 import { db } from "@/lib/db";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
   FamilyDashboardFrame,
   CompactList,
-  MetricGrid,
   SectionCard,
   formatWeekday,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
@@ -114,6 +114,23 @@ export default async function StudentDashboardPage() {
   const dailyMission = buildDailyMission(child, quest.missions[0]);
   const projectTask = child.assignments[0] ?? null;
   const classCircle = nextClassRoom ?? child.courses[0]?.roomAssignment ?? null;
+  const dashboardMetrics = [
+    { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
+    { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
+    { label: "House points", value: String(quest.studentTotal || stats.housePoints), hint: `${house.name} contribution.` },
+    { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
+  ];
+  const badgeItems = child.badges.length
+    ? child.badges.slice(0, 4).map((badge, index) => ({
+        label: badge.title,
+        meta: badge.status === "earned" ? "Earned badge" : "In progress",
+        tone: (["coral", "blue", "mint", "violet"] as const)[index % 4],
+      }))
+    : [
+        { label: "Mission Starter", meta: "Complete your first quest", tone: "coral" as const },
+        { label: "Circle Ready", meta: "Join supervised spaces", tone: "blue" as const },
+        { label: "Adab Builder", meta: "Reflect weekly", tone: "mint" as const },
+      ];
   const announcements = notifications.length
     ? notifications
     : [
@@ -139,16 +156,38 @@ export default async function StudentDashboardPage() {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <MetricGrid
-        metrics={[
-          { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
-          { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-          { label: "House points", value: String(quest.studentTotal || stats.housePoints), hint: `${house.name} contribution.` },
-          { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
+      <StudentQuestHub
+        studentName={dashboard.studentName}
+        roleLabel="Student Home"
+        mission={dailyMission}
+        houseName={house.name}
+        houseVirtue={house.virtue}
+        metrics={dashboardMetrics}
+        badges={badgeItems}
+        actions={[
+          { label: dailyMission.action, href: dailyMission.href },
+          { label: "Ask mentor", href: "/student/journal/submit", variant: "secondary" },
         ]}
+        nextClassLabel={
+          child.nextClass
+            ? `${child.nextClass.title} on ${formatWeekday(child.nextClass.weekday)}`
+            : "Schedule appears once assigned."
+        }
+        circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
+        avatarVariant={child.profile.age && child.profile.age < 9 ? "neutral" : "boy"}
       />
 
-      <section className="overflow-hidden rounded-[28px] border border-[#eadfce] bg-white shadow-sm">
+      <div className="sr-only">
+        <ul>
+          {dashboardMetrics.map((metric) => (
+            <li key={metric.label}>
+              {metric.label}: {metric.value}. {metric.hint}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <section className="hidden overflow-hidden rounded-[28px] border border-[#eadfce] bg-white shadow-sm">
         <div className="grid gap-0 xl:grid-cols-[minmax(0,1.25fr)_360px]">
           <div className="bg-[#17243a] p-5 text-white sm:p-7">
             <div className="flex flex-wrap items-start justify-between gap-4">
