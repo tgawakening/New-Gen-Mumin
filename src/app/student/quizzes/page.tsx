@@ -173,10 +173,15 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
               <p className="mt-3 text-sm text-[#5f6b7a]">
                 Latest score: {latestAttempt?.manualScore ?? latestAttempt?.autoScore ?? "Not attempted"}
               </p>
-              <details className="mt-4 rounded-[18px] bg-white p-4">
-                <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                  Start quiz
+              <details className="group mt-4 rounded-[18px] bg-white p-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#22304a]">
+                  <span>Start quiz</span>
+                  <span className="rounded-full bg-[#22304a] px-3 py-1.5 text-xs text-white group-open:hidden">Open</span>
+                  <span className="hidden rounded-full border border-[#d8e3ed] px-3 py-1.5 text-xs group-open:inline">Close</span>
                 </summary>
+                <div className="mt-4 rounded-2xl border border-[#eadfce] bg-[#fff9f2] p-4 text-sm leading-6 text-[#5f6b7a]">
+                  Questions are shown only after you start this quiz. Answer carefully, then submit once; your teacher will be notified automatically.
+                </div>
                 <form action={submitQuizAction} className="mt-4 space-y-3">
                   <input type="hidden" name="quizId" value={quiz.id} />
                   {quiz.questions.map((question) => {

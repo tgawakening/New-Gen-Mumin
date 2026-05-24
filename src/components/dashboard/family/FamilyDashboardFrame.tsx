@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { BatchCommunityButton } from "@/components/dashboard/family/BatchCommunityButton";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
+import { FamilyNavLinkClient } from "@/components/dashboard/family/FamilyNavLinkClient";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
 
@@ -164,20 +165,12 @@ export function FamilyDashboardFrame({
                 (() => {
                   const Icon = getNavIcon(item.icon);
                   return (
-                    <Link
+                    <FamilyNavLinkClient
                       key={item.href}
                       href={item.href}
-                      title={item.label}
-                      className="group/nav relative flex items-center justify-center gap-3 rounded-2xl bg-white/8 px-2 py-3 text-sm font-medium text-white/90 transition hover:bg-white/12 xl:justify-start xl:px-4"
-                    >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="hidden xl:inline">{item.label}</span>
-                      <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-40 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#22304a] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-xl transition group-hover/nav:block group-hover/nav:opacity-100 xl:hidden">
-                        {item.label}
-                      </span>
-                    </Link>
+                      label={item.label}
+                      icon={Icon}
+                    />
                   );
                 })()
               ))}

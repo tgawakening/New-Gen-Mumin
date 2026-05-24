@@ -212,15 +212,26 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
           Paste spreadsheet rows as CSV: serial,parent/location,location,child name,age. The serial number becomes the room code shown to students.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
-          {dashboard.rosters.map((roster) => (
-            <Link
-              key={roster.programId}
-              href={`/api/classes/breakout-csv?programId=${roster.programId}`}
-              className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-xs font-semibold text-[#0f4d81]"
-            >
-              Export Zoom CSV - {roster.title}
-            </Link>
-          ))}
+          {dashboard.rosters.map((roster) => {
+            const hasRoomAssignments = roster.students.some((student) => student.roomAssignment?.roomCode || student.roomAssignment?.roomName);
+            return hasRoomAssignments ? (
+              <Link
+                key={roster.programId}
+                href={`/api/classes/breakout-csv?programId=${roster.programId}`}
+                className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-xs font-semibold text-[#0f4d81]"
+              >
+                Export Zoom CSV - {roster.title}
+              </Link>
+            ) : (
+              <span
+                key={roster.programId}
+                title="Assign or import real student room codes before exporting."
+                className="cursor-not-allowed rounded-full border border-[#dce4ed] bg-[#f4f7fa] px-4 py-2 text-xs font-semibold text-[#8a96a5]"
+              >
+                Export locked - {roster.title}
+              </span>
+            );
+          })}
         </div>
         <form action={importRoomAssignmentsAction} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">

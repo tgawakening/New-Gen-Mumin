@@ -9,6 +9,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { getTeacherFeedbackSummary, getTeacherParentFeedbackInbox, submitWeeklyFeedback } from "@/lib/community/feedback";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { FeedbackReviewConsole, type FeedbackReviewEntry } from "@/components/dashboard/feedback/FeedbackReviewConsole";
+import { MultiStepFeedbackForm } from "@/components/dashboard/feedback/MultiStepFeedbackForm";
 import {
   TeacherDashboardFrame,
   TeacherMetricGrid,
@@ -162,60 +163,70 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
         <TeacherSection eyebrow="Class handover" title="Submit after class">
-          <form action={submitTeacherFeedback} className="grid gap-4">
-            <input type="hidden" name="weekLabel" value={`Class handover - ${new Date().toLocaleDateString("en-GB")}`} />
-            <div className="rounded-[22px] border border-[#f0d4bb] bg-[#fff8f0] p-4">
-              <span className="rounded-lg bg-[#f39f5f] px-3 py-1 text-xs font-semibold text-white">Section 1 of 3</span>
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <Field label="Teacher Name"><input name="teacherName" defaultValue={dashboard.teacherName} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-                <Field label="Class / Subject">
-                  <select name="classId" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                    {dashboard.classes.map((classInfo) => <option key={classInfo.id} value={classInfo.id}>{classInfo.title}</option>)}
-                  </select>
-                </Field>
-                <Field label="Program">
-                  <select name="classSubject" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                    {dashboard.rosters.map((program) => <option key={program.programId}>{program.title}</option>)}
-                    <option>Full Gen Mu&apos;min Program</option>
-                  </select>
-                </Field>
-                <Field label="Age Group">
-                  <select name="ageGroup" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                    {["6-8", "9-12", "13-17", "Mixed age group"].map((option) => <option key={option}>{option}</option>)}
-                  </select>
-                </Field>
-                <Field label="Class Date"><input name="classDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-                <Field label="Class Time"><input name="classTime" type="time" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-              </div>
-            </div>
-            <div className="rounded-[22px] border border-[#f0d4bb] bg-[#fff8f0] p-4">
-              <span className="rounded-lg bg-[#f39f5f] px-3 py-1 text-xs font-semibold text-white">Section 2 of 3</span>
-              <div className="mt-4 grid gap-4">
-                <Field label="What was taught today?"><textarea name="taughtToday" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Choice name="classStatus" label="Class Status" options={["Completed smoothly", "Partially completed", "Needs revision", "Needs management attention"]} />
-                  <Choice name="studentEngagement" label="Student Engagement" options={["High", "Medium", "Low"]} />
-                </div>
-                <Choice name="missedTopic" label="Was any topic missed or left incomplete?" options={["No", "Yes", "Not sure"]} />
-                <Field label="If yes, what was missed?"><textarea name="missedDetails" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-                <Field label="Notes for the next teacher"><textarea name="nextTeacherNotes" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-              </div>
-            </div>
-            <div className="rounded-[22px] border border-[#f0d4bb] bg-[#fff8f0] p-4">
-              <span className="rounded-lg bg-[#f39f5f] px-3 py-1 text-xs font-semibold text-white">Section 3 of 3</span>
-              <div className="mt-4 grid gap-4">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Choice name="studentConcern" label="Any student concern?" options={["No concern", "Minor concern", "Needs follow-up", "Urgent concern"]} />
-                  <Choice name="managementSupport" label="Do you need management support?" options={["No", "Yes", "Not Sure"]} />
-                </div>
-                <Field label="If there is a concern, explain briefly"><textarea name="concernExplanation" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-                <Field label="Any final note?"><textarea name="finalNote" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
-              </div>
-            </div>
-            <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">
-              Submit teacher feedback
-            </button>
-          </form>
+          <MultiStepFeedbackForm
+            action={submitTeacherFeedback}
+            hiddenFields={[{ name: "weekLabel", value: `Class handover - ${new Date().toLocaleDateString("en-GB")}` }]}
+            submitLabel="Submit teacher feedback"
+            steps={[
+              {
+                title: "Gen Mu'min Class Handover",
+                description: "A quick update after class so the next teacher and management stay aligned.",
+                content: (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Field label="Teacher Name"><input name="teacherName" defaultValue={dashboard.teacherName} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                    <Field label="Class / Subject">
+                      <select name="classId" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        {dashboard.classes.map((classInfo) => <option key={classInfo.id} value={classInfo.id}>{classInfo.title}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Program">
+                      <select name="classSubject" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        {dashboard.rosters.map((program) => <option key={program.programId}>{program.title}</option>)}
+                        <option>Full Gen Mu&apos;min Program</option>
+                      </select>
+                    </Field>
+                    <Field label="Age Group">
+                      <select name="ageGroup" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                        {["6-8", "9-12", "13-17", "Mixed age group"].map((option) => <option key={option}>{option}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Class Date"><input name="classDate" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                    <Field label="Class Time"><input name="classTime" type="time" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                  </div>
+                ),
+              },
+              {
+                title: "Class Summary",
+                description: "A short summary of what happened in today's class.",
+                content: (
+                  <>
+                    <Field label="What was taught today?"><textarea name="taughtToday" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Choice name="classStatus" label="Class Status" options={["Completed smoothly", "Partially completed", "Needs revision", "Needs management attention"]} />
+                      <Choice name="studentEngagement" label="Student Engagement" options={["High", "Medium", "Low"]} />
+                    </div>
+                    <Choice name="missedTopic" label="Was any topic missed or left incomplete?" options={["No", "Yes", "Not sure"]} />
+                    <Field label="If yes, what was missed?"><textarea name="missedDetails" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                    <Field label="Notes for the next teacher"><textarea name="nextTeacherNotes" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                  </>
+                ),
+              },
+              {
+                title: "Student Concerns & Support",
+                description: "Only mention important concerns or support needed.",
+                content: (
+                  <>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Choice name="studentConcern" label="Any student concern?" options={["No concern", "Minor concern", "Needs follow-up", "Urgent concern"]} />
+                      <Choice name="managementSupport" label="Do you need management support?" options={["No", "Yes", "Not Sure"]} />
+                    </div>
+                    <Field label="If there is a concern, explain briefly"><textarea name="concernExplanation" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                    <Field label="Any final note?"><textarea name="finalNote" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></Field>
+                  </>
+                ),
+              },
+            ]}
+          />
         </TeacherSection>
 
         <TeacherSection eyebrow="History" title="Recent entries">

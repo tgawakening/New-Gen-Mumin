@@ -40,7 +40,6 @@ type CourseBuilderWorkspaceProps = {
   materialComposer?: boolean;
 };
 
-const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
 const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 const AUDIENCE_OPTIONS = [
@@ -759,7 +758,9 @@ export function CourseBuilderWorkspace({
         programId: String(formData.get("programId") || ""),
         title: String(formData.get("title") || ""),
         startDate: String(formData.get("startDate") || ""),
-        weekday: Number(formData.get("weekday") || 0),
+        weekday: formData.get("startDate")
+          ? new Date(`${String(formData.get("startDate"))}T00:00:00`).getDay()
+          : new Date().getDay(),
         startTime: String(formData.get("startTime") || "16:00"),
         endTime: String(formData.get("endTime") || "17:00"),
         timezone: String(formData.get("timezone") || "Europe/London"),
@@ -1933,14 +1934,6 @@ export function CourseBuilderWorkspace({
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Start date
                       <input name="startDate" type="date" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-                    </label>
-                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                      Day
-                      <select name="weekday" defaultValue="6" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                        {WEEKDAYS.map((weekday, index) => (
-                          <option key={weekday} value={index}>{weekday}</option>
-                        ))}
-                      </select>
                     </label>
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Timezone

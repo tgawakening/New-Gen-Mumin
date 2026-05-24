@@ -133,7 +133,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
         ]}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+      <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <TeacherSection eyebrow="Create" title="New mission">
           <form action={createMission} className="grid gap-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -163,7 +163,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
               Description
               <textarea name="description" rows={2} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             </label>
-            <div className="grid gap-4 md:grid-cols-[1fr_180px_160px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_180px_140px]">
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Question
                 <input name="prompt" required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
@@ -186,7 +186,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
               Choices
               <textarea name="choices" rows={2} placeholder="Comma or line separated for MCQ" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             </label>
-            <div className="grid gap-4 md:grid-cols-[1fr_180px_180px]">
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_160px_160px]">
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Correct answer
                 <input name="answer" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
