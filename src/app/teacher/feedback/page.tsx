@@ -8,6 +8,7 @@ import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { getTeacherFeedbackSummary, getTeacherParentFeedbackInbox, submitWeeklyFeedback } from "@/lib/community/feedback";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { FeedbackReviewConsole, type FeedbackReviewEntry } from "@/components/dashboard/feedback/FeedbackReviewConsole";
 import {
   TeacherDashboardFrame,
   TeacherMetricGrid,
@@ -18,6 +19,14 @@ import {
 type PageProps = {
   searchParams?: Promise<{ submitted?: string }>;
 };
+
+function payloadEntries(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  return Object.entries(payload).map(([key, value]) => ({
+    label: key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase()),
+    value: Array.isArray(value) ? value.join(", ") : String(value || "No entry"),
+  }));
+}
 
 export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
@@ -30,6 +39,54 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
   ]);
   if (!dashboard) redirect("/teacher-registration");
   const parentInbox = await getTeacherParentFeedbackInbox(session.user.id);
+  const parentReviewEntries: FeedbackReviewEntry[] = parentInbox.responses.map((entry) => {
+    const studentName = entry.student?.displayName || `${entry.student?.user.firstName ?? ""} ${entry.student?.user.lastName ?? ""}`.trim() || null;
+    const programmes = entry.student?.enrollments.map((enrollment) => enrollment.program.title) ?? [];
+    const summary = [
+      { label: "What is going well", value: entry.wins || "No entry" },
+      { label: "Concern", value: entry.concerns || "No entry" },
+      { label: "Improvement", value: entry.supportNeeded || "No entry" },
+    ];
+
+    return {
+      id: entry.id,
+      audience: "PARENT",
+      title: entry.weekLabel,
+      submittedBy: `${entry.submittedBy.firstName} ${entry.submittedBy.lastName}`.trim(),
+      studentName,
+      programmes,
+      submittedAt: formatDate(entry.submittedAt),
+      metrics: [
+        { label: "Satisfaction", value: entry.moodRating ? `${entry.moodRating}/5` : "-" },
+        { label: "Confidence", value: entry.confidence ? `${entry.confidence}/5` : "-" },
+      ],
+      summary,
+      details: [...payloadEntries(entry.rawPayload), ...summary],
+    };
+  });
+  const teacherReviewEntries: FeedbackReviewEntry[] = feedback.map((entry) => ({
+    id: entry.id,
+    audience: "TEACHER",
+    title: entry.weekLabel,
+    submittedBy: dashboard.teacherName,
+    studentName: null,
+    programmes: [],
+    submittedAt: formatDate(entry.submittedAt),
+    metrics: [
+      { label: "Engagement", value: entry.confidence ? `${entry.confidence}/5` : "-" },
+    ],
+    summary: [
+      { label: "Taught", value: entry.wins || "No entry" },
+      { label: "Concern", value: entry.concerns || "No entry" },
+      { label: "Next teacher notes", value: entry.supportNeeded || "No entry" },
+    ],
+    details: [
+      ...payloadEntries(entry.rawPayload),
+      { label: "Taught", value: entry.wins || "No entry" },
+      { label: "Concern", value: entry.concerns || "No entry" },
+      { label: "Next teacher notes", value: entry.supportNeeded || "No entry" },
+    ],
+  }));
 
   const params = searchParams ? await searchParams : {};
 
@@ -162,34 +219,24 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
         </TeacherSection>
 
         <TeacherSection eyebrow="History" title="Recent entries">
-          <div className="space-y-3">
-            {feedback.map((entry) => (
-              <div key={entry.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b]">
-                <p className="font-semibold text-[#22304a]">{entry.weekLabel}</p>
-                <p className="mt-1">Confidence {entry.confidence ?? "-"} - Workload {entry.workload ?? "-"}</p>
-                <p className="mt-1 text-xs text-[#6d7785]">{formatDate(entry.submittedAt)}</p>
-              </div>
-            ))}
-            {!feedback.length ? (
-              <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
-                Your teacher feedback history will appear here.
-              </p>
-            ) : null}
-          </div>
+          <FeedbackReviewConsole
+            entries={teacherReviewEntries}
+            defaultAudience="TEACHER"
+            showAudienceTabs={false}
+            showProgrammeTabs={false}
+            emptyLabel="Your teacher feedback history will appear here."
+          />
         </TeacherSection>
       </div>
 
       <TeacherSection eyebrow="Parent pulse inbox" title="Parent feedback for your programmes">
-        <div className="grid gap-3">
-          {parentInbox.responses.slice(0, 30).map((entry) => (
-            <div key={entry.id} className="rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm">
-              <p className="font-semibold text-[#22304a]">{entry.student?.displayName || `${entry.student?.user.firstName ?? ""} ${entry.student?.user.lastName ?? ""}`.trim()}</p>
-              <p className="mt-1 text-[#617184]">{entry.weekLabel} - {formatDate(entry.submittedAt)}</p>
-              <p className="mt-2 line-clamp-2 text-[#4d5a6b]">{entry.wins || entry.concerns || "No written note"}</p>
-            </div>
-          ))}
-          {!parentInbox.responses.length ? <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm text-[#6b7482]">Parent feedback will appear here.</p> : null}
-        </div>
+        <FeedbackReviewConsole
+          entries={parentReviewEntries}
+          defaultAudience="PARENT"
+          showAudienceTabs={false}
+          showProgrammeTabs
+          emptyLabel="Parent feedback will appear here."
+        />
       </TeacherSection>
     </TeacherDashboardFrame>
   );

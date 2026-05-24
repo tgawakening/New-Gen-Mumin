@@ -4,6 +4,7 @@ import { FeedbackAudience } from "@prisma/client";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { getAdminFeedbackOverview } from "@/lib/community/feedback";
+import { FeedbackReviewConsole, type FeedbackReviewEntry } from "@/components/dashboard/feedback/FeedbackReviewConsole";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -22,11 +23,47 @@ function totalFor(totals: Array<{ audience: FeedbackAudience; _count: { _all: nu
   return totals.find((entry) => entry.audience === audience)?._count._all ?? 0;
 }
 
+function payloadEntries(payload: unknown) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
+  return Object.entries(payload).map(([key, value]) => ({
+    label: key.replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase()),
+    value: Array.isArray(value) ? value.join(", ") : String(value || "No entry"),
+  }));
+}
+
+function toReviewEntry(entry: Awaited<ReturnType<typeof getAdminFeedbackOverview>>["responses"][number]): FeedbackReviewEntry {
+  const programmes = entry.student?.enrollments.map((enrollment) => enrollment.program.title) ?? [];
+  const studentName = entry.student ? personName(entry.student.user) : null;
+  const summary = [
+    { label: "Wins / taught", value: entry.wins || "No entry" },
+    { label: "Concerns", value: entry.concerns || "No entry" },
+    { label: "Support / next steps", value: entry.supportNeeded || "No entry" },
+  ];
+
+  return {
+    id: entry.id,
+    audience: entry.audience,
+    title: entry.weekLabel,
+    submittedBy: `${personName(entry.submittedBy)} (${entry.submittedBy.role})`,
+    studentName,
+    programmes,
+    submittedAt: formatDate(entry.submittedAt),
+    metrics: [
+      { label: "Mood", value: entry.moodRating ? `${entry.moodRating}/5` : "-" },
+      { label: "Confidence", value: entry.confidence ? `${entry.confidence}/5` : "-" },
+      { label: "Workload", value: entry.workload ? `${entry.workload}/5` : "-" },
+    ],
+    summary,
+    details: [...payloadEntries(entry.rawPayload), ...summary],
+  };
+}
+
 export default async function AdminFeedbackPage() {
   const session = await getCurrentSession();
   if (!session || session.user.role !== "ADMIN") redirect("/admin");
 
   const overview = await getAdminFeedbackOverview();
+  const reviewEntries = overview.responses.map(toReviewEntry);
 
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
@@ -61,52 +98,16 @@ export default async function AdminFeedbackPage() {
         <section className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">Recent responses</p>
-            <h2 className="mt-2 text-xl font-semibold text-[#22304a]">Feedback stream</h2>
+            <h2 className="mt-2 text-xl font-semibold text-[#22304a]">Feedback review</h2>
           </div>
 
-          <div className="space-y-4">
-            {overview.responses.map((entry) => (
-              <div key={entry.id} className="rounded-[20px] border border-[#eadfce] bg-[#fbfdff] p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-[#22304a]">{entry.weekLabel}</p>
-                    <p className="mt-1 text-sm text-[#617184]">
-                      {entry.audience} by {personName(entry.submittedBy)} - {formatDate(entry.submittedAt)}
-                    </p>
-                    <p className="mt-1 text-sm text-[#617184]">
-                      Student: {entry.student ? personName(entry.student.user) : "General teacher/admin feedback"}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-xs font-semibold">
-                    <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-[#245d85]">Mood {entry.moodRating ?? "-"}/5</span>
-                    <span className="rounded-full bg-[#effaf3] px-3 py-1 text-[#2f6b4b]">Confidence {entry.confidence ?? "-"}/5</span>
-                    <span className="rounded-full bg-[#fff7eb] px-3 py-1 text-[#8a6326]">Workload {entry.workload ?? "-"}/5</span>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <FeedbackBlock label="Wins" value={entry.wins} />
-                  <FeedbackBlock label="Concerns" value={entry.concerns} />
-                  <FeedbackBlock label="Support needed" value={entry.supportNeeded} />
-                </div>
-              </div>
-            ))}
-            {!overview.responses.length ? (
-              <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
-                Feedback submissions will appear here.
-              </p>
-            ) : null}
-          </div>
+          <FeedbackReviewConsole
+            entries={reviewEntries}
+            defaultAudience="PARENT"
+            emptyLabel="Feedback submissions will appear here."
+          />
         </section>
       </div>
-    </div>
-  );
-}
-
-function FeedbackBlock({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div className="rounded-2xl bg-white px-4 py-3 text-sm">
-      <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">{label}</p>
-      <p className="mt-2 leading-6 text-[#4d5a6b]">{value || "No entry"}</p>
     </div>
   );
 }

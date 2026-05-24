@@ -100,6 +100,15 @@ export async function getAdminFeedbackOverview() {
       include: {
         student: {
           include: {
+            enrollments: {
+              include: {
+                program: {
+                  select: {
+                    title: true,
+                  },
+                },
+              },
+            },
             user: {
               select: {
                 firstName: true,
