@@ -298,6 +298,12 @@ function RevenueBreakdown({
         >
           Export monthly payment Excel
         </Link>
+        <Link
+          href="/api/admin/payments/monthly-export?all=1"
+          className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+        >
+          Export all completed payments
+        </Link>
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-3">
@@ -705,6 +711,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#182236]"
               >
                 Export monthly payment Excel
+              </Link>
+              <Link
+                href="/api/admin/payments/monthly-export?all=1"
+                className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
+              >
+                Export all completed payments
               </Link>
             </div>
 

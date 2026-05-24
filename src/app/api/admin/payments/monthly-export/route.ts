@@ -76,6 +76,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
+  const exportAll = searchParams.get("all") === "1";
   const window = monthWindow(searchParams.get("month"));
   const orders = await db.order.findMany({
     where: { status: "SUCCEEDED" },
@@ -94,17 +95,17 @@ export async function GET(request: Request) {
   const allTimeTotalGbp = orders.reduce((sum, order) => {
     return sum + convertAmountToGbp(order.totalAmount, order.currency);
   }, 0);
-  const monthOrders = orders.filter((order) => {
+  const scopedOrders = exportAll ? orders : orders.filter((order) => {
     const paidDate = order.paidAt ?? order.createdAt;
     return paidDate >= window.start && paidDate < window.end;
   });
-  const monthTotalGbp = monthOrders.reduce((sum, order) => {
+  const scopedTotalGbp = scopedOrders.reduce((sum, order) => {
     return sum + convertAmountToGbp(order.totalAmount, order.currency);
   }, 0);
 
   const grouped = PAYMENT_GROUPS.map((group) => ({
     ...group,
-    rows: monthOrders
+    rows: scopedOrders
       .filter((order) => order.gateway === group.key)
       .map((order) => {
         const registration = order.registration;
@@ -140,7 +141,7 @@ export async function GET(request: Request) {
         const row = group.rows[index];
         if (!row) {
           return `
-            <td class="empty" colspan="4">${index === 0 && group.rows.length === 0 ? "No completed payments this month" : ""}</td>
+            <td class="empty" colspan="4">${index === 0 && group.rows.length === 0 ? "No completed payments found" : ""}</td>
           `;
         }
 
@@ -174,18 +175,18 @@ export async function GET(request: Request) {
 </head>
 <body>
   <table>
-    <tr><th class="title" colspan="12">Gen-Mumin Payment Records</th></tr>
+    <tr><th class="title" colspan="12">${escapeHtml(exportAll ? "Gen-Mumin Full Payment Records" : "Gen-Mumin Monthly Payment Records")}</th></tr>
     <tr>
-      <td class="summary-label" colspan="3">Month</td>
-      <td class="summary-value" colspan="9">${escapeHtml(window.key)}</td>
+      <td class="summary-label" colspan="3">Report Scope</td>
+      <td class="summary-value" colspan="9">${escapeHtml(exportAll ? "All completed payments" : window.key)}</td>
     </tr>
     <tr>
       <td class="summary-label" colspan="3">Total Payment Received Yet</td>
       <td class="summary-value" colspan="9">${escapeHtml(formatGbp(allTimeTotalGbp))}</td>
     </tr>
     <tr>
-      <td class="summary-label" colspan="3">Total Received This Month</td>
-      <td class="summary-value" colspan="9">${escapeHtml(formatGbp(monthTotalGbp))}</td>
+      <td class="summary-label" colspan="3">${escapeHtml(exportAll ? "Total In This Export" : "Total Received This Month")}</td>
+      <td class="summary-value" colspan="9">${escapeHtml(formatGbp(scopedTotalGbp))}</td>
     </tr>
     <tr><td colspan="12"></td></tr>
     <tr>
@@ -206,7 +207,9 @@ export async function GET(request: Request) {
   </table>
 </body>
 </html>`;
-  const filename = `gen-mumin-monthly-payments-${window.key}.xls`;
+  const filename = exportAll
+    ? `gen-mumin-all-completed-payments.xls`
+    : `gen-mumin-monthly-payments-${window.key}.xls`;
 
   return new NextResponse(workbook, {
     headers: {
