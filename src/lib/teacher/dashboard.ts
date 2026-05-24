@@ -5,6 +5,7 @@ import { cleanLiveClassTitle, getLiveClassAudienceLabel } from "@/lib/live-class
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 
 const ACTIVE_STUDENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
+const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 
 export type TeacherDashboardData = {
   teacherName: string;
@@ -167,6 +168,20 @@ export async function getTeacherDashboardData(userId: string) {
         include: {
           program: {
             include: {
+              schedules: {
+                orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+                include: {
+                  teacher: {
+                    include: {
+                      user: true,
+                    },
+                  },
+                  lessonLogs: {
+                    orderBy: { lessonDate: "desc" },
+                    take: 18,
+                  },
+                },
+              },
               enrollments: {
                 where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
                 include: {
@@ -214,6 +229,7 @@ export async function getTeacherDashboardData(userId: string) {
   if (!teacherProfile) {
     return null;
   }
+  const isProgrammeLead = teacherProfile.user.email.toLowerCase() === PROGRAMME_LEAD_EMAIL;
 
   const journals = await db.journalEntry.findMany({
     where: {
@@ -260,7 +276,17 @@ export async function getTeacherDashboardData(userId: string) {
     },
   });
 
-  const classes = teacherProfile.classSchedules.map((schedule) => ({
+  const programmeSchedules = isProgrammeLead
+    ? teacherProfile.programAssignments.flatMap((assignment) =>
+        assignment.program.schedules.map((schedule) => ({
+          ...schedule,
+          program: assignment.program,
+        })),
+      )
+    : teacherProfile.classSchedules;
+  const uniqueSchedules = Array.from(new Map(programmeSchedules.map((schedule) => [schedule.id, schedule])).values());
+
+  const classes = uniqueSchedules.map((schedule) => ({
     id: schedule.id,
     programId: schedule.program.id,
     title: cleanLiveClassTitle(schedule.title),
@@ -339,7 +365,7 @@ export async function getTeacherDashboardData(userId: string) {
     })
     .slice(0, 12);
 
-  const lessonLogs = teacherProfile.classSchedules
+  const lessonLogs = uniqueSchedules
     .flatMap((schedule) =>
       schedule.lessonLogs.map((log) => ({
         id: log.id,

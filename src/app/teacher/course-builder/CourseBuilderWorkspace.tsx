@@ -42,6 +42,7 @@ type CourseBuilderWorkspaceProps = {
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
+const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 const AUDIENCE_OPTIONS = [
   { value: "PK_UK", label: "Pakistan and UK students" },
   { value: "US_CA", label: "USA and Canada students" },
@@ -191,7 +192,21 @@ async function resolveBuilderScheduleId(input: {
     const schedule = await db.classSchedule.findFirst({
       where: {
         id: providedScheduleId,
-        teacher: { userId: input.teacherUserId },
+        OR: [
+          { teacher: { userId: input.teacherUserId } },
+          {
+            program: {
+              teacherAssignments: {
+                some: {
+                  teacher: {
+                    userId: input.teacherUserId,
+                    user: { email: PROGRAMME_LEAD_EMAIL },
+                  },
+                },
+              },
+            },
+          },
+        ],
       },
     });
     if (schedule) return schedule.id;
@@ -229,6 +244,24 @@ async function resolveBuilderScheduleId(input: {
   });
 
   return created.id;
+}
+
+async function canManageBuilderProgram(input: {
+  teacherUserId: string;
+  programId: string;
+  ownerTeacherUserId?: string | null;
+}) {
+  if (input.ownerTeacherUserId === input.teacherUserId) return true;
+
+  const teacher = await db.teacherProfile.findUnique({
+    where: { userId: input.teacherUserId },
+    include: { user: true, programAssignments: true },
+  });
+
+  return Boolean(
+    teacher?.user.email.toLowerCase() === PROGRAMME_LEAD_EMAIL &&
+      teacher.programAssignments.some((assignment) => assignment.programId === input.programId),
+  );
 }
 
 async function ensureLessonTextColumns() {
@@ -517,10 +550,19 @@ export function CourseBuilderWorkspace({
         const existing = await db.lessonLog.findFirst({
           where: {
             id: lessonLogId,
-            teacherUserId,
           },
+          include: { schedule: { include: { teacher: { include: { user: true } } } } },
         });
-        if (!existing) throw new Error("Lesson is not available for this teacher.");
+        if (
+          !existing ||
+          !(await canManageBuilderProgram({
+            teacherUserId,
+            programId: existing.schedule.programId,
+            ownerTeacherUserId: existing.schedule.teacher.userId,
+          }))
+        ) {
+          throw new Error("Lesson is not available for this teacher.");
+        }
         await db.lessonLog.update({
           where: { id: lessonLogId },
           data: lessonPayload,
@@ -581,10 +623,18 @@ export function CourseBuilderWorkspace({
     const session = await getCurrentSession();
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
     const id = String(formData.get("lessonLogId") || "");
-    const existing = await db.lessonLog.findFirst({
-      where: { id, teacherUserId: session.user.id },
+    const existing = await db.lessonLog.findUnique({
+      where: { id },
+      include: { schedule: { include: { teacher: { include: { user: true } } } } },
     });
-    if (existing) {
+    if (
+      existing &&
+      (await canManageBuilderProgram({
+        teacherUserId: session.user.id,
+        programId: existing.schedule.programId,
+        ownerTeacherUserId: existing.schedule.teacher.userId,
+      }))
+    ) {
       await db.lessonLog.delete({ where: { id } });
     }
     revalidatePath("/teacher/course-builder");
@@ -658,10 +708,18 @@ export function CourseBuilderWorkspace({
     const weekLabel = cleanOptional(formData.get("weekLabel"));
     const title = String(formData.get("title") || "Deleted curriculum item").trim();
     const deleteType = String(formData.get("deleteType") || "") === "Module" ? "DeletedModule" : "DeletedWeekTopic";
-    const existing = await db.lessonLog.findFirst({
-      where: { id: structureId, teacherUserId: session.user.id },
+    const existing = await db.lessonLog.findUnique({
+      where: { id: structureId },
+      include: { schedule: { include: { teacher: { include: { user: true } } } } },
     });
-    if (existing) {
+    if (
+      existing &&
+      (await canManageBuilderProgram({
+        teacherUserId: session.user.id,
+        programId: existing.schedule.programId,
+        ownerTeacherUserId: existing.schedule.teacher.userId,
+      }))
+    ) {
       await db.lessonLog.delete({ where: { id: existing.id } });
     } else if (scheduleId && termId) {
       await db.lessonLog.create({
@@ -942,9 +1000,17 @@ export function CourseBuilderWorkspace({
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
     const scheduleId = String(formData.get("scheduleId") || "");
     const schedule = await db.classSchedule.findFirst({
-      where: { id: scheduleId, teacher: { userId: session.user.id } },
+      where: { id: scheduleId },
+      include: { teacher: { include: { user: true } } },
     });
-    if (schedule) {
+    if (
+      schedule &&
+      (await canManageBuilderProgram({
+        teacherUserId: session.user.id,
+        programId: schedule.programId,
+        ownerTeacherUserId: schedule.teacher.userId,
+      }))
+    ) {
       await db.classSchedule.delete({ where: { id: schedule.id } });
     }
 

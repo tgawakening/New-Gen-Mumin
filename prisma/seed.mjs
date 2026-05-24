@@ -111,6 +111,23 @@ const coupons = [
 
 const teacherProfiles = [
   {
+    email: "globalawakeningchannel@gmail.com",
+    firstName: "Programme",
+    lastName: "Lead",
+    password: "GenM-ProgrammeLead2026!",
+    bio: "Founder & Director of TGA Platform and Gen-Mumin Programme Lead Coordinator. PGDE in Primary Education from the University of Dundee, BA (Hons) in E-Commerce from Glasgow Caledonian University, and student of Tafsir, Tajweed, and Seerah An-Nabawiyyah.",
+    specialties: {
+      list: [
+        "Whole programme coordination",
+        "Primary education",
+        "Tafsir, Tajweed, and Seerah learning",
+        "Curriculum quality assurance",
+      ],
+      programmeLead: true,
+    },
+    programSlugs: ["seerah", "life-lessons", "arabic", "tajweed"],
+  },
+  {
     email: "abubakar98114@gmail.com",
     firstName: "Abubakar",
     lastName: "Sadique",

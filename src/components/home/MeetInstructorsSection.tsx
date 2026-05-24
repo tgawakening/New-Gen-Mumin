@@ -3,11 +3,17 @@
 import { useRef } from "react";
 import Image from "next/image";
 import { Swiper, SwiperSlide } from "swiper/react";
-import { ChevronLeft, ChevronRight, User } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Swiper as SwiperType } from "swiper";
 import "swiper/css";
 
 const INSTRUCTORS = [
+  {
+    src: "/images/ustad-nimra.png",
+    name: "Programme Founder & Lead Coordinator",
+    role: "Founder & Director - TGA Platform",
+    bio: "PGDE in Primary Education from the University of Dundee. BA (Hons) in E-Commerce from Glasgow Caledonian University. Student of Tafsir, Tajweed, and Seerah An-Nabawiyyah. Gen-Mumin Programme Lead Coordinator.",
+  },
   {
     src: "/images/ustad-abubakar.png",
     name: "Ustadh Abubakar Sadique",
