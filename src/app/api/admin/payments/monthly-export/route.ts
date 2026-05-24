@@ -35,14 +35,12 @@ function extractNoteValue(notes: string | null | undefined, label: string) {
   return entry ? entry.split(":").slice(1).join(":").trim() : null;
 }
 
-function safeCsvValue(value: string | number | null | undefined) {
-  const raw = String(value ?? "");
-  const protectedValue = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
-  return `"${protectedValue.replace(/"/g, '""')}"`;
-}
-
-function toCsv(rows: Array<Array<string | number | null | undefined>>) {
-  return rows.map((row) => row.map(safeCsvValue).join(",")).join("\r\n");
+function escapeHtml(value: string | number | null | undefined) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function formatGbp(amount: number) {
@@ -52,6 +50,10 @@ function formatGbp(amount: number) {
 function formatPayment(amount: number, currency: string) {
   const gbp = convertAmountToGbp(amount, currency);
   return `${currency} ${amount} (${formatGbp(gbp)})`;
+}
+
+function paymentTotalLabel(totalGbp: number, count: number) {
+  return `${formatGbp(totalGbp)} received from ${count} payment${count === 1 ? "" : "s"}`;
 }
 
 function monthWindow(monthParam: string | null) {
@@ -113,7 +115,6 @@ export async function GET(request: Request) {
         const parentName = registration
           ? formatPersonName(registration.parentFirstName, registration.parentLastName)
           : formatPersonName(order.parent.user.firstName, order.parent.user.lastName);
-        const paidDate = order.paidAt ?? order.createdAt;
         const city = extractNoteValue(registration?.notes, "City");
 
         return {
@@ -121,57 +122,95 @@ export async function GET(request: Request) {
           payment: formatPayment(order.totalAmount, order.currency),
           overview: `${children.length || 0} child${children.length === 1 ? "" : "ren"}${city ? `, ${city}` : ""}`,
           programmes: programmes.join(", ") || "Program pending",
-          order: order.orderNumber,
-          date: paidDate.toISOString().slice(0, 10),
         };
       }),
   }));
 
   const maxRows = Math.max(0, ...grouped.map((group) => group.rows.length));
-  const rows: Array<Array<string | number | null | undefined>> = [
-    ["Gen-Mumin monthly payment record"],
-    ["Month", window.key],
-    ["Total payment received yet", formatGbp(allTimeTotalGbp)],
-    ["Total received this month", formatGbp(monthTotalGbp)],
-    [],
-    [
-      "Stripe parent",
-      "Stripe payment",
-      "Stripe children",
-      "Stripe programmes",
-      "Stripe order/date",
-      "PayPal parent",
-      "PayPal payment",
-      "PayPal children",
-      "PayPal programmes",
-      "PayPal order/date",
-      "Bank Transfer parent",
-      "Bank Transfer payment",
-      "Bank Transfer children",
-      "Bank Transfer programmes",
-      "Bank Transfer order/date",
-    ],
-  ];
+  const groupTotals = grouped.map((group) => ({
+    ...group,
+    totalGbp: group.rows.reduce((sum, row) => {
+      const match = row.payment.match(/\(GBP ([\d.]+)\)/);
+      return sum + (match ? Number(match[1]) : 0);
+    }, 0),
+  }));
+  const bodyRows = Array.from({ length: Math.max(maxRows, 1) }, (_, index) => `
+    <tr>
+      ${groupTotals.map((group) => {
+        const row = group.rows[index];
+        if (!row) {
+          return `
+            <td class="empty" colspan="4">${index === 0 && group.rows.length === 0 ? "No completed payments this month" : ""}</td>
+          `;
+        }
 
-  for (let index = 0; index < maxRows; index += 1) {
-    rows.push(grouped.flatMap((group) => {
-      const row = group.rows[index];
-      return row
-        ? [row.parent, row.payment, row.overview, row.programmes, `${row.order} / ${row.date}`]
-        : ["", "", "", "", ""];
-    }));
-  }
+        return `
+          <td>${escapeHtml(row.parent)}</td>
+          <td class="amount">${escapeHtml(row.payment)}</td>
+          <td>${escapeHtml(row.overview)}</td>
+          <td>${escapeHtml(row.programmes)}</td>
+        `;
+      }).join("")}
+    </tr>
+  `).join("");
 
-  if (maxRows === 0) {
-    rows.push(["No completed payments found for this month."]);
-  }
+  const workbook = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body { font-family: Arial, sans-serif; color: #22304a; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border: 1px solid #cbd9e8; padding: 10px; vertical-align: top; font-size: 12px; }
+    .title { background: #22304a; color: #ffffff; font-size: 22px; font-weight: 700; text-align: center; padding: 16px; }
+    .summary-label { background: #eef6ff; color: #0f4d81; font-weight: 700; }
+    .summary-value { background: #ffffff; font-weight: 700; }
+    .method { background: #f39f5f; color: #ffffff; font-size: 16px; font-weight: 700; text-align: center; }
+    .method-total { background: #fff8f0; color: #8a6326; font-weight: 700; text-align: center; }
+    .subhead { background: #edf2f6; color: #22304a; font-weight: 700; }
+    .amount { background: #effaf3; color: #2f6b4b; font-weight: 700; }
+    .empty { background: #fbfdff; color: #8a94a3; text-align: center; font-style: italic; }
+  </style>
+</head>
+<body>
+  <table>
+    <tr><th class="title" colspan="12">Gen-Mumin Payment Records</th></tr>
+    <tr>
+      <td class="summary-label" colspan="3">Month</td>
+      <td class="summary-value" colspan="9">${escapeHtml(window.key)}</td>
+    </tr>
+    <tr>
+      <td class="summary-label" colspan="3">Total Payment Received Yet</td>
+      <td class="summary-value" colspan="9">${escapeHtml(formatGbp(allTimeTotalGbp))}</td>
+    </tr>
+    <tr>
+      <td class="summary-label" colspan="3">Total Received This Month</td>
+      <td class="summary-value" colspan="9">${escapeHtml(formatGbp(monthTotalGbp))}</td>
+    </tr>
+    <tr><td colspan="12"></td></tr>
+    <tr>
+      ${groupTotals.map((group) => `<th class="method" colspan="4">${escapeHtml(group.label)}</th>`).join("")}
+    </tr>
+    <tr>
+      ${groupTotals.map((group) => `<td class="method-total" colspan="4">${escapeHtml(paymentTotalLabel(group.totalGbp, group.rows.length))}</td>`).join("")}
+    </tr>
+    <tr>
+      ${groupTotals.map(() => `
+        <th class="subhead">Parent Name</th>
+        <th class="subhead">Paid Amount</th>
+        <th class="subhead">Children</th>
+        <th class="subhead">Programmes</th>
+      `).join("")}
+    </tr>
+    ${bodyRows}
+  </table>
+</body>
+</html>`;
+  const filename = `gen-mumin-monthly-payments-${window.key}.xls`;
 
-  const csv = toCsv(rows);
-  const filename = `gen-mumin-monthly-payments-${window.key}.csv`;
-
-  return new NextResponse(csv, {
+  return new NextResponse(workbook, {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "application/vnd.ms-excel; charset=utf-8",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Cache-Control": "no-store",
     },

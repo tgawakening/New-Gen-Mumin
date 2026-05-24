@@ -296,7 +296,7 @@ function RevenueBreakdown({
           href="/api/admin/payments/monthly-export"
           className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#182236]"
         >
-          Export monthly payment CSV
+          Export monthly payment Excel
         </Link>
       </div>
 
@@ -704,7 +704,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 href="/api/admin/payments/monthly-export"
                 className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#182236]"
               >
-                Export monthly payment CSV
+                Export monthly payment Excel
               </Link>
             </div>
 
