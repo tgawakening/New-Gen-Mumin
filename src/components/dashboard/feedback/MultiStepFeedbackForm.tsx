@@ -22,11 +22,22 @@ export function MultiStepFeedbackForm({
   const [activeStep, setActiveStep] = useState(0);
   const isFirst = activeStep === 0;
   const isLast = activeStep === steps.length - 1;
-  const step = steps[activeStep];
 
   function goNext(event: MouseEvent<HTMLButtonElement>) {
     const form = event.currentTarget.form;
-    if (form && !form.reportValidity()) return;
+    const activePanel = form?.querySelector(`[data-feedback-step="${activeStep}"]`);
+    const fields = Array.from(activePanel?.querySelectorAll("input, select, textarea") ?? []);
+    const invalidField = fields.find((field) => field instanceof HTMLInputElement || field instanceof HTMLSelectElement || field instanceof HTMLTextAreaElement
+      ? !field.checkValidity()
+      : false);
+    if (
+      invalidField instanceof HTMLInputElement ||
+      invalidField instanceof HTMLSelectElement ||
+      invalidField instanceof HTMLTextAreaElement
+    ) {
+      invalidField.reportValidity();
+      return;
+    }
     setActiveStep((value) => Math.min(steps.length - 1, value + 1));
   }
 
@@ -42,8 +53,8 @@ export function MultiStepFeedbackForm({
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">
               {activeStep + 1} / {steps.length}
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{step.title}</h3>
-            {step.description ? <p className="mt-1 text-sm leading-6 text-[#617184]">{step.description}</p> : null}
+            <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{steps[activeStep]?.title}</h3>
+            {steps[activeStep]?.description ? <p className="mt-1 text-sm leading-6 text-[#617184]">{steps[activeStep].description}</p> : null}
           </div>
           <div className="flex items-center gap-1">
             {steps.map((item, index) => (
@@ -55,7 +66,18 @@ export function MultiStepFeedbackForm({
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4">{step.content}</div>
+        <div className="mt-5">
+          {steps.map((item, index) => (
+            <div
+              key={item.title}
+              data-feedback-step={index}
+              className={index === activeStep ? "grid gap-4" : "hidden"}
+              aria-hidden={index !== activeStep}
+            >
+              {item.content}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
