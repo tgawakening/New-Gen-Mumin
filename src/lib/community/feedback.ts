@@ -56,3 +56,42 @@ export async function getTeacherFeedbackSummary(teacherUserId: string) {
     take: 10,
   });
 }
+
+export async function getAdminFeedbackOverview() {
+  const [responses, totals] = await Promise.all([
+    db.weeklyFeedbackResponse.findMany({
+      orderBy: { submittedAt: "desc" },
+      take: 80,
+      include: {
+        student: {
+          include: {
+            user: {
+              select: {
+                firstName: true,
+                lastName: true,
+                email: true,
+              },
+            },
+          },
+        },
+        submittedBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+      },
+    }),
+    db.weeklyFeedbackResponse.groupBy({
+      by: ["audience"],
+      _count: { _all: true },
+    }),
+  ]);
+
+  return {
+    responses,
+    totals,
+  };
+}

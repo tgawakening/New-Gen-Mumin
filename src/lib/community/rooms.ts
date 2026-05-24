@@ -70,6 +70,26 @@ async function ensureClassRoomForEnrollment(input: {
   return room;
 }
 
+async function ensureStudentClassRooms(student: {
+  id: string;
+  age: number | null;
+  enrollments: Array<{
+    programId: string;
+    program: {
+      title: string;
+    };
+  }>;
+}) {
+  for (const enrollment of student.enrollments) {
+    await ensureClassRoomForEnrollment({
+      programId: enrollment.programId,
+      programTitle: enrollment.program.title,
+      studentId: student.id,
+      age: student.age,
+    });
+  }
+}
+
 export async function getStudentCommunityData(userId: string) {
   const student = await db.studentProfile.findUnique({
     where: { userId },
@@ -83,14 +103,7 @@ export async function getStudentCommunityData(userId: string) {
   });
   if (!student) return null;
 
-  for (const enrollment of student.enrollments) {
-    await ensureClassRoomForEnrollment({
-      programId: enrollment.programId,
-      programTitle: enrollment.program.title,
-      studentId: student.id,
-      age: student.age,
-    });
-  }
+  await ensureStudentClassRooms(student);
 
   const memberships = await db.communityMembership.findMany({
     where: { studentId: student.id },
@@ -119,6 +132,71 @@ export async function getStudentCommunityData(userId: string) {
   });
 
   return { student, memberships };
+}
+
+export async function getParentCommunityData(parentUserId: string, selectedChildId?: string) {
+  const parent = await db.parentProfile.findUnique({
+    where: { userId: parentUserId },
+    include: {
+      students: {
+        include: {
+          student: {
+            include: {
+              user: true,
+              enrollments: {
+                where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
+                include: { program: true },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!parent) return null;
+
+  const children = parent.students.map((relation) => relation.student);
+  const selectedChild = children.find((child) => child.id === selectedChildId) ?? children[0] ?? null;
+  if (!selectedChild) {
+    return {
+      children,
+      selectedChild: null,
+      memberships: [],
+    };
+  }
+
+  await ensureStudentClassRooms(selectedChild);
+
+  const memberships = await db.communityMembership.findMany({
+    where: { studentId: selectedChild.id },
+    orderBy: { joinedAt: "desc" },
+    include: {
+      room: {
+        include: {
+          messages: {
+            where: { status: CommunityMessageStatus.VISIBLE },
+            orderBy: { createdAt: "desc" },
+            take: 20,
+            include: {
+              author: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  role: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  return {
+    children,
+    selectedChild,
+    memberships,
+  };
 }
 
 export async function postCommunityMessage(input: {

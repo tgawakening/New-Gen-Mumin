@@ -32,6 +32,7 @@ export function getParentNavItems(childId?: string) {
 
   return [
     { label: "Dashboard", href: `/parent${suffix}`, icon: "home" as const },
+    { label: "Community", href: `/parent/community${suffix}`, icon: "sun" as const },
     { label: "Feedback", href: `/parent/feedback${suffix}`, icon: "journal" as const },
     { label: "Courses", href: `/parent/courses${suffix}`, icon: "book" as const },
     { label: "Attendance", href: `/parent/attendance${suffix}`, icon: "check" as const },

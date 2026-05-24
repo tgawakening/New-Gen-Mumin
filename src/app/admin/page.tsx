@@ -432,6 +432,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     ...TABS.map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
     { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
     { key: "community", label: "Community", href: "/admin/community", icon: Users },
+    { key: "feedback", label: "Feedback", href: "/admin/feedback", icon: FileText },
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
     { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },
   ];
