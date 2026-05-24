@@ -18,10 +18,18 @@ import { getParentNavItems } from "@/lib/dashboard/family-nav";
 
 type ParentDashboard = NonNullable<Awaited<ReturnType<typeof getParentDashboardData>>>;
 type ParentChild = ParentDashboard["children"][number];
+type AvatarVariant = "boy" | "girl" | "neutral";
 
 type PageProps = {
   searchParams?: Promise<{ child?: string }>;
 };
+
+function avatarVariantForGender(gender?: string | null): AvatarVariant {
+  const normalized = gender?.trim().toLowerCase() ?? "";
+  if (["female", "girl", "f"].includes(normalized)) return "girl";
+  if (["male", "boy", "m"].includes(normalized)) return "boy";
+  return "neutral";
+}
 
 function buildStudentStats(child: ParentChild) {
   const quizAttempts = child.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0);
@@ -162,7 +170,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
             : "Schedule appears once assigned."
         }
         circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
-        avatarVariant={selectedChild.profile.age && selectedChild.profile.age < 9 ? "neutral" : "girl"}
+        avatarVariant={avatarVariantForGender(selectedChild.profile.gender)}
       />
 
       <div className="sr-only">

@@ -213,6 +213,11 @@ type ChildJournalMonthlySummary = {
   teacherSummary: string;
 };
 
+type ChildRegistrationGenderSummary = {
+  gender: string | null;
+  createdAt: Date;
+};
+
 type ChildSummary = {
   id: string;
   name: string;
@@ -240,6 +245,7 @@ type ChildSummary = {
     countryName: string | null;
     age: number | null;
     currentGrade: string | null;
+    gender: string | null;
   };
 };
 
@@ -886,6 +892,11 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     submittedAssignments,
     journals,
   });
+  const gender =
+    (child.registrationStudents as ChildRegistrationGenderSummary[] | undefined)
+      ?.filter((student) => student.gender)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0]
+      ?.gender ?? null;
 
   return {
     id: child.id,
@@ -992,6 +1003,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       countryName: child.countryName,
       age: child.age,
       currentGrade: child.currentGrade,
+      gender,
     },
   };
 }
@@ -1028,6 +1040,13 @@ async function getParentProfile(userId: string) {
           student: {
             include: {
               user: true,
+              registrationStudents: {
+                select: {
+                  gender: true,
+                  createdAt: true,
+                },
+                orderBy: { createdAt: "desc" },
+              },
               enrollments: {
                 orderBy: { createdAt: "desc" },
                 include: {
@@ -1188,6 +1207,13 @@ export async function getStudentDashboardData(userId: string) {
     where: { userId },
     include: {
       user: true,
+      registrationStudents: {
+        select: {
+          gender: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      },
       parents: {
         include: {
           parent: {

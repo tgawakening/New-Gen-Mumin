@@ -18,6 +18,14 @@ import {
 
 type StudentDashboard = NonNullable<Awaited<ReturnType<typeof getStudentDashboardData>>>;
 type StudentChild = StudentDashboard["child"];
+type AvatarVariant = "boy" | "girl" | "neutral";
+
+function avatarVariantForGender(gender?: string | null): AvatarVariant {
+  const normalized = gender?.trim().toLowerCase() ?? "";
+  if (["female", "girl", "f"].includes(normalized)) return "girl";
+  if (["male", "boy", "m"].includes(normalized)) return "boy";
+  return "neutral";
+}
 
 function buildStudentQuestStats(child: StudentChild) {
   const quizAttempts = child.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0);
@@ -174,7 +182,7 @@ export default async function StudentDashboardPage() {
             : "Schedule appears once assigned."
         }
         circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
-        avatarVariant={child.profile.age && child.profile.age < 9 ? "neutral" : "boy"}
+        avatarVariant={avatarVariantForGender(child.profile.gender)}
       />
 
       <div className="sr-only">
