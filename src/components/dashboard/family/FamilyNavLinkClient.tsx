@@ -2,16 +2,64 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ComponentType } from "react";
+import {
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
+  ChartColumn,
+  PenSquare,
+  CircleUserRound,
+  Sparkles,
+  SunMedium,
+  Home,
+} from "lucide-react";
+
+type FamilyNavIcon =
+  | "home"
+  | "book"
+  | "check"
+  | "calendar"
+  | "sparkles"
+  | "chart"
+  | "journal"
+  | "profile"
+  | "pen"
+  | "sun";
+
+function resolveIcon(icon?: FamilyNavIcon) {
+  switch (icon) {
+    case "book":
+      return BookOpen;
+    case "check":
+      return CheckCircle2;
+    case "calendar":
+      return CalendarDays;
+    case "sparkles":
+      return Sparkles;
+    case "chart":
+      return ChartColumn;
+    case "journal":
+      return PenSquare;
+    case "profile":
+      return CircleUserRound;
+    case "pen":
+      return PenSquare;
+    case "sun":
+      return SunMedium;
+    case "home":
+    default:
+      return Home;
+  }
+}
 
 export function FamilyNavLinkClient({
   href,
   label,
-  icon: Icon,
+  icon,
 }: {
   href: string;
   label: string;
-  icon: ComponentType<{ className?: string }>;
+  icon?: FamilyNavIcon;
 }) {
   const pathname = usePathname();
   const hrefPath = href.split("?")[0];
@@ -29,7 +77,10 @@ export function FamilyNavLinkClient({
       }`}
     >
       <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${isActive ? "bg-[#fff0db] text-[#c27a2c]" : "bg-white/12 text-[#ffd79b]"}`}>
-        <Icon className="h-4 w-4" />
+        {(() => {
+          const IconComp = resolveIcon(icon);
+          return <IconComp className="h-4 w-4" />;
+        })()}
       </span>
       <span className="hidden xl:inline">{label}</span>
       <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-40 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#22304a] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-xl transition group-hover/nav:block group-hover/nav:opacity-100 xl:hidden">

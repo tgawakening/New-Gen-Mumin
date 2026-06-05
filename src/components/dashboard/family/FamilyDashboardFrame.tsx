@@ -160,19 +160,14 @@ export function FamilyDashboardFrame({
             <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f] xl:block">
               Dashboard map
             </p>
-            <div className="space-y-2 xl:mt-5">
+              <div className="space-y-2 xl:mt-5">
               {navItems.map((item) => (
-                (() => {
-                  const Icon = getNavIcon(item.icon);
-                  return (
-                    <FamilyNavLinkClient
-                      key={item.href}
-                      href={item.href}
-                      label={item.label}
-                      icon={Icon}
-                    />
-                  );
-                })()
+                <FamilyNavLinkClient
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                />
               ))}
             </div>
           </div>
