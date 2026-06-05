@@ -1033,26 +1033,26 @@ async function getParentProfile(userId: string) {
     where: { userId },
     include: {
       user: true,
-        registrations: {
-          select: {
-            id: true,
-            status: true,
-            createdAt: true,
+      registrations: {
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
           students: {
             select: {
               studentProfileId: true,
             },
           },
         },
-        },
-        orders: {
-          orderBy: { createdAt: "desc" },
-          take: 12,
-          include: {
-            payments: {
-              orderBy: { createdAt: "desc" },
-              take: 1,
-            },
+      },
+      orders: {
+        orderBy: { createdAt: "desc" },
+        take: 12,
+        include: {
+          payments: {
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       },
       students: {
