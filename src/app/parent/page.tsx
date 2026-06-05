@@ -22,7 +22,7 @@ type ParentDashboard = NonNullable<Awaited<ReturnType<typeof getParentDashboardD
 type ParentChild = ParentDashboard["children"][number];
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; addChild?: string }>;
+  searchParams?: { child?: string; addChild?: string };
 };
 
 function buildParentActivity(child: ParentChild) {
@@ -55,13 +55,9 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   if (session.user.role !== "PARENT") redirect(getDashboardHome(session.user.role));
 
   let dashboard: ParentDashboard | null = null;
-  let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
 
   try {
-    [dashboard, options] = await Promise.all([
-      getParentDashboardData(session.user.id),
-      getRegistrationOptions(),
-    ]);
+    dashboard = await getParentDashboardData(session.user.id);
   } catch (error) {
     console.error("Failed to load parent dashboard", error);
     return (
@@ -88,13 +84,22 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     redirect("/registration");
   }
 
-  const params = searchParams ? await searchParams : undefined;
+  const params = searchParams;
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const showAddChildModal = params?.addChild === "1";
   const activity = selectedChild ? buildParentActivity(selectedChild) : null;
   const circle = selectedChild ? currentCircle(selectedChild) : null;
   const latestProject = selectedChild?.assignments[0] ?? null;
+
+  let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
+  if (showAddChildModal) {
+    try {
+      options = await getRegistrationOptions();
+    } catch (error) {
+      console.error("Failed to load registration options for add-child modal", error);
+    }
+  }
 
   return (
     <FamilyDashboardFrame
