@@ -563,13 +563,19 @@ function normalizeChildIdentity(input: {
 }
 
 function childPriorityScore(student: any) {
+  const enrollments = Array.isArray(student?.enrollments) ? student.enrollments : [];
+  const progressReports = Array.isArray(student?.progressReports) ? student.progressReports : [];
+  const journalEntries = Array.isArray(student?.journalEntries) ? student.journalEntries : [];
+  const quizAttempts = Array.isArray(student?.quizAttempts) ? student.quizAttempts : [];
+  const attendances = Array.isArray(student?.attendances) ? student.attendances : [];
+
   return (
     (studentHasDashboardAccess(student) ? 1_000 : 0) +
-    (student.enrollments?.length ?? 0) * 20 +
-    (student.progressReports?.length ?? 0) * 6 +
-    (student.journalEntries?.length ?? 0) * 5 +
-    (student.quizAttempts?.length ?? 0) * 3 +
-    (student.attendances?.length ?? 0) * 2
+    enrollments.length * 20 +
+    progressReports.length * 6 +
+    journalEntries.length * 5 +
+    quizAttempts.length * 3 +
+    attendances.length * 2
   );
 }
 
@@ -578,6 +584,10 @@ function dedupeParentStudents(relations: Array<{ student: any }>) {
 
   for (const relation of relations) {
     const student = relation.student;
+    if (!student?.id || !student.user) {
+      continue;
+    }
+
     const key = normalizeChildIdentity({
       displayName: student.displayName,
       firstName: student.user?.firstName,
@@ -596,7 +606,9 @@ function dedupeParentStudents(relations: Array<{ student: any }>) {
 }
 
 function studentHasDashboardAccess(student: any) {
-  return student.enrollments.some((enrollment: any) =>
+  const enrollments = Array.isArray(student?.enrollments) ? student.enrollments : [];
+
+  return enrollments.some((enrollment: any) =>
     ["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status),
   );
 }
@@ -861,17 +873,25 @@ function buildChildBadges({
 }
 
 function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
+  const enrollments = Array.isArray(child.enrollments) ? child.enrollments : [];
+  const validEnrollments = enrollments.filter((enrollment: any) => enrollment?.program);
+  const attendances = Array.isArray(child.attendances) ? child.attendances : [];
+  const quizAttempts = Array.isArray(child.quizAttempts) ? child.quizAttempts : [];
+  const assignmentSubmissions = Array.isArray(child.assignments) ? child.assignments : [];
+  const journalEntries = Array.isArray(child.journalEntries) ? child.journalEntries : [];
+  const progressReports = Array.isArray(child.progressReports) ? child.progressReports : [];
+
   const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
-    child.attendances,
-    child.enrollments.length,
+    attendances,
+    validEnrollments.length,
   );
 
-  const schedule = mapScheduleEntries(child.enrollments, child.countryCode);
-  const programQuizzes = child.enrollments.flatMap((enrollment: any) => enrollment.program.quizzes);
-  const quizzes = mapQuizSummaries(programQuizzes, child.quizAttempts);
-  const assignments = mapAssignmentSummaries(child.enrollments, child.assignments);
-  const lessonUpdates = mapLessonUpdates(child.enrollments);
-  const journals = child.journalEntries.map((entry: any) => ({
+  const schedule = mapScheduleEntries(validEnrollments, child.countryCode);
+  const programQuizzes = validEnrollments.flatMap((enrollment: any) => enrollment.program.quizzes ?? []);
+  const quizzes = mapQuizSummaries(programQuizzes, quizAttempts);
+  const assignments = mapAssignmentSummaries(validEnrollments, assignmentSubmissions);
+  const lessonUpdates = mapLessonUpdates(validEnrollments);
+  const journals = journalEntries.map((entry: any) => ({
     id: entry.id,
     title: entry.title,
     reflection: entry.reflection,
@@ -906,13 +926,13 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       child.user.firstName,
     statusLabel: accessLocked
       ? "Pending payment confirmation"
-      : child.enrollments.some((enrollment: any) => enrollment.status === "ACTIVE")
+      : validEnrollments.some((enrollment: any) => enrollment.status === "ACTIVE")
         ? "Active learner"
         : "Ready",
     accessLocked,
     attendanceRate,
     attendanceBreakdown,
-    courses: child.enrollments.map((enrollment: any) => ({
+    courses: validEnrollments.map((enrollment: any) => ({
       id: enrollment.id,
       title: enrollment.program.title,
       status: enrollment.status.replace(/_/g, " "),
@@ -976,7 +996,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     assignments,
     lessonUpdates,
     badges,
-    progress: child.progressReports.map((report: any) => ({
+    progress: progressReports.filter((report: any) => report?.program).map((report: any) => ({
       id: report.id,
       programTitle: report.program.title,
       reportPeriod: report.reportPeriod,
@@ -1128,7 +1148,8 @@ export async function getParentDashboardData(userId: string) {
     ) ??
     parentProfile.orders[0] ??
     null;
-  const allChildren = dedupeParentStudents(parentProfile.students);
+  const parentStudentRelations = Array.isArray(parentProfile.students) ? parentProfile.students : [];
+  const allChildren = dedupeParentStudents(parentStudentRelations);
   const completedStudentIds = new Set(
     parentProfile.registrations
       .filter((registration) => ["PAID", "CONVERTED"].includes(registration.status))
@@ -1164,7 +1185,7 @@ export async function getParentDashboardData(userId: string) {
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
 
-  const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentProfile.students.length > 0);
+  const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked
     ? resolvePendingReason(latestOrder?.status, latestOrder?.gateway ?? null)
     : null;
@@ -1196,9 +1217,18 @@ export async function getParentDashboardData(userId: string) {
           gateway: latestOrder.gateway,
         }
       : null,
-    children: resolvedChildren.map((student) =>
-      mapChildSummary(student, accessLocked),
-    ),
+    children: resolvedChildren.flatMap((student) => {
+      try {
+        return [mapChildSummary(student, accessLocked)];
+      } catch (error) {
+        console.error("Unable to render parent dashboard child", {
+          parentUserId: userId,
+          childId: student?.id,
+          error,
+        });
+        return [];
+      }
+    }),
   } satisfies ParentDashboardData;
 }
 
