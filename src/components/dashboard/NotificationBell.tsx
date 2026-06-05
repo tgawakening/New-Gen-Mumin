@@ -6,11 +6,16 @@ export async function NotificationBell() {
   const session = await getCurrentSession();
   if (!session) return null;
 
-  const notifications = await db.notification.findMany({
-    where: { userId: session.user.id, readAt: null },
-    orderBy: { createdAt: "desc" },
-    take: 8,
-  });
+  try {
+    const notifications = await db.notification.findMany({
+      where: { userId: session.user.id, readAt: null },
+      orderBy: { createdAt: "desc" },
+      take: 8,
+    });
 
-  return <NotificationBellClient notifications={notifications} />;
+    return <NotificationBellClient notifications={notifications} />;
+  } catch (error) {
+    console.error("NotificationBell server error", error);
+    return null;
+  }
 }

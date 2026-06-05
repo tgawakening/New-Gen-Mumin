@@ -54,10 +54,32 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   if (!session) redirect("/auth/login");
   if (session.user.role !== "PARENT") redirect(getDashboardHome(session.user.role));
 
-  const [dashboard, options] = await Promise.all([
-    getParentDashboardData(session.user.id),
-    getRegistrationOptions(),
-  ]);
+  let dashboard: ParentDashboard | null = null;
+  let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
+
+  try {
+    [dashboard, options] = await Promise.all([
+      getParentDashboardData(session.user.id),
+      getRegistrationOptions(),
+    ]);
+  } catch (error) {
+    console.error("Failed to load parent dashboard", error);
+    return (
+      <FamilyDashboardFrame
+        roleLabel="Parent Dashboard"
+        title="Assalamu alaikum"
+        subtitle="We could not load your family dashboard right now."
+        navItems={getParentNavItems(undefined)}
+      >
+        <SectionCard eyebrow="Error" title="Unable to load dashboard" icon="home">
+          <p className="text-sm leading-7 text-[#5f6b7a]">
+            We are having trouble loading your parent dashboard. Please refresh the page or contact support if this keeps happening.
+          </p>
+        </SectionCard>
+      </FamilyDashboardFrame>
+    );
+  }
+
   if (!dashboard) redirect("/registration");
   if (!dashboard.children.length && dashboard.accessLocked) {
     if (dashboard.pendingRegistrationId) {
