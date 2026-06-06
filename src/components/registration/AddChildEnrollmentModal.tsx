@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 
@@ -11,6 +11,7 @@ type Offer = {
   kind: "SINGLE" | "PAIR" | "BUNDLE";
   basePriceGbp: number;
   basePricePkr: number | null;
+  programSlugs?: string[];
 };
 
 type Country = {
@@ -192,16 +193,27 @@ export function AddChildEnrollmentModal({
   parent,
   offers,
   countries,
+  existingChild,
+  closePath = "/parent",
 }: {
   parent: ParentContext;
   offers: Offer[];
   countries: readonly Country[];
+  existingChild?: {
+    id: string;
+    name: string;
+    firstName: string;
+    lastName: string;
+    age: number | null;
+    gender: string | null;
+  };
+  closePath?: string;
 }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
-  const [childFullName, setChildFullName] = useState("");
-  const [childAge, setChildAge] = useState("");
-  const [childGender, setChildGender] = useState("");
+  const [childFullName, setChildFullName] = useState(existingChild?.name ?? "");
+  const [childAge, setChildAge] = useState(existingChild?.age ? String(existingChild.age) : "");
+  const [childGender, setChildGender] = useState(existingChild?.gender ?? "");
   const [selectedOfferSlug, setSelectedOfferSlug] = useState(
     offers.find((offer) => offer.kind === "BUNDLE")?.slug ?? offers[0]?.slug ?? "",
   );
@@ -247,6 +259,9 @@ export function AddChildEnrollmentModal({
   const selectedOffer = offers.find((offer) => offer.slug === selectedOfferSlug) ?? offers[0];
   const pricing = selectedOffer ? getRegionalPrice(selectedOffer, selectedCountry) : null;
   const isPakistan = selectedCountry.code === "PK";
+  const isExistingChildEnrollment = Boolean(existingChild);
+  const lineDiscountAmount = isExistingChildEnrollment || !pricing ? 0 : Math.round(pricing.displayAmount * 0.5);
+  const lineTotalAmount = pricing ? Math.max(0, pricing.displayAmount - lineDiscountAmount) : 0;
   const availablePaymentMethods = PAYMENT_METHODS.filter((method) =>
     method.value === "BANK_TRANSFER" ? isPakistan : true,
   );
@@ -272,6 +287,8 @@ export function AddChildEnrollmentModal({
 
     try {
       const childName = splitName(childFullName);
+      const selectedChildFirstName = existingChild?.firstName || childName.firstName;
+      const selectedChildLastName = existingChild?.lastName || childName.lastName;
 
       const registrationResponse = await fetch("/api/registration", {
         method: "POST",
@@ -288,12 +305,14 @@ export function AddChildEnrollmentModal({
           notes: "Source: parent-dashboard-add-child",
           students: [
             {
-              firstName: childName.firstName,
-              lastName: childName.lastName,
+              firstName: selectedChildFirstName,
+              lastName: selectedChildLastName,
               age: Number(childAge),
               gender: childGender,
               selectedOfferSlugs: [selectedOfferSlug],
-              notes: "",
+              notes: existingChild
+                ? `Source: parent-dashboard-add-program; existingChildId=${existingChild.id}`
+                : "",
             },
           ],
         }),
@@ -373,7 +392,7 @@ export function AddChildEnrollmentModal({
   }
 
   function closeModal() {
-    router.push("/parent");
+    router.push(closePath);
   }
 
   if (!mounted) {
@@ -387,10 +406,12 @@ export function AddChildEnrollmentModal({
         <div className="flex items-center justify-between border-b border-[#efe1d2] px-6 py-5">
           <div>
             <p className="inline-flex rounded-full bg-[#f39f5f] px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white">
-              Add another child
+              {isExistingChildEnrollment ? "Explore programmes" : "Add another child"}
             </p>
             <p className="mt-3 text-sm text-[#657284]">
-              Keep your parent details and continue with only the new child and payment flow.
+              {isExistingChildEnrollment
+                ? "Choose another programme for the selected child and continue with the same payment flow."
+                : "Keep your parent details and continue with only the new child and payment flow."}
             </p>
           </div>
           <button
@@ -427,15 +448,17 @@ export function AddChildEnrollmentModal({
 
               <section className="rounded-[24px] border border-[#ebdccb] bg-white px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-lg font-semibold text-[#22304a]">Child details</h3>
-                  <span className="rounded-full bg-[#fff7ea] px-3 py-1 text-xs font-semibold text-[#9b6328]">
+                  <h3 className="text-lg font-semibold text-[#22304a]">
+                    {isExistingChildEnrollment ? "Selected child" : "Child details"}
+                  </h3>
+                  {!isExistingChildEnrollment ? <span className="rounded-full bg-[#fff7ea] px-3 py-1 text-xs font-semibold text-[#9b6328]">
                     50% multi-child discount already applies from second child onward
-                  </span>
+                  </span> : null}
                 </div>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1.4fr)_120px_140px]">
-                  <FormField label="Child full name" value={childFullName} onChange={setChildFullName} />
-                  <FormField label="Age" value={childAge} onChange={setChildAge} type="number" />
+                  <FormField label="Child full name" value={childFullName} onChange={setChildFullName} readOnly={isExistingChildEnrollment} />
+                  <FormField label="Age" value={childAge} onChange={setChildAge} type="number" readOnly={isExistingChildEnrollment} />
                   <div>
                     <label className="mb-2 block text-sm font-medium text-[#38506a]">Gender</label>
                     <select
@@ -443,6 +466,7 @@ export function AddChildEnrollmentModal({
                       onChange={(event) => setChildGender(event.target.value)}
                       className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]"
                       required
+                      disabled={isExistingChildEnrollment}
                     >
                       <option value="">Select</option>
                       <option value="Boy">Boy</option>
@@ -467,6 +491,11 @@ export function AddChildEnrollmentModal({
                       </option>
                     ))}
                   </select>
+                  {!offers.length ? (
+                    <p className="rounded-2xl border border-[#d7efdf] bg-[#effaf3] px-4 py-3 text-sm text-[#2f6b4b]">
+                      This child already has access to all available programmes.
+                    </p>
+                  ) : null}
 
                   {selectedOffer && pricing ? (
                     <div className="rounded-[22px] border border-[#ebdccb] bg-[#fffaf4] px-4 py-4">
@@ -502,7 +531,7 @@ export function AddChildEnrollmentModal({
                 <div className="flex items-center justify-between gap-3 border-b border-[#f0e2d2] pb-3">
                   <h3 className="text-lg font-semibold text-[#22304a]">Order summary</h3>
                   <span className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                    {pricing ? formatMoney(pricing.displayAmount / 2, pricing.displayCurrency) : "—"}
+                    {pricing ? formatMoney(lineTotalAmount, pricing.displayCurrency) : "-"}
                   </span>
                 </div>
                 {selectedOffer && pricing ? (
@@ -512,17 +541,19 @@ export function AddChildEnrollmentModal({
                         <div>
                           <p className="font-semibold text-[#22304a]">{selectedOffer.title}</p>
                           <p className="mt-1 text-sm text-[#6d7785]">{childFullName || "New child"}</p>
-                          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#c27a2c]">
+                          {lineDiscountAmount > 0 ? <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#c27a2c]">
                             50% multi-child auto-discount
-                          </p>
+                          </p> : null}
                         </div>
                         <div className="text-right text-sm">
                           <p className="font-semibold text-[#22304a]">
                             {formatMoney(pricing.displayAmount, pricing.displayCurrency)}
                           </p>
-                          <p className="mt-1 font-medium text-[#c27a2c]">
-                            - {formatMoney(Math.round(pricing.displayAmount * 0.5), pricing.displayCurrency)}
-                          </p>
+                          {lineDiscountAmount > 0 ? (
+                            <p className="mt-1 font-medium text-[#c27a2c]">
+                              - {formatMoney(lineDiscountAmount, pricing.displayCurrency)}
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </div>
@@ -533,11 +564,11 @@ export function AddChildEnrollmentModal({
                       </div>
                       <div className="mt-2 flex items-center justify-between text-sm text-[#f8d39f]">
                         <span>Discount</span>
-                        <span>- {formatMoney(Math.round(pricing.displayAmount * 0.5), pricing.displayCurrency)}</span>
+                        <span>- {formatMoney(lineDiscountAmount, pricing.displayCurrency)}</span>
                       </div>
                       <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold">
                         <span>Total</span>
-                        <span>{formatMoney(Math.round(pricing.displayAmount * 0.5), pricing.displayCurrency)}</span>
+                        <span>{formatMoney(lineTotalAmount, pricing.displayCurrency)}</span>
                       </div>
                     </div>
                   </div>
@@ -705,10 +736,14 @@ export function AddChildEnrollmentModal({
 
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !offers.length}
                 className="w-full rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#182235] disabled:opacity-60"
               >
-                {isSubmitting ? "Submitting..." : "Continue with child enrollment"}
+                {isSubmitting
+                  ? "Submitting..."
+                  : isExistingChildEnrollment
+                    ? "Continue with programme enrollment"
+                    : "Continue with child enrollment"}
               </button>
             </aside>
           </form>
@@ -733,11 +768,13 @@ function FormField({
   value,
   onChange,
   type = "text",
+  readOnly = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
+  readOnly?: boolean;
 }) {
   return (
     <div>
@@ -746,7 +783,10 @@ function FormField({
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm outline-none focus:border-[#f39f5f]"
+        readOnly={readOnly}
+        className={`w-full rounded-2xl border border-[#d8c3ac] px-4 py-3 text-sm outline-none focus:border-[#f39f5f] ${
+          readOnly ? "bg-[#f6f1ea] text-[#5f6b7a]" : "bg-white"
+        }`}
         required
       />
     </div>

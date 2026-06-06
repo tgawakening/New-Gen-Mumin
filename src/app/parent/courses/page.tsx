@@ -5,8 +5,11 @@ import { FileText, ImageIcon, Video } from "lucide-react";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
+import { getRegistrationOptions } from "@/lib/registration/service";
 import { listMaterials } from "@/lib/google-drive/materials";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -16,8 +19,12 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; course?: string; lesson?: string }>;
+  searchParams?: Promise<{ child?: string; course?: string; lesson?: string; enrollProgram?: string }>;
 };
+
+type ParentDashboard = NonNullable<Awaited<ReturnType<typeof getParentDashboardData>>>;
+type ParentChild = ParentDashboard["children"][number];
+type RegistrationOffer = Awaited<ReturnType<typeof getRegistrationOptions>>["offers"][number];
 
 type Attachment = {
   id: string;
@@ -65,6 +72,37 @@ function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
   );
 }
 
+function enrolledProgramSlugs(child: ParentChild) {
+  const slugs = new Set(child.courses.map((course) => course.programSlug));
+  if (slugs.has("full-bundle")) {
+    return new Set<string>(FULL_GENM_PROGRAM_SLUGS);
+  }
+  return slugs;
+}
+
+function hasFullGenM(child: ParentChild) {
+  const slugs = enrolledProgramSlugs(child);
+  return FULL_GENM_PROGRAM_SLUGS.every((slug) => slugs.has(slug));
+}
+
+function offerProgramSlugs(offer: RegistrationOffer) {
+  return "programSlugs" in offer && Array.isArray(offer.programSlugs) ? offer.programSlugs : [];
+}
+
+function eligibleProgramOffers(offers: RegistrationOffer[], child: ParentChild) {
+  const enrolled = enrolledProgramSlugs(child);
+  return offers
+    .filter((offer) => {
+      const programSlugs = offerProgramSlugs(offer);
+      return programSlugs.length > 0 && programSlugs.some((slug) => !enrolled.has(slug));
+    })
+    .sort((left, right) => {
+      if (left.slug === "full-bundle") return -1;
+      if (right.slug === "full-bundle") return 1;
+      return 0;
+    });
+}
+
 export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -84,13 +122,14 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const selectedCourse = selectedChild.courses.find((course) => course.id === params?.course) ?? selectedChild.courses[0] ?? null;
   const selectedProgramId = selectedCourse?.id ?? null;
+  const showProgramEnrollmentModal = params?.enrollProgram === "1" && !hasFullGenM(selectedChild);
   const selectedLessonUpdates = selectedCourse
     ? selectedChild.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
     : [];
   const selectedLesson =
     selectedLessonUpdates.find((lesson) => lesson.id === params?.lesson) ?? selectedLessonUpdates[0] ?? null;
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
-  if (selectedProgramId) {
+  if (selectedProgramId && selectedCourse?.programSlug !== "full-bundle") {
     try {
       materials = await listMaterials({ programId: selectedProgramId, status: "approved", visibility: "students_parents", limit: 20 });
     } catch {
@@ -103,6 +142,15 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
     groups[folderName].push(material);
     return groups;
   }, {});
+  let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
+  if (showProgramEnrollmentModal) {
+    try {
+      options = await getRegistrationOptions();
+    } catch (error) {
+      console.error("Failed to load registration options for program enrollment modal", error);
+    }
+  }
+  const programEnrollmentOffers = showProgramEnrollmentModal ? eligibleProgramOffers(options.offers, selectedChild) : [];
 
   return (
     <FamilyDashboardFrame
@@ -112,7 +160,20 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
-      <SectionCard eyebrow="Child selector" title="Choose a learner">
+      <SectionCard
+        eyebrow="Child selector"
+        title="Choose a learner"
+        action={
+          !hasFullGenM(selectedChild) ? (
+            <Link
+              href={`/parent/courses?child=${selectedChild.id}&enrollProgram=1`}
+              className="rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
+            >
+              Explore other programmes
+            </Link>
+          ) : null
+        }
+      >
         <ChildSelector
           learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
           selectedChildId={selectedChild?.id}
@@ -129,7 +190,20 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         ]}
       />
 
-      <SectionCard eyebrow="Programmes" title={`${selectedChild.name}'s courses`}>
+      <SectionCard
+        eyebrow="Programmes"
+        title={`${selectedChild.name}'s courses`}
+        action={
+          !hasFullGenM(selectedChild) ? (
+            <Link
+              href={`/parent/courses?child=${selectedChild.id}&enrollProgram=1`}
+              className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f7fbff]"
+            >
+              Enroll another programme
+            </Link>
+          ) : null
+        }
+      >
         <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
           {selectedChild.courses.map((course) => (
             <Link
@@ -505,6 +579,29 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           ))}
         </div>
       </SectionCard>
+      ) : null}
+      {showProgramEnrollmentModal ? (
+        <AddChildEnrollmentModal
+          parent={{
+            parentName: dashboard.parentName,
+            parentEmail: dashboard.parentProfile.email,
+            phoneCountryCode: dashboard.parentProfile.phoneCountryCode,
+            phoneNumber: dashboard.parentProfile.phoneNumber,
+            billingCountryCode: dashboard.parentProfile.billingCountryCode,
+            billingCountryName: dashboard.parentProfile.billingCountryName,
+          }}
+          offers={programEnrollmentOffers}
+          countries={options.countries}
+          existingChild={{
+            id: selectedChild.id,
+            name: selectedChild.name,
+            firstName: selectedChild.profile.firstName,
+            lastName: selectedChild.profile.lastName,
+            age: selectedChild.profile.age,
+            gender: selectedChild.profile.gender,
+          }}
+          closePath={`/parent/courses?child=${selectedChild.id}`}
+        />
       ) : null}
     </FamilyDashboardFrame>
   );

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import {
   DEFAULT_OFFERS,
   FULL_BUNDLE_COUPON_OFFER_SLUG,
+  getCatalogOfferProgramSlugs,
   getDiscountCoupon,
   orderRegistrationCountries,
   PKR_OFFER_PRICE_OVERRIDES,
@@ -29,6 +30,7 @@ type CatalogOfferRecord = {
   title: string;
   basePriceGbp: number;
   basePricePkr: number | null;
+  programSlugs?: string[];
 };
 
 function trimForColumn(value: string | null | undefined, maxLength = 240) {
@@ -120,20 +122,7 @@ function normalizeStudentIdentity(input: {
 }
 
 function getProgramSlugsForOffer(offerSlug: string) {
-  switch (offerSlug) {
-    case "full-bundle":
-      return ["seerah", "life-lessons", "arabic", "tajweed"];
-    case "arabic-tajweed-pair":
-      return ["arabic", "tajweed"];
-    case "seerah-leadership-bundle":
-      return ["seerah", "life-lessons"];
-    case "seerah-single":
-      return ["seerah"];
-    case "life-lessons-single":
-      return ["life-lessons"];
-    default:
-      return [];
-  }
+  return getCatalogOfferProgramSlugs(offerSlug);
 }
 
 async function ensureParentProfile(
@@ -305,7 +294,9 @@ async function hasCompletedFamilyAccess(
         return false;
       }
 
-      const requestedProgramSlugs = getProgramSlugsForOffer(offer.slug);
+      const requestedProgramSlugs = offer.programSlugs?.length
+        ? offer.programSlugs
+        : getProgramSlugsForOffer(offer.slug);
 
       if (requestedProgramSlugs.length === 0) {
         return true;
@@ -334,14 +325,29 @@ export async function getRegistrationOptions() {
         kind: true,
         basePriceGbp: true,
         basePricePkr: true,
+        programs: {
+          orderBy: { sortOrder: "asc" },
+          select: {
+            program: {
+              select: {
+                slug: true,
+              },
+            },
+          },
+        },
       },
     });
 
     if (offers.length > 0) {
       return {
         offers: offers.map((offer) => ({
-          ...offer,
+          slug: offer.slug,
+          title: offer.title,
+          description: offer.description,
+          kind: offer.kind,
+          basePriceGbp: offer.basePriceGbp,
           basePricePkr: PKR_OFFER_PRICE_OVERRIDES[offer.slug] ?? offer.basePricePkr,
+          programSlugs: offer.programs.map((entry) => entry.program.slug),
         })),
         countries,
       };
@@ -371,10 +377,28 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
       title: true,
       basePriceGbp: true,
       basePricePkr: true,
+      programs: {
+        orderBy: { sortOrder: "asc" },
+        select: {
+          program: {
+            select: {
+              slug: true,
+            },
+          },
+        },
+      },
     },
   });
 
-  const offerLookup = buildOfferLookup(offers);
+  const offerRecords = offers.map((offer) => ({
+    id: offer.id,
+    slug: offer.slug,
+    title: offer.title,
+    basePriceGbp: offer.basePriceGbp,
+    basePricePkr: offer.basePricePkr,
+    programSlugs: offer.programs.map((entry) => entry.program.slug),
+  }));
+  const offerLookup = buildOfferLookup(offerRecords);
   const missingOffer = requestedOfferSlugs.find((slug) => !offerLookup.has(slug));
   const normalizedCouponCode = payload.couponCode?.trim().toUpperCase() ?? "";
   const fallbackCoupon = getRegistrationDiscountCoupon(normalizedCouponCode);
@@ -409,7 +433,7 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
   }
 
   return db.$transaction(async (tx) => {
-    const completedFamilyAccess = await hasCompletedFamilyAccess(tx, payload, offers);
+    const completedFamilyAccess = await hasCompletedFamilyAccess(tx, payload, offerRecords);
 
     if (completedFamilyAccess) {
       throw new Error(

@@ -6,6 +6,7 @@ import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrol
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import {
   ChildSelector,
@@ -22,7 +23,7 @@ type ParentDashboard = NonNullable<Awaited<ReturnType<typeof getParentDashboardD
 type ParentChild = ParentDashboard["children"][number];
 
 type PageProps = {
-  searchParams?: { child?: string; addChild?: string };
+  searchParams?: { child?: string; addChild?: string; enrollProgram?: string };
 };
 
 function buildParentActivity(child: ParentChild) {
@@ -47,6 +48,39 @@ function currentCircle(child: ParentChild) {
   return child.nextClass
     ? child.courses.find((course) => course.title === child.nextClass?.title)?.roomAssignment ?? null
     : child.courses[0]?.roomAssignment ?? null;
+}
+
+type RegistrationOffer = Awaited<ReturnType<typeof getRegistrationOptions>>["offers"][number];
+
+function enrolledProgramSlugs(child: ParentChild) {
+  const slugs = new Set(child.courses.map((course) => course.programSlug));
+  if (slugs.has("full-bundle")) {
+    return new Set<string>(FULL_GENM_PROGRAM_SLUGS);
+  }
+  return slugs;
+}
+
+function hasFullGenM(child: ParentChild) {
+  const slugs = enrolledProgramSlugs(child);
+  return FULL_GENM_PROGRAM_SLUGS.every((slug) => slugs.has(slug));
+}
+
+function offerProgramSlugs(offer: RegistrationOffer) {
+  return "programSlugs" in offer && Array.isArray(offer.programSlugs) ? offer.programSlugs : [];
+}
+
+function eligibleProgramOffers(offers: RegistrationOffer[], child: ParentChild) {
+  const enrolled = enrolledProgramSlugs(child);
+  return offers
+    .filter((offer) => {
+      const programSlugs = offerProgramSlugs(offer);
+      return programSlugs.length > 0 && programSlugs.some((slug) => !enrolled.has(slug));
+    })
+    .sort((left, right) => {
+      if (left.slug === "full-bundle") return -1;
+      if (right.slug === "full-bundle") return 1;
+      return 0;
+    });
 }
 
 export default async function ParentDashboardPage({ searchParams }: PageProps) {
@@ -88,18 +122,21 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const showAddChildModal = params?.addChild === "1";
+  const showProgramEnrollmentModal = params?.enrollProgram === "1" && selectedChild && !hasFullGenM(selectedChild);
   const activity = selectedChild ? buildParentActivity(selectedChild) : null;
   const circle = selectedChild ? currentCircle(selectedChild) : null;
   const latestProject = selectedChild?.assignments[0] ?? null;
 
   let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
-  if (showAddChildModal) {
+  if (showAddChildModal || showProgramEnrollmentModal) {
     try {
       options = await getRegistrationOptions();
     } catch (error) {
       console.error("Failed to load registration options for add-child modal", error);
     }
   }
+  const programEnrollmentOffers =
+    showProgramEnrollmentModal && selectedChild ? eligibleProgramOffers(options.offers, selectedChild) : [];
 
   return (
     <FamilyDashboardFrame
@@ -138,6 +175,14 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             >
               Add another child
             </Link>
+            {selectedChild && !hasFullGenM(selectedChild) ? (
+              <Link
+                href={`/parent?child=${selectedChild.id}&enrollProgram=1`}
+                className="cursor-pointer rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f7fbff]"
+              >
+                Explore other programmes
+              </Link>
+            ) : null}
           </div>
         }
       >
@@ -192,7 +237,21 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
             <div className="space-y-6">
-              <SectionCard eyebrow="Courses" title={selectedChild.name} icon="book">
+              <SectionCard
+                eyebrow="Courses"
+                title={selectedChild.name}
+                icon="book"
+                action={
+                  !hasFullGenM(selectedChild) ? (
+                    <Link
+                      href={`/parent?child=${selectedChild.id}&enrollProgram=1`}
+                      className="rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
+                    >
+                      Explore other programmes
+                    </Link>
+                  ) : null
+                }
+              >
                 <CompactList
                   items={selectedChild.courses.map((course) => ({
                     label: course.title,
@@ -387,6 +446,29 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           }}
           offers={options.offers}
           countries={options.countries}
+        />
+      ) : null}
+      {showProgramEnrollmentModal && selectedChild ? (
+        <AddChildEnrollmentModal
+          parent={{
+            parentName: dashboard.parentName,
+            parentEmail: dashboard.parentProfile.email,
+            phoneCountryCode: dashboard.parentProfile.phoneCountryCode,
+            phoneNumber: dashboard.parentProfile.phoneNumber,
+            billingCountryCode: dashboard.parentProfile.billingCountryCode,
+            billingCountryName: dashboard.parentProfile.billingCountryName,
+          }}
+          offers={programEnrollmentOffers}
+          countries={options.countries}
+          existingChild={{
+            id: selectedChild.id,
+            name: selectedChild.name,
+            firstName: selectedChild.profile.firstName,
+            lastName: selectedChild.profile.lastName,
+            age: selectedChild.profile.age,
+            gender: selectedChild.profile.gender,
+          }}
+          closePath={`/parent?child=${selectedChild.id}`}
         />
       ) : null}
     </FamilyDashboardFrame>

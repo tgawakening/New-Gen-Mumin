@@ -10,15 +10,19 @@ import {
   genMCoreOutcomes,
   genMPolicies,
   genMProgrammeSchedule,
+  genMProgrammes,
+  genMTeachers,
   genMTerms,
   getGenMProgrammeByTitle,
   getGenMTermPlansForProgramme,
   getGenMTeachersForProgramme,
 } from "@/lib/genm/curriculum";
 import { parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
+import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 
 type ChildCourseSummary = {
   id: string;
+  programSlug: string;
   title: string;
   status: string;
   startedAt: Date | null;
@@ -216,6 +220,18 @@ type ChildJournalMonthlySummary = {
 type ChildRegistrationGenderSummary = {
   gender: string | null;
   createdAt: Date;
+};
+
+type DashboardEnrollment = {
+  id: string;
+  status: string;
+  startedAt: Date | null;
+  program: {
+    id: string;
+    slug: string;
+    title: string;
+    schedules: unknown[];
+  };
 };
 
 type ChildSummary = {
@@ -917,6 +933,127 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       ?.filter((student) => student.gender)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0]
       ?.gender ?? null;
+  const courseSummaries: ChildCourseSummary[] = (validEnrollments as DashboardEnrollment[]).map((enrollment) => ({
+    id: enrollment.id,
+    programSlug: enrollment.program.slug,
+    title: enrollment.program.title,
+    status: enrollment.status.replace(/_/g, " "),
+    startedAt: enrollment.startedAt,
+    meetingCount: enrollment.program.schedules.length,
+    strapline: getGenMProgrammeByTitle(enrollment.program.title)?.strapline ?? null,
+    description: getGenMProgrammeByTitle(enrollment.program.title)?.description ?? null,
+    outcomes: getGenMProgrammeByTitle(enrollment.program.title)?.outcomes ?? [],
+    uploadIdeas: getGenMProgrammeByTitle(enrollment.program.title)?.uploadIdeas ?? [],
+    keyMaterials: getGenMProgrammeByTitle(enrollment.program.title)?.keyMaterials ?? [],
+    weeklyFlow: getGenMProgrammeByTitle(enrollment.program.title)?.weeklyFlow ?? [],
+    focusTerms: getGenMProgrammeByTitle(enrollment.program.title)?.focusTerms ?? [],
+    weeklySchedule: genMProgrammeSchedule,
+    wholePlanOutcomes: genMCoreOutcomes,
+    policies: genMPolicies,
+    termPlans: getGenMTermPlansForProgramme(enrollment.program.title),
+    teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
+      name: teacher.name,
+      title: teacher.title,
+      credential: teacher.credential,
+      bio: teacher.bio,
+      email: teacher.email,
+      specialties: teacher.specialties,
+    })),
+    recentLessonTopics: lessonUpdates
+      .filter((update) => update.programTitle === enrollment.program.title)
+      .slice(0, 4)
+      .map((update) => update.topic),
+    currentTaskTitles: assignments
+      .filter((assignment) => assignment.programTitle === enrollment.program.title)
+      .slice(0, 4)
+      .map((assignment) => assignment.title),
+    recentLessonCards: lessonUpdates
+      .filter((update) => update.programTitle === enrollment.program.title)
+      .slice(0, 3)
+      .map((update) => ({
+        id: update.id,
+        topic: update.topic,
+        teacherName: update.teacherName,
+        weekLabel: update.weekLabel,
+        contentType: update.contentType,
+      })),
+    currentTaskCards: assignments
+      .filter((assignment) => assignment.programTitle === enrollment.program.title)
+      .slice(0, 3)
+      .map((assignment) => ({
+        id: assignment.id,
+        title: assignment.title,
+        teacherName: assignment.teacherName,
+        taskCategory: assignment.taskCategory,
+        weekLabel: assignment.weekLabel,
+      })),
+    upcomingSessions: schedule
+      .filter((entry) => entry.title === enrollment.program.title || entry.title.startsWith("Whole Gen-Mumin:"))
+      .slice(0, 3),
+    roomAssignment: getStudentRoomAssignment(child.learningNotes, enrollment.program.id),
+  }));
+  const enrolledProgramSlugs = new Set(courseSummaries.map((course) => course.programSlug));
+  const hasFullGenMAccess = FULL_GENM_PROGRAM_SLUGS.every((slug) => enrolledProgramSlugs.has(slug));
+  const displayedCourses: ChildCourseSummary[] = hasFullGenMAccess
+    ? [
+        {
+          id: "full-genm",
+          programSlug: "full-bundle",
+          title: "Gen-Mumins Full Bundle",
+          status: accessLocked ? "PENDING" : "ACTIVE",
+          startedAt:
+            courseSummaries
+              .map((course) => course.startedAt)
+              .filter((date): date is Date => Boolean(date))
+              .sort((left, right) => left.getTime() - right.getTime())[0] ?? null,
+          meetingCount: schedule.length,
+          strapline: "All four Gen-Mumins programmes in one connected learning plan.",
+          description:
+            "Seerah, Life Lessons & Leadership, Arabic, and Qur'anic Tajweed are active together as the full Gen-Mumins programme.",
+          outcomes: genMCoreOutcomes,
+          uploadIdeas: Array.from(new Set(genMProgrammes.flatMap((programme) => programme.uploadIdeas))).slice(0, 8),
+          keyMaterials: Array.from(new Set(genMProgrammes.flatMap((programme) => programme.keyMaterials))).slice(0, 10),
+          weeklyFlow: genMProgrammeSchedule,
+          focusTerms: ["Arabic", "Qur'anic Tajweed", "The Prophet's Seerah", "Life Lessons & Leadership"],
+          weeklySchedule: genMProgrammeSchedule,
+          wholePlanOutcomes: genMCoreOutcomes,
+          policies: genMPolicies,
+          termPlans: genMTerms.map((term) => ({
+            id: term.id,
+            title: term.title,
+            window: term.window,
+            level: term.level,
+            highlights: term.highlights,
+          })),
+          teachers: genMTeachers.map((teacher) => ({
+            name: teacher.name,
+            title: teacher.title,
+            credential: teacher.credential,
+            bio: teacher.bio,
+            email: teacher.email,
+            specialties: teacher.specialties,
+          })),
+          recentLessonTopics: lessonUpdates.slice(0, 4).map((update) => update.topic),
+          currentTaskTitles: assignments.slice(0, 4).map((assignment) => assignment.title),
+          recentLessonCards: lessonUpdates.slice(0, 3).map((update) => ({
+            id: update.id,
+            topic: update.topic,
+            teacherName: update.teacherName,
+            weekLabel: update.weekLabel,
+            contentType: update.contentType,
+          })),
+          currentTaskCards: assignments.slice(0, 3).map((assignment) => ({
+            id: assignment.id,
+            title: assignment.title,
+            teacherName: assignment.teacherName,
+            taskCategory: assignment.taskCategory,
+            weekLabel: assignment.weekLabel,
+          })),
+          upcomingSessions: schedule.slice(0, 3),
+          roomAssignment: courseSummaries.find((course) => course.roomAssignment)?.roomAssignment ?? null,
+        },
+      ]
+    : courseSummaries;
 
   return {
     id: child.id,
@@ -932,64 +1069,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     accessLocked,
     attendanceRate,
     attendanceBreakdown,
-    courses: validEnrollments.map((enrollment: any) => ({
-      id: enrollment.id,
-      title: enrollment.program.title,
-      status: enrollment.status.replace(/_/g, " "),
-      startedAt: enrollment.startedAt,
-      meetingCount: enrollment.program.schedules.length,
-      strapline: getGenMProgrammeByTitle(enrollment.program.title)?.strapline ?? null,
-      description: getGenMProgrammeByTitle(enrollment.program.title)?.description ?? null,
-      outcomes: getGenMProgrammeByTitle(enrollment.program.title)?.outcomes ?? [],
-      uploadIdeas: getGenMProgrammeByTitle(enrollment.program.title)?.uploadIdeas ?? [],
-      keyMaterials: getGenMProgrammeByTitle(enrollment.program.title)?.keyMaterials ?? [],
-      weeklyFlow: getGenMProgrammeByTitle(enrollment.program.title)?.weeklyFlow ?? [],
-      focusTerms: getGenMProgrammeByTitle(enrollment.program.title)?.focusTerms ?? [],
-      weeklySchedule: genMProgrammeSchedule,
-      wholePlanOutcomes: genMCoreOutcomes,
-      policies: genMPolicies,
-      termPlans: getGenMTermPlansForProgramme(enrollment.program.title),
-        teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
-          name: teacher.name,
-          title: teacher.title,
-          credential: teacher.credential,
-          bio: teacher.bio,
-          email: teacher.email,
-          specialties: teacher.specialties,
-        })),
-      recentLessonTopics: lessonUpdates
-        .filter((update) => update.programTitle === enrollment.program.title)
-        .slice(0, 4)
-        .map((update) => update.topic),
-        currentTaskTitles: assignments
-          .filter((assignment) => assignment.programTitle === enrollment.program.title)
-          .slice(0, 4)
-          .map((assignment) => assignment.title),
-        recentLessonCards: lessonUpdates
-          .filter((update) => update.programTitle === enrollment.program.title)
-          .slice(0, 3)
-          .map((update) => ({
-            id: update.id,
-            topic: update.topic,
-            teacherName: update.teacherName,
-            weekLabel: update.weekLabel,
-            contentType: update.contentType,
-          })),
-        currentTaskCards: assignments
-          .filter((assignment) => assignment.programTitle === enrollment.program.title)
-          .slice(0, 3)
-          .map((assignment) => ({
-            id: assignment.id,
-            title: assignment.title,
-            teacherName: assignment.teacherName,
-            taskCategory: assignment.taskCategory,
-            weekLabel: assignment.weekLabel,
-          })),
-        upcomingSessions: schedule
-          .filter((entry) => entry.title === enrollment.program.title || entry.title.startsWith("Whole Gen-Mumin:"))
-          .slice(0, 3),
-        roomAssignment: getStudentRoomAssignment(child.learningNotes, enrollment.program.id),
-      })),
+    courses: displayedCourses,
     schedule,
     nextClass: schedule[0] ?? null,
     quizzes,

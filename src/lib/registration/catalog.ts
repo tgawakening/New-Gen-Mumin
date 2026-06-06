@@ -67,6 +67,24 @@ export const DEFAULT_OFFERS: CatalogOffer[] = [
     basePricePkr: 2000,
   },
   {
+    slug: "arabic-single",
+    title: "Arabic",
+    kind: "SINGLE",
+    description: "Single-program monthly enrollment for Arabic.",
+    programSlugs: ["arabic"],
+    basePriceGbp: 25,
+    basePricePkr: 3500,
+  },
+  {
+    slug: "tajweed-single",
+    title: "Qur'anic Tajweed",
+    kind: "SINGLE",
+    description: "Single-program monthly enrollment for Qur'anic Tajweed.",
+    programSlugs: ["tajweed"],
+    basePriceGbp: 25,
+    basePricePkr: 3500,
+  },
+  {
     slug: "seerah-leadership-bundle",
     title: "Seerah + Life Lessons & Leadership",
     kind: "PAIR",
@@ -219,6 +237,12 @@ export const DISCOUNT_COUPONS = PUBLIC_DISCOUNT_COUPONS;
 export const FULL_BUNDLE_COUPON_OFFER_SLUG = "full-bundle";
 export const SEERAH_SINGLE_OFFER_SLUG = "seerah-single";
 export const SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG = "seerah-leadership-bundle";
+
+export const FULL_GENM_PROGRAM_SLUGS = ["seerah", "life-lessons", "arabic", "tajweed"] as const;
+
+export function getCatalogOfferProgramSlugs(offerSlug: string) {
+  return DEFAULT_OFFERS.find((offer) => offer.slug === offerSlug)?.programSlugs ?? [];
+}
 
 export function isCouponEligibleForSelection(
   coupon: ReturnType<typeof getDiscountCoupon>,
