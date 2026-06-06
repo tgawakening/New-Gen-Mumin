@@ -131,7 +131,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   if (selectedProgramId && selectedCourse?.programSlug !== "full-bundle") {
     try {
-      materials = await listMaterials({ programId: selectedProgramId, status: "approved", visibility: "students_parents", limit: 20 });
+      materials = await listMaterials({ programId: selectedProgramId, status: "approved", visibility: "students_parents", limit: 20, studentId: selectedChild.id });
     } catch {
       materials = [];
     }

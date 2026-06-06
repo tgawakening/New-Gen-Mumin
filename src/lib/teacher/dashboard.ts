@@ -223,6 +223,7 @@ export async function getTeacherDashboardData(userId: string) {
           },
         },
       },
+      programRosters: true,
     },
   });
 
@@ -301,29 +302,43 @@ export async function getTeacherDashboardData(userId: string) {
     activeEnrollments: new Set(schedule.program.enrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size,
   }));
 
-  const rosterPrograms = teacherProfile.programAssignments.map((assignment) => ({
-    programId: assignment.program.id,
-    title: assignment.program.title,
-    assignmentCount: assignment.program.assignments.length,
-    students: Array.from(
-      new Map(
-        assignment.program.enrollments
-          .filter((enrollment) => ACTIVE_STUDENT_STATUSES.has(enrollment.status))
-          .map((enrollment) => [
-            enrollment.student.user.email.toLowerCase(),
-            {
-              id: enrollment.student.id,
-              name:
-                enrollment.student.displayName ||
-                `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim(),
-              email: enrollment.student.user.email,
-              enrollmentStatus: enrollment.status.replace(/_/g, " "),
-              roomAssignment: getStudentRoomAssignment(enrollment.student.learningNotes, assignment.program.id),
-            },
-          ]),
-      ).values(),
-    ),
-  }));
+  const rosterStudentIdsByProgram = new Map<string, Set<string>>();
+  for (const rosterEntry of teacherProfile.programRosters || []) {
+    const studentSet = rosterStudentIdsByProgram.get(rosterEntry.programId) ?? new Set<string>();
+    studentSet.add(rosterEntry.studentId);
+    rosterStudentIdsByProgram.set(rosterEntry.programId, studentSet);
+  }
+
+  const rosterPrograms = teacherProfile.programAssignments.map((assignment) => {
+    const rosterStudentIds = rosterStudentIdsByProgram.get(assignment.program.id);
+    const enrollments = rosterStudentIds && rosterStudentIds.size
+      ? assignment.program.enrollments.filter((enrollment) => rosterStudentIds.has(enrollment.studentId))
+      : assignment.program.enrollments;
+
+    return {
+      programId: assignment.program.id,
+      title: assignment.program.title,
+      assignmentCount: assignment.program.assignments.length,
+      students: Array.from(
+        new Map(
+          enrollments
+            .filter((enrollment) => ACTIVE_STUDENT_STATUSES.has(enrollment.status))
+            .map((enrollment) => [
+              enrollment.student.user.email.toLowerCase(),
+              {
+                id: enrollment.student.id,
+                name:
+                  enrollment.student.displayName ||
+                  `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim(),
+                email: enrollment.student.user.email,
+                enrollmentStatus: enrollment.status.replace(/_/g, " "),
+                roomAssignment: getStudentRoomAssignment(enrollment.student.learningNotes, assignment.program.id),
+              },
+            ]),
+        ).values(),
+      ),
+    };
+  });
 
   const quizLibrary = teacherProfile.programAssignments.flatMap((assignment) =>
     assignment.program.quizzes.map((quiz) => ({
@@ -416,11 +431,7 @@ export async function getTeacherDashboardData(userId: string) {
     .slice(0, 12);
 
   const uniqueStudents = new Set(
-    teacherProfile.programAssignments.flatMap((assignment) =>
-      assignment.program.enrollments
-        .filter((enrollment) => ACTIVE_STUDENT_STATUSES.has(enrollment.status))
-        .map((enrollment) => enrollment.student.user.email.toLowerCase()),
-    ),
+    rosterPrograms.flatMap((roster) => roster.students.map((student) => student.email.toLowerCase())),
   );
 
   const specialtyList = Array.isArray(teacherProfile.specialties)

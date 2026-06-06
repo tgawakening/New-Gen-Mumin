@@ -253,7 +253,7 @@ export async function uploadTeacherMaterial(input: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "reader", type: "anyone" }),
     });
-    if (!input.suppressNotifications) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title);
+    if (!input.suppressNotifications) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title, input.teacherUserId);
   }
 
   if (!input.suppressNotifications) await db.notification.create({
@@ -394,7 +394,49 @@ function mapDriveFile(file: DriveFile): DriveMaterial {
   };
 }
 
-export async function listMaterials(options: { status?: string; programId?: string; visibility?: string; limit?: number } = {}) {
+async function filterMaterialsForStudent(materials: DriveMaterial[], studentId?: string) {
+  if (!studentId || !materials.length) return materials;
+
+  const teacherUserIds = [
+    ...new Set(
+      materials
+        .map((material) => material.uploadedByUserId)
+        .filter((userId): userId is string => Boolean(userId)),
+    ),
+  ];
+  if (!teacherUserIds.length) return materials;
+
+  const teachers = await db.teacherProfile.findMany({
+    where: { userId: { in: teacherUserIds } },
+    select: {
+      userId: true,
+      programRosters: {
+        select: {
+          programId: true,
+          studentId: true,
+        },
+      },
+    },
+  });
+
+  const rosterByTeacherProgram = new Map<string, Set<string>>();
+  for (const teacher of teachers) {
+    for (const roster of teacher.programRosters) {
+      const key = `${teacher.userId}:${roster.programId}`;
+      const studentIds = rosterByTeacherProgram.get(key) ?? new Set<string>();
+      studentIds.add(roster.studentId);
+      rosterByTeacherProgram.set(key, studentIds);
+    }
+  }
+
+  return materials.filter((material) => {
+    if (!material.uploadedByUserId || !material.programId) return true;
+    const rosterStudentIds = rosterByTeacherProgram.get(`${material.uploadedByUserId}:${material.programId}`);
+    return !rosterStudentIds?.size || rosterStudentIds.has(studentId);
+  });
+}
+
+export async function listMaterials(options: { status?: string; programId?: string; visibility?: string; limit?: number; studentId?: string } = {}) {
   const query = [
     "appProperties has { key='genMumin' and value='course-material' }",
     options.status ? `appProperties has { key='status' and value='${escapeQuery(options.status)}' }` : "",
@@ -407,7 +449,7 @@ export async function listMaterials(options: { status?: string; programId?: stri
     `/files?q=${encodeURIComponent(query)}&pageSize=${options.limit ?? 50}&orderBy=createdTime desc&fields=files(id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties)`,
   );
 
-  return payload.files.map(mapDriveFile);
+  return filterMaterialsForStudent(payload.files.map(mapDriveFile), options.studentId);
 }
 
 export async function deleteMaterial(fileId: string) {
@@ -428,13 +470,32 @@ export async function deleteTeacherMaterial(fileId: string, teacherUserId: strin
   await deleteMaterial(fileId);
 }
 
-async function notifyMaterialLearners(fileId: string, fileName: string, programId: string, programTitle: string) {
+async function getTeacherRosterStudentIdsForProgram(teacherUserId: string | null | undefined, programId: string) {
+  if (!teacherUserId) return null;
+
+  const teacher = await db.teacherProfile.findUnique({
+    where: { userId: teacherUserId },
+    select: {
+      programRosters: {
+        where: { programId },
+        select: { studentId: true },
+      },
+    },
+  });
+
+  if (!teacher || !teacher.programRosters.length) return null;
+  return new Set(teacher.programRosters.map((entry) => entry.studentId));
+}
+
+async function notifyMaterialLearners(fileId: string, fileName: string, programId: string, programTitle: string, teacherUserId?: string | null) {
+  const rosterStudentIds = await getTeacherRosterStudentIdsForProgram(teacherUserId, programId);
   const enrollments = await db.enrollment.findMany({
     where: { programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
     include: { student: { include: { user: true } }, parent: { include: { user: true } } },
   });
   const userIds = new Set<string>();
   for (const enrollment of enrollments) {
+    if (rosterStudentIds?.size && !rosterStudentIds.has(enrollment.studentId)) continue;
     userIds.add(enrollment.student.user.id);
     if (enrollment.parent?.user.id) userIds.add(enrollment.parent.user.id);
   }
@@ -486,7 +547,7 @@ export async function approveMaterial(fileId: string, adminUserId: string) {
 
   const programId = updated.appProperties?.programId;
   if (programId && updated.appProperties?.visibility !== "internal") {
-    await notifyMaterialLearners(updated.id, updated.name, programId, programTitle);
+    await notifyMaterialLearners(updated.id, updated.name, programId, programTitle, updated.appProperties?.uploadedByUserId);
   }
 
   return updated;

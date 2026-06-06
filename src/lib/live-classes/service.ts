@@ -147,6 +147,94 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
   });
 }
 
+export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
+  const rosterEntries = await db.teacherStudentRoster.findMany({
+    where: { teacherId, programId },
+    select: { studentId: true },
+  });
+  return rosterEntries.map((entry) => entry.studentId);
+}
+
+export async function syncTeacherProgramRoster(teacherId: string, programId: string, studentIds: string[]) {
+  const existing = await db.teacherStudentRoster.findMany({
+    where: { teacherId, programId },
+    select: { id: true, studentId: true },
+  });
+
+  const existingIds = new Set(existing.map((entry) => entry.studentId));
+  const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
+  const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
+
+  const operations = [
+    ...(toRemove.length ? [db.teacherStudentRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
+    ...toAdd.map((studentId) =>
+      db.teacherStudentRoster.create({
+        data: {
+          teacherId,
+          programId,
+          studentId,
+        },
+      }),
+    ),
+  ];
+
+  if (operations.length) {
+    await db.$transaction(operations);
+  }
+}
+
+export async function getScheduleRosterStudentIds(scheduleId: string) {
+  const scheduleRoster = await db.classScheduleRoster.findMany({
+    where: { scheduleId },
+    select: { studentId: true },
+  });
+
+  if (scheduleRoster.length) {
+    return scheduleRoster.map((entry) => entry.studentId);
+  }
+
+  const schedule = await db.classSchedule.findUnique({
+    where: { id: scheduleId },
+    select: {
+      teacherId: true,
+      programId: true,
+    },
+  });
+
+  if (!schedule) {
+    return [];
+  }
+
+  return getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
+}
+
+export async function syncScheduleRoster(scheduleId: string, studentIds: string[]) {
+  const existing = await db.classScheduleRoster.findMany({
+    where: { scheduleId },
+    select: { id: true, studentId: true },
+  });
+
+  const existingIds = new Set(existing.map((entry) => entry.studentId));
+  const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
+  const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
+
+  const operations = [
+    ...(toRemove.length ? [db.classScheduleRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
+    ...toAdd.map((studentId) =>
+      db.classScheduleRoster.create({
+        data: {
+          scheduleId,
+          studentId,
+        },
+      }),
+    ),
+  ];
+
+  if (operations.length) {
+    await db.$transaction(operations);
+  }
+}
+
 export async function createLiveClass(input: CreateLiveClassInput, createdByUserId?: string) {
   const audienceGroup = normalizeAudienceGroup(input.audienceGroup);
   const teacherIds = input.teacherIds?.length ? input.teacherIds : input.teacherId ? [input.teacherId] : [];
@@ -426,11 +514,15 @@ export async function notifyEnrolledUsers(scheduleId: string) {
 
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
   const visibleTitle = cleanLiveClassTitle(schedule.title);
+  const rosterStudentIds = await getScheduleRosterStudentIds(schedule.id);
+  const hasRosterOverride = rosterStudentIds.length > 0;
+  const visibleStudentIds = new Set(rosterStudentIds);
   const users = new Map<string, { id: string; role: string }>();
   users.set(schedule.teacher.user.id, { id: schedule.teacher.user.id, role: "teacher" });
 
   for (const enrollment of schedule.program.enrollments) {
     if (!countryMatchesAudience(enrollment.student.countryCode, audienceGroup)) continue;
+    if (hasRosterOverride && !visibleStudentIds.has(enrollment.studentId)) continue;
     users.set(enrollment.student.user.id, { id: enrollment.student.user.id, role: "student" });
     if (enrollment.parent?.user.id) {
       users.set(enrollment.parent.user.id, { id: enrollment.parent.user.id, role: "parent" });

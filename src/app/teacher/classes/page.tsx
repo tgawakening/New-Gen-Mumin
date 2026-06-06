@@ -207,6 +207,16 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
         ]}
       />
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-[#5f6b7a]">Manage default programme rosters to control which students receive session and schedule updates.</p>
+        <Link
+          href="/teacher/roster"
+          className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-xs font-semibold text-[#0f4d81]"
+        >
+          Manage default roster
+        </Link>
+      </div>
+
       <TeacherSection eyebrow="Student rooms" title="Bulk import Zoom room codes">
         <p className="text-sm leading-6 text-[#617184]">
           Paste spreadsheet rows as CSV: serial,parent/location,location,child name,age. The serial number becomes the room code shown to students.

@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -297,6 +298,12 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                     Copy/open public link
                   </a>
                 ) : null}
+                <Link
+                  href={`/teacher/live-sessions/${entry.id}/roster`}
+                  className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
+                >
+                  Edit roster
+                </Link>
                 <form action={deleteSessionAction}>
                   <input type="hidden" name="scheduleId" value={entry.id} />
                   <FormSubmitButton pendingLabel="Removing..." className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646] disabled:cursor-wait disabled:opacity-70">

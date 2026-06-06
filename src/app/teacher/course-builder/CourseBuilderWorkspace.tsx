@@ -571,10 +571,23 @@ export function CourseBuilderWorkspace({
       }
 
       const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+      const teacherRoster = await db.teacherProfile.findUnique({
+        where: { userId: teacherUserId },
+        select: {
+          programRosters: {
+            where: { programId: schedule.programId },
+            select: { studentId: true },
+          },
+        },
+      });
+      const rosterStudentIds = teacherRoster?.programRosters.length
+        ? new Set(teacherRoster.programRosters.map((entry) => entry.studentId))
+        : null;
       const learnerUsers = await db.enrollment.findMany({
         where: {
           programId: schedule.programId,
           status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
+          ...(rosterStudentIds?.size ? { studentId: { in: [...rosterStudentIds] } } : {}),
         },
         select: { student: { select: { userId: true } } },
       });
