@@ -147,47 +147,97 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
   });
 }
 
+function isRosterTableUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return (
+    message.includes("TeacherStudentRoster") ||
+    message.includes("ClassScheduleRoster") ||
+    message.includes("doesn't exist") ||
+    message.includes("does not exist") ||
+    message.includes("P2021")
+  );
+}
+
+export async function getTeacherProgramRosterEntries(teacherId: string) {
+  try {
+    return await db.teacherStudentRoster.findMany({
+      where: { teacherId },
+      select: { programId: true, studentId: true },
+    });
+  } catch (error) {
+    if (isRosterTableUnavailable(error)) {
+      console.error("Teacher roster tables are not available yet.", error);
+      return [];
+    }
+    throw error;
+  }
+}
+
 export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
-  const rosterEntries = await db.teacherStudentRoster.findMany({
-    where: { teacherId, programId },
-    select: { studentId: true },
-  });
-  return rosterEntries.map((entry) => entry.studentId);
+  try {
+    const rosterEntries = await db.teacherStudentRoster.findMany({
+      where: { teacherId, programId },
+      select: { studentId: true },
+    });
+    return rosterEntries.map((entry) => entry.studentId);
+  } catch (error) {
+    if (isRosterTableUnavailable(error)) {
+      console.error("Teacher roster tables are not available yet.", error);
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function syncTeacherProgramRoster(teacherId: string, programId: string, studentIds: string[]) {
-  const existing = await db.teacherStudentRoster.findMany({
-    where: { teacherId, programId },
-    select: { id: true, studentId: true },
-  });
+  try {
+    const existing = await db.teacherStudentRoster.findMany({
+      where: { teacherId, programId },
+      select: { id: true, studentId: true },
+    });
 
-  const existingIds = new Set(existing.map((entry) => entry.studentId));
-  const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
-  const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
+    const existingIds = new Set(existing.map((entry) => entry.studentId));
+    const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
+    const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
 
-  const operations = [
-    ...(toRemove.length ? [db.teacherStudentRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
-    ...toAdd.map((studentId) =>
-      db.teacherStudentRoster.create({
-        data: {
-          teacherId,
-          programId,
-          studentId,
-        },
-      }),
-    ),
-  ];
+    const operations = [
+      ...(toRemove.length ? [db.teacherStudentRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
+      ...toAdd.map((studentId) =>
+        db.teacherStudentRoster.create({
+          data: {
+            teacherId,
+            programId,
+            studentId,
+          },
+        }),
+      ),
+    ];
 
-  if (operations.length) {
-    await db.$transaction(operations);
+    if (operations.length) {
+      await db.$transaction(operations);
+    }
+  } catch (error) {
+    if (isRosterTableUnavailable(error)) {
+      throw new Error("Roster saving is not ready yet because the roster database tables have not been deployed.");
+    }
+    throw error;
   }
 }
 
 export async function getScheduleRosterStudentIds(scheduleId: string) {
-  const scheduleRoster = await db.classScheduleRoster.findMany({
-    where: { scheduleId },
-    select: { studentId: true },
-  });
+  let scheduleRoster: Array<{ studentId: string }> = [];
+  try {
+    scheduleRoster = await db.classScheduleRoster.findMany({
+      where: { scheduleId },
+      select: { studentId: true },
+    });
+  } catch (error) {
+    if (isRosterTableUnavailable(error)) {
+      console.error("Class schedule roster table is not available yet.", error);
+    } else {
+      throw error;
+    }
+  }
 
   if (scheduleRoster.length) {
     return scheduleRoster.map((entry) => entry.studentId);
@@ -209,29 +259,36 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
 }
 
 export async function syncScheduleRoster(scheduleId: string, studentIds: string[]) {
-  const existing = await db.classScheduleRoster.findMany({
-    where: { scheduleId },
-    select: { id: true, studentId: true },
-  });
+  try {
+    const existing = await db.classScheduleRoster.findMany({
+      where: { scheduleId },
+      select: { id: true, studentId: true },
+    });
 
-  const existingIds = new Set(existing.map((entry) => entry.studentId));
-  const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
-  const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
+    const existingIds = new Set(existing.map((entry) => entry.studentId));
+    const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
+    const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
 
-  const operations = [
-    ...(toRemove.length ? [db.classScheduleRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
-    ...toAdd.map((studentId) =>
-      db.classScheduleRoster.create({
-        data: {
-          scheduleId,
-          studentId,
-        },
-      }),
-    ),
-  ];
+    const operations = [
+      ...(toRemove.length ? [db.classScheduleRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
+      ...toAdd.map((studentId) =>
+        db.classScheduleRoster.create({
+          data: {
+            scheduleId,
+            studentId,
+          },
+        }),
+      ),
+    ];
 
-  if (operations.length) {
-    await db.$transaction(operations);
+    if (operations.length) {
+      await db.$transaction(operations);
+    }
+  } catch (error) {
+    if (isRosterTableUnavailable(error)) {
+      throw new Error("Session roster saving is not ready yet because the roster database tables have not been deployed.");
+    }
+    throw error;
   }
 }
 

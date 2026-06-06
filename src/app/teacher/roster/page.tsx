@@ -10,7 +10,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
-import { syncTeacherProgramRoster } from "@/lib/live-classes/service";
+import { getTeacherProgramRosterEntries, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -53,22 +53,14 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
           },
         },
       },
-      programRosters: {
-        include: {
-          student: {
-            include: {
-              user: true,
-            },
-          },
-        },
-      },
     },
   });
 
   if (!teacher) redirect("/teacher-registration");
 
+  const programRosterEntries = await getTeacherProgramRosterEntries(teacher.id);
   const selectedStudentIdsByProgram = new Map<string, Set<string>>();
-  for (const rosterEntry of teacher.programRosters) {
+  for (const rosterEntry of programRosterEntries) {
     const selected = selectedStudentIdsByProgram.get(rosterEntry.programId) ?? new Set<string>();
     selected.add(rosterEntry.studentId);
     selectedStudentIdsByProgram.set(rosterEntry.programId, selected);
@@ -104,7 +96,12 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
     const validStudentIds = new Set(enrollments.map((entry) => entry.studentId));
     const studentIds = selectedIds.filter((id) => validStudentIds.has(id));
 
-    await syncTeacherProgramRoster(teacherProfile.id, programId, studentIds);
+    try {
+      await syncTeacherProgramRoster(teacherProfile.id, programId, studentIds);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save roster.";
+      redirect(noticeHref(message, "error"));
+    }
 
     revalidatePath("/teacher/roster");
     revalidatePath("/teacher/classes");

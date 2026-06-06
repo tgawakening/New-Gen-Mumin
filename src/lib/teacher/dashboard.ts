@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { cleanLiveClassTitle, getLiveClassAudienceLabel } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, getLiveClassAudienceLabel, getTeacherProgramRosterEntries } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 
 const ACTIVE_STUDENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
@@ -223,7 +223,6 @@ export async function getTeacherDashboardData(userId: string) {
           },
         },
       },
-      programRosters: true,
     },
   });
 
@@ -302,8 +301,9 @@ export async function getTeacherDashboardData(userId: string) {
     activeEnrollments: new Set(schedule.program.enrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size,
   }));
 
+  const programRosterEntries = await getTeacherProgramRosterEntries(teacherProfile.id);
   const rosterStudentIdsByProgram = new Map<string, Set<string>>();
-  for (const rosterEntry of teacherProfile.programRosters || []) {
+  for (const rosterEntry of programRosterEntries) {
     const studentSet = rosterStudentIdsByProgram.get(rosterEntry.programId) ?? new Set<string>();
     studentSet.add(rosterEntry.studentId);
     rosterStudentIdsByProgram.set(rosterEntry.programId, studentSet);

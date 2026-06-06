@@ -11,7 +11,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
-import { getTeacherProgramRosterStudentIds, syncScheduleRoster } from "@/lib/live-classes/service";
+import { getScheduleRosterStudentIds, getTeacherProgramRosterStudentIds, syncScheduleRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
   params: { scheduleId: string };
@@ -51,9 +51,6 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
           },
         },
       },
-      scheduleRosters: {
-        select: { studentId: true },
-      },
     },
   });
 
@@ -61,7 +58,7 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
     redirect("/teacher/live-sessions");
   }
 
-  const scheduleRosterIds = new Set(schedule.scheduleRosters.map((entry) => entry.studentId));
+  const scheduleRosterIds = new Set(await getScheduleRosterStudentIds(schedule.id));
   const defaultProgramRosterIds = await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
   const selectedIds = scheduleRosterIds.size ? scheduleRosterIds : new Set(defaultProgramRosterIds);
 
@@ -92,7 +89,12 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
     const validStudentIds = new Set(enrollments.map((entry) => entry.studentId));
     const studentIds = selected.filter((id) => validStudentIds.has(id));
 
-    await syncScheduleRoster(scheduleItem.id, studentIds);
+    try {
+      await syncScheduleRoster(scheduleItem.id, studentIds);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to save session roster.";
+      redirect(noticeHref(scheduleItem.id, message, "error"));
+    }
 
     revalidatePath(`/teacher/live-sessions/${scheduleItem.id}/roster`);
     redirect(noticeHref(scheduleItem.id, "Session roster saved successfully.", "success"));
