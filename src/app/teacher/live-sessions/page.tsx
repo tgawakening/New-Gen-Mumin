@@ -37,28 +37,6 @@ function noticeHref(message: string, tone: "success" | "error" = "success") {
   return `/teacher/live-sessions?${params.toString()}`;
 }
 
-function statusNotice(status?: string) {
-  if (status === "zoom-linked") {
-    return {
-      message: "Zoom live session created successfully. Admin has been notified for monitoring.",
-      tone: "success",
-    };
-  }
-  if (status === "zoom-pending") {
-    return {
-      message: "Zoom session could not be created. Please check the Zoom app scopes and try again.",
-      tone: "error",
-    };
-  }
-  if (status === "deleted") {
-    return {
-      message: "Live session removed successfully.",
-      tone: "success",
-    };
-  }
-  return null;
-}
-
 function weekdayFromDateInput(value: string) {
   const [year, month, day] = value.split("-").map(Number);
   if (!year || !month || !day) return null;
@@ -78,14 +56,13 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
     ? params.programId
     : dashboard.rosters[0]?.programId;
-  const codedNotice = statusNotice(params.status);
 
   async function requestSessionAction(formData: FormData) {
     "use server";
 
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
-    let successStatus = "zoom-linked";
+    let successHref = "";
 
     try {
       const schedule = await requestTeacherLiveClass(
@@ -113,12 +90,17 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       revalidatePath("/admin/classes");
       revalidatePath("/student/schedule");
       revalidatePath("/parent/schedule");
-      successStatus = schedule.meetingUrl ? "zoom-linked" : "zoom-pending";
+      successHref = noticeHref(
+        schedule.meetingUrl
+          ? "Zoom live session created successfully. Students and parents have been notified."
+          : "Live session saved, but Zoom did not return a meeting link. Please check Zoom app scopes.",
+        schedule.meetingUrl ? "success" : "error",
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to request this Zoom session.";
       redirect(noticeHref(message, "error"));
     }
-    redirect(`/teacher/live-sessions?status=${successStatus}`);
+    redirect(successHref);
   }
 
   async function deleteSessionAction(formData: FormData) {
@@ -146,7 +128,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
     revalidatePath("/admin/classes");
     revalidatePath("/student/schedule");
     revalidatePath("/parent/schedule");
-    redirect("/teacher/live-sessions?status=deleted");
+    redirect(noticeHref("Live session removed successfully.", "success"));
   }
 
   return (
@@ -155,7 +137,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       subtitle="Create Zoom sessions directly for your assigned programmes. Admin is notified automatically for monitoring."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.notice ?? codedNotice?.message} tone={params.tone ?? codedNotice?.tone} />
+      <ActionToast message={params.notice} tone={params.tone} />
 
       <TeacherMetricGrid
         metrics={[
@@ -167,6 +149,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       />
 
       <TeacherSection eyebrow="Zoom session" title="Create a recurring live session">
+        {defaultProgramId ? (
         <form action={requestSessionAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Program
@@ -256,6 +239,11 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
             Create Zoom session
           </FormSubmitButton>
         </form>
+        ) : (
+          <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-6 text-[#5f6b7a]">
+            No assigned programmes are available for Zoom session creation yet.
+          </p>
+        )}
       </TeacherSection>
 
       <TeacherSection eyebrow="Session status" title="Your live sessions">
