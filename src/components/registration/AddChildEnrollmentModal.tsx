@@ -70,6 +70,10 @@ const PAYMENT_METHODS: Array<{ value: PaymentValue; label: string; description: 
   { value: "BANK_TRANSFER", label: "Manual payment", description: "Use Bank Transfer or JazzCash and then submit proof for review." },
 ];
 
+const PAKISTAN_SEERAH_LEADERSHIP_4K_COUPON_CODE = "PKSEERAH4K";
+const SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG = "seerah-leadership-bundle";
+const PAKISTAN_SEERAH_LEADERSHIP_4K_TARGET_AMOUNT_PKR = 4000;
+
 const MANUAL_PAYMENT_PREVIEW: ManualInstructions = {
   whatsapp: "03181602388",
   instructions: [
@@ -217,6 +221,7 @@ export function AddChildEnrollmentModal({
   const [selectedOfferSlug, setSelectedOfferSlug] = useState(
     offers.find((offer) => offer.kind === "BUNDLE")?.slug ?? offers[0]?.slug ?? "",
   );
+  const [couponCode, setCouponCode] = useState("");
   const [selectedGateway, setSelectedGateway] = useState<PaymentValue>("STRIPE");
   const [draft, setDraft] = useState<DraftResponse | null>(null);
   const [success, setSuccess] = useState<CheckoutResponse | null>(null);
@@ -261,7 +266,17 @@ export function AddChildEnrollmentModal({
   const isPakistan = selectedCountry.code === "PK";
   const isExistingChildEnrollment = Boolean(existingChild);
   const lineDiscountAmount = isExistingChildEnrollment || !pricing ? 0 : Math.round(pricing.displayAmount * 0.5);
-  const lineTotalAmount = pricing ? Math.max(0, pricing.displayAmount - lineDiscountAmount) : 0;
+  const normalizedCouponCode = couponCode.trim().toUpperCase();
+  const seerahLeadership4kCouponEligible =
+    normalizedCouponCode === PAKISTAN_SEERAH_LEADERSHIP_4K_COUPON_CODE &&
+    isPakistan &&
+    selectedOfferSlug === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG &&
+    pricing?.displayCurrency === "PKR";
+  const subtotalAfterLineDiscount = pricing ? Math.max(0, pricing.displayAmount - lineDiscountAmount) : 0;
+  const couponDiscountAmount = seerahLeadership4kCouponEligible
+    ? Math.max(0, subtotalAfterLineDiscount - PAKISTAN_SEERAH_LEADERSHIP_4K_TARGET_AMOUNT_PKR)
+    : 0;
+  const lineTotalAmount = Math.max(0, subtotalAfterLineDiscount - couponDiscountAmount);
   const availablePaymentMethods = PAYMENT_METHODS.filter((method) =>
     method.value === "BANK_TRANSFER" ? isPakistan : true,
   );
@@ -303,6 +318,7 @@ export function AddChildEnrollmentModal({
           selectedCountryCode: selectedCountry.code,
           selectedCountryName: selectedCountry.name,
           notes: "Source: parent-dashboard-add-child",
+          couponCode: normalizedCouponCode,
           students: [
             {
               firstName: selectedChildFirstName,
@@ -566,6 +582,20 @@ export function AddChildEnrollmentModal({
                         <span>Discount</span>
                         <span>- {formatMoney(lineDiscountAmount, pricing.displayCurrency)}</span>
                       </div>
+                      {couponCode.trim() ? (
+                        <div className="mt-2 rounded-2xl bg-white/10 px-3 py-2 text-sm">
+                          {seerahLeadership4kCouponEligible ? (
+                            <div className="flex items-center justify-between text-[#f8d39f]">
+                              <span>Coupon {normalizedCouponCode}</span>
+                              <span>- {formatMoney(couponDiscountAmount, pricing.displayCurrency)}</span>
+                            </div>
+                          ) : (
+                            <p className="text-white/75">
+                              Coupon applies only to Pakistan Seerah + Life Lessons & Leadership.
+                            </p>
+                          )}
+                        </div>
+                      ) : null}
                       <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-3 text-base font-semibold">
                         <span>Total</span>
                         <span>{formatMoney(lineTotalAmount, pricing.displayCurrency)}</span>
@@ -582,6 +612,15 @@ export function AddChildEnrollmentModal({
                     Active
                   </span>
                 </div>
+                <label className="mt-4 block text-sm font-medium text-[#38506a]">
+                  Coupon code
+                  <input
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    placeholder="Enter coupon code"
+                    className="mt-2 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm uppercase outline-none focus:border-[#f39f5f]"
+                  />
+                </label>
                 <div className="mt-4 space-y-3">
                   {availablePaymentMethods.map((method) => (
                     <label
