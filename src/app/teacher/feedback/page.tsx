@@ -18,8 +18,19 @@ import {
 } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ submitted?: string }>;
+  searchParams?: Promise<{ submitted?: string; error?: string }>;
 };
+
+function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
+  const params = new URLSearchParams();
+  if (tone === "success") {
+    params.set("submitted", "1");
+  } else {
+    params.set("error", message);
+  }
+  const query = params.toString();
+  return `/teacher/feedback${query ? `?${query}` : ""}`;
+}
 
 function payloadEntries(payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return [];
@@ -94,54 +105,66 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
   async function submitTeacherFeedback(formData: FormData) {
     "use server";
 
-    const currentSession = await getCurrentSession();
-    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+    let successHref = "";
+    try {
+      const currentSession = await getCurrentSession();
+      if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
 
-    const classId = String(formData.get("classId") || "");
-    const classInfo = dashboard?.classes.find((entry) => entry.id === classId);
-    await submitWeeklyFeedback({
-      audience: FeedbackAudience.TEACHER,
-      submittedById: currentSession.user.id,
-      teacherUserId: currentSession.user.id,
-      weekLabel: String(formData.get("weekLabel") || `Class handover - ${new Date().toLocaleDateString("en-GB")}`),
-      moodRating: null,
-      confidence: String(formData.get("studentEngagement") || "") === "High" ? 5 : String(formData.get("studentEngagement") || "") === "Medium" ? 3 : 1,
-      workload: null,
-      wins: String(formData.get("taughtToday") || ""),
-      concerns: String(formData.get("concernExplanation") || ""),
-      supportNeeded: String(formData.get("nextTeacherNotes") || ""),
-      rawPayload: {
-        teacherName: String(formData.get("teacherName") || ""),
-        classSubject: String(formData.get("classSubject") || classInfo?.title || ""),
-        ageGroup: String(formData.get("ageGroup") || ""),
-        classDate: String(formData.get("classDate") || ""),
-        classTime: String(formData.get("classTime") || ""),
-        taughtToday: String(formData.get("taughtToday") || ""),
-        classStatus: String(formData.get("classStatus") || ""),
-        studentEngagement: String(formData.get("studentEngagement") || ""),
-        missedTopic: String(formData.get("missedTopic") || ""),
-        missedDetails: String(formData.get("missedDetails") || ""),
-        nextTeacherNotes: String(formData.get("nextTeacherNotes") || ""),
-        studentConcern: String(formData.get("studentConcern") || ""),
-        concernExplanation: String(formData.get("concernExplanation") || ""),
-        managementSupport: String(formData.get("managementSupport") || ""),
-        finalNote: String(formData.get("finalNote") || ""),
-      },
-    });
+      const currentDashboard = await getTeacherDashboardData(currentSession.user.id);
+      if (!currentDashboard) redirect("/teacher-registration");
 
-    const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
-    await db.notification.createMany({
-      data: admins.map((admin) => ({
-        userId: admin.id,
-        title: "Teacher handover submitted",
-        body: `${dashboard?.teacherName ?? "A teacher"} submitted class feedback.`,
-        href: "/admin/feedback",
-      })),
-      skipDuplicates: true,
-    });
+      const classId = String(formData.get("classId") || "");
+      const classInfo = currentDashboard.classes.find((entry) => entry.id === classId);
+      if (!classInfo) throw new Error("Selected class is not available for this teacher.");
 
-    revalidatePath("/teacher/feedback");
-    redirect("/teacher/feedback?submitted=1");
+      await submitWeeklyFeedback({
+        audience: FeedbackAudience.TEACHER,
+        submittedById: currentSession.user.id,
+        teacherUserId: currentSession.user.id,
+        weekLabel: String(formData.get("weekLabel") || `Class handover - ${new Date().toLocaleDateString("en-GB")}`),
+        moodRating: null,
+        confidence: String(formData.get("studentEngagement") || "") === "High" ? 5 : String(formData.get("studentEngagement") || "") === "Medium" ? 3 : 1,
+        workload: null,
+        wins: String(formData.get("taughtToday") || ""),
+        concerns: String(formData.get("concernExplanation") || ""),
+        supportNeeded: String(formData.get("nextTeacherNotes") || ""),
+        rawPayload: {
+          teacherName: String(formData.get("teacherName") || ""),
+          classSubject: String(formData.get("classSubject") || classInfo.title || ""),
+          ageGroup: String(formData.get("ageGroup") || ""),
+          classDate: String(formData.get("classDate") || ""),
+          classTime: String(formData.get("classTime") || ""),
+          taughtToday: String(formData.get("taughtToday") || ""),
+          classStatus: String(formData.get("classStatus") || ""),
+          studentEngagement: String(formData.get("studentEngagement") || ""),
+          missedTopic: String(formData.get("missedTopic") || ""),
+          missedDetails: String(formData.get("missedDetails") || ""),
+          nextTeacherNotes: String(formData.get("nextTeacherNotes") || ""),
+          studentConcern: String(formData.get("studentConcern") || ""),
+          concernExplanation: String(formData.get("concernExplanation") || ""),
+          managementSupport: String(formData.get("managementSupport") || ""),
+          finalNote: String(formData.get("finalNote") || ""),
+        },
+      });
+
+      const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+      await db.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          title: "Teacher handover submitted",
+          body: `${currentDashboard.teacherName ?? "A teacher"} submitted class feedback.`,
+          href: "/admin/feedback",
+        })),
+        skipDuplicates: true,
+      });
+
+      revalidatePath("/teacher/feedback");
+      successHref = noticeHref("Teacher feedback submitted.");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to submit teacher feedback.";
+      redirect(noticeHref(errorMessage, "error"));
+    }
+    redirect(successHref);
   }
 
   return (
@@ -150,7 +173,7 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
       subtitle="Submit teaching reflections, workload signals, student support needs, and operational blockers."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.submitted ? "Teacher feedback submitted." : undefined} />
+      <ActionToast message={params.error ? params.error : params.submitted ? "Teacher feedback submitted." : undefined} tone={params.error ? "error" : undefined} />
 
       <TeacherMetricGrid
         metrics={[
