@@ -1,12 +1,9 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { db } from "@/lib/db";
-import { requestTeacherLiveClass } from "@/lib/live-classes/service";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { ActionToast } from "@/components/dashboard/ActionToast";
@@ -32,18 +29,6 @@ const AUDIENCE_OPTIONS = [
   { value: "ALL", label: "All students" },
 ];
 
-function noticeHref(message: string, tone: "success" | "error" = "success") {
-  const params = new URLSearchParams({ notice: message, tone });
-  return `/teacher/live-sessions?${params.toString()}`;
-}
-
-function weekdayFromDateInput(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  if (!year || !month || !day) return null;
-  const parsed = new Date(year, month - 1, day);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.getDay();
-}
-
 export default async function TeacherLiveSessionsPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -56,80 +41,6 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
     ? params.programId
     : dashboard.rosters[0]?.programId;
-
-  async function requestSessionAction(formData: FormData) {
-    "use server";
-
-    const currentSession = await getCurrentSession();
-    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
-    let successHref = "";
-
-    try {
-      const schedule = await requestTeacherLiveClass(
-        {
-          programId: String(formData.get("programId") || ""),
-          title: String(formData.get("title") || ""),
-          startDate: String(formData.get("startDate") || ""),
-          weekday: weekdayFromDateInput(String(formData.get("startDate") || "")) ?? 0,
-          startTime: String(formData.get("startTime") || "16:00"),
-          endTime: String(formData.get("endTime") || "17:00"),
-          timezone: String(formData.get("timezone") || "Europe/London"),
-          createZoomMeeting: true,
-          audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
-          waitingRoom: formData.get("waitingRoom") === "on",
-          joinBeforeHost: formData.get("joinBeforeHost") === "on",
-          muteUponEntry: formData.get("muteUponEntry") === "on",
-          autoRecording: String(formData.get("autoRecording") || "cloud") as "none" | "local" | "cloud",
-          passcode: String(formData.get("passcode") || ""),
-          showToStudents: formData.get("showToStudents") === "on",
-        },
-        currentSession.user.id,
-      );
-
-      revalidatePath("/teacher/live-sessions");
-      revalidatePath("/admin/classes");
-      revalidatePath("/student/schedule");
-      revalidatePath("/parent/schedule");
-      successHref = noticeHref(
-        schedule.meetingUrl
-          ? "Zoom live session created successfully. Students and parents have been notified."
-          : "Live session saved, but Zoom did not return a meeting link. Please check Zoom app scopes.",
-        schedule.meetingUrl ? "success" : "error",
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to request this Zoom session.";
-      redirect(noticeHref(message, "error"));
-    }
-    redirect(successHref);
-  }
-
-  async function deleteSessionAction(formData: FormData) {
-    "use server";
-
-    const currentSession = await getCurrentSession();
-    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
-
-    const teacher = await db.teacherProfile.findUnique({ where: { userId: currentSession.user.id } });
-    if (!teacher) redirect("/teacher-registration");
-
-    const schedule = await db.classSchedule.findFirst({
-      where: {
-        id: String(formData.get("scheduleId") || ""),
-        teacherId: teacher.id,
-      },
-    });
-
-    if (schedule) {
-      await db.classSchedule.delete({ where: { id: schedule.id } });
-    }
-
-    revalidatePath("/teacher/live-sessions");
-    revalidatePath("/teacher/schedule");
-    revalidatePath("/admin/classes");
-    revalidatePath("/student/schedule");
-    revalidatePath("/parent/schedule");
-    redirect(noticeHref("Live session removed successfully.", "success"));
-  }
 
   return (
     <TeacherDashboardFrame
@@ -150,7 +61,8 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
 
       <TeacherSection eyebrow="Zoom session" title="Create a recurring live session">
         {defaultProgramId ? (
-        <form action={requestSessionAction} className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <form action="/teacher/live-sessions/actions" method="post" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <input type="hidden" name="intent" value="create" />
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Program
             <select name="programId" required defaultValue={defaultProgramId} className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
@@ -290,7 +202,8 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                 >
                   Edit roster
                 </Link>
-                <form action={deleteSessionAction}>
+                <form action="/teacher/live-sessions/actions" method="post">
+                  <input type="hidden" name="intent" value="delete" />
                   <input type="hidden" name="scheduleId" value={entry.id} />
                   <FormSubmitButton pendingLabel="Removing..." className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646] disabled:cursor-wait disabled:opacity-70">
                     Remove session
