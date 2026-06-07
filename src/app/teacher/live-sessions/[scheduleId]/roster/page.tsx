@@ -14,7 +14,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { getScheduleRosterStudentIds, getTeacherProgramRosterStudentIds, syncScheduleRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
-  params: { scheduleId: string };
+  params: Promise<{ scheduleId: string }>;
   searchParams?: Promise<{ notice?: string; tone?: string }>;
 };
 
@@ -24,6 +24,7 @@ function noticeHref(scheduleId: string, message: string, tone: "success" | "erro
 }
 
 export default async function TeacherScheduleRosterPage({ params, searchParams }: PageProps) {
+  const resolvedParams = await params;
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
@@ -32,7 +33,7 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
   if (!dashboard) redirect("/teacher-registration");
 
   const schedule = await db.classSchedule.findUnique({
-    where: { id: params.scheduleId },
+    where: { id: resolvedParams.scheduleId },
     include: {
       teacher: {
         include: { user: true },
@@ -68,8 +69,13 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
 
+    const scheduleId = String(formData.get("scheduleId") || "");
+    if (!scheduleId) {
+      redirect("/teacher/live-sessions");
+    }
+
     const scheduleItem = await db.classSchedule.findUnique({
-      where: { id: params.scheduleId },
+      where: { id: scheduleId },
       include: { teacher: true },
     });
     if (!scheduleItem || scheduleItem.teacher.userId !== currentSession.user.id) {
@@ -115,6 +121,7 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
           Use this page to override the default programme roster for this specific session. If no overrides are saved, the default programme roster will be used.
         </p>
         <form action={saveScheduleRosterAction} className="mt-6 rounded-3xl border border-[#e5e9ef] bg-[#fbfcff] p-6">
+          <input type="hidden" name="scheduleId" value={schedule.id} />
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h3 className="text-lg font-semibold text-[#22304a]">{schedule.program.title}</h3>
