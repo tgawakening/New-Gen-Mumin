@@ -59,6 +59,13 @@ function statusNotice(status?: string) {
   return null;
 }
 
+function weekdayFromDateInput(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  const parsed = new Date(year, month - 1, day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getDay();
+}
+
 export default async function TeacherLiveSessionsPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -86,7 +93,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           programId: String(formData.get("programId") || ""),
           title: String(formData.get("title") || ""),
           startDate: String(formData.get("startDate") || ""),
-          weekday: Number(formData.get("weekday") || 0),
+          weekday: weekdayFromDateInput(String(formData.get("startDate") || "")) ?? 0,
           startTime: String(formData.get("startTime") || "16:00"),
           endTime: String(formData.get("endTime") || "17:00"),
           timezone: String(formData.get("timezone") || "Europe/London"),
@@ -178,7 +185,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           </label>
 
           <div className="rounded-2xl border border-[#dce4ed] bg-[#f5fbff] px-4 py-3 text-sm font-semibold text-[#22304a] xl:col-span-4">
-            Recurrence: weekly Zoom session. Students and parents will see the same recurring join link in their schedules.
+            Recurrence: this creates one weekly Zoom meeting. The selected calendar date sets the weekly day, and the same recurring join link appears in student and parent schedules each week.
           </div>
 
           <label className="space-y-2 text-sm font-semibold text-[#22304a] xl:col-span-4">
@@ -191,17 +198,8 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
           </label>
 
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
-            Start date
-            <input name="startDate" type="date" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
-          </label>
-
-          <label className="space-y-2 text-sm font-semibold text-[#22304a]">
-            Day
-            <select name="weekday" defaultValue="6" className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
-              {WEEKDAYS.map((weekday, index) => (
-                <option key={weekday} value={index}>{weekday}</option>
-              ))}
-            </select>
+            First class date
+            <input name="startDate" type="date" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm" />
           </label>
 
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">

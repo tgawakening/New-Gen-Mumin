@@ -397,3 +397,31 @@ export async function sendTeacherZoomMeetingApprovedEmail(input: {
     }),
   });
 }
+
+export async function sendLiveClassScheduledEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  programTitle: string;
+  sessionTitle: string;
+  teacherName: string;
+  schedule: string;
+  dashboardPath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Zoom class scheduled",
+    template: "liveClassScheduled",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Zoom class scheduled",
+      preview: `${input.sessionTitle} has been added to your Gen-Mumins schedule.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.teacherName} scheduled a Zoom class for ${input.programTitle}.`,
+      sections: [
+        { label: "Programme", value: input.programTitle },
+        { label: "Session", value: input.sessionTitle },
+        { label: "Schedule", value: input.schedule },
+        { label: "Next step", value: "Open your dashboard schedule to view the class and join link." },
+      ],
+      callToAction: { label: "Open schedule", href: resolveHref(input.dashboardPath) },
+    }),
+  });
+}

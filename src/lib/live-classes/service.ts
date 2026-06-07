@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import {
   sendAdminZoomMeetingRequestEmail,
+  sendLiveClassScheduledEmail,
   sendTeacherZoomMeetingApprovedEmail,
 } from "@/lib/email/notifications";
 import { durationMinutes, nextWeeklyOccurrence, toZoomLocalStartTime } from "@/lib/live-classes/time";
@@ -41,6 +42,7 @@ const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
 };
 const HIDDEN_FROM_STUDENTS_MARKER = "[Students:hidden]";
 const VISIBLE_TO_STUDENTS_MARKER = "[Students:visible]";
+const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -107,6 +109,14 @@ function countryMatchesAudience(countryCode: string | null | undefined, group: L
 
 function teacherDisplayName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
+}
+
+function personName(user: { firstName: string; lastName: string | null; email: string }) {
+  return `${user.firstName} ${user.lastName ?? ""}`.trim() || user.firstName || user.email;
+}
+
+function canSendScheduleEmail(email: string | null | undefined) {
+  return Boolean(email && !email.endsWith("@genmumin.local"));
 }
 
 function isAlternativeHostLicenseError(error: unknown) {
@@ -382,6 +392,10 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
 
 export async function requestTeacherLiveClass(input: CreateLiveClassInput, teacherUserId: string) {
   const audienceGroup = normalizeAudienceGroup(input.audienceGroup);
+  if (!input.startDate) {
+    throw new Error("Choose the first class date. The weekly day is taken from that calendar date.");
+  }
+
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: teacherUserId },
     include: { user: true, programAssignments: true },
@@ -571,18 +585,35 @@ export async function notifyEnrolledUsers(scheduleId: string) {
 
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
   const visibleTitle = cleanLiveClassTitle(schedule.title);
+  const scheduleLabel = `${WEEKDAY_LABELS[schedule.weekday] ?? "Weekly class"} ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}`;
+  const teacherName = teacherDisplayName(schedule.teacher);
   const rosterStudentIds = await getScheduleRosterStudentIds(schedule.id);
   const hasRosterOverride = rosterStudentIds.length > 0;
   const visibleStudentIds = new Set(rosterStudentIds);
   const users = new Map<string, { id: string; role: string }>();
+  const emailRecipients = new Map<string, { toEmail: string; recipientName: string; dashboardPath: string }>();
   users.set(schedule.teacher.user.id, { id: schedule.teacher.user.id, role: "teacher" });
 
   for (const enrollment of schedule.program.enrollments) {
     if (!countryMatchesAudience(enrollment.student.countryCode, audienceGroup)) continue;
     if (hasRosterOverride && !visibleStudentIds.has(enrollment.studentId)) continue;
     users.set(enrollment.student.user.id, { id: enrollment.student.user.id, role: "student" });
+    if (canSendScheduleEmail(enrollment.student.user.email)) {
+      emailRecipients.set(enrollment.student.user.email.toLowerCase(), {
+        toEmail: enrollment.student.user.email,
+        recipientName: personName(enrollment.student.user),
+        dashboardPath: "/student/schedule",
+      });
+    }
     if (enrollment.parent?.user.id) {
       users.set(enrollment.parent.user.id, { id: enrollment.parent.user.id, role: "parent" });
+      if (canSendScheduleEmail(enrollment.parent.user.email)) {
+        emailRecipients.set(enrollment.parent.user.email.toLowerCase(), {
+          toEmail: enrollment.parent.user.email,
+          recipientName: personName(enrollment.parent.user),
+          dashboardPath: `/parent/schedule?child=${enrollment.studentId}`,
+        });
+      }
     }
   }
 
@@ -600,5 +631,23 @@ export async function notifyEnrolledUsers(scheduleId: string) {
               : "/student/schedule",
       },
     });
+  }
+
+  const emailResults = await Promise.allSettled(
+    [...emailRecipients.values()].map((recipient) =>
+      sendLiveClassScheduledEmail({
+        ...recipient,
+        programTitle: schedule.program.title,
+        sessionTitle: visibleTitle,
+        teacherName,
+        schedule: scheduleLabel,
+      }),
+    ),
+  );
+
+  for (const result of emailResults) {
+    if (result.status === "rejected") {
+      console.error("Unable to send live class schedule email", result.reason);
+    }
   }
 }
