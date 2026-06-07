@@ -22,6 +22,7 @@ type OrderDetailsPopupProps = {
   orderNumber: string;
   parentName: string;
   parentEmail: string;
+  sourceLabel?: string | null;
   city?: string | null;
   phone: string;
   gateway: string;
@@ -70,6 +71,7 @@ export function OrderDetailsPopup({
   orderNumber,
   parentName,
   parentEmail,
+  sourceLabel,
   city,
   phone,
   gateway,
@@ -125,6 +127,7 @@ export function OrderDetailsPopup({
 
             <div className="mt-5 grid gap-4 md:grid-cols-2">
               <DetailBlock label="Parent phone" value={phone} />
+              <DetailBlock label="Order type" value={sourceLabel ?? "New registration"} />
               <DetailBlock label="City" value={city ?? null} />
               <DetailBlock label="Gateway" value={gateway} />
               <DetailBlock label="Order status" value={status.replace(/_/g, " ")} />

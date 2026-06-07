@@ -234,7 +234,17 @@ export async function resendOrderCompletionEmails(
   const order = await db.order.findUnique({
     where: { id: orderId },
     include: {
-      registration: true,
+      registration: {
+        include: {
+          students: true,
+          items: {
+            include: {
+              offer: true,
+              registrationStudent: true,
+            },
+          },
+        },
+      },
       items: true,
       payments: {
         orderBy: { createdAt: "desc" },
@@ -247,15 +257,28 @@ export async function resendOrderCompletionEmails(
     throw new Error("Completed registration not found for this order.");
   }
 
+  const registration = order.registration;
   const payment = order.payments[0];
   const gateway = gatewayOverride ?? payment?.gateway ?? order.gateway;
-  const parentName = `${order.registration.parentFirstName} ${order.registration.parentLastName}`.trim();
+  const parentName = `${registration.parentFirstName} ${registration.parentLastName}`.trim();
   const childCount = await db.registrationStudent.count({
-    where: { registrationId: order.registration.id },
+    where: { registrationId: registration.id },
   });
+  const sourceLabel = registration.notes?.includes("parent-dashboard-add-program")
+    ? "Parent dashboard program enrollment"
+    : null;
+  const programmeSummary = registration.students
+    .map((student) => {
+      const childName = [student.firstName, student.lastName].filter(Boolean).join(" ").trim() || student.displayName || "Child";
+      const programmes = registration.items
+        .filter((item) => item.registrationStudentId === student.id)
+        .map((item) => item.offer.title);
+      return `${childName}: ${Array.from(new Set(programmes)).join(", ") || "Programme pending"}`;
+    })
+    .join("; ");
 
   await sendDashboardUnlockedEmail({
-    toEmail: order.registration.parentEmail,
+    toEmail: registration.parentEmail,
     parentName,
     dashboardUrl: "/parent",
   });
@@ -270,12 +293,14 @@ export async function resendOrderCompletionEmails(
   });
   await sendAdminPaymentCompletedEmail({
     parentName,
-    parentEmail: order.registration.parentEmail,
+    parentEmail: registration.parentEmail,
     orderNumber: order.orderNumber,
     amount: order.totalAmount,
     currency: order.currency,
     gateway,
     childCount,
+    sourceLabel,
+    programmeSummary,
   });
 }
 

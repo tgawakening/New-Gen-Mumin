@@ -93,15 +93,23 @@ export async function sendAdminNewEnrollmentEmail(input: {
   currency: string;
   studentCount: number;
   country: string;
+  sourceLabel?: string | null;
+  programmeSummary?: string | null;
 }) {
   await sendAdminFacingEmail(
     "adminNewEnrollment",
-    emailTemplateCatalog.adminNewEnrollment.heading,
-    emailTemplateCatalog.adminNewEnrollment.preview,
+    input.sourceLabel === "Parent dashboard program enrollment"
+      ? "Parent enrolled child in another programme"
+      : emailTemplateCatalog.adminNewEnrollment.heading,
+    input.sourceLabel === "Parent dashboard program enrollment"
+      ? "A registered parent started another programme enrollment from the dashboard."
+      : emailTemplateCatalog.adminNewEnrollment.preview,
     [
+      { label: "Type", value: input.sourceLabel ?? "New registration" },
       { label: "Parent", value: `${input.parentName} (${input.parentEmail})` },
       { label: "Registration", value: input.registrationId },
       { label: "Students", value: `${input.studentCount}` },
+      { label: "Programme", value: input.programmeSummary ?? "Pending" },
       { label: "Amount", value: `${input.currency} ${input.totalAmount}` },
       { label: "Country", value: input.country },
     ],
@@ -337,15 +345,22 @@ export async function sendAdminPaymentCompletedEmail(input: {
   currency: string;
   gateway: string;
   childCount?: number;
+  sourceLabel?: string | null;
+  programmeSummary?: string | null;
 }) {
   const gatewayLabel = input.gateway === "FREE" ? "Fully discounted" : input.gateway;
+  const isProgramEnrollment = input.sourceLabel === "Parent dashboard program enrollment";
   await sendAdminFacingEmail(
     "adminNewEnrollment",
-    "Payment completed",
-    "A Gen-Mumins order has been completed and the registration is now unlocked.",
+    isProgramEnrollment ? "Program enrollment payment completed" : "Payment completed",
+    isProgramEnrollment
+      ? "A registered parent completed payment for another programme and access is now unlocked."
+      : "A Gen-Mumins order has been completed and the registration is now unlocked.",
     [
+      { label: "Type", value: input.sourceLabel ?? "Registration payment" },
       { label: "Parent", value: `${input.parentName} (${input.parentEmail})` },
       { label: "Order", value: input.orderNumber },
+      { label: "Programme", value: input.programmeSummary ?? "Pending" },
       { label: "Gateway", value: gatewayLabel },
       { label: "Amount", value: `${input.currency} ${input.amount}` },
       { label: "Students", value: `${input.childCount ?? 1}` },

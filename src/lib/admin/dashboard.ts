@@ -48,6 +48,16 @@ function extractManualPaidAmountAdjustment(metadata: unknown) {
   };
 }
 
+function registrationSourceLabel(notes: string | null | undefined) {
+  if (notes?.includes("parent-dashboard-add-program")) {
+    return "Program enrollment";
+  }
+  if (notes?.includes("parent-dashboard-add-child")) {
+    return "Additional child";
+  }
+  return "New registration";
+}
+
 export type AdminDashboardFilters = {
   orderStatus?: string;
   orderPayment?: string;
@@ -248,6 +258,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const latestPayment = order.payments[0] ?? null;
     const childDetails = buildRegistrationChildren(order.registration);
     const city = extractNoteValue(order.registration?.notes, "City");
+    const sourceLabel = registrationSourceLabel(order.registration?.notes);
     const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
     const programTitles = Array.from(
       new Set(
@@ -267,6 +278,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           ? formatPersonName(order.registration.parentFirstName, order.registration.parentLastName)
           : formatPersonName(order.parent.user.firstName, order.parent.user.lastName),
       parentEmail: order.parent.user.email,
+      sourceLabel,
       city,
       phone: order.parent.user.phoneNumber
         ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
@@ -299,6 +311,9 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       programTitles,
       childCount: childDetails.length,
       childDetails,
+      programmeSummary: childDetails
+        .map((child) => `${child.name}: ${child.programs.join(", ") || "Programme pending"}`)
+        .join("; "),
       createdAt: order.createdAt,
       manualSubmission: latestPayment?.manualSubmission ?? null,
       paymentStatus: latestPayment?.status ?? order.status,

@@ -47,6 +47,12 @@ function extractManualPaidAmountAdjustment(metadata: unknown) {
   };
 }
 
+function registrationSourceLabel(notes: string | null | undefined) {
+  if (notes?.includes("parent-dashboard-add-program")) return "Program enrollment";
+  if (notes?.includes("parent-dashboard-add-child")) return "Additional child";
+  return "New registration";
+}
+
 export default async function AdminOrdersPage({
   searchParams,
 }: {
@@ -170,6 +176,7 @@ export default async function AdminOrdersPage({
               const latestPayment = order.payments[0] ?? null;
               const manualSubmission = latestPayment?.manualSubmission ?? null;
               const city = extractNoteValue(order.registration?.notes, "City");
+              const sourceLabel = registrationSourceLabel(order.registration?.notes);
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
               const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
@@ -191,6 +198,7 @@ export default async function AdminOrdersPage({
                       {order.parent.user.firstName} {order.parent.user.lastName} •{" "}
                       {order.parent.user.email}
                     </p>
+                    <p className="mt-2 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{sourceLabel}</p>
                     <p className="mt-1 text-sm text-[#6d7785]">City: {city ?? "Pending"}</p>
                   </div>
                   <span
@@ -266,7 +274,9 @@ export default async function AdminOrdersPage({
                       {order.status === "SUCCEEDED"
                         ? "Sync payment completed"
                         : order.gateway === "BANK_TRANSFER"
-                          ? "Approve and unlock dashboard"
+                          ? sourceLabel === "Program enrollment"
+                            ? "Mark payment completed and unlock programme"
+                            : "Approve and unlock dashboard"
                           : "Mark paid and unlock dashboard"}
                     </button>
                   </form>

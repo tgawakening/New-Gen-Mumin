@@ -727,6 +727,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     <div>
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Parent</p>
                       <p className="mt-2 font-semibold text-[#22304a]">{order.parentName || "Parent pending"}</p>
+                      <p className="mt-1 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{order.sourceLabel}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.parentEmail}</p>
                       <p className="mt-1 text-sm text-[#617184]">City: {order.city ?? "Pending"}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.phone}</p>
@@ -736,6 +737,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           orderNumber={order.orderNumber}
                           parentName={order.parentName || "Parent pending"}
                           parentEmail={order.parentEmail}
+                          sourceLabel={order.sourceLabel}
                           city={order.city}
                           phone={order.phone}
                           gateway={order.gateway}
@@ -808,7 +810,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                             {order.status === "SUCCEEDED"
                               ? "Sync payment completed"
                               : order.gateway === "BANK_TRANSFER"
-                                ? "Complete"
+                                ? order.sourceLabel === "Program enrollment"
+                                  ? "Mark payment completed and unlock programme"
+                                  : "Complete and unlock"
                                 : "Mark paid"}
                           </button>
                         </form>
