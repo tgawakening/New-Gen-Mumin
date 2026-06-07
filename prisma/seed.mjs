@@ -126,6 +126,7 @@ const coupons = [
   { code: "GENMPK60", discountAmount: 7000, currency: "PKR" },
   { code: "PKSTUDENT", discountAmount: 2000, currency: "PKR" },
   { code: "PKBUNDLE3K", discountAmount: 2000, currency: "PKR" },
+  { code: "PKSEERAH4K", discountAmount: 1000, currency: "PKR" },
   { code: "Q7N4FULLACCESS", discountPercent: 100 },
 ];
 

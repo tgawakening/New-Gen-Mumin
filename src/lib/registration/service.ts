@@ -17,8 +17,10 @@ import type { RegistrationPayload } from "@/lib/registration/schema";
 const BACKEND_ONLY_DISCOUNT_COUPONS = {
   PKSTUDENT: { code: "PKSTUDENT", discountAmount: 2000, currency: "PKR" },
   PKBUNDLE3K: { code: "PKBUNDLE3K", discountAmount: 2000, currency: "PKR" },
+  PKSEERAH4K: { code: "PKSEERAH4K", discountAmount: 1000, currency: "PKR" },
 } as const;
 const PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR = 3000;
+const PAKISTAN_SEERAH_LEADERSHIP_4K_TARGET_AMOUNT_PKR = 4000;
 
 type RegistrationCoupon =
   | ReturnType<typeof getDiscountCoupon>
@@ -87,7 +89,10 @@ function isRegistrationCouponEligibleForSelection(
     );
   }
 
-  if (coupon.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKBUNDLE3K.code) {
+  if (
+    coupon.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKBUNDLE3K.code ||
+    coupon.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKSEERAH4K.code
+  ) {
     return (
       countryCode?.toUpperCase() === "PK" &&
       selectedOfferSlugsByStudent.length === 1 &&
@@ -523,6 +528,12 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
       selectedOfferSlugsByStudent[0]?.length === 1 &&
       selectedOfferSlugsByStudent[0][0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG
         ? PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR
+        : effectiveFallbackCoupon?.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKSEERAH4K.code &&
+            currency === "PKR" &&
+            selectedOfferSlugsByStudent.length === 1 &&
+            selectedOfferSlugsByStudent[0]?.length === 1 &&
+            selectedOfferSlugsByStudent[0][0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG
+          ? PAKISTAN_SEERAH_LEADERSHIP_4K_TARGET_AMOUNT_PKR
         : null;
     const privateStudentBundleTargetAmount =
       privateStudentBundleTargetTotal === null
