@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
@@ -10,10 +11,28 @@ type RouteContext = {
   }>;
 };
 
+function getPublicBaseUrl(request: Request) {
+  if (env.success) {
+    return env.data.APP_URL;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(request.url).origin;
+}
+
+function redirectTo(request: Request, href: string) {
+  return NextResponse.redirect(new URL(href, getPublicBaseUrl(request)));
+}
+
 export async function GET(_request: Request, context: RouteContext) {
   const session = await getCurrentSession();
   if (!session || session.user.role !== "TEACHER") {
-    return NextResponse.redirect(new URL("/auth/login", _request.url));
+    return redirectTo(_request, "/auth/login");
   }
 
   const { scheduleId } = await context.params;
@@ -23,7 +42,7 @@ export async function GET(_request: Request, context: RouteContext) {
   });
 
   if (!teacher) {
-    return NextResponse.redirect(new URL("/teacher-registration", _request.url));
+    return redirectTo(_request, "/teacher-registration");
   }
 
   const schedule = await db.classSchedule.findFirst({
@@ -42,7 +61,7 @@ export async function GET(_request: Request, context: RouteContext) {
       notice: "Zoom start link is not available for this session yet.",
       tone: "error",
     });
-    return NextResponse.redirect(new URL(`/teacher/live-sessions?${params.toString()}`, _request.url));
+    return redirectTo(_request, `/teacher/live-sessions?${params.toString()}`);
   }
 
   try {
@@ -54,6 +73,6 @@ export async function GET(_request: Request, context: RouteContext) {
       notice: message,
       tone: "error",
     });
-    return NextResponse.redirect(new URL(`/teacher/live-sessions?${params.toString()}`, _request.url));
+    return redirectTo(_request, `/teacher/live-sessions?${params.toString()}`);
   }
 }

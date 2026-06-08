@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
@@ -10,10 +11,28 @@ type RouteContext = {
   }>;
 };
 
+function getPublicBaseUrl(request: Request) {
+  if (env.success) {
+    return env.data.APP_URL;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return new URL(request.url).origin;
+}
+
+function redirectTo(request: Request, href: string) {
+  return NextResponse.redirect(new URL(href, getPublicBaseUrl(request)));
+}
+
 export async function GET(request: Request, context: RouteContext) {
   const session = await getCurrentSession();
   if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/admin/classes", request.url));
+    return redirectTo(request, "/admin/classes");
   }
 
   const { scheduleId } = await context.params;
@@ -29,7 +48,7 @@ export async function GET(request: Request, context: RouteContext) {
       notice: "Zoom start link is not available for this class yet.",
       tone: "error",
     });
-    return NextResponse.redirect(new URL(`/admin/classes?${params.toString()}`, request.url));
+    return redirectTo(request, `/admin/classes?${params.toString()}`);
   }
 
   try {
@@ -41,6 +60,6 @@ export async function GET(request: Request, context: RouteContext) {
       notice: message,
       tone: "error",
     });
-    return NextResponse.redirect(new URL(`/admin/classes?${params.toString()}`, request.url));
+    return redirectTo(request, `/admin/classes?${params.toString()}`);
   }
 }

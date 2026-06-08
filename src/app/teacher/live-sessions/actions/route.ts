@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { env } from "@/lib/env";
 import { requestTeacherLiveClass } from "@/lib/live-classes/service";
 
 function noticeHref(message: string, tone: "success" | "error" = "success") {
@@ -10,8 +11,22 @@ function noticeHref(message: string, tone: "success" | "error" = "success") {
   return `/teacher/live-sessions?${params.toString()}`;
 }
 
+function getPublicBaseUrl(request: NextRequest) {
+  if (env.success) {
+    return env.data.APP_URL;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const forwardedProto = request.headers.get("x-forwarded-proto") ?? "https";
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return request.nextUrl.origin;
+}
+
 function redirectTo(request: NextRequest, href: string) {
-  return NextResponse.redirect(new URL(href, request.url), 303);
+  return NextResponse.redirect(new URL(href, getPublicBaseUrl(request)), 303);
 }
 
 function weekdayFromDateInput(value: string) {
