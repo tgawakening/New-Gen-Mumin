@@ -63,6 +63,7 @@ export type AdminDashboardFilters = {
   orderPayment?: string;
   orderProgram?: string;
   orderPricing?: string;
+  studentSearch?: string;
   studentPayment?: string;
   studentRegistrationStatus?: string;
   studentProgram?: string;
@@ -122,6 +123,25 @@ function buildRegistrationChildren(
 }
 
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
+  const studentSearch = filters.studentSearch?.trim();
+  const studentSearchWhere = studentSearch
+    ? {
+        OR: [
+          { displayName: { contains: studentSearch } },
+          { user: { firstName: { contains: studentSearch } } },
+          { user: { lastName: { contains: studentSearch } } },
+          { user: { email: { contains: studentSearch } } },
+          { parents: { some: { parent: { user: { firstName: { contains: studentSearch } } } } } },
+          { parents: { some: { parent: { user: { lastName: { contains: studentSearch } } } } } },
+          { parents: { some: { parent: { user: { email: { contains: studentSearch } } } } } },
+          { registrationStudents: { some: { firstName: { contains: studentSearch } } } },
+          { registrationStudents: { some: { lastName: { contains: studentSearch } } } },
+          { registrationStudents: { some: { registration: { parentFirstName: { contains: studentSearch } } } } },
+          { registrationStudents: { some: { registration: { parentLastName: { contains: studentSearch } } } } },
+          { registrationStudents: { some: { registration: { parentEmail: { contains: studentSearch } } } } },
+        ],
+      }
+    : null;
   const [
     activeEnrollments,
     pendingRegistrations,
@@ -195,8 +215,8 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     }),
     db.studentProfile.findMany({
       orderBy: { createdAt: "desc" },
-      take: 200,
-      where: {
+      take: studentSearch ? 80 : 200,
+      where: studentSearchWhere ?? {
         enrollments: {
           some: {
             status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] },
@@ -219,7 +239,6 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           },
         },
         enrollments: {
-          where: { status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] } },
           include: {
             program: true,
           },
@@ -410,7 +429,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const studentsView = Array.from(
     new Map(
       studentsViewRaw
-        .filter((student) => student.enrollments.some((enrollment) => COMPLETED_ENROLLMENT_STATUSES.has(enrollment.status)))
+        .filter((student) => studentSearch || student.enrollments.some((enrollment) => COMPLETED_ENROLLMENT_STATUSES.has(enrollment.status)))
         .map((student) => {
           const primaryEnrollment = student.enrollments[0];
           const dedupeKey = [
@@ -425,6 +444,18 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   );
 
   const filteredStudents = studentsView.filter((student) => {
+    if (studentSearch) {
+      const haystack = [
+        student.name,
+        student.email,
+        student.parentName,
+        ...student.childNames,
+        ...student.enrollments.map((enrollment) => `${enrollment.programTitle} ${enrollment.status}`),
+      ].join(" ").toLowerCase();
+      if (!haystack.includes(studentSearch.toLowerCase())) {
+        return false;
+      }
+    }
     if (
       filters.studentPayment &&
       filters.studentPayment !== "ALL" &&

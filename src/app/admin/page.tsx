@@ -30,6 +30,7 @@ type PageProps = {
     orderPayment?: string;
     orderProgram?: string;
     orderPricing?: string;
+    studentSearch?: string;
     studentPayment?: string;
     studentRegistrationStatus?: string;
     studentProgram?: string;
@@ -482,6 +483,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     orderPayment: params?.orderPayment,
     orderProgram: params?.orderProgram,
     orderPricing: params?.orderPricing,
+    studentSearch: params?.studentSearch,
     studentPayment: params?.studentPayment,
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
@@ -504,6 +506,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     orderPricing: params?.orderPricing,
   });
   const currentStudentHref = buildReturnHref("students", {
+    studentSearch: params?.studentSearch,
     studentPayment: params?.studentPayment,
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
@@ -885,6 +888,15 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
           <section className="space-y-5 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
             <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <input type="hidden" name="tab" value="students" />
+              <label className="grid gap-1 text-sm font-semibold text-[#22304a] xl:col-span-4">
+                Search parent or student
+                <input
+                  name="studentSearch"
+                  defaultValue={params?.studentSearch ?? ""}
+                  placeholder="Search by student name, parent name, or email"
+                  className="rounded-full border border-[#c9d7e6] bg-white px-4 py-3 text-sm font-medium text-[#22304a] outline-none transition focus:border-[#0f4d81]"
+                />
+              </label>
               <FilterSelect name="studentPayment" defaultValue={params?.studentPayment ?? "ALL"} options={["ALL", "STRIPE", "PAYPAL", "BANK_TRANSFER", "Pending"]} />
               <FilterSelect name="studentRegistrationStatus" defaultValue={params?.studentRegistrationStatus ?? "ALL"} options={["ALL", "PAID", "PENDING_PAYMENT", "SUBMITTED", "PAYMENT_REVIEW", "Pending"]} />
               <FilterSelect name="studentProgram" defaultValue={params?.studentProgram ?? "ALL"} options={["ALL", ...data.filterOptions.studentPrograms]} />
