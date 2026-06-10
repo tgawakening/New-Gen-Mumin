@@ -261,64 +261,39 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     return [];
   }
 
-  const catalogOfferSlugs = DEFAULT_OFFERS
-    .filter((offer) => offer.programSlugs.includes(program.slug))
-    .map((offer) => offer.slug);
-
-  const students = await db.studentProfile.findMany({
-    where: {
-      OR: [
-        {
-          enrollments: {
-            some: {
-              programId,
-              status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
-            },
+  const [directEnrollmentStudents, paidRegistrationStudents] = await Promise.all([
+    db.studentProfile.findMany({
+      where: {
+        enrollments: {
+          some: {
+            programId,
+            status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
           },
         },
-        {
-          registrationStudents: {
-            some: {
-              registration: {
-                status: { in: [...PAID_REGISTRATION_STATUSES] },
-              },
-              items: {
-                some: {
-                  offer: {
-                    OR: [
-                      { slug: { in: catalogOfferSlugs } },
-                      { programs: { some: { programId } } },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-        },
-      ],
-    },
-    include: {
-      user: true,
-      enrollments: {
-        where: { programId },
-        select: { status: true },
       },
-      registrationStudents: {
-        include: {
-          registration: {
-            select: {
-              status: true,
+      include: {
+        user: true,
+        enrollments: {
+          where: { programId },
+          select: { status: true },
+        },
+        registrationStudents: {
+          include: {
+            registration: {
+              select: {
+                status: true,
+              },
             },
-          },
-          items: {
-            include: {
-              offer: {
-                include: {
-                  programs: {
-                    include: {
-                      program: {
-                        select: {
-                          slug: true,
+            items: {
+              include: {
+                offer: {
+                  include: {
+                    programs: {
+                      include: {
+                        program: {
+                          select: {
+                            slug: true,
+                          },
                         },
                       },
                     },
@@ -329,15 +304,74 @@ export async function getProgramEligibleRosterStudents(programId: string) {
           },
         },
       },
-    },
-    orderBy: [
-      { displayName: "asc" },
-      { user: { firstName: "asc" } },
-      { user: { lastName: "asc" } },
-    ],
-  });
+    }),
+    db.registrationStudent.findMany({
+      where: {
+        studentProfileId: { not: null },
+        registration: {
+          status: { in: [...PAID_REGISTRATION_STATUSES] },
+        },
+      },
+      include: {
+        studentProfile: {
+          include: {
+            user: true,
+            enrollments: {
+              where: { programId },
+              select: { status: true },
+            },
+            registrationStudents: {
+              include: {
+                registration: {
+                  select: {
+                    status: true,
+                  },
+                },
+                items: {
+                  include: {
+                    offer: {
+                      include: {
+                        programs: {
+                          include: {
+                            program: {
+                              select: {
+                                slug: true,
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+        items: {
+          include: {
+            offer: {
+              include: {
+                programs: {
+                  include: {
+                    program: {
+                      select: {
+                        slug: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }),
+  ]);
 
-  return students.filter((student) => {
+  const studentsById = new Map<string, (typeof directEnrollmentStudents)[number]>();
+
+  for (const student of directEnrollmentStudents) {
     const activeDirectEnrollment = student.enrollments.some((enrollment) =>
       ACTIVE_ENROLLMENT_STATUSES.includes(enrollment.status as (typeof ACTIVE_ENROLLMENT_STATUSES)[number]),
     );
@@ -349,7 +383,24 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     const hasRegistrationOfferEvidence = paidRegistrationItems.length > 0;
     const hasProgramOffer = paidRegistrationItems.some((item) => offerIncludesProgram(item.offer, program));
 
-    return hasProgramOffer || (activeDirectEnrollment && !hasRegistrationOfferEvidence);
+    if (hasProgramOffer || (activeDirectEnrollment && !hasRegistrationOfferEvidence)) {
+      studentsById.set(student.id, student);
+    }
+  }
+
+  for (const registrationStudent of paidRegistrationStudents) {
+    if (!registrationStudent.studentProfile) continue;
+
+    const hasProgramOffer = registrationStudent.items.some((item) => offerIncludesProgram(item.offer, program));
+    if (hasProgramOffer) {
+      studentsById.set(registrationStudent.studentProfile.id, registrationStudent.studentProfile);
+    }
+  }
+
+  return Array.from(studentsById.values()).sort((left, right) => {
+    const leftName = left.displayName || `${left.user.firstName} ${left.user.lastName ?? ""}`.trim() || left.user.email;
+    const rightName = right.displayName || `${right.user.firstName} ${right.user.lastName ?? ""}`.trim() || right.user.email;
+    return leftName.localeCompare(rightName);
   });
 }
 
