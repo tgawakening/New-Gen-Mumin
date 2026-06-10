@@ -36,6 +36,7 @@ type PageProps = {
     studentRegistrationStatus?: string;
     studentProgram?: string;
     studentPricing?: string;
+    studentPage?: string;
     teacherReportMonth?: string;
     teacherReportTeacher?: string;
     notice?: string;
@@ -91,6 +92,10 @@ function formatShortDate(value: Date) {
     day: "2-digit",
     month: "short",
   }).format(value);
+}
+
+function formatOptionalDate(value?: Date | null) {
+  return value ? formatDate(value) : "Pending";
 }
 
 function formatMinutes(value: number) {
@@ -563,6 +568,18 @@ function buildReturnHref(
   return tabHref(tab, extra);
 }
 
+function paginationHref(
+  tab: string,
+  pageParam: string,
+  page: number,
+  extra: Record<string, string | undefined> = {},
+) {
+  return tabHref(tab, {
+    ...extra,
+    [pageParam]: String(page),
+  });
+}
+
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
 
@@ -702,6 +719,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
     studentPricing: params?.studentPricing,
+    studentPage: params?.studentPage,
   };
 
   const data = await getAdminDashboardData(filters);
@@ -731,7 +749,15 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
     studentPricing: params?.studentPricing,
+    studentPage: params?.studentPage,
   });
+  const studentFilterHrefParams = {
+    studentSearch: params?.studentSearch,
+    studentPayment: params?.studentPayment,
+    studentRegistrationStatus: params?.studentRegistrationStatus,
+    studentProgram: params?.studentProgram,
+    studentPricing: params?.studentPricing,
+  };
 
   return (
     <div className="min-h-screen bg-[#edf2f6] py-6">
@@ -1129,6 +1155,9 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
             </form>
 
             <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm font-semibold text-[#617184]">
+                Showing page {data.studentsPagination.page} of {data.studentsPagination.totalPages} - {data.studentsPagination.totalItems} students
+              </p>
               <Link
                 href="/registration"
                 className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
@@ -1189,8 +1218,89 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       </form>
                     </div>
                   </div>
+                  <div className="mt-4 rounded-[18px] border border-[#e6edf4] bg-white p-4 text-sm text-[#22304a]">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Enrollment and order dates</p>
+                        <p className="mt-2 text-[#617184]">
+                          Registration: {formatOptionalDate(student.registrationCreatedAt)}
+                          {student.orderPaidAt ? ` - Paid: ${formatOptionalDate(student.orderPaidAt)}` : ""}
+                          {student.orderNumber ? ` - Order ${student.orderNumber}` : ""}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">
+                        {student.enrollmentDetails.length} enrolled programmes
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+                      {student.enrollmentDetails.map((enrollment) => (
+                        <div key={enrollment.id} className="rounded-2xl bg-[#f6f9fc] px-3 py-3">
+                          <p className="font-semibold">{enrollment.programTitle}</p>
+                          <p className="mt-1 text-xs text-[#617184]">Status: {enrollment.status.replace(/_/g, " ")}</p>
+                          <p className="mt-1 text-xs text-[#617184]">
+                            Enrolled: {formatOptionalDate(enrollment.startedAt ?? enrollment.createdAt)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#e6edf4] pt-5">
+              <p className="text-sm text-[#617184]">
+                Page {data.studentsPagination.page} of {data.studentsPagination.totalPages}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={paginationHref("students", "studentPage", Math.max(1, data.studentsPagination.page - 1), studentFilterHrefParams)}
+                  aria-disabled={!data.studentsPagination.hasPreviousPage}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    data.studentsPagination.hasPreviousPage
+                      ? "border border-[#c9d7e6] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
+                      : "pointer-events-none border border-[#e6e9ee] bg-[#f8fafc] text-[#9aa5b4]"
+                  }`}
+                >
+                  Previous
+                </Link>
+                {Array.from({ length: data.studentsPagination.totalPages }, (_, index) => index + 1)
+                  .filter((page) => (
+                    page === 1 ||
+                    page === data.studentsPagination.totalPages ||
+                    Math.abs(page - data.studentsPagination.page) <= 2
+                  ))
+                  .map((page, index, pages) => {
+                    const previousPage = pages[index - 1];
+                    const showGap = previousPage && page - previousPage > 1;
+                    return (
+                      <span key={page} className="flex items-center gap-2">
+                        {showGap ? <span className="text-sm text-[#8a94a3]">...</span> : null}
+                        <Link
+                          href={paginationHref("students", "studentPage", page, studentFilterHrefParams)}
+                          className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                            page === data.studentsPagination.page
+                              ? "bg-[#0f4d81] text-white"
+                              : "border border-[#c9d7e6] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
+                          }`}
+                        >
+                          {page}
+                        </Link>
+                      </span>
+                    );
+                  })}
+                <Link
+                  href={paginationHref("students", "studentPage", Math.min(data.studentsPagination.totalPages, data.studentsPagination.page + 1), studentFilterHrefParams)}
+                  aria-disabled={!data.studentsPagination.hasNextPage}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold ${
+                    data.studentsPagination.hasNextPage
+                      ? "border border-[#c9d7e6] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
+                      : "pointer-events-none border border-[#e6e9ee] bg-[#f8fafc] text-[#9aa5b4]"
+                  }`}
+                >
+                  Next
+                </Link>
+              </div>
             </div>
           </section>
         ) : null}

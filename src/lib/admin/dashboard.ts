@@ -68,6 +68,7 @@ export type AdminDashboardFilters = {
   studentRegistrationStatus?: string;
   studentProgram?: string;
   studentPricing?: string;
+  studentPage?: string;
 };
 
 function hasDiscount(totalDiscount: number) {
@@ -124,6 +125,11 @@ function buildRegistrationChildren(
 
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
   const studentSearch = filters.studentSearch?.trim();
+  const studentPageSize = 25;
+  const parsedStudentPage = Number(filters.studentPage ?? 1);
+  const currentStudentPage = Number.isFinite(parsedStudentPage) && parsedStudentPage > 0
+    ? Math.floor(parsedStudentPage)
+    : 1;
   const studentSearchWhere = studentSearch
     ? {
         OR: [
@@ -215,7 +221,6 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     }),
     db.studentProfile.findMany({
       orderBy: { createdAt: "desc" },
-      take: studentSearch ? 80 : 200,
       where: studentSearchWhere ?? {
         enrollments: {
           some: {
@@ -242,8 +247,10 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           include: {
             program: true,
           },
+          orderBy: { createdAt: "desc" },
         },
         registrationStudents: {
+          orderBy: { createdAt: "desc" },
           include: {
             registration: {
               include: {
@@ -362,6 +369,14 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const studentsViewRaw = students.map((student) => {
     const latestOrder = student.parents[0]?.parent.orders[0] ?? null;
     const latestRegistration = student.registrationStudents[0]?.registration ?? null;
+    const enrollmentDetails = student.enrollments.map((enrollment) => ({
+      id: enrollment.id,
+      programTitle: enrollment.program.title,
+      status: enrollment.status,
+      startedAt: enrollment.startedAt,
+      createdAt: enrollment.createdAt,
+      completedAt: enrollment.completedAt,
+    }));
     const city = extractNoteValue(latestRegistration?.notes, "City");
     const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(latestOrder?.metadata);
     const registrationParentName = latestRegistration
@@ -393,8 +408,15 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
         programTitle: enrollment.program.title,
         status: enrollment.status,
       })),
+      enrollmentDetails,
       paymentGateway: latestOrder?.gateway ?? "Pending",
       registrationStatus: latestRegistration?.status ?? "Pending",
+      orderNumber: latestOrder?.orderNumber ?? null,
+      orderCreatedAt: latestOrder?.createdAt ?? null,
+      orderPaidAt: latestOrder?.paidAt ?? null,
+      registrationCreatedAt: latestRegistration?.createdAt ?? null,
+      registrationSubmittedAt: latestRegistration?.submittedAt ?? null,
+      registrationConvertedAt: latestRegistration?.convertedAt ?? null,
       pricingLabel,
       couponCode:
         typeof extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponCode") === "string"
@@ -486,6 +508,12 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     }
     return true;
   });
+  const studentTotalPages = Math.max(1, Math.ceil(filteredStudents.length / studentPageSize));
+  const safeStudentPage = Math.min(currentStudentPage, studentTotalPages);
+  const paginatedStudents = filteredStudents.slice(
+    (safeStudentPage - 1) * studentPageSize,
+    safeStudentPage * studentPageSize,
+  );
 
   const uniqueOrderPrograms = Array.from(
     new Set(ordersView.flatMap((order) => order.programTitles)),
@@ -520,7 +548,15 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     revenueByGateway,
     recentRegistrations,
     orders: filteredOrders,
-    students: filteredStudents,
+    students: paginatedStudents,
+    studentsPagination: {
+      page: safeStudentPage,
+      pageSize: studentPageSize,
+      totalItems: filteredStudents.length,
+      totalPages: studentTotalPages,
+      hasPreviousPage: safeStudentPage > 1,
+      hasNextPage: safeStudentPage < studentTotalPages,
+    },
     feeWaiverApplications,
     filterOptions: {
       orderPrograms: uniqueOrderPrograms,
