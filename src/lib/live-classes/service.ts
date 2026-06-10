@@ -8,6 +8,7 @@ import {
 } from "@/lib/email/notifications";
 import { durationMinutes, nextWeeklyOccurrence, toZoomLocalStartTime } from "@/lib/live-classes/time";
 import { createRecurringZoomMeeting, isZoomConfigured } from "@/lib/zoom/client";
+import { DEFAULT_OFFERS, getCatalogOfferProgramSlugs } from "@/lib/registration/catalog";
 
 export const WHOLE_GEN_MUMIN_PROGRAM_ID = "__whole_gen_mumin__";
 export const PENDING_ZOOM_PROVIDER = "Zoom Pending Approval";
@@ -43,6 +44,8 @@ const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
 const HIDDEN_FROM_STUDENTS_MARKER = "[Students:hidden]";
 const VISIBLE_TO_STUDENTS_MARKER = "[Students:visible]";
 const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
+const PAID_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -232,6 +235,122 @@ export async function syncTeacherProgramRoster(teacherId: string, programId: str
     }
     throw error;
   }
+}
+
+function offerIncludesProgram(
+  offer: {
+    slug: string;
+    programs: Array<{ programId: string; program: { slug: string } }>;
+  },
+  program: { id: string; slug: string },
+) {
+  if (offer.programs.some((entry) => entry.programId === program.id || entry.program.slug === program.slug)) {
+    return true;
+  }
+
+  return getCatalogOfferProgramSlugs(offer.slug).includes(program.slug);
+}
+
+export async function getProgramEligibleRosterStudents(programId: string) {
+  const program = await db.program.findUnique({
+    where: { id: programId },
+    select: { id: true, slug: true },
+  });
+
+  if (!program) {
+    return [];
+  }
+
+  const catalogOfferSlugs = DEFAULT_OFFERS
+    .filter((offer) => offer.programSlugs.includes(program.slug))
+    .map((offer) => offer.slug);
+
+  const students = await db.studentProfile.findMany({
+    where: {
+      OR: [
+        {
+          enrollments: {
+            some: {
+              programId,
+              status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+            },
+          },
+        },
+        {
+          registrationStudents: {
+            some: {
+              registration: {
+                status: { in: [...PAID_REGISTRATION_STATUSES] },
+              },
+              items: {
+                some: {
+                  offer: {
+                    OR: [
+                      { slug: { in: catalogOfferSlugs } },
+                      { programs: { some: { programId } } },
+                    ],
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+    },
+    include: {
+      user: true,
+      enrollments: {
+        where: { programId },
+        select: { status: true },
+      },
+      registrationStudents: {
+        include: {
+          registration: {
+            select: {
+              status: true,
+            },
+          },
+          items: {
+            include: {
+              offer: {
+                include: {
+                  programs: {
+                    include: {
+                      program: {
+                        select: {
+                          slug: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    orderBy: [
+      { displayName: "asc" },
+      { user: { firstName: "asc" } },
+      { user: { lastName: "asc" } },
+    ],
+  });
+
+  return students.filter((student) => {
+    const activeDirectEnrollment = student.enrollments.some((enrollment) =>
+      ACTIVE_ENROLLMENT_STATUSES.includes(enrollment.status as (typeof ACTIVE_ENROLLMENT_STATUSES)[number]),
+    );
+    const paidRegistrationItems = student.registrationStudents.flatMap((registrationStudent) =>
+      PAID_REGISTRATION_STATUSES.includes(registrationStudent.registration.status as (typeof PAID_REGISTRATION_STATUSES)[number])
+        ? registrationStudent.items
+        : [],
+    );
+    const hasRegistrationOfferEvidence = paidRegistrationItems.length > 0;
+    const hasProgramOffer = paidRegistrationItems.some((item) => offerIncludesProgram(item.offer, program));
+
+    return hasProgramOffer || (activeDirectEnrollment && !hasRegistrationOfferEvidence);
+  });
 }
 
 export async function getScheduleRosterStudentIds(scheduleId: string) {

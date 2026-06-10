@@ -1,10 +1,8 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { cleanLiveClassTitle, getLiveClassAudienceLabel, getTeacherProgramRosterEntries } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, getLiveClassAudienceLabel, getProgramEligibleRosterStudents, getTeacherProgramRosterEntries } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
-
-const ACTIVE_STUDENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
 const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 
 export type TeacherDashboardData = {
@@ -309,11 +307,21 @@ export async function getTeacherDashboardData(userId: string) {
     rosterStudentIdsByProgram.set(rosterEntry.programId, studentSet);
   }
 
+  const eligibleStudentsByProgram = new Map(
+    await Promise.all(
+      teacherProfile.programAssignments.map(async (assignment) => [
+        assignment.program.id,
+        await getProgramEligibleRosterStudents(assignment.program.id),
+      ] as const),
+    ),
+  );
+
   const rosterPrograms = teacherProfile.programAssignments.map((assignment) => {
     const rosterStudentIds = rosterStudentIdsByProgram.get(assignment.program.id);
-    const enrollments = rosterStudentIds && rosterStudentIds.size
-      ? assignment.program.enrollments.filter((enrollment) => rosterStudentIds.has(enrollment.studentId))
-      : assignment.program.enrollments;
+    const eligibleStudents = eligibleStudentsByProgram.get(assignment.program.id) ?? [];
+    const students = rosterStudentIds && rosterStudentIds.size
+      ? eligibleStudents.filter((student) => rosterStudentIds.has(student.id))
+      : eligibleStudents;
 
     return {
       programId: assignment.program.id,
@@ -321,18 +329,17 @@ export async function getTeacherDashboardData(userId: string) {
       assignmentCount: assignment.program.assignments.length,
       students: Array.from(
         new Map(
-          enrollments
-            .filter((enrollment) => ACTIVE_STUDENT_STATUSES.has(enrollment.status))
-            .map((enrollment) => [
-              enrollment.student.user.email.toLowerCase(),
+          students
+            .map((student) => [
+              student.user.email.toLowerCase(),
               {
-                id: enrollment.student.id,
+                id: student.id,
                 name:
-                  enrollment.student.displayName ||
-                  `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim(),
-                email: enrollment.student.user.email,
-                enrollmentStatus: enrollment.status.replace(/_/g, " "),
-                roomAssignment: getStudentRoomAssignment(enrollment.student.learningNotes, assignment.program.id),
+                  student.displayName ||
+                  `${student.user.firstName} ${student.user.lastName}`.trim(),
+                email: student.user.email,
+                enrollmentStatus: "ACTIVE",
+                roomAssignment: getStudentRoomAssignment(student.learningNotes, assignment.program.id),
               },
             ]),
         ).values(),

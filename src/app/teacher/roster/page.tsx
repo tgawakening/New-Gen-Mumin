@@ -10,7 +10,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
-import { getTeacherProgramRosterEntries, syncTeacherProgramRoster } from "@/lib/live-classes/service";
+import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -37,20 +37,7 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
       user: true,
       programAssignments: {
         include: {
-          program: {
-            include: {
-              enrollments: {
-                where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
-                include: {
-                  student: {
-                    include: {
-                      user: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
+          program: true,
         },
       },
     },
@@ -59,6 +46,14 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
   if (!teacher) redirect("/teacher-registration");
 
   const programRosterEntries = await getTeacherProgramRosterEntries(teacher.id);
+  const eligibleStudentsByProgram = new Map(
+    await Promise.all(
+      teacher.programAssignments.map(async (assignment) => [
+        assignment.programId,
+        await getProgramEligibleRosterStudents(assignment.programId),
+      ] as const),
+    ),
+  );
   const selectedStudentIdsByProgram = new Map<string, Set<string>>();
   for (const rosterEntry of programRosterEntries) {
     const selected = selectedStudentIdsByProgram.get(rosterEntry.programId) ?? new Set<string>();
@@ -85,15 +80,8 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
 
     const selectedIds = formData.getAll("studentIds").filter((value): value is string => typeof value === "string");
 
-    const enrollments = await db.enrollment.findMany({
-      where: {
-        programId,
-        status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
-      },
-      select: { studentId: true },
-    });
-
-    const validStudentIds = new Set(enrollments.map((entry) => entry.studentId));
+    const eligibleStudents = await getProgramEligibleRosterStudents(programId);
+    const validStudentIds = new Set(eligibleStudents.map((entry) => entry.id));
     const studentIds = selectedIds.filter((id) => validStudentIds.has(id));
 
     try {
@@ -133,6 +121,7 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
         <div className="mt-6 space-y-10">
           {teacher.programAssignments.map((assignment) => {
             const selectedIds = selectedStudentIdsByProgram.get(assignment.programId) ?? new Set<string>();
+            const eligibleStudents = eligibleStudentsByProgram.get(assignment.programId) ?? [];
             return (
               <form key={assignment.programId} action={saveProgramRosterAction} className="rounded-3xl border border-[#e5e9ef] bg-[#fbfcff] p-6">
                 <input type="hidden" name="programId" value={assignment.programId} />
@@ -147,25 +136,30 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  {assignment.program.enrollments.map((enrollment) => {
-                    const studentName = enrollment.student.displayName || `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim();
+                  {eligibleStudents.map((student) => {
+                    const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim();
                     return (
-                      <label key={enrollment.student.id} className="flex cursor-pointer flex-col rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm text-[#22304a] transition hover:border-[#9eb2c8]">
+                      <label key={student.id} className="flex cursor-pointer flex-col rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm text-[#22304a] transition hover:border-[#9eb2c8]">
                         <span className="flex items-center gap-3">
                           <input
                             type="checkbox"
                             name="studentIds"
-                            value={enrollment.student.id}
-                            defaultChecked={selectedIds.has(enrollment.student.id)}
+                            value={student.id}
+                            defaultChecked={selectedIds.has(student.id)}
                             className="h-4 w-4 rounded border-[#cdd9e4] text-[#0f4d81]"
                           />
                           <span className="font-semibold">{studentName}</span>
                         </span>
-                        <span className="mt-2 text-xs text-[#5f6b7a]">{enrollment.student.user.email}</span>
-                        <span className="mt-1 text-xs text-[#8a94a3]">{enrollment.status.replace(/_/g, " ")}</span>
+                        <span className="mt-2 text-xs text-[#5f6b7a]">{student.user.email}</span>
+                        <span className="mt-1 text-xs text-[#8a94a3]">Eligible for {assignment.program.title}</span>
                       </label>
                     );
                   })}
+                  {!eligibleStudents.length ? (
+                    <p className="rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm leading-6 text-[#617184]">
+                      No eligible paid students found for this programme yet.
+                    </p>
+                  ) : null}
                 </div>
               </form>
             );
