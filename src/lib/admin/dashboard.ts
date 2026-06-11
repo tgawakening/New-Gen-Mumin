@@ -48,6 +48,35 @@ function extractManualPaidAmountAdjustment(metadata: unknown) {
   };
 }
 
+function extractSubscriptionAmountAdjustment(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return null;
+  }
+
+  const adjustment = (metadata as Record<string, unknown>).subscriptionAmountAdjustment;
+  if (!adjustment || typeof adjustment !== "object" || Array.isArray(adjustment)) {
+    return null;
+  }
+
+  const record = adjustment as Record<string, unknown>;
+  return {
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    note: typeof record.note === "string" ? record.note : null,
+    adjustedAt: typeof record.adjustedAt === "string" ? record.adjustedAt : null,
+    providerSubscriptionId: typeof record.providerSubscriptionId === "string" ? record.providerSubscriptionId : null,
+  };
+}
+
+function formatPhone(
+  phoneCountryCode?: string | null,
+  phoneNumber?: string | null,
+) {
+  return phoneNumber
+    ? `${phoneCountryCode ?? ""} ${phoneNumber}`.trim()
+    : "Pending";
+}
+
 function registrationSourceLabel(notes: string | null | undefined) {
   if (notes?.includes("parent-dashboard-add-program")) {
     return "Program enrollment";
@@ -210,6 +239,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
         items: {
           include: {
             offer: true,
+            subscription: true,
             enrollment: {
               include: {
                 program: true,
@@ -286,6 +316,15 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const city = extractNoteValue(order.registration?.notes, "City");
     const sourceLabel = registrationSourceLabel(order.registration?.notes);
     const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
+    const subscriptionAmountAdjustment = extractSubscriptionAmountAdjustment(order.metadata);
+    const stripeSubscriptionId =
+      order.items.find((item) => item.subscription?.providerSubscriptionId)?.subscription?.providerSubscriptionId ??
+      (typeof order.metadata === "object" &&
+      order.metadata &&
+      !Array.isArray(order.metadata) &&
+      typeof (order.metadata as Record<string, unknown>).subscriptionId === "string"
+        ? String((order.metadata as Record<string, unknown>).subscriptionId)
+        : null);
     const programTitles = Array.from(
       new Set(
         order.items.flatMap((item) => {
@@ -306,9 +345,9 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       parentEmail: order.parent.user.email,
       sourceLabel,
       city,
-      phone: order.parent.user.phoneNumber
-        ? `${order.parent.user.phoneCountryCode ?? ""} ${order.parent.user.phoneNumber}`.trim()
-        : "Pending",
+      phone: order.registration?.phoneNumber
+        ? formatPhone(order.registration.phoneCountryCode, order.registration.phoneNumber)
+        : formatPhone(order.parent.user.phoneCountryCode, order.parent.user.phoneNumber),
       gateway: order.gateway,
       status: order.status,
       currency: order.currency,
@@ -328,6 +367,8 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           ? `${order.currency} ${order.totalAmount} after ${order.discountAmount} discount`
           : `${order.currency} ${order.totalAmount}`,
       manualPaidAmountAdjustment,
+      subscriptionAmountAdjustment,
+      stripeSubscriptionId,
       registrationStatus: order.registration?.status ?? "Pending",
       enrollmentStates: order.items
         .map((item) => item.enrollment?.status)
@@ -385,6 +426,12 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const linkedParentNames = student.parents
       .map((entry) => formatPersonName(entry.parent.user.firstName, entry.parent.user.lastName))
       .filter(Boolean);
+    const parentPhone =
+      latestRegistration?.phoneNumber
+        ? formatPhone(latestRegistration.phoneCountryCode, latestRegistration.phoneNumber)
+        : student.parents
+            .map((entry) => formatPhone(entry.parent.user.phoneCountryCode, entry.parent.user.phoneNumber))
+            .find((phone) => phone !== "Pending") ?? "Pending";
     const childDetails = buildRegistrationChildren(latestRegistration);
     const childNames = childDetails.map((child) => child.name);
     const pricingLabel = student.registrationStudents.some((entry) =>
@@ -400,9 +447,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
         student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
       email: student.user.email,
       city,
-      phone: student.user.phoneNumber
-        ? `${student.user.phoneCountryCode ?? ""} ${student.user.phoneNumber}`.trim()
-        : "Pending",
+      phone: parentPhone,
       enrollments: student.enrollments.map((enrollment) => ({
         id: enrollment.id,
         programTitle: enrollment.program.title,

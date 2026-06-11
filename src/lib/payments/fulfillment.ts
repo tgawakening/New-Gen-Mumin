@@ -7,6 +7,7 @@ import {
   sendPaymentCompletedEmail,
 } from "@/lib/email/notifications";
 import { activateOrderEnrollments } from "@/lib/enrollment/access";
+import { getStripeClient } from "@/lib/payments/stripe";
 
 function toJsonValue(value: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput | undefined {
   if (value === undefined) return undefined;
@@ -225,6 +226,133 @@ export async function recordManualPaidAmount(
       });
     }
   });
+}
+
+export async function updateStripeSubscriptionAmount(
+  orderId: string,
+  input: {
+    amount: number;
+    currency?: string | null;
+    note?: string | null;
+  },
+) {
+  const amount = Math.round(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error("Subscription amount must be greater than zero.");
+  }
+
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: {
+        include: {
+          subscription: true,
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new Error("Order not found.");
+  }
+  if (order.gateway !== "STRIPE") {
+    throw new Error("Only Stripe subscriptions can be updated from this control.");
+  }
+
+  const metadataBase =
+    typeof order.metadata === "object" && order.metadata && !Array.isArray(order.metadata)
+      ? (order.metadata as Record<string, unknown>)
+      : {};
+  const providerSubscriptionId =
+    order.items.find((item) => item.subscription?.providerSubscriptionId)?.subscription?.providerSubscriptionId ??
+    (typeof metadataBase.subscriptionId === "string" ? metadataBase.subscriptionId : null);
+
+  if (!providerSubscriptionId) {
+    throw new Error("Stripe subscription id is missing for this order.");
+  }
+
+  const stripe = getStripeClient();
+  const subscription = await stripe.subscriptions.retrieve(providerSubscriptionId, {
+    expand: ["items.data.price.product"],
+  });
+  const subscriptionItem = subscription.items.data[0];
+  if (!subscriptionItem) {
+    throw new Error("Stripe subscription has no billable item to update.");
+  }
+
+  const currentProduct = subscriptionItem.price.product;
+  const productId =
+    typeof currentProduct === "string"
+      ? currentProduct
+      : currentProduct && typeof currentProduct === "object" && "id" in currentProduct
+        ? currentProduct.id
+        : null;
+  if (!productId) {
+    throw new Error("Stripe subscription product is missing.");
+  }
+
+  const currency = (input.currency || order.currency).toLowerCase();
+  const newPrice = await stripe.prices.create({
+    currency,
+    unit_amount: amount * 100,
+    recurring: {
+      interval: "month",
+    },
+    product: productId,
+    metadata: {
+      orderId,
+      adjustedFromOrderNumber: order.orderNumber,
+      adjustedAt: new Date().toISOString(),
+    },
+  });
+
+  await stripe.subscriptions.update(providerSubscriptionId, {
+    items: [
+      {
+        id: subscriptionItem.id,
+        price: newPrice.id,
+      },
+    ],
+    proration_behavior: "none",
+    metadata: {
+      ...subscription.metadata,
+      orderId,
+      adjustedMonthlyAmount: String(amount),
+      adjustedMonthlyCurrency: (input.currency || order.currency).toUpperCase(),
+    },
+  });
+
+  const adjustedAt = new Date();
+  const adjustedCurrency = (input.currency || order.currency).toUpperCase();
+  const adjustedDiscountAmount = Math.max(0, order.subtotalAmount - amount);
+  const metadata = {
+    ...metadataBase,
+    subscriptionId: providerSubscriptionId,
+    subscriptionAmountAdjustment: {
+      amount,
+      currency: adjustedCurrency,
+      note: input.note?.trim() || null,
+      adjustedAt: adjustedAt.toISOString(),
+      providerSubscriptionId,
+      stripePriceId: newPrice.id,
+    },
+  };
+
+  await db.order.update({
+    where: { id: order.id },
+    data: {
+      currency: adjustedCurrency,
+      totalAmount: amount,
+      discountAmount: adjustedDiscountAmount,
+      metadata,
+    },
+  });
+
+  return {
+    providerSubscriptionId,
+    amount,
+    currency: adjustedCurrency,
+  };
 }
 
 export async function resendOrderCompletionEmails(

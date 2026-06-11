@@ -19,6 +19,7 @@ import {
   markOrderPaid,
   recordManualPaidAmount,
   resendOrderCompletionEmails,
+  updateStripeSubscriptionAmount,
 } from "@/lib/payments/fulfillment";
 
 type AdminDashboardData = Awaited<ReturnType<typeof getAdminDashboardData>>;
@@ -293,6 +294,13 @@ function canCancelOrder(order: {
   status: string;
 }) {
   return !["FAILED", "CANCELLED"].includes(order.status);
+}
+
+function canUpdateStripeSubscription(order: {
+  gateway: string;
+  stripeSubscriptionId: string | null;
+}) {
+  return order.gateway === "STRIPE" && Boolean(order.stripeSubscriptionId);
 }
 
 function paymentMethodLabel(gateway: string) {
@@ -675,6 +683,31 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Paid amount record updated&tone=success`);
   }
 
+  async function adjustStripeSubscriptionAmount(formData: FormData) {
+    "use server";
+    const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
+    const amount = Number(formData.get("subscriptionAmount"));
+    const currency = String(formData.get("subscriptionCurrency") || "");
+    const note = String(formData.get("subscriptionNote") || "");
+
+    if (!orderId || !Number.isFinite(amount) || amount <= 0) {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Enter a valid monthly subscription amount&tone=error`);
+    }
+
+    try {
+      await updateStripeSubscriptionAmount(orderId, { amount, currency, note });
+      revalidatePath("/admin");
+      revalidatePath("/parent");
+      revalidatePath("/student");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update this Stripe subscription right now";
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(message)}&tone=error`);
+    }
+
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Stripe subscription amount updated for future invoices&tone=success`);
+  }
+
   async function deleteStudent(formData: FormData) {
     "use server";
     const userId = String(formData.get("userId") || "");
@@ -981,7 +1014,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="mt-1 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{order.sourceLabel}</p>
                       <p className="mt-1 text-sm text-[#617184]">{order.parentEmail}</p>
                       <p className="mt-1 text-sm text-[#617184]">City: {order.city ?? "Pending"}</p>
-                      <p className="mt-1 text-sm text-[#617184]">{order.phone}</p>
+                      <p className="mt-1 text-sm text-[#617184]">Parent phone: {order.phone}</p>
                       <p className="mt-2 text-sm text-[#22304a]">{order.orderNumber}</p>
                       <div className="mt-3">
                         <OrderDetailsPopup
@@ -1025,6 +1058,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         <p className="mt-1 text-[#8a6326]">
                           Payment record: {formatMoney(order.manualPaidAmountAdjustment.amount ?? order.totalAmount, order.manualPaidAmountAdjustment.currency ?? order.currency)}
                           {order.manualPaidAmountAdjustment.note ? ` - ${order.manualPaidAmountAdjustment.note}` : ""}
+                        </p>
+                      ) : null}
+                      {order.subscriptionAmountAdjustment ? (
+                        <p className="mt-1 text-[#0f4d81]">
+                          Next subscription: {formatMoney(order.subscriptionAmountAdjustment.amount ?? order.totalAmount, order.subscriptionAmountAdjustment.currency ?? order.currency)}
+                          {order.subscriptionAmountAdjustment.note ? ` - ${order.subscriptionAmountAdjustment.note}` : ""}
                         </p>
                       ) : null}
                     </div>
@@ -1124,6 +1163,42 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           </button>
                         </form>
                       ) : null}
+                      {canUpdateStripeSubscription(order) ? (
+                        <form action={adjustStripeSubscriptionAmount} className="rounded-2xl border border-[#d7e6f4] bg-[#f8fbff] p-3">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnUrl" value={currentOrderHref} />
+                          <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-[#0f4d81]">
+                            Next Stripe monthly charge
+                          </label>
+                          <div className="mt-2 grid grid-cols-[1fr_72px] gap-2">
+                            <input
+                              name="subscriptionAmount"
+                              type="number"
+                              min="1"
+                              step="1"
+                              defaultValue={order.subscriptionAmountAdjustment?.amount ?? order.totalAmount}
+                              className="w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm text-[#22304a]"
+                            />
+                            <input
+                              name="subscriptionCurrency"
+                              defaultValue={order.subscriptionAmountAdjustment?.currency ?? order.currency}
+                              className="w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm uppercase text-[#22304a]"
+                            />
+                          </div>
+                          <textarea
+                            name="subscriptionNote"
+                            defaultValue={order.subscriptionAmountAdjustment?.note ?? ""}
+                            placeholder="Reason, e.g. client approved $50 monthly family price"
+                            className="mt-2 min-h-16 w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm text-[#22304a]"
+                          />
+                          <p className="mt-2 text-xs leading-5 text-[#617184]">
+                            Updates future Stripe invoices with no immediate proration.
+                          </p>
+                          <button className="mt-2 w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
+                            Update Stripe subscription
+                          </button>
+                        </form>
+                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1181,7 +1256,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="mt-2">{student.parentName}</p>
                       <p className="mt-1 text-[#617184]">{student.email}</p>
                       <p className="mt-1 text-[#617184]">City: {student.city ?? "Pending"}</p>
-                      <p className="mt-1 text-[#617184]">{student.phone}</p>
+                      <p className="mt-1 text-[#617184]">Parent phone: {student.phone}</p>
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {student.childCount}</p>
