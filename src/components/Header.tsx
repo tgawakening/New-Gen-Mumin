@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { Menu, ChevronDown, ArrowRight, Plus, Minus, X, Mail, Phone } from "lucide-react";
 import { PROGRAMS, PROGRAMS_LABEL, NAV, SITE } from "@/lib/config";
 import { SOCIAL_LINKS } from "@/components/TopBar";
+import { AuthAwareDashboardCta } from "@/components/AuthAwareDashboardCta";
 
 /** Header nav: Home | Gen-Mumins Programs | Pricing | Faq's | Contact | Enroll Now (live structure). */
 export function Header() {
@@ -46,14 +47,21 @@ export function Header() {
             <Logo logoUrl={SITE.logoUrl || undefined} />
           </Link>
 
-          <button
-            type="button"
-            className="xl:hidden -m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-gray-700"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle menu"
-          >
-            <Menu className="h-6 w-6" />
-          </button>
+          <div className="flex items-center gap-2 xl:hidden">
+            <AuthAwareDashboardCta
+              className="inline-flex items-center justify-center gap-1.5 rounded-full bg-[#F97316] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#EA580C] sm:px-4 sm:text-sm"
+              loggedOutLabel="Enroll"
+              loggedInLabel="Dashboard"
+            />
+            <button
+              type="button"
+              className="-m-2.5 inline-flex items-center justify-center rounded-md p-2.5 text-gray-700"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-label="Toggle menu"
+            >
+              <Menu className="h-6 w-6" />
+            </button>
+          </div>
 
           {/* Nav links + Enroll Now - right aligned (live: header-right) */}
           <div className="hidden xl:flex xl:items-center xl:justify-end xl:gap-8 xl:ml-auto">

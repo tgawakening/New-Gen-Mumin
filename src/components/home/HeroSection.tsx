@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight } from "lucide-react";
 import { SECTION_IDS } from "@/lib/config";
+import { AuthAwareDashboardCta } from "@/components/AuthAwareDashboardCta";
 
 /** Hero section structured to match live site inspect element. */
 export function HeroSection() {
@@ -82,10 +83,7 @@ export function HeroSection() {
 
             {/* Buttons - theme-btn (filled) + theme-btn--outline, same size */}
             <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start items-center flex-wrap">
-              <Link href="/registration" className="theme-btn">
-                <span>Enroll Now</span>
-                <ArrowRight className="h-4 w-4" aria-hidden />
-              </Link>
+              <AuthAwareDashboardCta />
               <Link href={`#${SECTION_IDS.courses}`} className="theme-btn theme-btn--outline">
                 <span>Gen-Mu&apos;mins Programme</span>
                 <ArrowRight className="h-4 w-4" aria-hidden />
