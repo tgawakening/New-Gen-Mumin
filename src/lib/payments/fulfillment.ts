@@ -281,15 +281,32 @@ export async function updateStripeSubscriptionAmount(
   }
 
   const currentProduct = subscriptionItem.price.product;
-  const productId =
+  const product =
     typeof currentProduct === "string"
-      ? currentProduct
+      ? await stripe.products.retrieve(currentProduct)
       : currentProduct && typeof currentProduct === "object" && "id" in currentProduct
-        ? currentProduct.id
+        ? currentProduct
         : null;
-  if (!productId) {
+  if (!product) {
     throw new Error("Stripe subscription product is missing.");
   }
+
+  const productDeleted = "deleted" in product && product.deleted;
+  const productActive = !productDeleted && "active" in product && product.active;
+  const productName = !productDeleted && "name" in product ? product.name : "Gen-Mumins subscription";
+  const activeProductId = productActive
+    ? product.id
+    : (
+        await stripe.products.create({
+          name: `${productName || "Gen-Mumins subscription"} - adjusted`,
+          description: "Active product used for an adjusted Gen-Mumins monthly subscription amount.",
+          metadata: {
+            orderId,
+            previousProductId: product.id,
+            adjustedFromOrderNumber: order.orderNumber,
+          },
+        })
+      ).id;
 
   const currency = (input.currency || order.currency).toLowerCase();
   const newPrice = await stripe.prices.create({
@@ -298,7 +315,7 @@ export async function updateStripeSubscriptionAmount(
     recurring: {
       interval: "month",
     },
-    product: productId,
+    product: activeProductId,
     metadata: {
       orderId,
       adjustedFromOrderNumber: order.orderNumber,
