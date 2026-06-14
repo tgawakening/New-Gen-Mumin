@@ -258,6 +258,30 @@ export async function sendAdminContactNotificationEmail(input: {
   );
 }
 
+export async function sendAdminFeedbackSubmittedEmail(input: {
+  audience: "PARENT" | "TEACHER" | "STUDENT";
+  submittedByName: string;
+  submittedByEmail: string;
+  studentName?: string | null;
+  programmes?: string[];
+  weekLabel: string;
+  summary: string;
+}) {
+  const audienceLabel = input.audience.toLowerCase();
+  await sendAdminFacingEmail(
+    "adminFeedbackSubmitted",
+    `New ${audienceLabel} feedback submitted`,
+    `A new ${audienceLabel} feedback form was submitted and is ready for admin review.`,
+    [
+      { label: "Submitted by", value: `${input.submittedByName} (${input.submittedByEmail})` },
+      { label: "Student", value: input.studentName ?? "Not linked" },
+      { label: "Programme", value: input.programmes?.length ? input.programmes.join(", ") : "General" },
+      { label: "Feedback", value: input.weekLabel },
+      { label: "Overview", value: input.summary || "No overview provided" },
+    ],
+  );
+}
+
 export async function sendPasswordResetEmail(input: {
   toEmail: string;
   firstName: string;

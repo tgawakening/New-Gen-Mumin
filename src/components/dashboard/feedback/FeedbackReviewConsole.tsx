@@ -109,7 +109,18 @@ export function FeedbackReviewConsole({
       <div className="rounded-[24px] border border-[#dce4ed] bg-[#f8fafc] p-3 shadow-sm sm:p-4">
         <div className="grid gap-3">
           {filteredEntries.map((entry) => (
-            <article key={entry.id} className="rounded-[22px] border border-[#dce4ed] bg-white p-4 shadow-sm">
+            <article key={entry.id} className="grid gap-3 rounded-[22px] border border-[#dce4ed] bg-white p-4 shadow-sm md:grid-cols-[auto_minmax(0,1fr)]">
+              {deleteAction ? (
+                <form action={deleteAction} className="md:pt-1">
+                  <input type="hidden" name="feedbackId" value={entry.id} />
+                  <button className="inline-flex items-center gap-2 rounded-full border border-[#efb3b3] bg-[#fff8f8] px-4 py-2.5 text-sm font-semibold text-[#b24646] transition hover:bg-[#fff0f0] md:h-full md:min-h-24 md:flex-col md:justify-center md:px-3">
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                </form>
+              ) : null}
+
+              <div className="min-w-0">
               <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
@@ -136,15 +147,6 @@ export function FeedbackReviewConsole({
                     <Pencil className="h-4 w-4" />
                     {updateAction && entry.editable ? "Edit details" : "View details"}
                   </button>
-                  {deleteAction ? (
-                    <form action={deleteAction}>
-                      <input type="hidden" name="feedbackId" value={entry.id} />
-                      <button className="inline-flex items-center gap-2 rounded-full border border-[#efb3b3] bg-white px-4 py-2.5 text-sm font-semibold text-[#b24646] transition hover:bg-[#fff4f4]">
-                        <Trash2 className="h-4 w-4" />
-                        Delete
-                      </button>
-                    </form>
-                  ) : null}
                 </div>
               </div>
 
@@ -179,6 +181,7 @@ export function FeedbackReviewConsole({
                     {metric.label} {metric.value}
                   </span>
                 ))}
+              </div>
               </div>
             </article>
           ))}

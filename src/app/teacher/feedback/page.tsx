@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { getTeacherFeedbackSummary, getTeacherParentFeedbackInbox, submitWeeklyFeedback } from "@/lib/community/feedback";
+import { sendAdminFeedbackSubmittedEmail } from "@/lib/email/notifications";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { FeedbackReviewConsole, type FeedbackReviewEntry } from "@/components/dashboard/feedback/FeedbackReviewConsole";
 import { MultiStepFeedbackForm } from "@/components/dashboard/feedback/MultiStepFeedbackForm";
@@ -157,6 +158,20 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
         })),
         skipDuplicates: true,
       });
+
+      try {
+        await sendAdminFeedbackSubmittedEmail({
+          audience: "TEACHER",
+          submittedByName: currentDashboard.teacherName,
+          submittedByEmail: currentDashboard.profile.email,
+          studentName: null,
+          programmes: [String(formData.get("classSubject") || classInfo.title || "General")],
+          weekLabel: String(formData.get("weekLabel") || `Class handover - ${new Date().toLocaleDateString("en-GB")}`),
+          summary: String(formData.get("taughtToday") || formData.get("nextTeacherNotes") || formData.get("concernExplanation") || ""),
+        });
+      } catch (emailError) {
+        console.error("Admin teacher feedback email failed", emailError);
+      }
 
       revalidatePath("/teacher/feedback");
       successHref = noticeHref("Teacher feedback submitted.");

@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentFeedbackSummary, submitWeeklyFeedback } from "@/lib/community/feedback";
+import { sendAdminFeedbackSubmittedEmail } from "@/lib/email/notifications";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { MultiStepFeedbackForm } from "@/components/dashboard/feedback/MultiStepFeedbackForm";
 import {
@@ -19,8 +20,20 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; submitted?: string }>;
+  searchParams?: Promise<{ child?: string; submitted?: string; error?: string }>;
 };
+
+function noticeHref(childId: string | undefined, message: string, tone: "success" | "error" = "success") {
+  const params = new URLSearchParams();
+  if (childId) params.set("child", childId);
+  if (tone === "success") {
+    params.set("submitted", "1");
+  } else {
+    params.set("error", message);
+  }
+  const query = params.toString();
+  return `/parent/feedback${query ? `?${query}` : ""}`;
+}
 
 export default async function ParentFeedbackPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
@@ -43,61 +56,82 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
     if (!currentDashboard) redirect("/registration");
 
     const childId = String(formData.get("childId") || "");
-    const child = currentDashboard.children.find((entry) => entry.id === childId);
-    if (!child) throw new Error("Child is not available for this parent.");
+    try {
+      const child = currentDashboard.children.find((entry) => entry.id === childId);
+      if (!child) throw new Error("Child is not available for this parent.");
 
-    await submitWeeklyFeedback({
-      audience: FeedbackAudience.PARENT,
-      submittedById: currentSession.user.id,
-      studentId: child.id,
-      weekLabel: String(formData.get("weekLabel") || `Week of ${new Date().toLocaleDateString("en-GB")}`),
-      moodRating: Number(formData.get("satisfaction") || 0) || null,
-      confidence: Number(formData.get("confidence") || 0) || null,
-      workload: null,
-      wins: String(formData.get("goingWell") || ""),
-      concerns: String(formData.get("concern") || ""),
-      supportNeeded: String(formData.get("improvement") || ""),
-      rawPayload: {
-        parentName: String(formData.get("parentName") || ""),
-        childName: String(formData.get("childName") || ""),
-        childAgeGroup: String(formData.get("childAgeGroup") || ""),
-        programmes: formData.getAll("programmes").map(String),
-        enjoying: String(formData.get("enjoying") || ""),
-        understanding: String(formData.get("understanding") || ""),
-        homePractice: String(formData.get("homePractice") || ""),
-        confidence: String(formData.get("confidence") || ""),
-        goingWell: String(formData.get("goingWell") || ""),
-        improvement: String(formData.get("improvement") || ""),
-        concern: String(formData.get("concern") || ""),
-        contactRequest: String(formData.get("contactRequest") || ""),
-        satisfaction: String(formData.get("satisfaction") || ""),
-      },
-    });
+      const selectedProgrammes = formData.getAll("programmes").map(String);
 
-    const teachers = await db.teacherProgram.findMany({
-      where: { program: { title: { in: formData.getAll("programmes").map(String) } } },
-      select: { teacher: { select: { userId: true } } },
-    });
-    await db.notification.createMany({
-      data: [
-        {
-          userId: currentSession.user.id,
-          title: "Weekly feedback submitted",
-          body: `Your feedback for ${child.name} has been saved.`,
-          href: `/parent/feedback?child=${child.id}`,
+      await submitWeeklyFeedback({
+        audience: FeedbackAudience.PARENT,
+        submittedById: currentSession.user.id,
+        studentId: child.id,
+        weekLabel: String(formData.get("weekLabel") || `Week of ${new Date().toLocaleDateString("en-GB")}`),
+        moodRating: Number(formData.get("satisfaction") || 0) || null,
+        confidence: Number(formData.get("confidence") || 0) || null,
+        workload: null,
+        wins: String(formData.get("goingWell") || ""),
+        concerns: String(formData.get("concern") || ""),
+        supportNeeded: String(formData.get("improvement") || ""),
+        rawPayload: {
+          parentName: String(formData.get("parentName") || ""),
+          childName: String(formData.get("childName") || ""),
+          childAgeGroup: String(formData.get("childAgeGroup") || ""),
+          programmes: selectedProgrammes,
+          enjoying: String(formData.get("enjoying") || ""),
+          understanding: String(formData.get("understanding") || ""),
+          homePractice: String(formData.get("homePractice") || ""),
+          confidence: String(formData.get("confidence") || ""),
+          goingWell: String(formData.get("goingWell") || ""),
+          improvement: String(formData.get("improvement") || ""),
+          concern: String(formData.get("concern") || ""),
+          contactRequest: String(formData.get("contactRequest") || ""),
+          satisfaction: String(formData.get("satisfaction") || ""),
         },
-        ...teachers.map((teacher) => ({
-          userId: teacher.teacher.userId,
-          title: "Parent feedback received",
-          body: `${child.name}'s parent submitted weekly feedback.`,
-          href: "/teacher/feedback",
-        })),
-      ],
-      skipDuplicates: true,
-    });
+      });
 
-    revalidatePath("/parent/feedback");
-    redirect(`/parent/feedback?child=${child.id}&submitted=1`);
+      const teachers = await db.teacherProgram.findMany({
+        where: { program: { title: { in: selectedProgrammes } } },
+        select: { teacher: { select: { userId: true } } },
+      });
+      await db.notification.createMany({
+        data: [
+          {
+            userId: currentSession.user.id,
+            title: "Weekly feedback submitted",
+            body: `Your feedback for ${child.name} has been saved.`,
+            href: `/parent/feedback?child=${child.id}`,
+          },
+          ...teachers.map((teacher) => ({
+            userId: teacher.teacher.userId,
+            title: "Parent feedback received",
+            body: `${child.name}'s parent submitted weekly feedback.`,
+            href: "/teacher/feedback",
+          })),
+        ],
+        skipDuplicates: true,
+      });
+
+      try {
+        await sendAdminFeedbackSubmittedEmail({
+          audience: "PARENT",
+          submittedByName: currentDashboard.parentName,
+          submittedByEmail: currentDashboard.parentProfile.email,
+          studentName: child.name,
+          programmes: selectedProgrammes,
+          weekLabel: String(formData.get("weekLabel") || `Week of ${new Date().toLocaleDateString("en-GB")}`),
+          summary: String(formData.get("goingWell") || formData.get("improvement") || formData.get("concern") || ""),
+        });
+      } catch (emailError) {
+        console.error("Admin parent feedback email failed", emailError);
+      }
+
+      revalidatePath("/parent/feedback");
+      redirect(noticeHref(child.id, "Parent feedback submitted."));
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unable to submit parent feedback.";
+      redirect(noticeHref(childId || undefined, errorMessage, "error"));
+    }
   }
 
   return (
@@ -108,7 +142,7 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
-      <ActionToast message={params.submitted ? "Parent feedback submitted." : undefined} />
+      <ActionToast message={params.error ? params.error : params.submitted ? "Parent feedback submitted." : undefined} tone={params.error ? "error" : undefined} />
 
       <MetricGrid
         metrics={[
