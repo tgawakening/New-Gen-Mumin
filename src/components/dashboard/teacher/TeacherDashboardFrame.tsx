@@ -47,13 +47,13 @@ export function TeacherDashboardFrame({
         </div>
       </div>
 
-      <div className="section-container grid grid-cols-[64px_minmax(0,1fr)] gap-3 py-5 sm:gap-5 sm:py-6 xl:grid-cols-[250px_minmax(0,1fr)] xl:gap-6 xl:py-8">
-        <aside className="sticky top-3 self-start xl:static">
-          <div className="rounded-[22px] bg-[#22304a] p-2 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)] xl:rounded-[28px] xl:p-6">
+      <div className="section-container grid grid-cols-[64px_minmax(0,1fr)] gap-3 py-5 sm:gap-5 sm:py-6 xl:grid-cols-[220px_minmax(0,1fr)] xl:gap-5 xl:py-8">
+        <aside className="sticky top-3 self-start">
+          <div className="max-h-[calc(100vh-1.5rem)] overflow-visible rounded-[22px] bg-[#22304a] p-2 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)] xl:overflow-y-auto xl:rounded-[24px] xl:p-4">
             <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f] xl:block">
               Teaching suite
             </p>
-            <div className="space-y-2 xl:mt-5">
+            <div className="space-y-2 xl:mt-4">
               {navItems.map((item) => (
                 <TeacherNavLinkClient
                   key={item.href}
