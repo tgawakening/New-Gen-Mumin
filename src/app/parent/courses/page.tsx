@@ -103,6 +103,21 @@ function eligibleProgramOffers(offers: RegistrationOffer[], child: ParentChild) 
     });
 }
 
+function programTabLabel(course: ParentChild["courses"][number]) {
+  const title = course.title.toLowerCase();
+  if (title.includes("arabic")) return "Arabic";
+  if (title.includes("tajweed")) return "Tajweed";
+  if (title.includes("seerah")) return "Seerah";
+  if (title.includes("life") || title.includes("leadership")) return "Leadership";
+  return course.title;
+}
+
+function courseHref(childId: string, courseId: string, lessonId?: string) {
+  const params = new URLSearchParams({ child: childId, course: courseId });
+  if (lessonId) params.set("lesson", lessonId);
+  return `/parent/courses?${params.toString()}`;
+}
+
 export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -121,15 +136,18 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const selectedCourse = selectedChild.courses.find((course) => course.id === params?.course) ?? selectedChild.courses[0] ?? null;
-  const selectedProgramId = selectedCourse?.id ?? null;
+  const selectedProgramId = selectedCourse?.programId ?? null;
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && !hasFullGenM(selectedChild);
   const selectedLessonUpdates = selectedCourse
     ? selectedChild.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
     : [];
   const selectedLesson =
     selectedLessonUpdates.find((lesson) => lesson.id === params?.lesson) ?? selectedLessonUpdates[0] ?? null;
+  const selectedAssignments = selectedCourse
+    ? selectedChild.assignments.filter((assignment) => assignment.programTitle === selectedCourse.title)
+    : [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
-  if (selectedProgramId && selectedCourse?.programSlug !== "full-bundle") {
+  if (selectedProgramId) {
     try {
       materials = await listMaterials({ programId: selectedProgramId, status: "approved", visibility: "students_parents", limit: 20, studentId: selectedChild.id });
     } catch {
@@ -156,7 +174,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
       title="Courses"
-      subtitle="Review each child's active programmes, term highlights, and weekly teacher updates in a compact family-friendly view."
+      subtitle="Review live sessions and open each programme curriculum exactly as teachers publish it."
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
@@ -191,8 +209,27 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       />
 
       <SectionCard
+        eyebrow="Live sessions"
+        title="Scheduled sessions overview"
+        action={<Link href={`/parent/schedule?child=${selectedChild.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open full schedule</Link>}
+      >
+        <div className={`grid gap-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+          {selectedChild.schedule.slice(0, 4).map((session) => (
+            <div key={session.id} className="grid gap-2 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b] md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center">
+              <p className="font-semibold text-[#22304a]">{session.title}</p>
+              <p>{session.startTime}-{session.endTime} {session.timezone}</p>
+              <p className="text-xs text-[#6d7785]">{session.teacherName ?? "Teacher assigned"}</p>
+            </div>
+          ))}
+          {!selectedChild.schedule.length ? (
+            <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm text-[#5f6b7a]">Scheduled live classes will appear here.</p>
+          ) : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard
         eyebrow="Programmes"
-        title={`${selectedChild.name}'s courses`}
+        title={`${selectedChild.name}'s curriculum`}
         action={
           !hasFullGenM(selectedChild) ? (
             <Link
@@ -208,15 +245,16 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           {selectedChild.courses.map((course) => (
             <Link
               key={`${course.id}-tab`}
-              href={`/parent/courses?child=${selectedChild.id}&course=${course.id}`}
+              href={courseHref(selectedChild.id, course.id)}
               className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${
                 selectedCourse?.id === course.id ? "bg-[#22304a] text-white" : "border border-[#eadfce] bg-white text-[#22304a]"
               }`}
             >
-              {course.title}
+              {programTabLabel(course)}
             </Link>
           ))}
         </div>
+        {false ? (
         <div className={`grid gap-4 lg:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
           {selectedChild.courses.filter((course) => course.id === selectedCourse?.id).map((course) => (
             <div key={course.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
@@ -331,9 +369,28 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
             </div>
           ))}
         </div>
+        ) : selectedCourse ? (
+          <div className="mt-5 grid gap-3 rounded-[22px] bg-[#fbf6ef] p-4 text-sm text-[#4d5a6b] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+            <div>
+              <h3 className="text-lg font-semibold text-[#22304a]">{selectedCourse.title}</h3>
+              <p className="mt-1">Teacher: {selectedCourse.roomAssignment?.teacherName ?? (selectedCourse.teachers.map((teacher) => teacher.name).slice(0, 2).join(", ") || "Assigned soon")}</p>
+              {selectedCourse.roomAssignment?.roomName || selectedCourse.roomAssignment?.roomCode ? (
+                <p className="mt-1 text-xs text-[#6d7785]">
+                  Group: {selectedCourse.roomAssignment.roomName ?? "Assigned group"}
+                  {selectedCourse.roomAssignment.roomCode ? ` - ${selectedCourse.roomAssignment.roomCode}` : ""}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">{selectedLessonUpdates.length} lessons</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">{selectedAssignments.length} tasks</span>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">{materials.length} materials</span>
+            </div>
+          </div>
+        ) : null}
       </SectionCard>
 
-      {selectedCourse ? (
+      {false && selectedCourse ? (
         <SectionCard eyebrow="Weekly lessons" title={`${selectedCourse.title} lesson content`}>
           <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
             {selectedLessonUpdates.map((update) => (
@@ -372,6 +429,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         </SectionCard>
       ) : null}
 
+      {false ? (
       <SectionCard eyebrow="Course library" title="Approved materials">
         <div className="space-y-4">
           {Object.entries(groupedMaterials).map(([folderName, folderMaterials]) => (
@@ -399,7 +457,9 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           ) : null}
         </div>
       </SectionCard>
+      ) : null}
 
+      {false ? (
       <SectionCard eyebrow="Assignments" title="Coursework tracking">
         <div id="parent-assignments" />
         <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
@@ -427,6 +487,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           ))}
         </div>
       </SectionCard>
+      ) : null}
 
       {selectedCourse ? (
         <SectionCard eyebrow="Curriculum" title={`${selectedCourse.title} LMS viewer`}>
@@ -509,6 +570,36 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                       <p className="mt-2">{selectedLesson.homework}</p>
                     </div>
                   ) : null}
+                  <div className="mt-5 grid gap-4 xl:grid-cols-2">
+                    <div className="rounded-[18px] bg-[#fbf6ef] p-4">
+                      <p className="text-sm font-semibold text-[#22304a]">Uploaded materials</p>
+                      <div className="mt-3 grid gap-2">
+                        {materials.slice(0, 6).map((material) => (
+                          <a key={material.id} href={material.webViewLink ?? "#"} target="_blank" className="rounded-2xl bg-white px-4 py-3 text-sm">
+                            <p className="font-semibold text-[#22304a]">{material.name}</p>
+                            <p className="mt-1 text-xs text-[#617184]">
+                              {material.folderName ?? "General"}{material.uploadedBy ? ` - ${material.uploadedBy}` : ""}
+                            </p>
+                          </a>
+                        ))}
+                        {!materials.length ? <p className="text-sm leading-6 text-[#5f6b7a]">Teacher uploads for this programme will appear here.</p> : null}
+                      </div>
+                    </div>
+                    <div className="rounded-[18px] bg-[#fbf6ef] p-4">
+                      <p className="text-sm font-semibold text-[#22304a]">Tasks for this programme</p>
+                      <div className="mt-3 grid gap-2">
+                        {selectedAssignments.slice(0, 6).map((assignment) => (
+                          <div key={assignment.id} className="rounded-2xl bg-white px-4 py-3 text-sm">
+                            <p className="font-semibold text-[#22304a]">{assignment.title}</p>
+                            <p className="mt-1 text-xs text-[#617184]">
+                              {assignment.status.replace(/_/g, " ")} - Due {formatDate(assignment.dueDate)}
+                            </p>
+                          </div>
+                        ))}
+                        {!selectedAssignments.length ? <p className="text-sm leading-6 text-[#5f6b7a]">Teacher tasks for this programme will appear here.</p> : null}
+                      </div>
+                    </div>
+                  </div>
                 </article>
               ) : (
                 <div className="rounded-[18px] bg-[#fbf6ef] p-5 text-sm leading-7 text-[#5f6b7a]">

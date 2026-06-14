@@ -82,7 +82,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   if (selectedCourse) {
     try {
-      materials = await listMaterials({ programId: selectedCourse.id, status: "approved", visibility: "students_parents", limit: 20, studentId: child.id });
+      materials = await listMaterials({ programId: selectedCourse.programId, status: "approved", visibility: "students_parents", limit: 20, studentId: child.id });
     } catch {
       materials = [];
     }

@@ -22,6 +22,7 @@ import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 
 type ChildCourseSummary = {
   id: string;
+  programId: string;
   programSlug: string;
   title: string;
   status: string;
@@ -128,6 +129,7 @@ type ChildAssignmentSummary = {
 
 type ChildLessonUpdateSummary = {
   id: string;
+  teacherUserId: string | null;
   programTitle: string;
   scheduleTitle: string;
   lessonDate: Date;
@@ -760,6 +762,7 @@ function mapLessonUpdates(enrollments: any[]) {
 
           return {
             id: log.id,
+            teacherUserId: log.teacherUserId ?? null,
             programTitle: enrollment.program.title,
             scheduleTitle: schedule.title,
             lessonDate: log.lessonDate,
@@ -935,6 +938,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       ?.gender ?? null;
   const courseSummaries: ChildCourseSummary[] = (validEnrollments as DashboardEnrollment[]).map((enrollment) => ({
     id: enrollment.id,
+    programId: enrollment.program.id,
     programSlug: enrollment.program.slug,
     title: enrollment.program.title,
     status: enrollment.status.replace(/_/g, " "),
@@ -992,69 +996,6 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       .slice(0, 3),
     roomAssignment: getStudentRoomAssignment(child.learningNotes, enrollment.program.id),
   }));
-  const enrolledProgramSlugs = new Set(courseSummaries.map((course) => course.programSlug));
-  const hasFullGenMAccess = FULL_GENM_PROGRAM_SLUGS.every((slug) => enrolledProgramSlugs.has(slug));
-  const displayedCourses: ChildCourseSummary[] = hasFullGenMAccess
-    ? [
-        {
-          id: "full-genm",
-          programSlug: "full-bundle",
-          title: "Gen-Mumins Full Bundle",
-          status: accessLocked ? "PENDING" : "ACTIVE",
-          startedAt:
-            courseSummaries
-              .map((course) => course.startedAt)
-              .filter((date): date is Date => Boolean(date))
-              .sort((left, right) => left.getTime() - right.getTime())[0] ?? null,
-          meetingCount: schedule.length,
-          strapline: "All four Gen-Mumins programmes in one connected learning plan.",
-          description:
-            "Seerah, Life Lessons & Leadership, Arabic, and Qur'anic Tajweed are active together as the full Gen-Mumins programme.",
-          outcomes: genMCoreOutcomes,
-          uploadIdeas: Array.from(new Set(genMProgrammes.flatMap((programme) => programme.uploadIdeas))).slice(0, 8),
-          keyMaterials: Array.from(new Set(genMProgrammes.flatMap((programme) => programme.keyMaterials))).slice(0, 10),
-          weeklyFlow: genMProgrammeSchedule,
-          focusTerms: ["Arabic", "Qur'anic Tajweed", "The Prophet's Seerah", "Life Lessons & Leadership"],
-          weeklySchedule: genMProgrammeSchedule,
-          wholePlanOutcomes: genMCoreOutcomes,
-          policies: genMPolicies,
-          termPlans: genMTerms.map((term) => ({
-            id: term.id,
-            title: term.title,
-            window: term.window,
-            level: term.level,
-            highlights: term.highlights,
-          })),
-          teachers: genMTeachers.map((teacher) => ({
-            name: teacher.name,
-            title: teacher.title,
-            credential: teacher.credential,
-            bio: teacher.bio,
-            email: teacher.email,
-            specialties: teacher.specialties,
-          })),
-          recentLessonTopics: lessonUpdates.slice(0, 4).map((update) => update.topic),
-          currentTaskTitles: assignments.slice(0, 4).map((assignment) => assignment.title),
-          recentLessonCards: lessonUpdates.slice(0, 3).map((update) => ({
-            id: update.id,
-            topic: update.topic,
-            teacherName: update.teacherName,
-            weekLabel: update.weekLabel,
-            contentType: update.contentType,
-          })),
-          currentTaskCards: assignments.slice(0, 3).map((assignment) => ({
-            id: assignment.id,
-            title: assignment.title,
-            teacherName: assignment.teacherName,
-            taskCategory: assignment.taskCategory,
-            weekLabel: assignment.weekLabel,
-          })),
-          upcomingSessions: schedule.slice(0, 3),
-          roomAssignment: courseSummaries.find((course) => course.roomAssignment)?.roomAssignment ?? null,
-        },
-      ]
-    : courseSummaries;
-
   return {
     id: child.id,
     name:
@@ -1069,7 +1010,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     accessLocked,
     attendanceRate,
     attendanceBreakdown,
-    courses: displayedCourses,
+    courses: courseSummaries,
     schedule,
     nextClass: schedule[0] ?? null,
     quizzes,
