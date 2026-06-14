@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye, X } from "lucide-react";
+import { Eye, Pencil, Trash2, X } from "lucide-react";
 
 export type FeedbackReviewEntry = {
   id: string;
@@ -14,6 +14,15 @@ export type FeedbackReviewEntry = {
   metrics: Array<{ label: string; value: string }>;
   summary: Array<{ label: string; value: string }>;
   details: Array<{ label: string; value: string }>;
+  editable?: {
+    weekLabel: string;
+    moodRating: number | null;
+    confidence: number | null;
+    workload: number | null;
+    wins: string | null;
+    concerns: string | null;
+    supportNeeded: string | null;
+  };
 };
 
 type FeedbackReviewConsoleProps = {
@@ -22,6 +31,8 @@ type FeedbackReviewConsoleProps = {
   showAudienceTabs?: boolean;
   showProgrammeTabs?: boolean;
   emptyLabel: string;
+  deleteAction?: (formData: FormData) => void | Promise<void>;
+  updateAction?: (formData: FormData) => void | Promise<void>;
 };
 
 const audienceTabs = [
@@ -37,6 +48,8 @@ export function FeedbackReviewConsole({
   showAudienceTabs = true,
   showProgrammeTabs = true,
   emptyLabel,
+  deleteAction,
+  updateAction,
 }: FeedbackReviewConsoleProps) {
   const [activeAudience, setActiveAudience] = useState(defaultAudience);
   const [activeProgramme, setActiveProgramme] = useState("ALL");
@@ -94,18 +107,18 @@ export function FeedbackReviewConsole({
       ) : null}
 
       <div className="overflow-hidden rounded-[24px] border border-[#dce4ed] bg-white shadow-sm">
-        <div className="grid grid-cols-[minmax(0,1.1fr)_minmax(150px,0.7fr)_minmax(140px,0.65fr)_96px] gap-3 border-b border-[#edf1f5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">
+        <div className="hidden gap-3 border-b border-[#edf1f5] bg-[#f8fafc] px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#6f7d8f] md:grid md:grid-cols-[minmax(260px,1.1fr)_minmax(180px,0.7fr)_minmax(180px,0.65fr)_160px]">
           <span>Submission</span>
-          <span className="hidden md:block">Programme</span>
-          <span className="hidden md:block">Overview</span>
+          <span>Programme</span>
+          <span>Overview</span>
           <span className="text-right">Action</span>
         </div>
 
         <div className="divide-y divide-[#edf1f5]">
           {filteredEntries.map((entry) => (
-            <div key={entry.id} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1.1fr)_minmax(150px,0.7fr)_minmax(140px,0.65fr)_96px] md:items-center">
+            <div key={entry.id} className="grid gap-4 px-4 py-4 md:grid-cols-[minmax(260px,1.1fr)_minmax(180px,0.7fr)_minmax(180px,0.65fr)_160px] md:items-center">
               <div className="min-w-0">
-                <p className="break-words font-semibold text-[#22304a]">{entry.title}</p>
+                <p className="break-words text-base font-semibold leading-6 text-[#22304a]">{entry.title}</p>
                 <p className="mt-1 text-sm text-[#617184]">
                   {entry.submittedBy} - {entry.submittedAt}
                 </p>
@@ -125,14 +138,25 @@ export function FeedbackReviewConsole({
                   </span>
                 ))}
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedEntry(entry)}
-                className="ml-auto inline-flex items-center gap-2 rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#17243a]"
-              >
-                <Eye className="h-4 w-4" />
-                View
-              </button>
+              <div className="flex flex-wrap justify-start gap-2 md:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedEntry(entry)}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#17243a]"
+                >
+                  <Eye className="h-4 w-4" />
+                  View / Edit
+                </button>
+                {deleteAction ? (
+                  <form action={deleteAction}>
+                    <input type="hidden" name="feedbackId" value={entry.id} />
+                    <button className="inline-flex items-center gap-2 rounded-full border border-[#efb3b3] bg-white px-3 py-2 text-xs font-semibold text-[#b24646] transition hover:bg-[#fff4f4]">
+                      <Trash2 className="h-4 w-4" />
+                      Delete
+                    </button>
+                  </form>
+                ) : null}
+              </div>
             </div>
           ))}
 
@@ -188,11 +212,83 @@ export function FeedbackReviewConsole({
                   ))}
                 </div>
               </section>
+
+              {updateAction && selectedEntry.editable ? (
+                <section className="rounded-[22px] border border-[#dce4ed] bg-[#f8fafc] p-4">
+                  <div className="flex items-center gap-2">
+                    <Pencil className="h-4 w-4 text-[#0f4d81]" />
+                    <p className="text-sm font-semibold text-[#22304a]">Edit feedback fields</p>
+                  </div>
+                  <form action={updateAction} className="mt-4 grid gap-3">
+                    <input type="hidden" name="feedbackId" value={selectedEntry.id} />
+                    <label className="grid gap-1 text-sm font-semibold text-[#22304a]">
+                      Week / title
+                      <input
+                        name="weekLabel"
+                        defaultValue={selectedEntry.editable.weekLabel}
+                        className="rounded-xl border border-[#c9d7e6] bg-white px-3 py-2 text-sm font-medium text-[#22304a] outline-none"
+                      />
+                    </label>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <RatingInput name="moodRating" label="Mood" value={selectedEntry.editable.moodRating} />
+                      <RatingInput name="confidence" label="Confidence" value={selectedEntry.editable.confidence} />
+                      <RatingInput name="workload" label="Workload" value={selectedEntry.editable.workload} />
+                    </div>
+                    <FeedbackTextarea name="wins" label="Wins / taught" value={selectedEntry.editable.wins} />
+                    <FeedbackTextarea name="concerns" label="Concerns" value={selectedEntry.editable.concerns} />
+                    <FeedbackTextarea name="supportNeeded" label="Support / next steps" value={selectedEntry.editable.supportNeeded} />
+                    <button className="w-fit rounded-full bg-[#0f4d81] px-5 py-2.5 text-sm font-semibold text-white">
+                      Save feedback edits
+                    </button>
+                  </form>
+                </section>
+              ) : null}
+
+              {deleteAction ? (
+                <form action={deleteAction} className="rounded-[22px] border border-[#efb3b3] bg-[#fff8f8] p-4">
+                  <input type="hidden" name="feedbackId" value={selectedEntry.id} />
+                  <p className="text-sm font-semibold text-[#8f2f2f]">Delete this feedback submission</p>
+                  <p className="mt-1 text-sm text-[#7b5d5d]">This removes the submitted form from the admin console.</p>
+                  <button className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#b24646] px-4 py-2 text-sm font-semibold text-white">
+                    <Trash2 className="h-4 w-4" />
+                    Delete feedback
+                  </button>
+                </form>
+              ) : null}
             </div>
           </div>
         </div>
       ) : null}
     </div>
+  );
+}
+
+function RatingInput({ name, label, value }: { name: string; label: string; value: number | null }) {
+  return (
+    <label className="grid gap-1 text-sm font-semibold text-[#22304a]">
+      {label}
+      <input
+        name={name}
+        type="number"
+        min="1"
+        max="5"
+        defaultValue={value ?? ""}
+        className="rounded-xl border border-[#c9d7e6] bg-white px-3 py-2 text-sm font-medium text-[#22304a] outline-none"
+      />
+    </label>
+  );
+}
+
+function FeedbackTextarea({ name, label, value }: { name: string; label: string; value: string | null }) {
+  return (
+    <label className="grid gap-1 text-sm font-semibold text-[#22304a]">
+      {label}
+      <textarea
+        name={name}
+        defaultValue={value ?? ""}
+        className="min-h-24 rounded-xl border border-[#c9d7e6] bg-white px-3 py-2 text-sm font-medium leading-6 text-[#22304a] outline-none"
+      />
+    </label>
   );
 }
 

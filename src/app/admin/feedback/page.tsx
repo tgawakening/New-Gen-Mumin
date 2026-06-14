@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { FeedbackAudience } from "@prisma/client";
 
 import { getCurrentSession } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { getAdminFeedbackOverview } from "@/lib/community/feedback";
 import { FeedbackReviewConsole, type FeedbackReviewEntry } from "@/components/dashboard/feedback/FeedbackReviewConsole";
 
@@ -55,12 +57,61 @@ function toReviewEntry(entry: Awaited<ReturnType<typeof getAdminFeedbackOverview
     ],
     summary,
     details: [...payloadEntries(entry.rawPayload), ...summary],
+    editable: {
+      weekLabel: entry.weekLabel,
+      moodRating: entry.moodRating,
+      confidence: entry.confidence,
+      workload: entry.workload,
+      wins: entry.wins,
+      concerns: entry.concerns,
+      supportNeeded: entry.supportNeeded,
+    },
   };
 }
 
 export default async function AdminFeedbackPage() {
   const session = await getCurrentSession();
   if (!session || session.user.role !== "ADMIN") redirect("/admin");
+
+  async function deleteFeedbackAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+
+    const feedbackId = String(formData.get("feedbackId") || "");
+    if (!feedbackId) return;
+
+    await db.weeklyFeedbackResponse.delete({ where: { id: feedbackId } });
+    revalidatePath("/admin/feedback");
+  }
+
+  async function updateFeedbackAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+
+    const feedbackId = String(formData.get("feedbackId") || "");
+    if (!feedbackId) return;
+
+    const parseRating = (value: FormDataEntryValue | null) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? Math.min(5, Math.max(1, Math.round(parsed))) : null;
+    };
+
+    await db.weeklyFeedbackResponse.update({
+      where: { id: feedbackId },
+      data: {
+        weekLabel: String(formData.get("weekLabel") || "Weekly feedback").trim() || "Weekly feedback",
+        moodRating: parseRating(formData.get("moodRating")),
+        confidence: parseRating(formData.get("confidence")),
+        workload: parseRating(formData.get("workload")),
+        wins: String(formData.get("wins") || "").trim() || null,
+        concerns: String(formData.get("concerns") || "").trim() || null,
+        supportNeeded: String(formData.get("supportNeeded") || "").trim() || null,
+      },
+    });
+    revalidatePath("/admin/feedback");
+  }
 
   const overview = await getAdminFeedbackOverview();
   const reviewEntries = overview.responses.map(toReviewEntry);
@@ -105,6 +156,8 @@ export default async function AdminFeedbackPage() {
             entries={reviewEntries}
             defaultAudience="PARENT"
             emptyLabel="Feedback submissions will appear here."
+            deleteAction={deleteFeedbackAction}
+            updateAction={updateFeedbackAction}
           />
         </section>
       </div>
