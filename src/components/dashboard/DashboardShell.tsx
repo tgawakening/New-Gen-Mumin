@@ -81,7 +81,7 @@ export function DashboardShell({
 
       <div className="section-container grid gap-5 py-8 xl:grid-cols-[220px_minmax(0,1fr)]">
         <aside className="min-h-full space-y-5">
-          <div className="sticky top-3 rounded-[24px] bg-[#22304a] p-4 text-white shadow-[0_20px_50px_rgba(34,48,74,0.22)]">
+          <div className="dashboard-sticky-sidebar rounded-[24px] bg-[#22304a] p-4 text-white shadow-[0_20px_50px_rgba(34,48,74,0.22)]">
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#f2c58f]">{accentLabel}</p>
             <h2 className="mt-3 text-xl font-semibold">Dashboard map</h2>
             <div className="mt-4 space-y-2">
