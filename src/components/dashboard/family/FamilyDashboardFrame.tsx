@@ -14,7 +14,6 @@ import {
   SunMedium,
   Trophy,
 } from "lucide-react";
-import { BatchCommunityButton } from "@/components/dashboard/family/BatchCommunityButton";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { FamilyNavLinkClient } from "@/components/dashboard/family/FamilyNavLinkClient";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
@@ -177,10 +176,6 @@ export function FamilyDashboardFrame({
           {pendingReason ? <PendingAccessNotice message={pendingReason} /> : null}
           {children}
         </div>
-      </div>
-
-      <div className="fixed bottom-4 right-4 z-50 sm:bottom-6 sm:right-6">
-        <BatchCommunityButton />
       </div>
     </div>
   );

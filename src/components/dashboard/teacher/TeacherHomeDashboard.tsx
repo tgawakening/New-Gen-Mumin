@@ -29,6 +29,28 @@ export function TeacherHomeDashboard({
         ]}
       />
 
+      {!adminPreview ? (
+        <TeacherSection eyebrow="Start here" title="Main teaching workflow">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: "Set roster", href: "/teacher/roster", detail: "Confirm students for each programme." },
+              { label: "Live sessions", href: "/teacher/live-sessions", detail: "Start or manage scheduled classes." },
+              { label: "Curriculum builder", href: "/teacher/course-builder", detail: "Publish lessons, tasks, and weekly content." },
+              { label: "Lesson log", href: "/teacher/lesson-log", detail: "Record what happened in class." },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-2xl border border-[#dfe7ef] bg-[#fbf6ef] px-4 py-4 text-sm transition hover:border-[#f0b36f] hover:bg-[#fff8ef]"
+              >
+                <p className="font-semibold text-[#22304a]">{item.label}</p>
+                <p className="mt-2 leading-6 text-[#617184]">{item.detail}</p>
+              </Link>
+            ))}
+          </div>
+        </TeacherSection>
+      ) : null}
+
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.75fr)]">
         <div className="space-y-6">
           <TeacherSection
