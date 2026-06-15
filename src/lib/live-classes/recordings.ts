@@ -37,6 +37,43 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
   };
 }
 
+function isPlayableVideoRecording(recording: { fileType?: string | null; topic?: string | null; playUrl?: string | null }) {
+  const fileType = (recording.fileType ?? "").toUpperCase();
+  const topic = (recording.topic ?? "").toLowerCase();
+  const playUrl = (recording.playUrl ?? "").toLowerCase();
+
+  if (["CHAT", "CC", "TRANSCRIPT", "TIMELINE", "SUMMARY"].includes(fileType)) return false;
+  if (topic.includes("chat file") || playUrl.includes("file_type=chat")) return false;
+  if (fileType && !["MP4", "M4A"].includes(fileType)) return false;
+
+  return true;
+}
+
+function collapseRecordingsBySession(recordings: any[]) {
+  const visible = recordings.filter(isPlayableVideoRecording);
+  const grouped = new Map<string, any>();
+
+  for (const recording of visible) {
+    const key = [
+      recording.scheduleId,
+      recording.recordingStart ? recording.recordingStart.toISOString().slice(0, 10) : recording.availableAt.toISOString().slice(0, 10),
+    ].join("|");
+    const existing = grouped.get(key);
+    if (!existing) {
+      grouped.set(key, recording);
+      continue;
+    }
+
+    const currentType = (recording.fileType ?? "").toUpperCase();
+    const existingType = (existing.fileType ?? "").toUpperCase();
+    if (currentType === "MP4" && existingType !== "MP4") {
+      grouped.set(key, recording);
+    }
+  }
+
+  return [...grouped.values()];
+}
+
 function includeRecordingRelations() {
   return {
     schedule: {
@@ -94,7 +131,7 @@ export async function listStudentRecordings(studentUserId: string) {
       orderBy: { availableAt: "desc" },
     });
 
-    return recordings.filter((recording) => recordingIsVisibleToStudent(recording, student.id)).map(mapRecording);
+    return collapseRecordingsBySession(recordings.filter((recording) => recordingIsVisibleToStudent(recording, student.id))).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -133,7 +170,7 @@ export async function listParentChildRecordings(parentUserId: string, childId: s
       orderBy: { availableAt: "desc" },
     });
 
-    return recordings.filter((recording) => recordingIsVisibleToStudent(recording, childId)).map(mapRecording);
+    return collapseRecordingsBySession(recordings.filter((recording) => recordingIsVisibleToStudent(recording, childId))).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -156,7 +193,7 @@ export async function listTeacherRecordings(teacherUserId: string) {
       orderBy: { availableAt: "desc" },
     });
 
-    return recordings.map(mapRecording);
+    return collapseRecordingsBySession(recordings).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -174,7 +211,7 @@ export async function listAdminRecordings() {
       orderBy: { availableAt: "desc" },
     });
 
-    return recordings.map((recording) => ({
+    return collapseRecordingsBySession(recordings).map((recording) => ({
       ...mapRecording(recording),
       scheduleId: recording.scheduleId,
       teacherId: recording.schedule.teacherId,

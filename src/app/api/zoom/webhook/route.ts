@@ -25,6 +25,34 @@ function fallbackRecordingFileId(scheduleId: string, playUrl: string) {
   return `${scheduleId}-${createHash("sha256").update(playUrl).digest("hex").slice(0, 32)}`;
 }
 
+function choosePrimaryRecordingFile(
+  files: Array<{
+    id?: string;
+    play_url?: string;
+    download_url?: string;
+    file_type?: string;
+    file_size?: number;
+    recording_start?: string;
+    recording_end?: string;
+  }>,
+) {
+  const playable = files.filter((file) => {
+    const fileType = (file.file_type ?? "").toUpperCase();
+    const playUrl = (file.play_url ?? "").toLowerCase();
+    if (!file.play_url) return false;
+    if (["CHAT", "CC", "TRANSCRIPT", "TIMELINE", "SUMMARY"].includes(fileType)) return false;
+    if (playUrl.includes("file_type=chat")) return false;
+    return true;
+  });
+
+  return (
+    playable.find((file) => (file.file_type ?? "").toUpperCase() === "MP4") ??
+    playable.find((file) => (file.file_type ?? "").toUpperCase() === "M4A") ??
+    playable[0] ??
+    null
+  );
+}
+
 function isRecordingTableUnavailable(error: unknown) {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
@@ -144,12 +172,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "recording.completed") {
-    const recordingFiles = payload.payload?.object?.recording_files?.filter((file) => file.play_url) ?? [];
-    if (!recordingFiles.length) {
+    const primaryFile = choosePrimaryRecordingFile(payload.payload?.object?.recording_files ?? []);
+    if (!primaryFile) {
       return NextResponse.json({ received: true, recordings: 0 });
     }
 
-    for (const file of recordingFiles) {
+    for (const file of [primaryFile]) {
       const recordingFileId = file.id ?? fallbackRecordingFileId(schedule.id, file.play_url!);
       try {
         await db.liveClassRecording.upsert({
@@ -213,7 +241,7 @@ export async function POST(request: NextRequest) {
       })),
     });
 
-    return NextResponse.json({ received: true, recordings: recordingFiles.length });
+    return NextResponse.json({ received: true, recordings: 1 });
   }
 
   return NextResponse.json({ received: true });
