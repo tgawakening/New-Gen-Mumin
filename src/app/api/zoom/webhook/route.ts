@@ -1,8 +1,14 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import {
+  cleanLiveClassTitle,
+  enrollmentMatchesLiveClassAudience,
+  getLiveClassAudienceGroup,
+  getScheduleRosterStudentIds,
+} from "@/lib/live-classes/service";
 
 function webhookSecret() {
   return env.success ? env.data.ZOOM_WEBHOOK_SECRET_TOKEN : undefined;
@@ -12,6 +18,10 @@ function hashWithSecret(value: string) {
   const secret = webhookSecret();
   if (!secret) return null;
   return createHmac("sha256", secret).update(value).digest("hex");
+}
+
+function fallbackRecordingFileId(scheduleId: string, playUrl: string) {
+  return `${scheduleId}-${createHash("sha256").update(playUrl).digest("hex").slice(0, 32)}`;
 }
 
 function verifyZoomSignature(request: NextRequest, rawBody: string) {
@@ -39,7 +49,15 @@ export async function POST(request: NextRequest) {
         topic?: string;
         join_url?: string;
         host_email?: string;
-        recording_files?: Array<{ play_url?: string }>;
+        recording_files?: Array<{
+          id?: string;
+          play_url?: string;
+          download_url?: string;
+          file_type?: string;
+          file_size?: number;
+          recording_start?: string;
+          recording_end?: string;
+        }>;
       };
     };
   };
@@ -72,7 +90,17 @@ export async function POST(request: NextRequest) {
             where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
             include: {
               parent: { include: { user: true } },
-              student: { include: { user: true } },
+              student: {
+                include: {
+                  user: true,
+                  registrationStudents: {
+                    select: {
+                      countryCode: true,
+                      countryName: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -103,14 +131,68 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "recording.completed") {
-    await db.notification.create({
-      data: {
-        userId: schedule.teacher.user.id,
-        title: "Zoom recording ready",
-        body: `${schedule.title} has a new Zoom recording available in Zoom cloud recordings.`,
-        href: "/teacher/schedule",
-      },
+    const recordingFiles = payload.payload?.object?.recording_files?.filter((file) => file.play_url) ?? [];
+    if (!recordingFiles.length) {
+      return NextResponse.json({ received: true, recordings: 0 });
+    }
+
+    for (const file of recordingFiles) {
+      const recordingFileId = file.id ?? fallbackRecordingFileId(schedule.id, file.play_url!);
+      await db.liveClassRecording.upsert({
+        where: {
+          recordingFileId,
+        },
+        create: {
+          scheduleId: schedule.id,
+          recordingFileId,
+          meetingId,
+          topic: payload.payload?.object?.topic ?? schedule.title,
+          fileType: file.file_type ?? null,
+          playUrl: file.play_url!,
+          downloadUrl: file.download_url ?? null,
+          recordingStart: file.recording_start ? new Date(file.recording_start) : null,
+          recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
+          fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
+        },
+        update: {
+          playUrl: file.play_url!,
+          downloadUrl: file.download_url ?? null,
+          fileType: file.file_type ?? null,
+          recordingStart: file.recording_start ? new Date(file.recording_start) : null,
+          recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
+          fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
+          deletedAt: null,
+        },
+      });
+    }
+
+    const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
+    const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+    const users = new Map<string, { role: "teacher" | "student" | "parent"; childId?: string }>();
+    users.set(schedule.teacher.user.id, { role: "teacher" });
+    for (const enrollment of schedule.program.enrollments) {
+      if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+      if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
+      users.set(enrollment.student.user.id, { role: "student" });
+      users.set(enrollment.parent.user.id, { role: "parent", childId: enrollment.studentId });
+    }
+
+    const title = cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title);
+    await db.notification.createMany({
+      data: [...users.entries()].map(([userId, item]) => ({
+        userId,
+        title: "Class recording ready",
+        body: `${title} recording is now available.`,
+        href:
+          item.role === "teacher"
+            ? "/teacher/recordings"
+            : item.role === "parent"
+              ? `/parent/recordings${item.childId ? `?child=${item.childId}` : ""}`
+              : "/student/recordings",
+      })),
     });
+
+    return NextResponse.json({ received: true, recordings: recordingFiles.length });
   }
 
   return NextResponse.json({ received: true });

@@ -3,6 +3,7 @@ export function getTeacherNavItems() {
     { label: "Dashboard", href: "/teacher", icon: "home" },
     { label: "Roster", href: "/teacher/roster", icon: "check" },
     { label: "Live Sessions", href: "/teacher/live-sessions", icon: "video" },
+    { label: "Recordings", href: "/teacher/recordings", icon: "video" },
     { label: "Classes", href: "/teacher/classes", icon: "classes" },
     { label: "Schedule", href: "/teacher/schedule", icon: "calendar" },
     { label: "Course Builder", href: "/teacher/course-builder", icon: "builder" },

@@ -292,6 +292,7 @@ model ClassSchedule {
   teacher           TeacherProfile     @relation(fields: [teacherId], references: [id])
   term              AcademicTerm?      @relation(fields: [termId], references: [id])
   lessonLogs        LessonLog[]
+  recordings        LiveClassRecording[]
   scheduleRosters   ClassScheduleRoster[]
 
   @@index([createdByUserId], map: "ClassSchedule_createdByUserId_fkey")
@@ -330,6 +331,29 @@ model ClassScheduleRoster {
   @@unique([scheduleId, studentId])
   @@index([scheduleId], map: "ClassScheduleRoster_scheduleId_fkey")
   @@index([studentId], map: "ClassScheduleRoster_studentId_fkey")
+}
+
+model LiveClassRecording {
+  id              String        @id @default(cuid())
+  scheduleId      String
+  recordingFileId String?
+  meetingId       String?
+  topic           String?
+  fileType        String?
+  playUrl         String
+  downloadUrl     String?
+  recordingStart  DateTime?
+  recordingEnd    DateTime?
+  fileSize        BigInt?
+  availableAt     DateTime      @default(now())
+  deletedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  schedule        ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([recordingFileId])
+  @@index([scheduleId, availableAt])
+  @@index([deletedAt, availableAt])
 }
 
 model Registration {

@@ -12,6 +12,7 @@ import {
   Sparkles,
   SunMedium,
   Home,
+  Video,
 } from "lucide-react";
 
 type FamilyNavIcon =
@@ -19,6 +20,7 @@ type FamilyNavIcon =
   | "book"
   | "check"
   | "calendar"
+  | "video"
   | "sparkles"
   | "chart"
   | "journal"
@@ -34,6 +36,8 @@ function resolveIcon(icon?: FamilyNavIcon) {
       return CheckCircle2;
     case "calendar":
       return CalendarDays;
+    case "video":
+      return Video;
     case "sparkles":
       return Sparkles;
     case "chart":
