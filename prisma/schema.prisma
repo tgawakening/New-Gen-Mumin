@@ -294,6 +294,7 @@ model ClassSchedule {
   lessonLogs        LessonLog[]
   recordings        LiveClassRecording[]
   scheduleRosters   ClassScheduleRoster[]
+  sessionOccurrences LiveClassSessionOccurrence[]
 
   @@index([createdByUserId], map: "ClassSchedule_createdByUserId_fkey")
   @@index([programId], map: "ClassSchedule_programId_fkey")
@@ -354,6 +355,23 @@ model LiveClassRecording {
   @@unique([recordingFileId])
   @@index([scheduleId, availableAt])
   @@index([deletedAt, availableAt])
+}
+
+model LiveClassSessionOccurrence {
+  id             String        @id @default(cuid())
+  scheduleId     String
+  teacherUserId  String?
+  meetingId      String?
+  occurrenceDate DateTime
+  startedAt      DateTime      @default(now())
+  source         String        @default("platform")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  schedule       ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  @@unique([scheduleId, teacherUserId, occurrenceDate, source])
+  @@index([scheduleId, startedAt])
+  @@index([teacherUserId, occurrenceDate])
 }
 
 model Registration {

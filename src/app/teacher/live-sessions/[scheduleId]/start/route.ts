@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
@@ -51,6 +52,7 @@ export async function GET(_request: Request, context: RouteContext) {
       teacherId: teacher.id,
     },
     select: {
+      id: true,
       meetingId: true,
       meetingUrl: true,
     },
@@ -66,6 +68,12 @@ export async function GET(_request: Request, context: RouteContext) {
 
   try {
     const startUrl = await getZoomMeetingStartUrl(schedule.meetingId);
+    await recordLiveClassSessionOccurrence({
+      scheduleId: schedule.id,
+      teacherUserId: session.user.id,
+      meetingId: schedule.meetingId,
+      source: "teacher-start",
+    });
     return NextResponse.redirect(startUrl);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to open the teacher start link.";

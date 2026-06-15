@@ -55,6 +55,14 @@ function formatTeacherName(teacher: {
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
 }
 
+function formatFullDate(value: Date | null) {
+  return value ? new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(value) : "Start date not set";
+}
+
+function formatDateTime(value: Date) {
+  return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(value);
+}
+
 function parseCsvLine(line: string) {
   const values: string[] = [];
   let current = "";
@@ -309,6 +317,9 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       include: {
         program: true,
         teacher: { include: { user: true } },
+        sessionOccurrences: {
+          orderBy: { startedAt: "desc" },
+        },
       },
     }),
   ]);
@@ -546,6 +557,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                       <p className="font-semibold text-[#22304a]">{cleanLiveClassTitle(schedule.title)}</p>
                       <p className="mt-1 text-sm text-[#617184]">{schedule.program.title}</p>
                       <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{getLiveClassAudienceLabel(schedule.title)}</p>
+                      <p className="mt-2 text-xs font-semibold text-[#22304a]">Starts: {formatFullDate(schedule.startsOn)}</p>
                     </div>
                     <div className="text-sm text-[#22304a]">
                       <p>{formatTeacherName(schedule.teacher)}</p>
@@ -584,10 +596,25 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                     <p className="font-semibold text-[#22304a]">{cleanLiveClassTitle(schedule.title)}</p>
                     <p className="mt-1 text-sm text-[#617184]">{schedule.program.title}</p>
                     <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{getLiveClassAudienceLabel(schedule.title)}</p>
+                    <p className="mt-2 text-xs font-semibold text-[#22304a]">Starts: {formatFullDate(schedule.startsOn)}</p>
                   </div>
                   <div className="text-sm text-[#22304a]">
                     <p>{formatTeacherName(schedule.teacher)}</p>
                     <p className="mt-1 text-[#617184]">{WEEKDAYS[schedule.weekday]} {schedule.startTime}-{schedule.endTime}</p>
+                    <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-xs text-[#617184]">
+                      <p className="font-semibold text-[#22304a]">Teacher starts via this link: {schedule.sessionOccurrences.filter((entry) => entry.source === "teacher-start").length}</p>
+                      {schedule.sessionOccurrences.length ? (
+                        <div className="mt-1 space-y-1">
+                          {schedule.sessionOccurrences.slice(0, 3).map((entry) => (
+                            <p key={entry.id}>
+                              {formatDateTime(entry.startedAt)} · {entry.source === "teacher-start" ? "teacher" : entry.source === "admin-start" ? "admin" : "Zoom"}
+                            </p>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-1">No starts recorded yet.</p>
+                      )}
+                    </div>
                   </div>
                   <div className="text-sm text-[#22304a]">
                     <p>{schedule.meetingProvider ?? "No provider"}</p>

@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -119,6 +120,12 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "meeting.started") {
+    await recordLiveClassSessionOccurrence({
+      scheduleId: schedule.id,
+      meetingId,
+      source: "zoom-webhook",
+    });
+
     const users = new Map<string, "teacher" | "student" | "parent">();
     users.set(schedule.teacher.user.id, "teacher");
     for (const enrollment of schedule.program.enrollments) {

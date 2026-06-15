@@ -1,0 +1,56 @@
+import "server-only";
+
+import { db } from "@/lib/db";
+
+export function startOfUtcDay(value: Date) {
+  return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+}
+
+function isOccurrenceTableUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
+  return code === "P2021" || code === "P2022" || message.includes("LiveClassSessionOccurrence");
+}
+
+export async function recordLiveClassSessionOccurrence(input: {
+  scheduleId: string;
+  teacherUserId?: string | null;
+  meetingId?: string | null;
+  startedAt?: Date;
+  source?: string;
+}) {
+  const startedAt = input.startedAt ?? new Date();
+  const occurrenceDate = startOfUtcDay(startedAt);
+  const source = input.source ?? "platform";
+
+  try {
+    await db.liveClassSessionOccurrence.upsert({
+      where: {
+        scheduleId_teacherUserId_occurrenceDate_source: {
+          scheduleId: input.scheduleId,
+          teacherUserId: input.teacherUserId ?? "",
+          occurrenceDate,
+          source,
+        },
+      },
+      create: {
+        scheduleId: input.scheduleId,
+        teacherUserId: input.teacherUserId ?? "",
+        meetingId: input.meetingId ?? null,
+        occurrenceDate,
+        startedAt,
+        source,
+      },
+      update: {
+        meetingId: input.meetingId ?? null,
+        startedAt,
+      },
+    });
+  } catch (error) {
+    if (isOccurrenceTableUnavailable(error)) {
+      console.error("Live class occurrence table is not available yet.", error);
+      return;
+    }
+    throw error;
+  }
+}

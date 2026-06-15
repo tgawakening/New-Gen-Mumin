@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
@@ -39,6 +40,7 @@ export async function GET(request: Request, context: RouteContext) {
   const schedule = await db.classSchedule.findUnique({
     where: { id: scheduleId },
     select: {
+      id: true,
       meetingId: true,
     },
   });
@@ -53,6 +55,12 @@ export async function GET(request: Request, context: RouteContext) {
 
   try {
     const startUrl = await getZoomMeetingStartUrl(schedule.meetingId);
+    await recordLiveClassSessionOccurrence({
+      scheduleId: schedule.id,
+      teacherUserId: session.user.id,
+      meetingId: schedule.meetingId,
+      source: "admin-start",
+    });
     return NextResponse.redirect(startUrl);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to open the admin host link.";
