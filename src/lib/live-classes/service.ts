@@ -509,6 +509,54 @@ export async function syncScheduleRoster(scheduleId: string, studentIds: string[
   }
 }
 
+async function syncAutomaticScheduleRoster(scheduleId: string) {
+  const schedule = await db.classSchedule.findUnique({
+    where: { id: scheduleId },
+    select: {
+      id: true,
+      title: true,
+      teacherId: true,
+      programId: true,
+      program: {
+        select: {
+          enrollments: {
+            where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+            include: {
+              parent: {
+                include: {
+                  user: true,
+                },
+              },
+              student: {
+                include: {
+                  registrationStudents: {
+                    select: {
+                      countryCode: true,
+                      countryName: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!schedule) return;
+
+  const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+  const defaultRosterStudentIds = new Set(await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId));
+  const hasDefaultRoster = defaultRosterStudentIds.size > 0;
+  const studentIds = schedule.program.enrollments
+    .filter((enrollment) => !hasDefaultRoster || defaultRosterStudentIds.has(enrollment.studentId))
+    .filter((enrollment) => enrollmentMatchesLiveClassAudience(enrollment, audienceGroup))
+    .map((enrollment) => enrollment.studentId);
+
+  await syncScheduleRoster(schedule.id, Array.from(new Set(studentIds)));
+}
+
 export async function createLiveClass(input: CreateLiveClassInput, createdByUserId?: string) {
   const audienceGroup = normalizeAudienceGroup(input.audienceGroup);
   const teacherIds = input.teacherIds?.length ? input.teacherIds : input.teacherId ? [input.teacherId] : [];
@@ -586,6 +634,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
         update: {},
       });
 
+      await syncAutomaticScheduleRoster(schedule.id);
       createdSchedules.push(schedule);
     }
   }
@@ -634,6 +683,8 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
       startsOn: getScheduleStartDate(input),
     },
   });
+
+  await syncAutomaticScheduleRoster(schedule.id);
 
   const admins = await db.user.findMany({ where: { role: "ADMIN" } });
   if (admins.length) {
@@ -693,6 +744,8 @@ export async function approveTeacherLiveClass(scheduleId: string, approvedByUser
       recurringSeriesId: String(meeting.id),
     },
   });
+
+  await syncAutomaticScheduleRoster(updated.id);
 
   await db.notification.create({
     data: {
@@ -765,6 +818,8 @@ export async function syncScheduleToZoom(scheduleId: string) {
       startsOn: schedule.startsOn ?? nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
     },
   });
+
+  await syncAutomaticScheduleRoster(updated.id);
 
   await notifyEnrolledUsers(updated.id);
   return updated;
