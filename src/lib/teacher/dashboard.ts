@@ -35,6 +35,7 @@ export type TeacherDashboardData = {
     programId: string;
     title: string;
     weekday: number;
+    startsOn: Date | null;
     startTime: string;
     endTime: string;
     timezone: string;
@@ -333,6 +334,7 @@ export async function getTeacherDashboardData(userId: string) {
       programId: schedule.program.id,
       title: cleanLiveClassTitle(schedule.title),
       weekday: schedule.weekday,
+      startsOn: schedule.startsOn,
       startTime: schedule.startTime,
       endTime: schedule.endTime,
       timezone: schedule.timezone,

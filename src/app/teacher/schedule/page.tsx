@@ -7,6 +7,10 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { ensureTeacherLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection, formatWeekday } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
+function formatFullDate(value: Date | null) {
+  return value ? new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(value) : "Start date not set";
+}
+
 export default async function TeacherSchedulePage() {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -61,6 +65,9 @@ export default async function TeacherSchedulePage() {
               </div>
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {formatWeekday(entry.weekday)} • {entry.startTime}-{entry.endTime} • {entry.timezone}
+              </p>
+              <p className="mt-2 text-sm font-semibold text-[#22304a]">
+                Starts: {formatFullDate(entry.startsOn)}
               </p>
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 Students: {entry.activeEnrollments} active

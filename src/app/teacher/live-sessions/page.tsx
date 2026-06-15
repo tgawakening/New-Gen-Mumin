@@ -21,6 +21,10 @@ type PageProps = {
 };
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function formatFullDate(value: Date | null) {
+  return value ? new Intl.DateTimeFormat("en", { dateStyle: "full" }).format(value) : "Start date not set";
+}
 const TIMEZONES = ["Europe/London", "Asia/Karachi", "Asia/Dubai", "Asia/Riyadh", "America/New_York", "America/Toronto", "UTC"];
 const AUDIENCE_OPTIONS = [
   { value: "PK_UK", label: "Pakistan and UK students" },
@@ -170,6 +174,9 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
               </div>
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {WEEKDAYS[entry.weekday]} {entry.startTime}-{entry.endTime} {entry.timezone}
+              </p>
+              <p className="mt-2 text-sm font-semibold text-[#22304a]">
+                Starts: {formatFullDate(entry.startsOn)}
               </p>
               <p className="mt-1 text-sm text-[#5f6b7a]">{entry.audience}</p>
               <p className="mt-2 text-sm text-[#5f6b7a]">
