@@ -101,13 +101,50 @@ function getScheduleStartDate(input: Pick<CreateLiveClassInput, "weekday" | "sta
   return nextWeeklyOccurrence(input.weekday, input.startTime);
 }
 
-function countryMatchesAudience(countryCode: string | null | undefined, group: LiveClassAudienceGroup) {
-  const code = (countryCode ?? "").trim().toUpperCase();
+function normalizeCountryAudienceCode(countryCode: string | null | undefined) {
+  return (countryCode ?? "").trim().toUpperCase().replace(/[^\dA-Z+]/gu, "");
+}
+
+export function countryMatchesLiveClassAudience(
+  countryCodeOrCodes: string | Array<string | null | undefined> | null | undefined,
+  group: LiveClassAudienceGroup,
+) {
+  const codes = Array.isArray(countryCodeOrCodes) ? countryCodeOrCodes : [countryCodeOrCodes];
+  const normalizedCodes = codes.map(normalizeCountryAudienceCode).filter(Boolean);
   if (group === "ALL") return true;
-  if (group === "PK_UK") return ["PK", "PAK", "GB", "UK", "GBR"].includes(code);
-  if (group === "US_CA") return ["US", "USA", "CA", "CAN"].includes(code);
-  if (group === "AU") return ["AU", "AUS"].includes(code);
+  if (group === "PK_UK") return normalizedCodes.some((code) => ["PK", "PAK", "PAKISTAN", "+92", "92", "GB", "UK", "GBR", "UNITEDKINGDOM", "+44", "44"].includes(code));
+  if (group === "US_CA") return normalizedCodes.some((code) => ["US", "USA", "UNITEDSTATES", "CA", "CAN", "CANADA", "+1", "1"].includes(code));
+  if (group === "AU") return normalizedCodes.some((code) => ["AU", "AUS", "AUSTRALIA", "+61", "61"].includes(code));
   return true;
+}
+
+export function enrollmentMatchesLiveClassAudience(
+  enrollment: {
+    student?: {
+      countryCode?: string | null;
+      countryName?: string | null;
+      registrationStudents?: Array<{ countryCode?: string | null; countryName?: string | null }> | null;
+    } | null;
+    parent?: {
+      billingCountryCode?: string | null;
+      billingCountryName?: string | null;
+      user?: { phoneCountryCode?: string | null } | null;
+    } | null;
+  },
+  group: LiveClassAudienceGroup,
+) {
+  const registrationCountries = enrollment.student?.registrationStudents ?? [];
+  return countryMatchesLiveClassAudience(
+    [
+      enrollment.student?.countryCode,
+      enrollment.student?.countryName,
+      ...registrationCountries.flatMap((entry) => [entry.countryCode, entry.countryName]),
+      enrollment.parent?.billingCountryCode,
+      enrollment.parent?.billingCountryName,
+      enrollment.parent?.user?.phoneCountryCode,
+    ],
+    group,
+  );
 }
 
 function teacherDisplayName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
@@ -743,7 +780,17 @@ export async function notifyEnrolledUsers(scheduleId: string) {
             where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
             include: {
               parent: { include: { user: true } },
-              student: { include: { user: true } },
+              student: {
+                include: {
+                  user: true,
+                  registrationStudents: {
+                    select: {
+                      countryCode: true,
+                      countryName: true,
+                    },
+                  },
+                },
+              },
             },
           },
         },
@@ -765,7 +812,7 @@ export async function notifyEnrolledUsers(scheduleId: string) {
   users.set(schedule.teacher.user.id, { id: schedule.teacher.user.id, role: "teacher" });
 
   for (const enrollment of schedule.program.enrollments) {
-    if (!countryMatchesAudience(enrollment.student.countryCode, audienceGroup)) continue;
+    if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
     if (hasRosterOverride && !visibleStudentIds.has(enrollment.studentId)) continue;
     users.set(enrollment.student.user.id, { id: enrollment.student.user.id, role: "student" });
     if (canSendScheduleEmail(enrollment.student.user.email)) {

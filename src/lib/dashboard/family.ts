@@ -3,7 +3,11 @@ import "server-only";
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { getLiveClassAudienceGroup, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
+import {
+  countryMatchesLiveClassAudience,
+  getLiveClassAudienceGroup,
+  isLiveClassVisibleToStudents,
+} from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 import {
@@ -631,23 +635,40 @@ function studentHasDashboardAccess(student: any) {
   );
 }
 
-function countryMatchesLiveAudience(countryCode: string | null | undefined, group: string) {
-  const code = (countryCode ?? "").trim().toUpperCase();
-  if (group === "ALL") return true;
-  if (group === "PK_UK") return ["PK", "PAK", "GB", "UK", "GBR"].includes(code);
-  if (group === "US_CA") return ["US", "USA", "CA", "CAN"].includes(code);
-  if (group === "AU") return ["AU", "AUS"].includes(code);
-  return true;
-}
-
-function mapScheduleEntries(enrollments: any[], childCountryCode?: string | null): ChildScheduleSummary[] {
+function mapScheduleEntries(
+  enrollments: any[],
+  child: { id: string; countryCode?: string | null; countryName?: string | null; registrationStudents?: Array<{ countryCode?: string | null; countryName?: string | null }> | null },
+  fallbackCountryCodes: Array<string | null | undefined> = [],
+): ChildScheduleSummary[] {
   const entries = enrollments
     .flatMap((enrollment) =>
       enrollment.program.schedules
         .filter(
-          (schedule: any) =>
-            isLiveClassVisibleToStudents(schedule.title) &&
-            countryMatchesLiveAudience(childCountryCode, getLiveClassAudienceGroup(schedule.title)),
+          (schedule: any) => {
+            if (!isLiveClassVisibleToStudents(schedule.title)) return false;
+
+            const scheduleRosterIds = Array.isArray(schedule.scheduleRosters)
+              ? schedule.scheduleRosters.map((entry: any) => entry.studentId)
+              : [];
+            const teacherRosterIds = Array.isArray(schedule.teacher?.programRosters)
+              ? schedule.teacher.programRosters
+                  .filter((entry: any) => entry.programId === enrollment.program.id)
+                  .map((entry: any) => entry.studentId)
+              : [];
+            const visibleRosterIds = scheduleRosterIds.length ? scheduleRosterIds : teacherRosterIds;
+            if (visibleRosterIds.length && !visibleRosterIds.includes(child.id)) return false;
+
+            const registrationCountries = Array.isArray(child.registrationStudents) ? child.registrationStudents : [];
+            return countryMatchesLiveClassAudience(
+              [
+                child.countryCode,
+                child.countryName,
+                ...registrationCountries.flatMap((entry) => [entry.countryCode, entry.countryName]),
+                ...fallbackCountryCodes,
+              ],
+              getLiveClassAudienceGroup(schedule.title),
+            );
+          },
         )
         .map((schedule: any) => ({
           id: schedule.id,
@@ -905,7 +926,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     validEnrollments.length,
   );
 
-  const schedule = mapScheduleEntries(validEnrollments, child.countryCode);
+  const schedule = mapScheduleEntries(validEnrollments, child, child.parentAudienceCountryCodes ?? []);
   const programQuizzes = validEnrollments.flatMap((enrollment: any) => enrollment.program.quizzes ?? []);
   const quizzes = mapQuizSummaries(programQuizzes, quizAttempts);
   const assignments = mapAssignmentSummaries(validEnrollments, assignmentSubmissions);
@@ -1084,6 +1105,8 @@ async function getParentProfile(userId: string) {
               registrationStudents: {
                 select: {
                   gender: true,
+                  countryCode: true,
+                  countryName: true,
                   createdAt: true,
                 },
                 orderBy: { createdAt: "desc" },
@@ -1096,9 +1119,20 @@ async function getParentProfile(userId: string) {
                       schedules: {
                         orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
                         include: {
+                          scheduleRosters: {
+                            select: {
+                              studentId: true,
+                            },
+                          },
                           teacher: {
                             include: {
                               user: true,
+                              programRosters: {
+                                select: {
+                                  programId: true,
+                                  studentId: true,
+                                },
+                              },
                             },
                           },
                           lessonLogs: {
@@ -1240,7 +1274,19 @@ export async function getParentDashboardData(userId: string) {
       : null,
     children: resolvedChildren.flatMap((student) => {
       try {
-        return [mapChildSummary(student, accessLocked)];
+        return [
+          mapChildSummary(
+            {
+              ...student,
+              parentAudienceCountryCodes: [
+                parentProfile.billingCountryCode,
+                parentProfile.billingCountryName,
+                parentProfile.user.phoneCountryCode,
+              ],
+            },
+            accessLocked,
+          ),
+        ];
       } catch (error) {
         console.error("Unable to render parent dashboard child", {
           parentUserId: userId,
@@ -1261,6 +1307,8 @@ export async function getStudentDashboardData(userId: string) {
       registrationStudents: {
         select: {
           gender: true,
+          countryCode: true,
+          countryName: true,
           createdAt: true,
         },
         orderBy: { createdAt: "desc" },
@@ -1269,6 +1317,7 @@ export async function getStudentDashboardData(userId: string) {
         include: {
           parent: {
             include: {
+              user: true,
               orders: {
                 orderBy: { createdAt: "desc" },
                 take: 1,
@@ -1285,9 +1334,20 @@ export async function getStudentDashboardData(userId: string) {
               schedules: {
                 orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
                 include: {
+                  scheduleRosters: {
+                    select: {
+                      studentId: true,
+                    },
+                  },
                   teacher: {
                     include: {
                       user: true,
+                      programRosters: {
+                        select: {
+                          programId: true,
+                          studentId: true,
+                        },
+                      },
                     },
                   },
                   lessonLogs: {
@@ -1355,7 +1415,17 @@ export async function getStudentDashboardData(userId: string) {
     pendingReason: accessLocked
       ? resolvePendingReason(latestOrder?.status, latestOrder?.gateway ?? null)
       : null,
-    child: mapChildSummary(studentProfile, accessLocked),
+    child: mapChildSummary(
+      {
+        ...studentProfile,
+        parentAudienceCountryCodes: [
+          studentProfile.parents[0]?.parent.billingCountryCode,
+          studentProfile.parents[0]?.parent.billingCountryName,
+          studentProfile.parents[0]?.parent.user.phoneCountryCode,
+        ],
+      },
+      accessLocked,
+    ),
   } satisfies StudentDashboardData;
 }
 

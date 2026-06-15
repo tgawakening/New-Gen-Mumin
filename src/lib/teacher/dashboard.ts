@@ -1,7 +1,15 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { cleanLiveClassTitle, getLiveClassAudienceLabel, getProgramEligibleRosterStudents, getTeacherProgramRosterEntries } from "@/lib/live-classes/service";
+import {
+  cleanLiveClassTitle,
+  enrollmentMatchesLiveClassAudience,
+  getLiveClassAudienceGroup,
+  getLiveClassAudienceLabel,
+  getProgramEligibleRosterStudents,
+  getScheduleRosterStudentIds,
+  getTeacherProgramRosterEntries,
+} from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 
@@ -128,9 +136,20 @@ export async function getTeacherDashboardData(userId: string) {
               enrollments: {
                 where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
                 include: {
+                  parent: {
+                    include: {
+                      user: true,
+                    },
+                  },
                   student: {
                     include: {
                       user: true,
+                      registrationStudents: {
+                        select: {
+                          countryCode: true,
+                          countryName: true,
+                        },
+                      },
                     },
                   },
                 },
@@ -183,9 +202,20 @@ export async function getTeacherDashboardData(userId: string) {
               enrollments: {
                 where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
                 include: {
+                  parent: {
+                    include: {
+                      user: true,
+                    },
+                  },
                   student: {
                     include: {
                       user: true,
+                      registrationStudents: {
+                        select: {
+                          countryCode: true,
+                          countryName: true,
+                        },
+                      },
                     },
                   },
                 },
@@ -283,21 +313,36 @@ export async function getTeacherDashboardData(userId: string) {
       )
     : teacherProfile.classSchedules;
   const uniqueSchedules = Array.from(new Map(programmeSchedules.map((schedule) => [schedule.id, schedule])).values());
+  const scheduleRosterIdsBySchedule = new Map(
+    await Promise.all(
+      uniqueSchedules.map(async (schedule) => [schedule.id, new Set(await getScheduleRosterStudentIds(schedule.id))] as const),
+    ),
+  );
 
-  const classes = uniqueSchedules.map((schedule) => ({
-    id: schedule.id,
-    programId: schedule.program.id,
-    title: cleanLiveClassTitle(schedule.title),
-    weekday: schedule.weekday,
-    startTime: schedule.startTime,
-    endTime: schedule.endTime,
-    timezone: schedule.timezone,
-    meetingUrl: schedule.meetingUrl,
-    provider: schedule.meetingProvider,
-    audience: getLiveClassAudienceLabel(schedule.title),
-    studentCount: new Set(schedule.program.enrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size,
-    activeEnrollments: new Set(schedule.program.enrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size,
-  }));
+  const classes = uniqueSchedules.map((schedule) => {
+    const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+    const rosterStudentIds = scheduleRosterIdsBySchedule.get(schedule.id) ?? new Set<string>();
+    const visibleEnrollments = schedule.program.enrollments.filter((enrollment) => {
+      if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) return false;
+      return !rosterStudentIds.size || rosterStudentIds.has(enrollment.studentId);
+    });
+    const learnerCount = new Set(visibleEnrollments.map((enrollment) => enrollment.student.user.email.toLowerCase())).size;
+
+    return {
+      id: schedule.id,
+      programId: schedule.program.id,
+      title: cleanLiveClassTitle(schedule.title),
+      weekday: schedule.weekday,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      timezone: schedule.timezone,
+      meetingUrl: schedule.meetingUrl,
+      provider: schedule.meetingProvider,
+      audience: getLiveClassAudienceLabel(schedule.title),
+      studentCount: learnerCount,
+      activeEnrollments: learnerCount,
+    };
+  });
 
   const programRosterEntries = await getTeacherProgramRosterEntries(teacherProfile.id);
   const rosterStudentIdsByProgram = new Map<string, Set<string>>();

@@ -11,7 +11,13 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
-import { getScheduleRosterStudentIds, getTeacherProgramRosterStudentIds, syncScheduleRoster } from "@/lib/live-classes/service";
+import {
+  enrollmentMatchesLiveClassAudience,
+  getLiveClassAudienceGroup,
+  getScheduleRosterStudentIds,
+  getTeacherProgramRosterStudentIds,
+  syncScheduleRoster,
+} from "@/lib/live-classes/service";
 
 type PageProps = {
   params: Promise<{ scheduleId: string }>;
@@ -43,9 +49,20 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
           enrollments: {
             where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
             include: {
+              parent: {
+                include: {
+                  user: true,
+                },
+              },
               student: {
                 include: {
                   user: true,
+                  registrationStudents: {
+                    select: {
+                      countryCode: true,
+                      countryName: true,
+                    },
+                  },
                 },
               },
             },
@@ -89,10 +106,31 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
         programId: scheduleItem.programId,
         status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
       },
-      select: { studentId: true },
+      include: {
+        parent: {
+          include: {
+            user: true,
+          },
+        },
+        student: {
+          include: {
+            registrationStudents: {
+              select: {
+                countryCode: true,
+                countryName: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    const validStudentIds = new Set(enrollments.map((entry) => entry.studentId));
+    const audienceGroup = getLiveClassAudienceGroup(scheduleItem.title);
+    const validStudentIds = new Set(
+      enrollments
+        .filter((entry) => enrollmentMatchesLiveClassAudience(entry, audienceGroup))
+        .map((entry) => entry.studentId),
+    );
     const studentIds = selected.filter((id) => validStudentIds.has(id));
 
     try {
@@ -133,7 +171,9 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {schedule.program.enrollments.map((enrollment) => {
+            {schedule.program.enrollments
+              .filter((enrollment) => enrollmentMatchesLiveClassAudience(enrollment, getLiveClassAudienceGroup(schedule.title)))
+              .map((enrollment) => {
               const studentName = enrollment.student.displayName || `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim();
               return (
                 <label key={enrollment.student.id} className="flex cursor-pointer flex-col rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm text-[#22304a] transition hover:border-[#9eb2c8]">
