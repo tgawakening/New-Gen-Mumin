@@ -62,6 +62,12 @@ function recordingIsVisibleToStudent(recording: any, studentId: string) {
   return !rosterIds.length || rosterIds.includes(studentId);
 }
 
+function isRecordingTableUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
+  return code === "P2021" || code === "P2022" || message.includes("LiveClassRecording");
+}
+
 export async function listStudentRecordings(studentUserId: string) {
   const student = await db.studentProfile.findUnique({
     where: { userId: studentUserId },
@@ -69,25 +75,33 @@ export async function listStudentRecordings(studentUserId: string) {
   });
   if (!student) return [];
 
-  const recordings = await db.liveClassRecording.findMany({
-    where: {
-      deletedAt: null,
-      schedule: {
-        program: {
-          enrollments: {
-            some: {
-              studentId: student.id,
-              status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+  try {
+    const recordings = await db.liveClassRecording.findMany({
+      where: {
+        deletedAt: null,
+        schedule: {
+          program: {
+            enrollments: {
+              some: {
+                studentId: student.id,
+                status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+              },
             },
           },
         },
       },
-    },
-    include: includeRecordingRelations(),
-    orderBy: { availableAt: "desc" },
-  });
+      include: includeRecordingRelations(),
+      orderBy: { availableAt: "desc" },
+    });
 
-  return recordings.filter((recording) => recordingIsVisibleToStudent(recording, student.id)).map(mapRecording);
+    return recordings.filter((recording) => recordingIsVisibleToStudent(recording, student.id)).map(mapRecording);
+  } catch (error) {
+    if (isRecordingTableUnavailable(error)) {
+      console.error("Live class recordings table is not available yet.", error);
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function listParentChildRecordings(parentUserId: string, childId: string) {
@@ -100,59 +114,90 @@ export async function listParentChildRecordings(parentUserId: string, childId: s
   });
   if (!relation) return [];
 
-  const recordings = await db.liveClassRecording.findMany({
-    where: {
-      deletedAt: null,
-      schedule: {
-        program: {
-          enrollments: {
-            some: {
-              studentId: childId,
-              status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+  try {
+    const recordings = await db.liveClassRecording.findMany({
+      where: {
+        deletedAt: null,
+        schedule: {
+          program: {
+            enrollments: {
+              some: {
+                studentId: childId,
+                status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+              },
             },
           },
         },
       },
-    },
-    include: includeRecordingRelations(),
-    orderBy: { availableAt: "desc" },
-  });
+      include: includeRecordingRelations(),
+      orderBy: { availableAt: "desc" },
+    });
 
-  return recordings.filter((recording) => recordingIsVisibleToStudent(recording, childId)).map(mapRecording);
+    return recordings.filter((recording) => recordingIsVisibleToStudent(recording, childId)).map(mapRecording);
+  } catch (error) {
+    if (isRecordingTableUnavailable(error)) {
+      console.error("Live class recordings table is not available yet.", error);
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function listTeacherRecordings(teacherUserId: string) {
-  const recordings = await db.liveClassRecording.findMany({
-    where: {
-      deletedAt: null,
-      schedule: {
-        teacher: { userId: teacherUserId },
+  try {
+    const recordings = await db.liveClassRecording.findMany({
+      where: {
+        deletedAt: null,
+        schedule: {
+          teacher: { userId: teacherUserId },
+        },
       },
-    },
-    include: includeRecordingRelations(),
-    orderBy: { availableAt: "desc" },
-  });
+      include: includeRecordingRelations(),
+      orderBy: { availableAt: "desc" },
+    });
 
-  return recordings.map(mapRecording);
+    return recordings.map(mapRecording);
+  } catch (error) {
+    if (isRecordingTableUnavailable(error)) {
+      console.error("Live class recordings table is not available yet.", error);
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function listAdminRecordings() {
-  const recordings = await db.liveClassRecording.findMany({
-    where: { deletedAt: null },
-    include: includeRecordingRelations(),
-    orderBy: { availableAt: "desc" },
-  });
+  try {
+    const recordings = await db.liveClassRecording.findMany({
+      where: { deletedAt: null },
+      include: includeRecordingRelations(),
+      orderBy: { availableAt: "desc" },
+    });
 
-  return recordings.map((recording) => ({
-    ...mapRecording(recording),
-    scheduleId: recording.scheduleId,
-    teacherId: recording.schedule.teacherId,
-  }));
+    return recordings.map((recording) => ({
+      ...mapRecording(recording),
+      scheduleId: recording.scheduleId,
+      teacherId: recording.schedule.teacherId,
+    }));
+  } catch (error) {
+    if (isRecordingTableUnavailable(error)) {
+      console.error("Live class recordings table is not available yet.", error);
+      return [];
+    }
+    throw error;
+  }
 }
 
 export async function deleteRecordingForAdmin(recordingId: string) {
-  await db.liveClassRecording.update({
-    where: { id: recordingId },
-    data: { deletedAt: new Date() },
-  });
+  try {
+    await db.liveClassRecording.update({
+      where: { id: recordingId },
+      data: { deletedAt: new Date() },
+    });
+  } catch (error) {
+    if (isRecordingTableUnavailable(error)) {
+      throw new Error("Recordings storage is still being prepared. Please apply the database migration first.");
+    }
+    throw error;
+  }
 }

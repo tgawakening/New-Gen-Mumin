@@ -24,6 +24,12 @@ function fallbackRecordingFileId(scheduleId: string, playUrl: string) {
   return `${scheduleId}-${createHash("sha256").update(playUrl).digest("hex").slice(0, 32)}`;
 }
 
+function isRecordingTableUnavailable(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const code = typeof error === "object" && error && "code" in error ? String((error as { code?: unknown }).code) : "";
+  return code === "P2021" || code === "P2022" || message.includes("LiveClassRecording");
+}
+
 function verifyZoomSignature(request: NextRequest, rawBody: string) {
   const secret = webhookSecret();
   if (!secret) return false;
@@ -138,32 +144,40 @@ export async function POST(request: NextRequest) {
 
     for (const file of recordingFiles) {
       const recordingFileId = file.id ?? fallbackRecordingFileId(schedule.id, file.play_url!);
-      await db.liveClassRecording.upsert({
-        where: {
-          recordingFileId,
-        },
-        create: {
-          scheduleId: schedule.id,
-          recordingFileId,
-          meetingId,
-          topic: payload.payload?.object?.topic ?? schedule.title,
-          fileType: file.file_type ?? null,
-          playUrl: file.play_url!,
-          downloadUrl: file.download_url ?? null,
-          recordingStart: file.recording_start ? new Date(file.recording_start) : null,
-          recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
-          fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
-        },
-        update: {
-          playUrl: file.play_url!,
-          downloadUrl: file.download_url ?? null,
-          fileType: file.file_type ?? null,
-          recordingStart: file.recording_start ? new Date(file.recording_start) : null,
-          recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
-          fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
-          deletedAt: null,
-        },
-      });
+      try {
+        await db.liveClassRecording.upsert({
+          where: {
+            recordingFileId,
+          },
+          create: {
+            scheduleId: schedule.id,
+            recordingFileId,
+            meetingId,
+            topic: payload.payload?.object?.topic ?? schedule.title,
+            fileType: file.file_type ?? null,
+            playUrl: file.play_url!,
+            downloadUrl: file.download_url ?? null,
+            recordingStart: file.recording_start ? new Date(file.recording_start) : null,
+            recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
+            fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
+          },
+          update: {
+            playUrl: file.play_url!,
+            downloadUrl: file.download_url ?? null,
+            fileType: file.file_type ?? null,
+            recordingStart: file.recording_start ? new Date(file.recording_start) : null,
+            recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
+            fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
+            deletedAt: null,
+          },
+        });
+      } catch (error) {
+        if (isRecordingTableUnavailable(error)) {
+          console.error("Live class recordings table is not available yet.", error);
+          return NextResponse.json({ received: true, recordings: 0, storage: "pending" });
+        }
+        throw error;
+      }
     }
 
     const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
