@@ -46,6 +46,9 @@ type ReportSchedule = {
     teacherUserId: string | null;
     occurrenceDate: Date;
     startedAt: Date;
+    endedAt: Date | null;
+    durationMinutes: number | null;
+    completedAt: Date | null;
     source: string;
   }>;
 };
@@ -131,6 +134,10 @@ function classDurationMinutes(startTime: string, endTime: string) {
   const startTotal = startHour * 60 + startMinute;
   const endTotal = endHour * 60 + endMinute;
   return Math.max(0, endTotal - startTotal);
+}
+
+function isCompletedOccurrence(occurrence: ReportSchedule["sessionOccurrences"][number] | null | undefined) {
+  return Boolean(occurrence?.completedAt && (occurrence.durationMinutes ?? 0) >= 30);
 }
 
 export async function getAdminTeacherMonthlyReports(options: {
@@ -224,7 +231,7 @@ export async function getAdminTeacherMonthlyReports(options: {
     const assignedSchedules = schedules.filter((schedule) => schedule.teacherId === teacher.id);
     const coveredSchedules = schedules.filter((schedule) =>
       schedule.lessonLogs.some((log) => log.teacherUserId === teacher.userId && schedule.teacher.userId !== teacher.userId) ||
-      schedule.sessionOccurrences.some((occurrence) => occurrence.teacherUserId === teacher.userId && schedule.teacher.userId !== teacher.userId),
+      schedule.sessionOccurrences.some((occurrence) => occurrence.teacherUserId === teacher.userId && schedule.teacher.userId !== teacher.userId && isCompletedOccurrence(occurrence)),
     );
     const relevantSchedules = Array.from(
       new Map([...assignedSchedules, ...coveredSchedules].map((schedule) => [schedule.id, schedule])).values(),
@@ -239,7 +246,7 @@ export async function getAdminTeacherMonthlyReports(options: {
         .filter((log) => log.teacherUserId === teacher.userId && !scheduledDates.some((date) => dateKey(date) === dateKey(log.lessonDate)))
         .map((log) => startOfUtcDay(log.lessonDate));
       const occurrenceDates = schedule.sessionOccurrences
-        .filter((occurrence) => occurrence.teacherUserId === teacher.userId && !scheduledDates.some((date) => dateKey(date) === dateKey(occurrence.occurrenceDate)))
+        .filter((occurrence) => occurrence.teacherUserId === teacher.userId && isCompletedOccurrence(occurrence) && !scheduledDates.some((date) => dateKey(date) === dateKey(occurrence.occurrenceDate)))
         .map((occurrence) => startOfUtcDay(occurrence.occurrenceDate));
 
       return Array.from(
@@ -249,11 +256,11 @@ export async function getAdminTeacherMonthlyReports(options: {
         const logs = schedule.lessonLogs.filter((log) => dateKey(log.lessonDate) === key);
         const occurrences = schedule.sessionOccurrences.filter((occurrence) => dateKey(occurrence.occurrenceDate) === key);
         const ownLog = logs.find((log) => log.teacherUserId === teacher.userId) ?? null;
-        const ownOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId === teacher.userId) ?? null;
+        const ownOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId === teacher.userId && isCompletedOccurrence(occurrence)) ?? null;
         const substituteLog = logs.find((log) => log.teacherUserId !== schedule.teacher.userId) ?? null;
-        const substituteOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId && occurrence.teacherUserId !== schedule.teacher.userId) ?? null;
+        const substituteOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId && occurrence.teacherUserId !== schedule.teacher.userId && isCompletedOccurrence(occurrence)) ?? null;
         const assignedTeacherLog = logs.find((log) => log.teacherUserId === schedule.teacher.userId) ?? null;
-        const assignedTeacherOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId === schedule.teacher.userId) ?? null;
+        const assignedTeacherOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId === schedule.teacher.userId && isCompletedOccurrence(occurrence)) ?? null;
         const due = lessonDate <= today;
         const attendance = statusCounts(schedule.attendances, key);
 
@@ -295,12 +302,14 @@ export async function getAdminTeacherMonthlyReports(options: {
                 : assignedTeacherOccurrence
                   ? displayName(schedule.teacher.user)
                 : null,
-          topic: ownLog?.topic ?? substituteLog?.topic ?? assignedTeacherLog?.topic ?? (ownOccurrence ? "Started via Zoom link" : null),
+          topic: ownLog?.topic ?? substituteLog?.topic ?? assignedTeacherLog?.topic ?? (ownOccurrence ? "Completed via Zoom link" : null),
           summary:
             ownLog?.summary ??
             substituteLog?.summary ??
             assignedTeacherLog?.summary ??
-            (ownOccurrence ? `Started at ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(ownOccurrence.startedAt)} UTC` : null),
+            (ownOccurrence
+              ? `Started at ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(ownOccurrence.startedAt)} UTC. Duration: ${ownOccurrence.durationMinutes ?? 0} minutes.`
+              : null),
           status,
           studentAttendance: attendance,
         };

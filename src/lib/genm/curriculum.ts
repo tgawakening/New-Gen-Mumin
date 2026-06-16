@@ -1,5 +1,25 @@
 export type GenMProgramSlug = "seerah" | "life-lessons" | "arabic" | "tajweed";
 
+export const ARABIC_TAJWEED_TITLE = "Arabic & Tajweed";
+export const ARABIC_TAJWEED_PROGRAM_SLUGS = ["arabic", "tajweed"] as const;
+
+export function isArabicTajweedSlug(slug: string | null | undefined) {
+  return slug === "arabic" || slug === "tajweed";
+}
+
+export function displayProgramTitle(titleOrSlug: string | null | undefined) {
+  const value = (titleOrSlug ?? "").toLowerCase();
+  if (value.includes("arabic") || value.includes("tajweed")) return ARABIC_TAJWEED_TITLE;
+  if (value.includes("life") || value.includes("leadership")) return "Life Lessons & Leadership";
+  return titleOrSlug ?? "";
+}
+
+export function sameProgramFamily(left: { slug?: string | null; title?: string | null }, right: { slug?: string | null; title?: string | null }) {
+  const leftTitle = displayProgramTitle(left.slug ?? left.title);
+  const rightTitle = displayProgramTitle(right.slug ?? right.title);
+  return leftTitle === rightTitle;
+}
+
 export type GenMTeacherProfile = {
   slug: string;
   name: string;
@@ -70,7 +90,7 @@ export const genMTeachers: GenMTeacherProfile[] = [
     bio: "Oversees mentoring direction and contributes directly to the Arabic stream as a programme coordinator.",
     email: "abubakar98114@gmail.com",
     specialties: ["Mentoring", "Arabic supervision", "Islamic studies"],
-    programSlugs: ["arabic"],
+    programSlugs: ["arabic", "tajweed"],
   },
   {
     slug: "mehran",
@@ -80,7 +100,7 @@ export const genMTeachers: GenMTeacherProfile[] = [
     bio: "Supports Arabic language progression, Fiqh and Hadith context, and digital presentation of the learning material.",
     email: "mehranraziq@gmail.com",
     specialties: ["Arabic content", "Fiqh", "Hadith", "Web resources"],
-    programSlugs: ["arabic"],
+    programSlugs: ["arabic", "tajweed"],
   },
   {
     slug: "afira",
@@ -90,27 +110,7 @@ export const genMTeachers: GenMTeacherProfile[] = [
     bio: "Focuses on beginner Arabic grammar, speaking games, vocabulary growth, and lower-level confidence building.",
     email: "shoaibmufti11221122@gmail.com",
     specialties: ["Arabic grammar", "Beginner Arabic", "Conversation practice"],
-    programSlugs: ["arabic"],
-  },
-  {
-    slug: "abubakar-saeed",
-    name: "Ustadh Abubakar Saeed",
-    title: "Tajweed Trainer",
-    credential: "15 Years Teaching Experience",
-    bio: "Leads tajweed practice, Qur'anic accent work, and guided recitation habits for the tajweed stream.",
-    email: "abubakarsaeed.genm@gmail.com",
-    specialties: ["Tajweed", "Qur'anic accent", "Arabic language support"],
-    programSlugs: ["tajweed"],
-  },
-  {
-    slug: "zainab",
-    name: "Ustadha Zainab",
-    title: "Tajweed Lead",
-    credential: "Master's Degree in Islamic Studies",
-    bio: "Supports structured Qur'an recitation, tajweed fluency, and higher-level correction for the tajweed stream.",
-    email: "zainab.tajweed.genm@gmail.com",
-    specialties: ["Qur'an teaching", "Tajweed fluency", "Recitation correction"],
-    programSlugs: ["tajweed"],
+    programSlugs: ["arabic", "tajweed"],
   },
   {
     slug: "javeria-khuram",
@@ -264,23 +264,25 @@ export const genMProgrammes: GenMProgramContent[] = [
   },
   {
     slug: "arabic",
-    title: "Arabic",
-    strapline: "Structured Arabic growth through books, games, speaking, and writing.",
-    description: "The Arabic track builds from alphabet mastery and word recognition to confident phrases, paragraphs, and simple presentations.",
+    title: ARABIC_TAJWEED_TITLE,
+    strapline: "Structured Arabic growth with Qur'anic Tajweed and guided recitation practice.",
+    description: "The Arabic & Tajweed track combines Arabic reading, writing, vocabulary, conversation, makharij, recitation fluency, and Qur'an pronunciation habits in one teacher-led programme.",
     outcomes: [
       "Read and recognise Arabic accurately.",
       "Speak basic phrases and short dialogues with confidence.",
       "Write words, paragraphs, and simple story-based responses.",
+      "Apply core tajweed rules in guided Qur'anic recitation.",
     ],
     uploadIdeas: [
       "Vocabulary deck or flashcard sheet",
       "Dialogue practice audio/video",
+      "Makharij or recitation practice prompt",
       "Speaking game prompt",
       "Writing task or mini presentation brief",
     ],
-    keyMaterials: ["Al-Arabiyyah Bayna Yaday Awladina books 1-6", "Flashcards", "Alphabet posters", "Writing notebooks", "Mini whiteboards"],
-    weeklyFlow: ["Warm-up game", "Review and repetition", "Main language target", "Speaking or writing task"],
-    focusTerms: ["Alphabet and 50 core words", "Travel/home/food vocabulary", "Sentences and paragraphs", "Stories, phrases, and presentations"],
+    keyMaterials: ["Al-Arabiyyah Bayna Yaday Awladina books 1-6", "Qaida/pen Quran", "Madani Mushaf", "Flashcards", "Tajweed posters", "Writing notebooks"],
+    weeklyFlow: ["Warm-up game", "Arabic review and repetition", "Main language target", "Tajweed/recitation practice", "Speaking or writing task"],
+    focusTerms: ["Alphabet, makharij, and 50 core words", "Travel/home vocabulary with noon saakin and qalqalah", "Sentences, paragraphs, madd, and stopping rules", "Stories, phrases, tarteel, and final recitation"],
   },
   {
     slug: "tajweed",
@@ -312,8 +314,23 @@ const programTitleMap = new Map(
   genMProgrammes.flatMap((programme) => [
     [normalizeProgramKey(programme.slug), programme],
     [normalizeProgramKey(programme.title), programme],
+    ...(programme.slug === "arabic"
+      ? [
+          [normalizeProgramKey("Qur'anic Tajweed"), programme],
+          [normalizeProgramKey("Tajweed"), programme],
+          [normalizeProgramKey(ARABIC_TAJWEED_TITLE), programme],
+          [normalizeProgramKey("Arabic + Qur'anic Tajweed"), programme],
+        ] as const
+      : []),
   ]),
 );
+
+const arabicTajweedProgramme = genMProgrammes.find((programme) => programme.slug === "arabic");
+if (arabicTajweedProgramme) {
+  for (const alias of ["arabic", "tajweed", "Qur'anic Tajweed", "Arabic & Tajweed", "Arabic + Qur'anic Tajweed"]) {
+    programTitleMap.set(normalizeProgramKey(alias), arabicTajweedProgramme);
+  }
+}
 
 export function getGenMProgrammeByTitle(title: string) {
   return programTitleMap.get(normalizeProgramKey(title)) ?? null;
@@ -322,6 +339,9 @@ export function getGenMProgrammeByTitle(title: string) {
 export function getGenMTeachersForProgramme(title: string) {
   const programme = getGenMProgrammeByTitle(title);
   if (!programme) return [];
+  if (isArabicTajweedSlug(programme.slug)) {
+    return genMTeachers.filter((teacher) => teacher.programSlugs.includes("arabic"));
+  }
   return genMTeachers.filter((teacher) => teacher.programSlugs.includes(programme.slug));
 }
 
@@ -331,13 +351,11 @@ export function getGenMTermPlansForProgramme(title: string) {
 
   return genMTerms.map((term) => {
     const highlights =
-      programme.slug === "arabic"
-        ? term.arabic
-        : programme.slug === "tajweed"
-          ? term.tajweed
-          : programme.slug === "seerah"
-            ? term.seerah
-            : term.lifeSkills;
+      programme.slug === "arabic" || programme.slug === "tajweed"
+        ? [...term.arabic, ...term.tajweed]
+        : programme.slug === "seerah"
+          ? term.seerah
+          : term.lifeSkills;
 
     return {
       id: term.id,

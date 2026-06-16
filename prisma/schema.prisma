@@ -343,6 +343,10 @@ model LiveClassRecording {
   fileType        String?
   playUrl         String
   downloadUrl     String?
+  driveFileId     String?
+  driveViewUrl    String?
+  driveFolderId   String?
+  storageProvider String        @default("zoom")
   recordingStart  DateTime?
   recordingEnd    DateTime?
   fileSize        BigInt?
@@ -364,6 +368,9 @@ model LiveClassSessionOccurrence {
   meetingId      String?
   occurrenceDate DateTime
   startedAt      DateTime      @default(now())
+  endedAt        DateTime?
+  durationMinutes Int?
+  completedAt    DateTime?
   source         String        @default("platform")
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt

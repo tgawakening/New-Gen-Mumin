@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 
 function statusClass(status: string) {
   if (status === "ACTIVE") return "bg-[#effaf3] text-[#2f6b4b]";
@@ -39,7 +40,7 @@ export default async function AdminProgramsPage() {
             <div key={program.id} className="rounded-[1.6rem] border border-[#eadfce] bg-white p-5 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h2 className="text-xl font-semibold text-[#22304a]">{program.title}</h2>
+                  <h2 className="text-xl font-semibold text-[#22304a]">{displayProgramTitle(program.title)}</h2>
                   <p className="mt-1 text-sm text-[#6d7785]">{program.shortDescription ?? "Programme description coming soon."}</p>
                 </div>
                 <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(program.status)}`}>

@@ -54,3 +54,42 @@ export async function recordLiveClassSessionOccurrence(input: {
     throw error;
   }
 }
+
+export async function recordLiveClassSessionEnd(input: {
+  scheduleId: string;
+  meetingId?: string | null;
+  endedAt?: Date;
+}) {
+  const endedAt = input.endedAt ?? new Date();
+  const occurrenceDate = startOfUtcDay(endedAt);
+
+  try {
+    const occurrences = await db.liveClassSessionOccurrence.findMany({
+      where: {
+        scheduleId: input.scheduleId,
+        occurrenceDate,
+        startedAt: { lte: endedAt },
+      },
+      orderBy: { startedAt: "desc" },
+    });
+
+    for (const occurrence of occurrences) {
+      const durationMinutes = Math.max(0, Math.floor((endedAt.getTime() - occurrence.startedAt.getTime()) / 60000));
+      await db.liveClassSessionOccurrence.update({
+        where: { id: occurrence.id },
+        data: {
+          meetingId: input.meetingId ?? occurrence.meetingId,
+          endedAt,
+          durationMinutes,
+          completedAt: durationMinutes >= 30 ? endedAt : null,
+        },
+      });
+    }
+  } catch (error) {
+    if (isOccurrenceTableUnavailable(error)) {
+      console.error("Live class occurrence table is not available yet.", error);
+      return;
+    }
+    throw error;
+  }
+}

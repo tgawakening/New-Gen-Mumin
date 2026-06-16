@@ -3,13 +3,15 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
+import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
+import { recordLiveClassSessionEnd, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
   getScheduleRosterStudentIds,
 } from "@/lib/live-classes/service";
+import { downloadZoomRecording } from "@/lib/zoom/client";
 
 function webhookSecret() {
   return env.success ? env.data.ZOOM_WEBHOOK_SECRET_TOKEN : undefined;
@@ -59,6 +61,17 @@ function isRecordingTableUnavailable(error: unknown) {
   return code === "P2021" || code === "P2022" || message.includes("LiveClassRecording");
 }
 
+async function hasDriveRecordingColumns() {
+  try {
+    const rows = await db.$queryRawUnsafe<Array<{ COLUMN_NAME: string }>>(
+      "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'LiveClassRecording' AND COLUMN_NAME IN ('driveFileId', 'driveViewUrl', 'driveFolderId', 'storageProvider')",
+    );
+    return rows.length >= 4;
+  } catch {
+    return false;
+  }
+}
+
 function verifyZoomSignature(request: NextRequest, rawBody: string) {
   const secret = webhookSecret();
   if (!secret) return false;
@@ -84,6 +97,7 @@ export async function POST(request: NextRequest) {
         topic?: string;
         join_url?: string;
         host_email?: string;
+        end_time?: string;
         recording_files?: Array<{
           id?: string;
           play_url?: string;
@@ -171,14 +185,44 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  if (payload.event === "meeting.ended") {
+    await recordLiveClassSessionEnd({
+      scheduleId: schedule.id,
+      meetingId,
+      endedAt: payload.payload?.object?.end_time ? new Date(payload.payload.object.end_time) : new Date(),
+    });
+
+    return NextResponse.json({ received: true });
+  }
+
   if (payload.event === "recording.completed") {
     const primaryFile = choosePrimaryRecordingFile(payload.payload?.object?.recording_files ?? []);
     if (!primaryFile) {
       return NextResponse.json({ received: true, recordings: 0 });
     }
+    const driveColumnsAvailable = await hasDriveRecordingColumns();
 
     for (const file of [primaryFile]) {
       const recordingFileId = file.id ?? fallbackRecordingFileId(schedule.id, file.play_url!);
+      let driveRecording: { id: string; webViewLink: string | null; folderId: string } | null = null;
+      if (driveColumnsAvailable && file.download_url) {
+        try {
+          const downloaded = await downloadZoomRecording(file.download_url);
+          driveRecording = await uploadLiveClassRecordingToDrive({
+            programId: schedule.program.id,
+            teacherUserId: schedule.teacher.user.id,
+            scheduleId: schedule.id,
+            recordingFileId,
+            title: cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title),
+            buffer: downloaded.buffer,
+            mimeType: downloaded.mimeType,
+            fileType: file.file_type ?? null,
+            recordingStart: file.recording_start ? new Date(file.recording_start) : null,
+          });
+        } catch (error) {
+          console.error("Unable to copy Zoom recording to Google Drive.", error);
+        }
+      }
       try {
         await db.liveClassRecording.upsert({
           where: {
@@ -190,15 +234,31 @@ export async function POST(request: NextRequest) {
             meetingId,
             topic: payload.payload?.object?.topic ?? schedule.title,
             fileType: file.file_type ?? null,
-            playUrl: file.play_url!,
+            playUrl: driveRecording?.webViewLink ?? file.play_url!,
             downloadUrl: file.download_url ?? null,
+            ...(driveColumnsAvailable
+              ? {
+                  driveFileId: driveRecording?.id ?? null,
+                  driveViewUrl: driveRecording?.webViewLink ?? null,
+                  driveFolderId: driveRecording?.folderId ?? null,
+                  storageProvider: driveRecording ? "google-drive" : "zoom",
+                }
+              : {}),
             recordingStart: file.recording_start ? new Date(file.recording_start) : null,
             recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
             fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
           },
           update: {
-            playUrl: file.play_url!,
+            playUrl: driveRecording?.webViewLink ?? file.play_url!,
             downloadUrl: file.download_url ?? null,
+            ...(driveColumnsAvailable
+              ? {
+                  driveFileId: driveRecording?.id ?? undefined,
+                  driveViewUrl: driveRecording?.webViewLink ?? undefined,
+                  driveFolderId: driveRecording?.folderId ?? undefined,
+                  storageProvider: driveRecording ? "google-drive" : "zoom",
+                }
+              : {}),
             fileType: file.file_type ?? null,
             recordingStart: file.recording_start ? new Date(file.recording_start) : null,
             recordingEnd: file.recording_end ? new Date(file.recording_end) : null,

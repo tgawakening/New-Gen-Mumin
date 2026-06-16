@@ -5,6 +5,7 @@ import { FeedbackAudience } from "@prisma/client";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { getAdminFeedbackOverview } from "@/lib/community/feedback";
 import { FeedbackReviewConsole, type FeedbackReviewEntry } from "@/components/dashboard/feedback/FeedbackReviewConsole";
 
@@ -34,7 +35,7 @@ function payloadEntries(payload: unknown) {
 }
 
 function toReviewEntry(entry: Awaited<ReturnType<typeof getAdminFeedbackOverview>>["responses"][number]): FeedbackReviewEntry {
-  const programmes = entry.student?.enrollments.map((enrollment) => enrollment.program.title) ?? [];
+  const programmes = Array.from(new Set(entry.student?.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)) ?? []));
   const studentName = entry.student ? personName(entry.student.user) : null;
   const summary = [
     { label: "Wins / taught", value: entry.wins || "No entry" },

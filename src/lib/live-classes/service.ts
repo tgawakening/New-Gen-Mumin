@@ -9,6 +9,7 @@ import {
 import { durationMinutes, nextWeeklyOccurrence, toZoomLocalStartTime } from "@/lib/live-classes/time";
 import { createRecurringZoomMeeting, isZoomConfigured } from "@/lib/zoom/client";
 import { DEFAULT_OFFERS, getCatalogOfferProgramSlugs } from "@/lib/registration/catalog";
+import { isArabicTajweedSlug } from "@/lib/genm/curriculum";
 
 export const WHOLE_GEN_MUMIN_PROGRAM_ID = "__whole_gen_mumin__";
 export const PENDING_ZOOM_PROVIDER = "Zoom Pending Approval";
@@ -281,11 +282,12 @@ function offerIncludesProgram(
   },
   program: { id: string; slug: string },
 ) {
-  if (offer.programs.some((entry) => entry.programId === program.id || entry.program.slug === program.slug)) {
+  const compatibleSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
+  if (offer.programs.some((entry) => entry.programId === program.id || compatibleSlugs.includes(entry.program.slug))) {
     return true;
   }
 
-  return getCatalogOfferProgramSlugs(offer.slug).includes(program.slug);
+  return getCatalogOfferProgramSlugs(offer.slug).some((slug) => compatibleSlugs.includes(slug));
 }
 
 export async function getProgramEligibleRosterStudents(programId: string) {
@@ -298,12 +300,13 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     return [];
   }
 
+  const compatibleProgramSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
   const [directEnrollmentStudents, paidRegistrationStudents] = await Promise.all([
     db.studentProfile.findMany({
       where: {
         enrollments: {
           some: {
-            programId,
+            program: { slug: { in: compatibleProgramSlugs } },
             status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
           },
         },
@@ -311,7 +314,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       include: {
         user: true,
         enrollments: {
-          where: { programId },
+          where: { program: { slug: { in: compatibleProgramSlugs } } },
           select: { status: true },
         },
         registrationStudents: {
@@ -354,7 +357,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
           include: {
             user: true,
             enrollments: {
-              where: { programId },
+              where: { program: { slug: { in: compatibleProgramSlugs } } },
               select: { status: true },
             },
             registrationStudents: {

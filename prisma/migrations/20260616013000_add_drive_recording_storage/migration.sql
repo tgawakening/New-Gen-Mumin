@@ -1,0 +1,5 @@
+ALTER TABLE `LiveClassRecording`
+  ADD COLUMN `driveFileId` VARCHAR(191) NULL,
+  ADD COLUMN `driveViewUrl` VARCHAR(191) NULL,
+  ADD COLUMN `driveFolderId` VARCHAR(191) NULL,
+  ADD COLUMN `storageProvider` VARCHAR(191) NOT NULL DEFAULT 'zoom';

@@ -182,3 +182,24 @@ export async function getZoomMeetingStartUrl(meetingId: string) {
 
   return meeting.start_url;
 }
+
+export async function downloadZoomRecording(downloadUrl: string) {
+  const accessToken = await getZoomAccessToken();
+  const response = await fetch(downloadUrl, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const details = await readZoomError(response);
+    throw new Error(`Zoom recording download failed: ${details}.`);
+  }
+
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    mimeType: response.headers.get("content-type") ?? "video/mp4",
+  };
+}

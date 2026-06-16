@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { completedOrderWhere } from "@/lib/payments/completed-orders";
 import { convertAmountToGbp } from "@/lib/registration/catalog";
 
@@ -328,8 +329,8 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const programTitles = Array.from(
       new Set(
         order.items.flatMap((item) => {
-          if (item.enrollment?.program?.title) return [item.enrollment.program.title];
-          if (item.offer?.title) return [formatProgramTitle(item.offer.title, item.offer.slug)];
+          if (item.enrollment?.program?.title) return [displayProgramTitle(item.enrollment.program.title)];
+          if (item.offer?.title) return [displayProgramTitle(formatProgramTitle(item.offer.title, item.offer.slug))];
           return [];
         }),
       ),
@@ -412,7 +413,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const latestRegistration = student.registrationStudents[0]?.registration ?? null;
     const enrollmentDetails = student.enrollments.map((enrollment) => ({
       id: enrollment.id,
-      programTitle: enrollment.program.title,
+      programTitle: displayProgramTitle(enrollment.program.title),
       status: enrollment.status,
       startedAt: enrollment.startedAt,
       createdAt: enrollment.createdAt,
@@ -450,7 +451,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       phone: parentPhone,
       enrollments: student.enrollments.map((enrollment) => ({
         id: enrollment.id,
-        programTitle: enrollment.program.title,
+        programTitle: displayProgramTitle(enrollment.program.title),
         status: enrollment.status,
       })),
       enrollmentDetails,
@@ -482,7 +483,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           name: student.displayName || formatPersonName(student.user.firstName, student.user.lastName) || "Unnamed child",
           age: student.age,
           gender: null,
-          programs: student.enrollments.map((enrollment) => enrollment.program.title),
+          programs: Array.from(new Set(student.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)))),
         },
       ],
       childNames: childNames.length ? childNames : [

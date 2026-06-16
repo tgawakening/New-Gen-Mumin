@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { cleanLiveClassTitle } from "@/lib/live-classes/service";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
@@ -26,7 +27,7 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
   return {
     id: recording.id,
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
-    programTitle: recording.schedule.program.title,
+    programTitle: displayProgramTitle(recording.schedule.program.title),
     teacherName: teacherName(recording.schedule.teacher),
     playUrl: recording.playUrl,
     downloadUrl: recording.downloadUrl,

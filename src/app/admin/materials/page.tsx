@@ -10,6 +10,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { approveMaterial, deleteMaterial, grantAdminAccessToMaterials, listMaterials, rejectMaterial, uploadAdminMaterial } from "@/lib/google-drive/materials";
 import { isGoogleDriveConfigured } from "@/lib/google-drive/client";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -150,7 +151,7 @@ export default async function AdminMaterialsPage({ searchParams }: PageProps) {
               Program folder
               <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
                 {programs.map((program) => (
-                  <option key={program.id} value={program.id}>{program.title}</option>
+                  <option key={program.id} value={program.id}>{displayProgramTitle(program.title)}</option>
                 ))}
               </select>
             </label>

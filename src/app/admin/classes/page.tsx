@@ -8,6 +8,7 @@ import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { updateRoomAssignmentNotes } from "@/lib/live-classes/rooms";
 import {
   approveTeacherLiveClass,
@@ -61,6 +62,14 @@ function formatFullDate(value: Date | null) {
 
 function formatDateTime(value: Date) {
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(value);
+}
+
+function formatOccurrenceDuration(minutes: number | null) {
+  if (minutes === null) return "in progress / not ended";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
 function parseCsvLine(line: string) {
@@ -370,7 +379,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                 <option value={WHOLE_GEN_MUMIN_PROGRAM_ID}>Whole Gen-Mumin</option>
                 {programs.map((program) => (
                   <option key={program.id} value={program.id}>
-                    {program.title}
+                    {displayProgramTitle(program.title)}
                   </option>
                 ))}
               </select>
@@ -496,7 +505,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                 href={`/api/classes/breakout-csv?programId=${program.id}`}
                 className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-xs font-semibold text-[#0f4d81]"
               >
-                Export Zoom CSV - {program.title}
+                Export Zoom CSV - {displayProgramTitle(program.title)}
               </Link>
             ))}
           </div>
@@ -505,7 +514,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
               Programme
               <select name="programId" required className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
                 {programs.map((program) => (
-                  <option key={program.id} value={program.id}>{program.title}</option>
+                  <option key={program.id} value={program.id}>{displayProgramTitle(program.title)}</option>
                 ))}
               </select>
             </label>
@@ -555,7 +564,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                   <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_auto] xl:items-center">
                     <div>
                       <p className="font-semibold text-[#22304a]">{cleanLiveClassTitle(schedule.title)}</p>
-                      <p className="mt-1 text-sm text-[#617184]">{schedule.program.title}</p>
+                      <p className="mt-1 text-sm text-[#617184]">{displayProgramTitle(schedule.program.title)}</p>
                       <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{getLiveClassAudienceLabel(schedule.title)}</p>
                       <p className="mt-2 text-xs font-semibold text-[#22304a]">Starts: {formatFullDate(schedule.startsOn)}</p>
                     </div>
@@ -594,7 +603,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                 <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr_0.8fr_auto] xl:items-center">
                   <div>
                     <p className="font-semibold text-[#22304a]">{cleanLiveClassTitle(schedule.title)}</p>
-                    <p className="mt-1 text-sm text-[#617184]">{schedule.program.title}</p>
+                    <p className="mt-1 text-sm text-[#617184]">{displayProgramTitle(schedule.program.title)}</p>
                     <p className="mt-1 text-xs font-semibold text-[#2a76aa]">{getLiveClassAudienceLabel(schedule.title)}</p>
                     <p className="mt-2 text-xs font-semibold text-[#22304a]">Starts: {formatFullDate(schedule.startsOn)}</p>
                   </div>
@@ -602,12 +611,15 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                     <p>{formatTeacherName(schedule.teacher)}</p>
                     <p className="mt-1 text-[#617184]">{WEEKDAYS[schedule.weekday]} {schedule.startTime}-{schedule.endTime}</p>
                     <div className="mt-2 rounded-2xl bg-white px-3 py-2 text-xs text-[#617184]">
-                      <p className="font-semibold text-[#22304a]">Teacher starts via this link: {schedule.sessionOccurrences.filter((entry) => entry.source === "teacher-start").length}</p>
+                      <p className="font-semibold text-[#22304a]">
+                        Completed teacher sessions: {schedule.sessionOccurrences.filter((entry) => entry.source === "teacher-start" && entry.completedAt).length}
+                      </p>
                       {schedule.sessionOccurrences.length ? (
                         <div className="mt-1 space-y-1">
                           {schedule.sessionOccurrences.slice(0, 3).map((entry) => (
                             <p key={entry.id}>
-                              {formatDateTime(entry.startedAt)} · {entry.source === "teacher-start" ? "teacher" : entry.source === "admin-start" ? "admin" : "Zoom"}
+                              {formatDateTime(entry.startedAt)} · {entry.source === "teacher-start" ? "teacher" : entry.source === "admin-start" ? "admin" : "Zoom"} · {formatOccurrenceDuration(entry.durationMinutes)}
+                              {entry.source === "teacher-start" && !entry.completedAt ? " · not payable yet" : ""}
                             </p>
                           ))}
                         </div>

@@ -8,6 +8,7 @@ import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import { listMaterials } from "@/lib/google-drive/materials";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import {
@@ -104,12 +105,17 @@ function eligibleProgramOffers(offers: RegistrationOffer[], child: ParentChild) 
 }
 
 function programTabLabel(course: ParentChild["courses"][number]) {
-  const title = course.title.toLowerCase();
-  if (title.includes("arabic")) return "Arabic";
-  if (title.includes("tajweed")) return "Tajweed";
+  const title = displayProgramTitle(course.programSlug || course.title).toLowerCase();
+  if (title.includes("arabic") || title.includes("tajweed")) return "Arabic & Tajweed";
   if (title.includes("seerah")) return "Seerah";
   if (title.includes("life") || title.includes("leadership")) return "Leadership";
   return course.title;
+}
+
+function courseOwnsProgramTitle(course: ParentChild["courses"][number], programTitle: string) {
+  return (course.programTitles ?? [course.title]).some(
+    (title) => title === programTitle || displayProgramTitle(title) === displayProgramTitle(programTitle),
+  );
 }
 
 function courseHref(childId: string, courseId: string, lessonId?: string) {
@@ -136,20 +142,26 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const selectedCourse = selectedChild.courses.find((course) => course.id === params?.course) ?? selectedChild.courses[0] ?? null;
-  const selectedProgramId = selectedCourse?.programId ?? null;
+  const selectedProgramIds = selectedCourse?.programIds?.length ? selectedCourse.programIds : selectedCourse?.programId ? [selectedCourse.programId] : [];
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && !hasFullGenM(selectedChild);
   const selectedLessonUpdates = selectedCourse
-    ? selectedChild.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
+    ? selectedChild.lessonUpdates.filter((update) => courseOwnsProgramTitle(selectedCourse, update.programTitle))
     : [];
   const selectedLesson =
     selectedLessonUpdates.find((lesson) => lesson.id === params?.lesson) ?? selectedLessonUpdates[0] ?? null;
   const selectedAssignments = selectedCourse
-    ? selectedChild.assignments.filter((assignment) => assignment.programTitle === selectedCourse.title)
+    ? selectedChild.assignments.filter((assignment) => courseOwnsProgramTitle(selectedCourse, assignment.programTitle))
     : [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
-  if (selectedProgramId) {
+  if (selectedProgramIds.length) {
     try {
-      materials = await listMaterials({ programId: selectedProgramId, status: "approved", visibility: "students_parents", limit: 20, studentId: selectedChild.id });
+      materials = (
+        await Promise.all(
+          selectedProgramIds.map((programId) =>
+            listMaterials({ programId, status: "approved", visibility: "students_parents", limit: 20, studentId: selectedChild.id }),
+          ),
+        )
+      ).flat();
     } catch {
       materials = [];
     }

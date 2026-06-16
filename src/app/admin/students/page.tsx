@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-GB", {
@@ -99,9 +100,9 @@ export default async function AdminStudentsPage() {
 
               {student.enrollments.length > 0 ? (
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {student.enrollments.map((enrollment) => (
-                    <span key={enrollment.id} className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-medium text-[#2a76aa]">
-                      {enrollment.program.title}
+                  {Array.from(new Set(student.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)))).map((programTitle) => (
+                    <span key={programTitle} className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-medium text-[#2a76aa]">
+                      {programTitle}
                     </span>
                   ))}
                 </div>

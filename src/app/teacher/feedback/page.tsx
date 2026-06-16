@@ -4,6 +4,7 @@ import { FeedbackAudience } from "@prisma/client";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { getTeacherFeedbackSummary, getTeacherParentFeedbackInbox, submitWeeklyFeedback } from "@/lib/community/feedback";
@@ -54,7 +55,7 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
   const parentInbox = await getTeacherParentFeedbackInbox(session.user.id);
   const parentReviewEntries: FeedbackReviewEntry[] = parentInbox.responses.map((entry) => {
     const studentName = entry.student?.displayName || `${entry.student?.user.firstName ?? ""} ${entry.student?.user.lastName ?? ""}`.trim() || null;
-    const programmes = entry.student?.enrollments.map((enrollment) => enrollment.program.title) ?? [];
+    const programmes = Array.from(new Set(entry.student?.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)) ?? []));
     const summary = [
       { label: "What is going well", value: entry.wins || "No entry" },
       { label: "Concern", value: entry.concerns || "No entry" },

@@ -5,6 +5,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   ChildSelector,
@@ -185,7 +186,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
                 <div key={quiz.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
                   <h3 className="text-lg font-semibold text-[#22304a]">{quiz.title}</h3>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {quiz.program.title} - {quiz.type.replace(/_/g, " ")} - {quiz.questions.length} questions - {quiz.questions.reduce((sum, question) => sum + question.points, 0)} total points
+                    {displayProgramTitle(quiz.program.title)} - {quiz.type.replace(/_/g, " ")} - {quiz.questions.length} questions - {quiz.questions.reduce((sum, question) => sum + question.points, 0)} total points
                   </p>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
                     {latestAttempt?.submittedAt

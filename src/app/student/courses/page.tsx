@@ -7,6 +7,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { listMaterials, uploadStudentSubmissionFile } from "@/lib/google-drive/materials";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
@@ -67,6 +68,22 @@ function AttachmentGrid({ attachments }: { attachments: Attachment[] }) {
   );
 }
 
+type StudentChild = NonNullable<Awaited<ReturnType<typeof getStudentDashboardData>>>["child"];
+
+function programTabLabel(course: StudentChild["courses"][number]) {
+  const title = displayProgramTitle(course.programSlug || course.title).toLowerCase();
+  if (title.includes("arabic") || title.includes("tajweed")) return "Arabic & Tajweed";
+  if (title.includes("seerah")) return "Seerah";
+  if (title.includes("life") || title.includes("leadership")) return "Leadership";
+  return course.title;
+}
+
+function courseOwnsProgramTitle(course: StudentChild["courses"][number], programTitle: string) {
+  return (course.programTitles ?? [course.title]).some(
+    (title) => title === programTitle || displayProgramTitle(title) === displayProgramTitle(programTitle),
+  );
+}
+
 export default async function StudentCoursesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
 
@@ -79,10 +96,17 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
   const child = dashboard.child;
   const params = searchParams ? await searchParams : {};
   const selectedCourse = child.courses.find((course) => course.id === params.course) ?? child.courses[0] ?? null;
+  const selectedProgramIds = selectedCourse?.programIds?.length ? selectedCourse.programIds : selectedCourse?.programId ? [selectedCourse.programId] : [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
-  if (selectedCourse) {
+  if (selectedProgramIds.length) {
     try {
-      materials = await listMaterials({ programId: selectedCourse.programId, status: "approved", visibility: "students_parents", limit: 20, studentId: child.id });
+      materials = (
+        await Promise.all(
+          selectedProgramIds.map((programId) =>
+            listMaterials({ programId, status: "approved", visibility: "students_parents", limit: 20, studentId: child.id }),
+          ),
+        )
+      ).flat();
     } catch {
       materials = [];
     }
@@ -94,12 +118,12 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
     return groups;
   }, {});
   const selectedLessonUpdates = selectedCourse
-    ? child.lessonUpdates.filter((update) => update.programTitle === selectedCourse.title)
+    ? child.lessonUpdates.filter((update) => courseOwnsProgramTitle(selectedCourse, update.programTitle))
     : [];
   const selectedLesson =
     selectedLessonUpdates.find((lesson) => lesson.id === params.lesson) ?? selectedLessonUpdates[0] ?? null;
   const selectedAssignments = selectedCourse
-    ? child.assignments.filter((assignment) => assignment.programTitle === selectedCourse.title)
+    ? child.assignments.filter((assignment) => courseOwnsProgramTitle(selectedCourse, assignment.programTitle))
     : child.assignments;
 
   async function submitAssignmentAction(formData: FormData) {
@@ -225,7 +249,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                   : "border border-[#eadfce] bg-white text-[#22304a]"
               }`}
             >
-              {course.title}
+              {programTabLabel(course)}
             </Link>
           ))}
         </div>
@@ -233,7 +257,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
         {selectedCourse ? (
           <div className={`mt-5 rounded-[24px] bg-[#fbf6ef] p-5 ${child.accessLocked ? "opacity-60" : ""}`}>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h3 className="text-xl font-semibold text-[#22304a]">{selectedCourse.title}</h3>
+              <h3 className="text-xl font-semibold text-[#22304a]">{programTabLabel(selectedCourse)}</h3>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
                 {selectedCourse.status}
               </span>
@@ -288,7 +312,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       </SectionCard>
 
       {selectedCourse ? (
-        <SectionCard eyebrow="Weekly lessons" title={`${selectedCourse.title} lesson content`}>
+        <SectionCard eyebrow="Weekly lessons" title={`${programTabLabel(selectedCourse)} lesson content`}>
           <div className="space-y-4">
             {selectedLessonUpdates.map((update) => (
               <article key={update.id} className="rounded-[22px] bg-[#fbf6ef] p-5">
@@ -327,7 +351,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       ) : null}
 
       {selectedCourse ? (
-        <SectionCard eyebrow="Course library" title={`${selectedCourse.title} materials`}>
+        <SectionCard eyebrow="Course library" title={`${programTabLabel(selectedCourse)} materials`}>
           <div className="space-y-4">
             {Object.entries(groupedMaterials).map(([folderName, folderMaterials]) => (
               <div key={folderName} className="rounded-[20px] bg-[#fbf6ef] p-4">
@@ -341,7 +365,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                       className="rounded-[16px] border border-[#eadfce] bg-white px-4 py-3 text-sm"
                     >
                       <p className="font-semibold text-[#22304a]">{material.name}</p>
-                      <p className="mt-1 text-xs text-[#617184]">{material.programTitle ?? selectedCourse.title}</p>
+                      <p className="mt-1 text-xs text-[#617184]">{material.programTitle ? displayProgramTitle(material.programTitle) : programTabLabel(selectedCourse)}</p>
                     </a>
                   ))}
                 </div>
@@ -357,7 +381,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       ) : null}
 
       {selectedCourse ? (
-        <SectionCard eyebrow="Gen-Mumins plan" title={`${selectedCourse.title} curriculum`}>
+        <SectionCard eyebrow="Gen-Mumins plan" title={`${programTabLabel(selectedCourse)} curriculum`}>
           <div className={`grid gap-4 rounded-[24px] bg-[#fbf6ef] p-4 lg:grid-cols-[320px_minmax(0,1fr)] ${child.accessLocked ? "opacity-60" : ""}`}>
             <aside className="max-h-[760px] overflow-y-auto rounded-[20px] bg-white p-3">
               <p className="px-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Curriculum tree</p>

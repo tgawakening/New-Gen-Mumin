@@ -2,6 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { driveRequest, driveUpload, getDriveRootFolderId } from "@/lib/google-drive/client";
 
 export type DriveMaterial = {
@@ -48,9 +49,21 @@ function escapeQuery(value: string) {
 function folderNameForProgram(title: string) {
   if (title.toLowerCase().includes("life")) return "Leadership";
   if (title.toLowerCase().includes("seerah")) return "Seerah";
-  if (title.toLowerCase().includes("tajweed")) return "Tajweed";
-  if (title.toLowerCase().includes("arabic")) return "Arabic";
+  if (title.toLowerCase().includes("tajweed") || title.toLowerCase().includes("arabic")) return "Arabic and Tajweed";
   return title;
+}
+
+function isArabicTajweedProgram(title: string) {
+  const displayTitle = displayProgramTitle(title).toLowerCase();
+  return displayTitle.includes("arabic") && displayTitle.includes("tajweed");
+}
+
+function teacherFolderName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
+  const email = teacher.user.email.toLowerCase();
+  if (email === "abubakar98114@gmail.com") return "Ustadh Abubakr Sadique";
+  if (email === "shoaibmufti11221122@gmail.com") return "Ustadha Afira Tahir";
+  if (email === "mehranraziq@gmail.com") return "Ustadh Mehran Tahir";
+  return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
 }
 
 async function shareFileWithEmails(fileId: string, emails: Array<string | null | undefined>, role: "reader" | "writer" = "writer") {
@@ -173,6 +186,56 @@ async function uploadFileToFolder(input: {
   });
 }
 
+async function uploadBufferToFolder(input: {
+  folderId: string;
+  buffer: Buffer;
+  mimeType: string;
+  name: string;
+  appProperties?: Record<string, string>;
+  copyRequiresWriterPermission?: boolean;
+}) {
+  const boundary = `genmumin-${Date.now()}`;
+  const metadata = {
+    name: input.name,
+    parents: [input.folderId],
+    appProperties: input.appProperties,
+    copyRequiresWriterPermission: input.copyRequiresWriterPermission,
+  };
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`),
+    Buffer.from(`--${boundary}\r\nContent-Type: ${input.mimeType || "application/octet-stream"}\r\n\r\n`),
+    input.buffer,
+    Buffer.from(`\r\n--${boundary}--`),
+  ]);
+
+  return driveUpload<DriveFile>("/files?uploadType=multipart&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
+    method: "POST",
+    headers: { "Content-Type": `multipart/related; boundary=${boundary}` },
+    body,
+  });
+}
+
+async function ensureTeacherProgramSubfolder(input: {
+  programId: string;
+  teacherUserId: string;
+  subfolder: "Curriculum" | "Recordings";
+}) {
+  const [program, teacher] = await Promise.all([
+    db.program.findUnique({ where: { id: input.programId } }),
+    db.teacherProfile.findUnique({ where: { userId: input.teacherUserId }, include: { user: true } }),
+  ]);
+  if (!program) throw new Error("Program not found.");
+  if (!teacher) throw new Error("Teacher not found.");
+
+  const programFolderId = await ensureProgramFolder(input.programId);
+  if (!isArabicTajweedProgram(program.title)) {
+    return ensureChildFolder(programFolderId, input.subfolder);
+  }
+
+  const teacherFolderId = await ensureChildFolder(programFolderId, teacherFolderName(teacher));
+  return ensureChildFolder(teacherFolderId, input.subfolder);
+}
+
 export async function uploadTeacherMaterial(input: {
   programId: string;
   teacherUserId: string;
@@ -196,7 +259,12 @@ export async function uploadTeacherMaterial(input: {
   if (!program) throw new Error("Program not found.");
 
   const programFolderId = await ensureProgramFolder(input.programId);
-  const folderId = await ensureChildFolder(programFolderId, input.folderName ?? "");
+  const curriculumFolderId = await ensureTeacherProgramSubfolder({
+    programId: input.programId,
+    teacherUserId: input.teacherUserId,
+    subfolder: "Curriculum",
+  });
+  const folderId = await ensureChildFolder(curriculumFolderId, input.folderName ?? "");
   const folderName = input.folderName?.trim() || "General";
   const teacherEmails = await getProgramTeacherEmails(input.programId);
   const metadata = {
@@ -325,6 +393,68 @@ export async function uploadAdminMaterial(input: {
   return uploaded;
 }
 
+export async function uploadLiveClassRecordingToDrive(input: {
+  programId: string;
+  teacherUserId: string;
+  scheduleId: string;
+  recordingFileId: string;
+  title: string;
+  buffer: Buffer;
+  mimeType: string;
+  fileType?: string | null;
+  recordingStart?: Date | null;
+}) {
+  const [program, teacher] = await Promise.all([
+    db.program.findUnique({ where: { id: input.programId } }),
+    db.teacherProfile.findUnique({ where: { userId: input.teacherUserId }, include: { user: true } }),
+  ]);
+  if (!program) throw new Error("Program not found.");
+  if (!teacher) throw new Error("Teacher not found.");
+
+  const recordingsFolderId = await ensureTeacherProgramSubfolder({
+    programId: input.programId,
+    teacherUserId: input.teacherUserId,
+    subfolder: "Recordings",
+  });
+  const extension = (input.fileType ?? "mp4").toLowerCase() || "mp4";
+  const dateLabel = input.recordingStart ? input.recordingStart.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const uploaded = await uploadBufferToFolder({
+    folderId: recordingsFolderId,
+    buffer: input.buffer,
+    mimeType: input.mimeType,
+    name: `${input.title} - ${dateLabel}.${extension}`,
+    copyRequiresWriterPermission: true,
+    appProperties: {
+      genMumin: "live-class-recording",
+      programId: input.programId,
+      programTitle: displayProgramTitle(program.title),
+      teacherUserId: input.teacherUserId,
+      teacherName: teacherFolderName(teacher),
+      scheduleId: input.scheduleId,
+      recordingFileId: input.recordingFileId,
+      folderName: "Recordings",
+      visibility: "students_parents",
+    },
+  });
+
+  await driveRequest(`/files/${uploaded.id}/permissions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "reader", type: "anyone" }),
+  });
+  await driveRequest(`/files/${uploaded.id}?fields=id,webViewLink,copyRequiresWriterPermission`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ copyRequiresWriterPermission: true }),
+  }).catch(() => undefined);
+
+  return {
+    id: uploaded.id,
+    webViewLink: uploaded.webViewLink ?? null,
+    folderId: recordingsFolderId,
+  };
+}
+
 export async function uploadStudentSubmissionFile(input: {
   studentId: string;
   studentName: string;
@@ -385,7 +515,7 @@ function mapDriveFile(file: DriveFile): DriveMaterial {
     thumbnailLink: file.thumbnailLink ?? null,
     createdTime: file.createdTime,
     programId: file.appProperties?.programId ?? null,
-    programTitle: file.appProperties?.programTitle ?? null,
+    programTitle: file.appProperties?.programTitle ? displayProgramTitle(file.appProperties.programTitle) : null,
     status: file.appProperties?.status ?? "pending",
     uploadedBy: file.appProperties?.uploadedByName ?? null,
     uploadedByUserId: file.appProperties?.uploadedByUserId ?? null,

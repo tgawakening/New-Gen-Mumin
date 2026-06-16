@@ -11,6 +11,7 @@ import {
   getTeacherProgramRosterEntries,
 } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 
 export type TeacherDashboardData = {
@@ -372,7 +373,7 @@ export async function getTeacherDashboardData(userId: string) {
 
     return {
       programId: assignment.program.id,
-      title: assignment.program.title,
+      title: displayProgramTitle(assignment.program.slug || assignment.program.title),
       assignmentCount: assignment.program.assignments.length,
       students: Array.from(
         new Map(
@@ -455,7 +456,7 @@ export async function getTeacherDashboardData(userId: string) {
       assignment.program.assignments.map((task) => ({
         id: task.id,
         programId: assignment.program.id,
-        programTitle: assignment.program.title,
+        programTitle: displayProgramTitle(assignment.program.slug || assignment.program.title),
         title: task.title,
         instructions: task.instructions ?? null,
         dueDate: task.dueDate,

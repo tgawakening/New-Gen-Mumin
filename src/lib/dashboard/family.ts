@@ -17,6 +17,7 @@ import {
   genMProgrammes,
   genMTeachers,
   genMTerms,
+  displayProgramTitle,
   getGenMProgrammeByTitle,
   getGenMTermPlansForProgramme,
   getGenMTeachersForProgramme,
@@ -27,8 +28,11 @@ import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 type ChildCourseSummary = {
   id: string;
   programId: string;
+  programIds: string[];
   programSlug: string;
+  programSlugs: string[];
   title: string;
+  programTitles: string[];
   status: string;
   startedAt: Date | null;
   meetingCount: number;
@@ -957,11 +961,14 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       ?.filter((student) => student.gender)
       .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0]
       ?.gender ?? null;
-  const courseSummaries: ChildCourseSummary[] = (validEnrollments as DashboardEnrollment[]).map((enrollment) => ({
+  const rawCourseSummaries: ChildCourseSummary[] = (validEnrollments as DashboardEnrollment[]).map((enrollment) => ({
     id: enrollment.id,
     programId: enrollment.program.id,
+    programIds: [enrollment.program.id],
     programSlug: enrollment.program.slug,
-    title: enrollment.program.title,
+    programSlugs: [enrollment.program.slug],
+    title: displayProgramTitle(enrollment.program.slug || enrollment.program.title),
+    programTitles: [enrollment.program.title],
     status: enrollment.status.replace(/_/g, " "),
     startedAt: enrollment.startedAt,
     meetingCount: enrollment.program.schedules.length,
@@ -1017,6 +1024,38 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
       .slice(0, 3),
     roomAssignment: getStudentRoomAssignment(child.learningNotes, enrollment.program.id),
   }));
+  const courseSummaries = Array.from(
+    rawCourseSummaries
+      .reduce((groups, course) => {
+        const key = displayProgramTitle(course.programSlug || course.title);
+        const existing = groups.get(key);
+        if (!existing) {
+          groups.set(key, course);
+          return groups;
+        }
+
+        existing.id = [...existing.id.split("::"), course.id].join("::");
+        existing.programIds = [...new Set([...existing.programIds, ...course.programIds])];
+        existing.programSlugs = [...new Set([...existing.programSlugs, ...course.programSlugs])];
+        existing.programTitles = [...new Set([...existing.programTitles, ...course.programTitles])];
+        existing.meetingCount += course.meetingCount;
+        existing.startedAt =
+          existing.startedAt && course.startedAt
+            ? existing.startedAt < course.startedAt
+              ? existing.startedAt
+              : course.startedAt
+            : existing.startedAt ?? course.startedAt;
+        existing.teachers = Array.from(new Map([...existing.teachers, ...course.teachers].map((teacher) => [teacher.email, teacher])).values());
+        existing.recentLessonTopics = [...new Set([...existing.recentLessonTopics, ...course.recentLessonTopics])].slice(0, 4);
+        existing.currentTaskTitles = [...new Set([...existing.currentTaskTitles, ...course.currentTaskTitles])].slice(0, 4);
+        existing.recentLessonCards = [...existing.recentLessonCards, ...course.recentLessonCards].slice(0, 3);
+        existing.currentTaskCards = [...existing.currentTaskCards, ...course.currentTaskCards].slice(0, 3);
+        existing.upcomingSessions = [...existing.upcomingSessions, ...course.upcomingSessions].slice(0, 3);
+        if (!existing.roomAssignment) existing.roomAssignment = course.roomAssignment;
+        return groups;
+      }, new Map<string, ChildCourseSummary>())
+      .values(),
+  );
   return {
     id: child.id,
     name:

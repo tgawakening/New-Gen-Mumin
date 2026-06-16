@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { getGenMProgrammeByTitle, type GenMProgramSlug } from "@/lib/genm/curriculum";
+import { getGenMProgrammeByTitle, isArabicTajweedSlug, type GenMProgramSlug } from "@/lib/genm/curriculum";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
@@ -23,14 +23,18 @@ export default async function TeacherProgrammeBuilderPage({ params, searchParams
 
   const resolvedParams = await params;
   const resolvedSearch = searchParams ? await searchParams : undefined;
-  const assignedProgramme = dashboard.rosters.find(
-    (roster) => getGenMProgrammeByTitle(roster.title)?.slug === resolvedParams.programmeSlug,
-  );
+  const assignedProgramme = dashboard.rosters.find((roster) => {
+    const programme = getGenMProgrammeByTitle(roster.title);
+    if (!programme) return false;
+    return isArabicTajweedSlug(resolvedParams.programmeSlug)
+      ? isArabicTajweedSlug(programme.slug)
+      : programme.slug === resolvedParams.programmeSlug;
+  });
 
   if (!assignedProgramme) {
     const fallbackProgramme = dashboard.rosters[0] ? getGenMProgrammeByTitle(dashboard.rosters[0].title) : null;
     if (fallbackProgramme) {
-      redirect(`/teacher/course-builder/${fallbackProgramme.slug}`);
+      redirect(`/teacher/course-builder/${isArabicTajweedSlug(fallbackProgramme.slug) ? "arabic" : fallbackProgramme.slug}`);
     }
     redirect("/teacher/course-builder");
   }

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { getGenMProgrammeByTitle } from "@/lib/genm/curriculum";
+import { getGenMProgrammeByTitle, isArabicTajweedSlug } from "@/lib/genm/curriculum";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
@@ -41,7 +41,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
       if (params?.taskComposer) query.set("taskComposer", params.taskComposer);
       if (params?.liveComposer) query.set("liveComposer", params.liveComposer);
       if (params?.materialComposer) query.set("materialComposer", params.materialComposer);
-      redirect(`/teacher/course-builder/${programme.slug}${query.size ? `?${query.toString()}` : ""}`);
+      redirect(`/teacher/course-builder/${isArabicTajweedSlug(programme.slug) ? "arabic" : programme.slug}${query.size ? `?${query.toString()}` : ""}`);
     }
   }
 

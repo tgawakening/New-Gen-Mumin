@@ -10,6 +10,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
@@ -127,7 +128,7 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
                 <input type="hidden" name="programId" value={assignment.programId} />
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h3 className="text-lg font-semibold text-[#22304a]">{assignment.program.title}</h3>
+                    <h3 className="text-lg font-semibold text-[#22304a]">{displayProgramTitle(assignment.program.title)}</h3>
                     <p className="mt-1 text-sm text-[#5f6b7a]">Select the students who should receive live session notifications by default.</p>
                   </div>
                   <FormSubmitButton className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white" pendingLabel="Saving roster...">
@@ -151,7 +152,7 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
                           <span className="font-semibold">{studentName}</span>
                         </span>
                         <span className="mt-2 text-xs text-[#5f6b7a]">{student.user.email}</span>
-                        <span className="mt-1 text-xs text-[#8a94a3]">Eligible for {assignment.program.title}</span>
+                        <span className="mt-1 text-xs text-[#8a94a3]">Eligible for {displayProgramTitle(assignment.program.title)}</span>
                       </label>
                     );
                   })}

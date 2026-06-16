@@ -10,7 +10,7 @@ import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/
 import { QuizQuestionBuilderClient } from "@/components/dashboard/teacher/QuizQuestionBuilderClient";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, type GenMProgramSlug } from "@/lib/genm/curriculum";
+import { displayProgramTitle, genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, isArabicTajweedSlug, type GenMProgramSlug } from "@/lib/genm/curriculum";
 import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
 import { uploadTeacherMaterial } from "@/lib/google-drive/materials";
 import { requestTeacherLiveClass } from "@/lib/live-classes/service";
@@ -142,16 +142,11 @@ async function uploadBuilderAttachments(input: {
 }
 
 function getProgrammeTeachingCapabilities(programmeSlug: GenMProgramSlug) {
-  if (programmeSlug === "arabic") {
+  if (isArabicTajweedSlug(programmeSlug)) {
     return [
       "Update textbook progress across Al-Arabiyyah Bayna Yaday Awladina books 1-6.",
       "Publish weekly vocabulary decks, speaking games, and writing prompts.",
       "Track reading, dialogue practice, and simple presentation readiness.",
-    ];
-  }
-
-  if (programmeSlug === "tajweed") {
-    return [
       "Publish recitation targets, listening tasks, and rule-practice homework.",
       "Highlight makharij, noon saakin, madd, and fluency goals by term.",
       "Keep memorisation and pronunciation correction visible to families.",
@@ -174,8 +169,7 @@ function getProgrammeTeachingCapabilities(programmeSlug: GenMProgramSlug) {
 }
 
 function getProgrammeHighlights(programmeSlug: GenMProgramSlug, term: (typeof genMTerms)[number]) {
-  if (programmeSlug === "arabic") return term.arabic;
-  if (programmeSlug === "tajweed") return term.tajweed;
+  if (isArabicTajweedSlug(programmeSlug)) return [...term.arabic, ...term.tajweed];
   if (programmeSlug === "seerah") return term.seerah;
   return term.lifeSkills;
 }
@@ -294,7 +288,13 @@ export function CourseBuilderWorkspace({
   materialComposer = false,
 }: CourseBuilderWorkspaceProps) {
   const selectedRoster = selectedProgrammeSlug
-    ? dashboard.rosters.find((roster) => getGenMProgrammeByTitle(roster.title)?.slug === selectedProgrammeSlug) ?? null
+    ? dashboard.rosters.find((roster) => {
+        const programme = getGenMProgrammeByTitle(roster.title);
+        if (!programme) return false;
+        return isArabicTajweedSlug(selectedProgrammeSlug)
+          ? isArabicTajweedSlug(programme.slug)
+          : programme.slug === selectedProgrammeSlug;
+      }) ?? null
     : null;
 
   const visibleRosters = selectedRoster ? [selectedRoster] : dashboard.rosters;
@@ -340,9 +340,9 @@ export function CourseBuilderWorkspace({
     : null;
 
   const selectedProgramme = selectedRoster ? getGenMProgrammeByTitle(selectedRoster.title) : null;
-  const successRedirectPath = selectedProgrammeSlug ? `/teacher/course-builder/${selectedProgrammeSlug}` : "/teacher/course-builder";
+  const successRedirectPath = selectedProgrammeSlug ? `/teacher/course-builder/${isArabicTajweedSlug(selectedProgrammeSlug) ? "arabic" : selectedProgrammeSlug}` : "/teacher/course-builder";
   const programmeTeachers = selectedRoster ? getGenMTeachersForProgramme(selectedRoster.title) : [];
-  const tabBaseHref = selectedProgrammeSlug ? `/teacher/course-builder/${selectedProgrammeSlug}` : "/teacher/course-builder";
+  const tabBaseHref = selectedProgrammeSlug ? `/teacher/course-builder/${isArabicTajweedSlug(selectedProgrammeSlug) ? "arabic" : selectedProgrammeSlug}` : "/teacher/course-builder";
   const selectedProgramId = selectedRoster?.programId ?? visibleRosters[0]?.programId ?? "";
 
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
@@ -482,7 +482,7 @@ export function CourseBuilderWorkspace({
         scheduleId,
         teacherUserId,
         programId: selectedProgramId,
-        fallbackTitle: selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder",
+        fallbackTitle: displayProgramTitle(selectedRoster?.title ?? selectedProgramme?.title ?? "Course Builder"),
       });
       const schedule = dashboard.classes.find((entry) => entry.id === resolvedScheduleId) ?? {
         id: resolvedScheduleId,
@@ -595,19 +595,19 @@ export function CourseBuilderWorkspace({
         {
           userId: teacherUserId,
           title: lessonLogId ? "Lesson updated" : "Lesson published",
-          body: `${topic} is now saved in ${selectedProgramme?.title ?? selectedRoster?.title ?? "the programme"}.`,
+          body: `${topic} is now saved in ${displayProgramTitle(selectedProgramme?.title ?? selectedRoster?.title ?? "the programme")}.`,
           href: `${successRedirectPath}?tab=plan`,
         },
         ...admins.map((admin) => ({
           userId: admin.id,
           title: lessonLogId ? "Teacher updated a lesson" : "Teacher published a lesson",
-          body: `${dashboard.teacherName} saved ${topic} for ${selectedProgramme?.title ?? selectedRoster?.title ?? "a programme"}.`,
+          body: `${dashboard.teacherName} saved ${topic} for ${displayProgramTitle(selectedProgramme?.title ?? selectedRoster?.title ?? "a programme")}.`,
           href: "/admin/classes",
         })),
         ...learnerUsers.map((learner) => ({
           userId: learner.student.userId,
           title: "New lesson published",
-          body: `${topic} is available in ${selectedProgramme?.title ?? selectedRoster?.title ?? "your course"}.`,
+          body: `${topic} is available in ${displayProgramTitle(selectedProgramme?.title ?? selectedRoster?.title ?? "your course")}.`,
           href: "/parent/courses",
         })),
       ];
@@ -1180,7 +1180,7 @@ export function CourseBuilderWorkspace({
                 <div key={roster.programId} className="rounded-[24px] bg-[#fbf6ef] p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-xl font-semibold text-[#22304a]">{roster.title}</h3>
+                      <h3 className="text-xl font-semibold text-[#22304a]">{displayProgramTitle(roster.title)}</h3>
                       {programme?.strapline ? <p className="mt-2 text-sm font-medium text-[#c27a2c]">{programme.strapline}</p> : null}
                     </div>
                     <Link
@@ -1732,7 +1732,7 @@ export function CourseBuilderWorkspace({
                   <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
                     <div className="rounded-[18px] border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm text-[#4d5a6b]">
                       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#c27a2c]">Programme workspace</p>
-                      <p className="mt-1 font-semibold text-[#22304a]">{selectedRoster?.title ?? selectedProgramme?.title ?? "Selected programme"}</p>
+                      <p className="mt-1 font-semibold text-[#22304a]">{displayProgramTitle(selectedRoster?.title ?? selectedProgramme?.title ?? "Selected programme")}</p>
                       <p className="mt-1 text-xs">Lesson will be saved under this course builder automatically.</p>
                     </div>
                     <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
@@ -1996,7 +1996,7 @@ export function CourseBuilderWorkspace({
                 <input type="hidden" name="returnTab" value="task" />
 
                 <div className="rounded-[18px] bg-[#fbf6ef] px-4 py-3 text-sm leading-7 text-[#5f6b7a]">
-                  Publishing task for <span className="font-semibold text-[#22304a]">{selectedRoster?.title}</span>. Attach worksheets, examples, images, or files students need before starting.
+                  Publishing task for <span className="font-semibold text-[#22304a]">{displayProgramTitle(selectedRoster?.title)}</span>. Attach worksheets, examples, images, or files students need before starting.
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">

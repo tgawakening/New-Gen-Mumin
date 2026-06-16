@@ -5,6 +5,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
+import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   FamilyDashboardFrame,
@@ -53,7 +54,7 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
   const quizForms = student?.enrollments.flatMap((enrollment) =>
     enrollment.program.quizzes.map((quiz) => ({
       ...quiz,
-      programTitle: enrollment.program.title,
+      programTitle: displayProgramTitle(enrollment.program.title),
     })),
   ) ?? [];
 
