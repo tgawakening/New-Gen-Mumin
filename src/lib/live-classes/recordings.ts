@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
 import { cleanLiveClassTitle } from "@/lib/live-classes/service";
-import { downloadZoomRecording } from "@/lib/zoom/client";
+import { downloadZoomRecording, findZoomRecordingDownloadUrl } from "@/lib/zoom/client";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 
@@ -297,7 +297,25 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
     throw new Error("This recording is still being prepared for Google Drive viewing.");
   }
 
-  const downloaded = await downloadZoomRecording(recording.downloadUrl);
+  let downloadUrl = recording.downloadUrl;
+  let downloaded: Awaited<ReturnType<typeof downloadZoomRecording>>;
+  try {
+    downloaded = await downloadZoomRecording(downloadUrl);
+  } catch (directDownloadError) {
+    if (!recording.meetingId) throw directDownloadError;
+
+    const freshDownloadUrl = await findZoomRecordingDownloadUrl({
+      meetingId: recording.meetingId,
+      recordingFileId: recording.recordingFileId,
+      recordingStart: recording.recordingStart,
+      fileType: recording.fileType,
+    });
+    if (!freshDownloadUrl) throw directDownloadError;
+
+    downloadUrl = freshDownloadUrl;
+    downloaded = await downloadZoomRecording(downloadUrl);
+  }
+
   const driveRecording = await uploadLiveClassRecordingToDrive({
     programId: recording.schedule.programId,
     teacherUserId: recording.schedule.teacher.user.id,
@@ -318,6 +336,7 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
       driveViewUrl: driveRecording.webViewLink,
       driveFolderId: driveRecording.folderId,
       storageProvider: "google-drive",
+      downloadUrl,
     },
   });
 

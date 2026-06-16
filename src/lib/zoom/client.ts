@@ -29,6 +29,23 @@ type ZoomMeetingDetailsResponse = {
   start_url?: string;
 };
 
+type ZoomRecordingFile = {
+  id?: string;
+  file_type?: string;
+  file_size?: number;
+  play_url?: string;
+  download_url?: string;
+  recording_start?: string;
+  recording_end?: string;
+};
+
+type ZoomMeetingRecordingsResponse = {
+  id?: number | string;
+  uuid?: string;
+  topic?: string;
+  recording_files?: ZoomRecordingFile[];
+};
+
 async function readZoomError(response: Response) {
   const body = await response.text();
   if (!body) return `${response.status} ${response.statusText}`.trim();
@@ -183,6 +200,10 @@ export async function getZoomMeetingStartUrl(meetingId: string) {
   return meeting.start_url;
 }
 
+function recordingScopeGuidance() {
+  return " Check that the Zoom Server-to-Server OAuth app has account-level cloud recording read/download access, for example recording:read:admin, then click Activate again after saving scope changes.";
+}
+
 export async function downloadZoomRecording(downloadUrl: string) {
   const accessToken = await getZoomAccessToken();
   const fetchRecording = (url: string, withBearer: boolean) => fetch(url, {
@@ -202,7 +223,7 @@ export async function downloadZoomRecording(downloadUrl: string) {
     const details = await readZoomError(response);
     const guidance =
       response.status === 401 || response.status === 403
-        ? " Check that the Zoom Server-to-Server OAuth app has cloud recording read scopes and was re-activated after scope changes."
+        ? recordingScopeGuidance()
         : "";
     throw new Error(`Zoom recording download failed: ${details}.${guidance}`);
   }
@@ -211,4 +232,66 @@ export async function downloadZoomRecording(downloadUrl: string) {
     buffer: Buffer.from(await response.arrayBuffer()),
     mimeType: response.headers.get("content-type") ?? "video/mp4",
   };
+}
+
+function zoomMeetingRecordingsUrl(meetingId: string) {
+  const encodedMeetingId = meetingId.includes("/") ? encodeURIComponent(encodeURIComponent(meetingId)) : encodeURIComponent(meetingId);
+  return `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings`;
+}
+
+export async function getZoomMeetingRecordings(meetingId: string) {
+  const accessToken = await getZoomAccessToken();
+  const response = await fetch(zoomMeetingRecordingsUrl(meetingId), {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const details = await readZoomError(response);
+    const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
+    throw new Error(`Zoom meeting recordings lookup failed: ${details}.${guidance}`);
+  }
+
+  return (await response.json()) as ZoomMeetingRecordingsResponse;
+}
+
+function sameRecordingTime(left?: string, right?: Date | string | null) {
+  if (!left || !right) return false;
+  const leftMs = new Date(left).getTime();
+  const rightMs = right instanceof Date ? right.getTime() : new Date(right).getTime();
+  if (!Number.isFinite(leftMs) || !Number.isFinite(rightMs)) return false;
+  return Math.abs(leftMs - rightMs) <= 2 * 60 * 1000;
+}
+
+export async function findZoomRecordingDownloadUrl(payload: {
+  meetingId: string;
+  recordingFileId?: string | null;
+  recordingStart?: Date | string | null;
+  fileType?: string | null;
+}) {
+  const recordings = await getZoomMeetingRecordings(payload.meetingId);
+  const files = recordings.recording_files ?? [];
+  const playable = files.filter((file) => {
+    const fileType = (file.file_type ?? "").toUpperCase();
+    if (!file.download_url) return false;
+    if (["CHAT", "CC", "TRANSCRIPT", "TIMELINE", "SUMMARY"].includes(fileType)) return false;
+    return !fileType || ["MP4", "M4A"].includes(fileType);
+  });
+
+  const requestedType = (payload.fileType ?? "").toUpperCase();
+  const exact =
+    playable.find((file) => payload.recordingFileId && file.id === payload.recordingFileId) ??
+    playable.find(
+      (file) =>
+        sameRecordingTime(file.recording_start, payload.recordingStart) &&
+        (!requestedType || (file.file_type ?? "").toUpperCase() === requestedType),
+    ) ??
+    playable.find((file) => sameRecordingTime(file.recording_start, payload.recordingStart)) ??
+    playable.find((file) => (file.file_type ?? "").toUpperCase() === "MP4") ??
+    playable[0];
+
+  return exact?.download_url ?? null;
 }
