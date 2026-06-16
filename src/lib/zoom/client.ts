@@ -31,7 +31,7 @@ type ZoomMeetingDetailsResponse = {
 
 async function readZoomError(response: Response) {
   const body = await response.text();
-  if (!body) return response.statusText;
+  if (!body) return `${response.status} ${response.statusText}`.trim();
 
   try {
     const payload = JSON.parse(body) as { message?: string; error?: string; reason?: string; code?: number };
@@ -185,17 +185,26 @@ export async function getZoomMeetingStartUrl(meetingId: string) {
 
 export async function downloadZoomRecording(downloadUrl: string) {
   const accessToken = await getZoomAccessToken();
-  const response = await fetch(downloadUrl, {
+  const fetchRecording = (url: string, withBearer: boolean) => fetch(url, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers: withBearer ? { Authorization: `Bearer ${accessToken}` } : undefined,
     cache: "no-store",
   });
 
+  let response = await fetchRecording(downloadUrl, true);
+  if (!response.ok) {
+    const tokenUrl = new URL(downloadUrl);
+    tokenUrl.searchParams.set("access_token", accessToken);
+    response = await fetchRecording(tokenUrl.toString(), false);
+  }
+
   if (!response.ok) {
     const details = await readZoomError(response);
-    throw new Error(`Zoom recording download failed: ${details}.`);
+    const guidance =
+      response.status === 401 || response.status === 403
+        ? " Check that the Zoom Server-to-Server OAuth app has cloud recording read scopes and was re-activated after scope changes."
+        : "";
+    throw new Error(`Zoom recording download failed: ${details}.${guidance}`);
   }
 
   return {
