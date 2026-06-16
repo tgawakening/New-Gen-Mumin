@@ -2,7 +2,9 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
+import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
 import { cleanLiveClassTitle } from "@/lib/live-classes/service";
+import { downloadZoomRecording } from "@/lib/zoom/client";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 
@@ -11,8 +13,8 @@ export type LiveClassRecordingSummary = {
   title: string;
   programTitle: string;
   teacherName: string;
-  playUrl: string;
-  downloadUrl: string | null;
+  watchUrl: string | null;
+  storageProvider: string | null;
   fileType: string | null;
   recordingStart: Date | null;
   recordingEnd: Date | null;
@@ -29,8 +31,8 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
     programTitle: displayProgramTitle(recording.schedule.program.title),
     teacherName: teacherName(recording.schedule.teacher),
-    playUrl: recording.playUrl,
-    downloadUrl: recording.downloadUrl,
+    watchUrl: recording.driveViewUrl ? `/api/recordings/${recording.id}/watch` : recording.downloadUrl ? `/api/recordings/${recording.id}/watch` : null,
+    storageProvider: recording.storageProvider ?? null,
     fileType: recording.fileType,
     recordingStart: recording.recordingStart,
     recordingEnd: recording.recordingEnd,
@@ -238,4 +240,90 @@ export async function deleteRecordingForAdmin(recordingId: string) {
     }
     throw error;
   }
+}
+
+export async function userCanAccessRecording(recordingId: string, user: { id: string; role: string }) {
+  const recording = await db.liveClassRecording.findFirst({
+    where: { id: recordingId, deletedAt: null },
+    include: includeRecordingRelations(),
+  });
+  if (!recording) return null;
+
+  if (user.role === "ADMIN") return recording;
+  if (user.role === "TEACHER" && recording.schedule.teacher.user.id === user.id) return recording;
+  if (user.role === "STUDENT") {
+    const student = await db.studentProfile.findUnique({ where: { userId: user.id }, select: { id: true } });
+    if (student && recordingIsVisibleToStudent(recording, student.id)) {
+      const enrollment = await db.enrollment.findFirst({
+        where: {
+          studentId: student.id,
+          programId: recording.schedule.programId,
+          status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+        },
+        select: { id: true },
+      });
+      if (enrollment) return recording;
+    }
+  }
+  if (user.role === "PARENT") {
+    const childIds = await db.parentStudent.findMany({
+      where: { parent: { userId: user.id } },
+      select: { studentId: true },
+    });
+    for (const child of childIds) {
+      if (!recordingIsVisibleToStudent(recording, child.studentId)) continue;
+      const enrollment = await db.enrollment.findFirst({
+        where: {
+          studentId: child.studentId,
+          programId: recording.schedule.programId,
+          status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+        },
+        select: { id: true },
+      });
+      if (enrollment) return recording;
+    }
+  }
+
+  return null;
+}
+
+export async function ensureRecordingDriveViewUrl(recordingId: string, user: { id: string; role: string }) {
+  const recording = await userCanAccessRecording(recordingId, user);
+  if (!recording) {
+    throw new Error("Recording not found or you do not have access.");
+  }
+  if (recording.driveViewUrl) return recording.driveViewUrl;
+  if (!recording.downloadUrl) {
+    throw new Error("This recording is still being prepared for Google Drive viewing.");
+  }
+
+  const downloaded = await downloadZoomRecording(recording.downloadUrl);
+  const driveRecording = await uploadLiveClassRecordingToDrive({
+    programId: recording.schedule.programId,
+    teacherUserId: recording.schedule.teacher.user.id,
+    scheduleId: recording.scheduleId,
+    recordingFileId: recording.recordingFileId ?? recording.id,
+    title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+    buffer: downloaded.buffer,
+    mimeType: downloaded.mimeType,
+    fileType: recording.fileType,
+    recordingStart: recording.recordingStart,
+  });
+
+  await db.liveClassRecording.update({
+    where: { id: recording.id },
+    data: {
+      playUrl: driveRecording.webViewLink ?? recording.playUrl,
+      driveFileId: driveRecording.id,
+      driveViewUrl: driveRecording.webViewLink,
+      driveFolderId: driveRecording.folderId,
+      storageProvider: "google-drive",
+    },
+  });
+
+  if (!driveRecording.webViewLink) {
+    throw new Error("Google Drive did not return a viewing link for this recording.");
+  }
+
+  return driveRecording.webViewLink;
 }

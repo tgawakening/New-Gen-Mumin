@@ -25,7 +25,7 @@ export default async function TeacherRecordingsPage() {
   return (
     <TeacherDashboardFrame
       title="Recordings"
-      subtitle="Review Zoom recordings generated after your completed live classes."
+      subtitle="Review Drive-backed recordings generated after your completed live classes."
       navItems={getTeacherNavItems()}
     >
       <TeacherMetricGrid
@@ -37,7 +37,7 @@ export default async function TeacherRecordingsPage() {
         ]}
       />
 
-      <TeacherSection eyebrow="Zoom replays" title="Class recordings">
+      <TeacherSection eyebrow="Drive replays" title="Class recordings">
         <div className="space-y-4">
           {recordings.map((recording) => (
             <div key={recording.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
@@ -45,14 +45,15 @@ export default async function TeacherRecordingsPage() {
               <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
               <p className="mt-2 text-sm text-[#5f6b7a]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
               <div className="mt-4 flex flex-wrap gap-2">
-                <Link href={recording.playUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                  Watch recording
-                </Link>
-                {recording.downloadUrl ? (
-                  <Link href={recording.downloadUrl} target="_blank" className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
-                    Download
+                {recording.watchUrl ? (
+                  <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                    Watch recording
                   </Link>
-                ) : null}
+                ) : (
+                  <span className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
+                    Preparing Drive view
+                  </span>
+                )}
               </div>
             </div>
           ))}

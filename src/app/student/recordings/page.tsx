@@ -48,9 +48,15 @@ export default async function StudentRecordingsPage() {
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 {recording.teacherName} • {formatDate(recording.recordingStart ?? recording.availableAt)}
               </p>
-              <Link href={recording.playUrl} target="_blank" className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                Watch recording
-              </Link>
+              {recording.watchUrl ? (
+                <Link href={recording.watchUrl} target="_blank" className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                  Watch recording
+                </Link>
+              ) : (
+                <span className="mt-4 inline-flex rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
+                  Preparing Drive view
+                </span>
+              )}
             </div>
           ))}
           {!recordings.length ? (

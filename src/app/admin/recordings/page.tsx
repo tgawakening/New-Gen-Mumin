@@ -76,7 +76,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Admin / Recordings</p>
               <h1 className="mt-3 text-3xl font-semibold text-[#22304a]">Live class recordings</h1>
               <p className="mt-2 text-sm leading-6 text-[#617184]">
-                Review Zoom recordings by teacher and remove recordings from parent, student, and teacher dashboards when needed.
+                Review Drive-backed class recordings by teacher and remove recordings from parent, student, and teacher dashboards when needed.
               </p>
             </div>
             <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
@@ -124,9 +124,15 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                       <p className="mt-1 text-sm text-[#617184]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Link href={recording.playUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                        Open
-                      </Link>
+                      {recording.watchUrl ? (
+                        <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                          Open
+                        </Link>
+                      ) : (
+                        <span className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
+                          Preparing Drive view
+                        </span>
+                      )}
                       <form action={deleteRecordingAction}>
                         <input type="hidden" name="recordingId" value={recording.id} />
                         <button className="rounded-full border border-[#efc6c1] bg-white px-4 py-2 text-sm font-semibold text-[#a23c3c]">
