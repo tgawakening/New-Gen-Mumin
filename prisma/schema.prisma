@@ -376,7 +376,7 @@ model LiveClassSessionOccurrence {
   updatedAt      DateTime      @updatedAt
   schedule       ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
 
-  @@unique([scheduleId, teacherUserId, occurrenceDate, source])
+  @@index([scheduleId, teacherUserId, occurrenceDate, source])
   @@index([scheduleId, startedAt])
   @@index([teacherUserId, occurrenceDate])
 }

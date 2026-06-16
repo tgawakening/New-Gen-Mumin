@@ -24,26 +24,14 @@ export async function recordLiveClassSessionOccurrence(input: {
   const source = input.source ?? "platform";
 
   try {
-    await db.liveClassSessionOccurrence.upsert({
-      where: {
-        scheduleId_teacherUserId_occurrenceDate_source: {
-          scheduleId: input.scheduleId,
-          teacherUserId: input.teacherUserId ?? "",
-          occurrenceDate,
-          source,
-        },
-      },
-      create: {
+    await db.liveClassSessionOccurrence.create({
+      data: {
         scheduleId: input.scheduleId,
         teacherUserId: input.teacherUserId ?? "",
         meetingId: input.meetingId ?? null,
         occurrenceDate,
         startedAt,
         source,
-      },
-      update: {
-        meetingId: input.meetingId ?? null,
-        startedAt,
       },
     });
   } catch (error) {
@@ -69,11 +57,17 @@ export async function recordLiveClassSessionEnd(input: {
         scheduleId: input.scheduleId,
         occurrenceDate,
         startedAt: { lte: endedAt },
+        endedAt: null,
       },
       orderBy: { startedAt: "desc" },
     });
 
+    const closedKeys = new Set<string>();
     for (const occurrence of occurrences) {
+      const key = `${occurrence.teacherUserId ?? ""}:${occurrence.source}`;
+      if (closedKeys.has(key)) continue;
+      closedKeys.add(key);
+
       const durationMinutes = Math.max(0, Math.floor((endedAt.getTime() - occurrence.startedAt.getTime()) / 60000));
       await db.liveClassSessionOccurrence.update({
         where: { id: occurrence.id },

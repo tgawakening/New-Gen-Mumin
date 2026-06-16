@@ -140,6 +140,10 @@ function isCompletedOccurrence(occurrence: ReportSchedule["sessionOccurrences"][
   return Boolean(occurrence?.completedAt && (occurrence.durationMinutes ?? 0) >= 30);
 }
 
+function occurrenceSummary(occurrence: ReportSchedule["sessionOccurrences"][number]) {
+  return `Started at ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(occurrence.startedAt)} UTC. Duration: ${occurrence.durationMinutes ?? 0} minutes.`;
+}
+
 export async function getAdminTeacherMonthlyReports(options: {
   month?: string;
   teacherId?: string;
@@ -242,21 +246,17 @@ export async function getAdminTeacherMonthlyReports(options: {
       const scheduledDates = assignedToTeacher
         ? scheduledDatesForMonth(schedule, reportMonth.startsAt, reportMonth.endsAt)
         : [];
-      const coverageDates = schedule.lessonLogs
-        .filter((log) => log.teacherUserId === teacher.userId && !scheduledDates.some((date) => dateKey(date) === dateKey(log.lessonDate)))
-        .map((log) => startOfUtcDay(log.lessonDate));
-      const occurrenceDates = schedule.sessionOccurrences
-        .filter((occurrence) => occurrence.teacherUserId === teacher.userId && isCompletedOccurrence(occurrence) && !scheduledDates.some((date) => dateKey(date) === dateKey(occurrence.occurrenceDate)))
-        .map((occurrence) => startOfUtcDay(occurrence.occurrenceDate));
-
-      return Array.from(
-        new Map([...scheduledDates, ...coverageDates, ...occurrenceDates].map((date) => [dateKey(date), date])).values(),
-      ).map((lessonDate) => {
+      const consumedOccurrenceIds = new Set<string>();
+      const scheduledDetails = scheduledDates.map((lessonDate) => {
         const key = dateKey(lessonDate);
         const logs = schedule.lessonLogs.filter((log) => dateKey(log.lessonDate) === key);
         const occurrences = schedule.sessionOccurrences.filter((occurrence) => dateKey(occurrence.occurrenceDate) === key);
         const ownLog = logs.find((log) => log.teacherUserId === teacher.userId) ?? null;
-        const ownOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId === teacher.userId && isCompletedOccurrence(occurrence)) ?? null;
+        const ownOccurrences = occurrences
+          .filter((occurrence) => occurrence.teacherUserId === teacher.userId && isCompletedOccurrence(occurrence))
+          .sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
+        const ownOccurrence = ownOccurrences[0] ?? null;
+        if (ownOccurrence) consumedOccurrenceIds.add(ownOccurrence.id);
         const substituteLog = logs.find((log) => log.teacherUserId !== schedule.teacher.userId) ?? null;
         const substituteOccurrence = occurrences.find((occurrence) => occurrence.teacherUserId && occurrence.teacherUserId !== schedule.teacher.userId && isCompletedOccurrence(occurrence)) ?? null;
         const assignedTeacherLog = logs.find((log) => log.teacherUserId === schedule.teacher.userId) ?? null;
@@ -286,7 +286,7 @@ export async function getAdminTeacherMonthlyReports(options: {
           programTitle: schedule.program.title,
           startTime: schedule.startTime,
           endTime: schedule.endTime,
-          durationMinutes: classDurationMinutes(schedule.startTime, schedule.endTime),
+          durationMinutes: ownOccurrence?.durationMinutes ?? classDurationMinutes(schedule.startTime, schedule.endTime),
           timezone: schedule.timezone,
           assignedTeacherName: displayName(schedule.teacher.user),
           actualTeacherName: ownLog
@@ -307,13 +307,75 @@ export async function getAdminTeacherMonthlyReports(options: {
             ownLog?.summary ??
             substituteLog?.summary ??
             assignedTeacherLog?.summary ??
-            (ownOccurrence
-              ? `Started at ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(ownOccurrence.startedAt)} UTC. Duration: ${ownOccurrence.durationMinutes ?? 0} minutes.`
-              : null),
+            (ownOccurrence ? occurrenceSummary(ownOccurrence) : null),
           status,
           studentAttendance: attendance,
         };
       });
+
+      const extraOccurrenceDetails = schedule.sessionOccurrences
+        .filter((occurrence) =>
+          occurrence.teacherUserId === teacher.userId &&
+          isCompletedOccurrence(occurrence) &&
+          !consumedOccurrenceIds.has(occurrence.id),
+        )
+        .map((occurrence) => {
+          const key = dateKey(occurrence.occurrenceDate);
+          const attendance = statusCounts(schedule.attendances, key);
+          const status: "present" | "covered-for-other" = assignedToTeacher ? "present" : "covered-for-other";
+
+          return {
+            id: `${schedule.id}-${occurrence.id}`,
+            scheduleId: schedule.id,
+            lessonDate: occurrence.startedAt,
+            dateKey: key,
+            classTitle: cleanLiveClassTitle(schedule.title),
+            programTitle: schedule.program.title,
+            startTime: new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(occurrence.startedAt),
+            endTime: occurrence.endedAt
+              ? new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(occurrence.endedAt)
+              : schedule.endTime,
+            durationMinutes: occurrence.durationMinutes ?? classDurationMinutes(schedule.startTime, schedule.endTime),
+            timezone: "UTC",
+            assignedTeacherName: displayName(schedule.teacher.user),
+            actualTeacherName: displayName(teacher.user),
+            topic: "Additional completed Zoom session",
+            summary: occurrenceSummary(occurrence),
+            status,
+            studentAttendance: attendance,
+          };
+        });
+
+      const logCoverageDetails = schedule.lessonLogs
+        .filter((log) =>
+          log.teacherUserId === teacher.userId &&
+          !assignedToTeacher &&
+          !scheduledDetails.some((detail) => detail.dateKey === dateKey(log.lessonDate)) &&
+          !extraOccurrenceDetails.some((detail) => detail.dateKey === dateKey(log.lessonDate)),
+        )
+        .map((log) => {
+          const key = dateKey(log.lessonDate);
+          return {
+            id: `${schedule.id}-${log.id}`,
+            scheduleId: schedule.id,
+            lessonDate: log.lessonDate,
+            dateKey: key,
+            classTitle: cleanLiveClassTitle(schedule.title),
+            programTitle: schedule.program.title,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            durationMinutes: classDurationMinutes(schedule.startTime, schedule.endTime),
+            timezone: schedule.timezone,
+            assignedTeacherName: displayName(schedule.teacher.user),
+            actualTeacherName: displayName(log.teacher),
+            topic: log.topic,
+            summary: log.summary,
+            status: "covered-for-other" as const,
+            studentAttendance: statusCounts(schedule.attendances, key),
+          };
+        });
+
+      return [...scheduledDetails, ...extraOccurrenceDetails, ...logCoverageDetails];
     }).sort((left, right) => left.lessonDate.getTime() - right.lessonDate.getTime());
 
     const scheduled = details.filter((detail) => detail.assignedTeacherName === displayName(teacher.user)).length;
