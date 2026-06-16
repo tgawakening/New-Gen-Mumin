@@ -18,34 +18,34 @@ import {
   Video,
 } from "lucide-react";
 
-function TeacherNavIcon({ icon }: { icon?: string }) {
+function TeacherNavIcon({ icon, className = "h-4 w-4" }: { icon?: string; className?: string }) {
   switch (icon) {
     case "classes":
-      return <GraduationCap className="h-4 w-4" />;
+      return <GraduationCap className={className} />;
     case "video":
-      return <Video className="h-4 w-4" />;
+      return <Video className={className} />;
     case "check":
-      return <CheckCircle2 className="h-4 w-4" />;
+      return <CheckCircle2 className={className} />;
     case "builder":
-      return <PenTool className="h-4 w-4" />;
+      return <PenTool className={className} />;
     case "folder":
-      return <FolderOpen className="h-4 w-4" />;
+      return <FolderOpen className={className} />;
     case "quiz":
-      return <ClipboardList className="h-4 w-4" />;
+      return <ClipboardList className={className} />;
     case "lesson":
-      return <BookOpen className="h-4 w-4" />;
+      return <BookOpen className={className} />;
     case "journal":
-      return <NotebookPen className="h-4 w-4" />;
+      return <NotebookPen className={className} />;
     case "reports":
-      return <PieChart className="h-4 w-4" />;
+      return <PieChart className={className} />;
     case "calendar":
-      return <CalendarDays className="h-4 w-4" />;
+      return <CalendarDays className={className} />;
     case "profile":
-      return <UserRound className="h-4 w-4" />;
+      return <UserRound className={className} />;
     case "home":
-      return <LayoutDashboard className="h-4 w-4" />;
+      return <LayoutDashboard className={className} />;
     default:
-      return <FileText className="h-4 w-4" />;
+      return <FileText className={className} />;
   }
 }
 
@@ -53,13 +53,35 @@ export function TeacherNavLinkClient({
   href,
   label,
   icon,
+  variant = "sidebar",
 }: {
   href: string;
   label: string;
   icon?: string;
+  variant?: "sidebar" | "mobileTab";
 }) {
   const pathname = usePathname();
   const isActive = pathname === href || (href !== "/teacher" && pathname.startsWith(`${href}/`));
+
+  if (variant === "mobileTab") {
+    return (
+      <Link
+        href={href}
+        title={label}
+        aria-current={isActive ? "page" : undefined}
+        className={`flex min-w-[9rem] snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
+          isActive
+            ? "bg-white text-[#22304a] ring-1 ring-white/40"
+            : "bg-white/10 text-white/90 hover:bg-white/16"
+        }`}
+      >
+        <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${isActive ? "bg-[#fff0db] text-[#c27a2c]" : "bg-white/12 text-[#ffd79b]"}`}>
+          <TeacherNavIcon icon={icon} />
+        </span>
+        <span className="whitespace-nowrap">{label}</span>
+      </Link>
+    );
+  }
 
   return (
     <Link
