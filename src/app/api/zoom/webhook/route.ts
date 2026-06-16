@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
-import { recordLiveClassSessionEnd, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
+import { recordLiveClassSessionEnd, recordLiveClassSessionFromRecording, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -204,6 +204,23 @@ export async function POST(request: NextRequest) {
 
     for (const file of [primaryFile]) {
       const recordingFileId = file.id ?? fallbackRecordingFileId(schedule.id, file.play_url!);
+      const recordingStart = file.recording_start ? new Date(file.recording_start) : null;
+      const recordingEnd = file.recording_end ? new Date(file.recording_end) : null;
+      if (recordingStart && recordingEnd) {
+        await recordLiveClassSessionEnd({
+          scheduleId: schedule.id,
+          meetingId,
+          startedAt: recordingStart,
+          endedAt: recordingEnd,
+        });
+        await recordLiveClassSessionFromRecording({
+          scheduleId: schedule.id,
+          teacherUserId: schedule.teacher.user.id,
+          meetingId,
+          recordingStart,
+          recordingEnd,
+        });
+      }
       let driveRecording: { id: string; webViewLink: string | null; folderId: string } | null = null;
       if (driveColumnsAvailable && file.download_url) {
         try {
@@ -217,7 +234,7 @@ export async function POST(request: NextRequest) {
             buffer: downloaded.buffer,
             mimeType: downloaded.mimeType,
             fileType: file.file_type ?? null,
-            recordingStart: file.recording_start ? new Date(file.recording_start) : null,
+            recordingStart,
           });
         } catch (error) {
           console.error("Unable to copy Zoom recording to Google Drive.", error);
@@ -244,8 +261,8 @@ export async function POST(request: NextRequest) {
                   storageProvider: driveRecording ? "google-drive" : "zoom",
                 }
               : {}),
-            recordingStart: file.recording_start ? new Date(file.recording_start) : null,
-            recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
+            recordingStart,
+            recordingEnd,
             fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
           },
           update: {
@@ -260,8 +277,8 @@ export async function POST(request: NextRequest) {
                 }
               : {}),
             fileType: file.file_type ?? null,
-            recordingStart: file.recording_start ? new Date(file.recording_start) : null,
-            recordingEnd: file.recording_end ? new Date(file.recording_end) : null,
+            recordingStart,
+            recordingEnd,
             fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
             deletedAt: null,
           },

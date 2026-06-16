@@ -223,7 +223,7 @@ export async function getAdminTeacherMonthlyReports(options: {
               gte: reportMonth.startsAt,
               lt: reportMonth.endsAt,
             },
-            source: "teacher-start",
+            source: { in: ["teacher-start", "zoom-recording"] },
           },
           orderBy: { startedAt: "asc" },
         },

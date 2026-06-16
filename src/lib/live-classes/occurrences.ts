@@ -47,16 +47,22 @@ export async function recordLiveClassSessionEnd(input: {
   scheduleId: string;
   meetingId?: string | null;
   endedAt?: Date;
+  startedAt?: Date | null;
 }) {
   const endedAt = input.endedAt ?? new Date();
-  const occurrenceDate = startOfUtcDay(endedAt);
+  const occurrenceDate = startOfUtcDay(input.startedAt ?? endedAt);
 
   try {
     const occurrences = await db.liveClassSessionOccurrence.findMany({
       where: {
         scheduleId: input.scheduleId,
         occurrenceDate,
-        startedAt: { lte: endedAt },
+        startedAt: input.startedAt
+          ? {
+              gte: new Date(input.startedAt.getTime() - 10 * 60 * 1000),
+              lte: new Date(input.startedAt.getTime() + 10 * 60 * 1000),
+            }
+          : { lte: endedAt },
         endedAt: null,
       },
       orderBy: { startedAt: "desc" },
@@ -79,6 +85,66 @@ export async function recordLiveClassSessionEnd(input: {
         },
       });
     }
+  } catch (error) {
+    if (isOccurrenceTableUnavailable(error)) {
+      console.error("Live class occurrence table is not available yet.", error);
+      return;
+    }
+    throw error;
+  }
+}
+
+export async function recordLiveClassSessionFromRecording(input: {
+  scheduleId: string;
+  teacherUserId: string;
+  meetingId?: string | null;
+  recordingStart: Date;
+  recordingEnd: Date;
+}) {
+  const durationMinutes = Math.max(0, Math.floor((input.recordingEnd.getTime() - input.recordingStart.getTime()) / 60000));
+  const occurrenceDate = startOfUtcDay(input.recordingStart);
+
+  try {
+    const existing = await db.liveClassSessionOccurrence.findFirst({
+      where: {
+        scheduleId: input.scheduleId,
+        teacherUserId: input.teacherUserId,
+        occurrenceDate,
+        startedAt: {
+          gte: new Date(input.recordingStart.getTime() - 10 * 60 * 1000),
+          lte: new Date(input.recordingStart.getTime() + 10 * 60 * 1000),
+        },
+      },
+      orderBy: { startedAt: "asc" },
+    });
+
+    if (existing) {
+      await db.liveClassSessionOccurrence.update({
+        where: { id: existing.id },
+        data: {
+          meetingId: input.meetingId ?? existing.meetingId,
+          startedAt: existing.startedAt ?? input.recordingStart,
+          endedAt: input.recordingEnd,
+          durationMinutes,
+          completedAt: durationMinutes >= 30 ? input.recordingEnd : null,
+        },
+      });
+      return;
+    }
+
+    await db.liveClassSessionOccurrence.create({
+      data: {
+        scheduleId: input.scheduleId,
+        teacherUserId: input.teacherUserId,
+        meetingId: input.meetingId ?? null,
+        occurrenceDate,
+        startedAt: input.recordingStart,
+        endedAt: input.recordingEnd,
+        durationMinutes,
+        completedAt: durationMinutes >= 30 ? input.recordingEnd : null,
+        source: "zoom-recording",
+      },
+    });
   } catch (error) {
     if (isOccurrenceTableUnavailable(error)) {
       console.error("Live class occurrence table is not available yet.", error);
