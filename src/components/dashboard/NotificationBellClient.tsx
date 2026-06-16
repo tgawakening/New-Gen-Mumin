@@ -35,7 +35,7 @@ export function NotificationBellClient({ notifications }: { notifications: Notif
           </span>
         ) : null}
       </summary>
-      <div className="absolute right-0 z-50 mt-3 w-[min(360px,calc(100vw-2rem))] rounded-[22px] border border-[#dce4ed] bg-white p-4 shadow-xl">
+      <div className="fixed inset-x-4 top-28 z-[80] max-h-[68vh] overflow-y-auto rounded-[22px] border border-[#dce4ed] bg-white p-4 shadow-xl sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-3 sm:max-h-[70vh] sm:w-[min(360px,calc(100vw-2rem))]">
         <p className="text-sm font-semibold text-[#22304a]">Notifications</p>
         <div className="mt-3 space-y-2">
           {notifications.map((notification) => (
