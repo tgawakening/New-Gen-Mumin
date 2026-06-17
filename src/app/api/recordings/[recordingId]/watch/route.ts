@@ -19,7 +19,8 @@ export async function GET(_request: Request, { params }: RouteProps) {
       id: session.user.id,
       role: session.user.role,
     });
-    return NextResponse.redirect(driveUrl);
+    void driveUrl;
+    return NextResponse.redirect(new URL(`/recordings/${resolvedParams.recordingId}/watch`, _request.url));
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to open recording.";
     return new NextResponse(message, { status: 403 });

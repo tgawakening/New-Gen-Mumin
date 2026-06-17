@@ -31,7 +31,7 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
     programTitle: displayProgramTitle(recording.schedule.program.title),
     teacherName: teacherName(recording.schedule.teacher),
-    watchUrl: recording.driveViewUrl ? `/api/recordings/${recording.id}/watch` : recording.downloadUrl ? `/api/recordings/${recording.id}/watch` : null,
+    watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
     storageProvider: recording.storageProvider ?? null,
     fileType: recording.fileType,
     recordingStart: recording.recordingStart,
@@ -347,4 +347,26 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
   }
 
   return driveRecording.webViewLink;
+}
+
+export async function getRecordingPlaybackDetails(recordingId: string, user: { id: string; role: string }) {
+  await ensureRecordingDriveViewUrl(recordingId, user);
+  const recording = await userCanAccessRecording(recordingId, user);
+  if (!recording) {
+    throw new Error("Recording not found or you do not have access.");
+  }
+  if (!recording.driveFileId) {
+    throw new Error("Recording file is still being prepared.");
+  }
+
+  return {
+    id: recording.id,
+    title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+    programTitle: displayProgramTitle(recording.schedule.program.title),
+    teacherName: teacherName(recording.schedule.teacher),
+    recordingStart: recording.recordingStart,
+    availableAt: recording.availableAt,
+    driveViewUrl: recording.driveViewUrl,
+    fileType: recording.fileType,
+  };
 }

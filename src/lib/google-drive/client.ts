@@ -200,6 +200,26 @@ export async function driveUpload<T>(path: string, init: RequestInit = {}) {
   return parseDriveResponse<T>(response);
 }
 
+export async function driveMediaRequest(fileId: string, rangeHeader?: string | null) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(rangeHeader ? { Range: rangeHeader } : {}),
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok && response.status !== 206) {
+    throw new Error(`Google Drive media request failed: ${await response.text()}`);
+  }
+
+  return response;
+}
+
 export function getDriveRootFolderId() {
   return getDriveConfig().rootFolderId;
 }
