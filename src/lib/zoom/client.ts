@@ -295,3 +295,36 @@ export async function findZoomRecordingDownloadUrl(payload: {
 
   return exact?.download_url ?? null;
 }
+
+function tail(value: string, length = 6) {
+  return value.length <= length ? value : value.slice(-length);
+}
+
+export async function diagnoseZoomRecordingAccess() {
+  const config = getZoomConfig();
+  const accessToken = await getZoomAccessToken();
+  const response = await fetch("https://api.zoom.us/v2/meetings/123456789/recordings", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  const details = response.ok ? "Unexpectedly found placeholder meeting recordings." : await readZoomError(response);
+  const hasRecordingLookupScope =
+    response.ok ||
+    response.status === 404 ||
+    response.status === 300 ||
+    /meeting does not exist|not found|does not exist/i.test(details);
+
+  return {
+    zoomConfigured: true,
+    accountIdTail: tail(config.accountId),
+    clientIdTail: tail(config.clientId),
+    hostUserIdTail: tail(config.hostUserId),
+    recordingsEndpointStatus: response.status,
+    hasRecordingLookupScope,
+    details,
+  };
+}
