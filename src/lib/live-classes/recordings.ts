@@ -350,13 +350,9 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
 }
 
 export async function getRecordingPlaybackDetails(recordingId: string, user: { id: string; role: string }) {
-  await ensureRecordingDriveViewUrl(recordingId, user);
   const recording = await userCanAccessRecording(recordingId, user);
   if (!recording) {
     throw new Error("Recording not found or you do not have access.");
-  }
-  if (!recording.driveFileId) {
-    throw new Error("Recording file is still being prepared.");
   }
 
   return {
@@ -367,6 +363,8 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
     recordingStart: recording.recordingStart,
     availableAt: recording.availableAt,
     driveViewUrl: recording.driveViewUrl,
+    driveFileId: recording.driveFileId,
+    isReadyForPlayback: Boolean(recording.driveFileId),
     fileType: recording.fileType,
   };
 }

@@ -68,10 +68,22 @@ export default async function RecordingWatchPage({ params }: PageProps) {
         </div>
 
         <div className="rounded-[28px] border border-[#eadfce] bg-white p-4 shadow-sm">
-          <RecordingPlayer src={`/api/recordings/${recording.id}/media`} title={recording.title} />
-          <p className="mt-4 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#617184]">
-            The recording plays through the Gen-Mumins dashboard. If it was uploaded only moments ago, give the player a short refresh after Google Drive finishes accepting the file stream.
-          </p>
+          {recording.isReadyForPlayback ? (
+            <>
+              <RecordingPlayer src={`/api/recordings/${recording.id}/media`} title={recording.title} />
+              <p className="mt-4 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#617184]">
+                The recording plays through the Gen-Mumins dashboard. Download controls are hidden from the player.
+              </p>
+            </>
+          ) : (
+            <div className="rounded-[24px] bg-[#fbf6ef] px-5 py-8 text-center">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Preparing recording</p>
+              <h2 className="mt-3 text-2xl font-semibold text-[#22304a]">This replay is still being prepared</h2>
+              <p className="mx-auto mt-3 max-w-2xl text-sm leading-7 text-[#617184]">
+                Zoom has sent the recording details, but the Drive playback file has not finished importing yet. Please refresh this page after a few minutes.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     </main>

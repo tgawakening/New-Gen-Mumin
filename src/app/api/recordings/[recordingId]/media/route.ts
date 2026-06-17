@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
-import { db } from "@/lib/db";
 import { driveMediaRequest } from "@/lib/google-drive/client";
-import { ensureRecordingDriveViewUrl, userCanAccessRecording } from "@/lib/live-classes/recordings";
+import { userCanAccessRecording } from "@/lib/live-classes/recordings";
 
 type RouteProps = {
   params: Promise<{ recordingId: string }>;
@@ -35,16 +34,7 @@ export async function GET(request: Request, { params }: RouteProps) {
 
   let driveFileId = recording.driveFileId;
   if (!driveFileId) {
-    await ensureRecordingDriveViewUrl(recordingId, user);
-    const refreshed = await db.liveClassRecording.findUnique({
-      where: { id: recordingId },
-      select: { driveFileId: true },
-    });
-    driveFileId = refreshed?.driveFileId ?? null;
-  }
-
-  if (!driveFileId) {
-    return NextResponse.json({ error: "Recording is still being prepared." }, { status: 409 });
+    return NextResponse.json({ error: "Recording is still being prepared for playback." }, { status: 409 });
   }
 
   const driveResponse = await driveMediaRequest(driveFileId, request.headers.get("range"));
