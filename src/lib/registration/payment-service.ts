@@ -15,7 +15,7 @@ function createOrderNumber() {
 
 export async function createCheckoutDraft(
   registrationId: string,
-  payload: RegistrationCheckoutPayload,
+  payload: RegistrationCheckoutPayload & { skipProviderCheckout?: boolean; allowManualOutsidePakistan?: boolean },
 ) {
   const checkout = await db.$transaction(async (tx) => {
     const registration = await tx.registration.findUnique({
@@ -245,7 +245,7 @@ export async function createCheckoutDraft(
 
     let manualInstructions: ReturnType<typeof getManualPaymentDetails> | null = null;
 
-    if (payload.gateway === "BANK_TRANSFER" && registration.selectedCountryCode !== "PK") {
+    if (payload.gateway === "BANK_TRANSFER" && registration.selectedCountryCode !== "PK" && !payload.allowManualOutsidePakistan) {
       throw new Error("Manual payment is available only for registrations from Pakistan.");
     }
 
@@ -302,7 +302,7 @@ export async function createCheckoutDraft(
         ? "Choose Bank Transfer or JazzCash and submit the payment proof for manual verification."
         : `Continue to ${payload.gateway.toLowerCase()} to complete the subscription.`;
 
-  if (payload.gateway === "STRIPE" && checkout.amount > 0) {
+  if (payload.gateway === "STRIPE" && checkout.amount > 0 && !payload.skipProviderCheckout) {
     const checkoutLabel =
       checkout.itemTitles.length === 1
         ? `${checkout.itemTitles[0]} subscription`
@@ -351,7 +351,7 @@ export async function createCheckoutDraft(
         },
       },
     });
-  } else if (payload.gateway === "PAYPAL" && checkout.amount > 0) {
+  } else if (payload.gateway === "PAYPAL" && checkout.amount > 0 && !payload.skipProviderCheckout) {
     if (checkout.itemSlugs.length !== 1) {
       throw new Error("PayPal subscriptions are available for single programme selections only. Please use Stripe for discounted or multi-child enrollments.");
     }

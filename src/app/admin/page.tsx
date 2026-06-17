@@ -13,17 +13,20 @@ import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/dashboard";
+import { createAdminProgramEnrollmentOrder } from "@/lib/admin/program-enrollment";
 import { getAdminTeacherMonthlyReports } from "@/lib/admin/teacher-monthly-reports";
 import {
   markOrderCancelled,
   markOrderPaid,
   recordManualPaidAmount,
   resendOrderCompletionEmails,
-  updateStripeSubscriptionAmount,
 } from "@/lib/payments/fulfillment";
+import { getRegistrationOptions } from "@/lib/registration/service";
 
 type AdminDashboardData = Awaited<ReturnType<typeof getAdminDashboardData>>;
 type RecentRegistration = AdminDashboardData["recentRegistrations"][number];
+type AdminStudent = AdminDashboardData["students"][number];
+type RegistrationOffer = Awaited<ReturnType<typeof getRegistrationOptions>>["offers"][number];
 
 type PageProps = {
   searchParams?: Promise<{
@@ -273,6 +276,121 @@ function ChildDetailsList({
   );
 }
 
+function AdminProgramChangePopup({
+  student,
+  offers,
+  action,
+  returnUrl,
+}: {
+  student: AdminStudent;
+  offers: RegistrationOffer[];
+  action: (formData: FormData) => void | Promise<void>;
+  returnUrl: string;
+}) {
+  return (
+    <details className="group relative">
+      <summary className="flex w-full cursor-pointer list-none items-center justify-center rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#0b3d67] [&::-webkit-details-marker]:hidden">
+        Manage programmes
+      </summary>
+      <div className="fixed inset-0 z-[80] bg-[#22304a]/45" />
+      <div className="fixed left-1/2 top-1/2 z-[90] max-h-[90vh] w-[min(980px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[28px] border border-[#dce4ed] bg-[#fffaf5] p-6 shadow-2xl">
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#eadfce] pb-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Admin programme update</p>
+            <h3 className="mt-2 text-2xl font-semibold text-[#22304a]">{student.name}</h3>
+            <p className="mt-1 text-sm text-[#617184]">
+              Parent: {student.parentName} - {student.parentEmail}
+            </p>
+          </div>
+          <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">
+            {student.enrollmentDetails.length} active programmes
+          </span>
+        </div>
+
+        <form action={action} className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <input type="hidden" name="studentId" value={student.id} />
+          <input type="hidden" name="returnUrl" value={returnUrl} />
+
+          <div className="space-y-4">
+            <section className="rounded-[22px] border border-[#ebdccb] bg-white p-4">
+              <p className="font-semibold text-[#22304a]">Current access</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {student.enrollmentDetails.length ? student.enrollmentDetails.map((enrollment) => (
+                  <span key={enrollment.id} className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">
+                    {enrollment.programTitle} - {enrollment.status}
+                  </span>
+                )) : (
+                  <span className="text-sm text-[#617184]">No active programmes yet.</span>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[22px] border border-[#ebdccb] bg-white p-4">
+              <label className="block text-sm font-semibold text-[#22304a]">
+                Programme selection
+                <select name="offerSlug" required className="mt-2 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm">
+                  {offers.map((offer) => (
+                    <option key={offer.slug} value={offer.slug}>
+                      {offer.kind === "BUNDLE" ? `${offer.title} - full bundle` : offer.title}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-4 text-sm">
+                  <input type="radio" name="changeMode" value="add" defaultChecked className="mr-2" />
+                  <span className="font-semibold text-[#22304a]">Add programme</span>
+                  <p className="mt-1 text-[#617184]">Keep existing access and add this programme/order.</p>
+                </label>
+                <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-4 text-sm">
+                  <input type="radio" name="changeMode" value="switch" className="mr-2" />
+                  <span className="font-semibold text-[#22304a]">Switch programme</span>
+                  <p className="mt-1 text-[#617184]">After completion, cancel old access and keep only this selection.</p>
+                </label>
+              </div>
+            </section>
+          </div>
+
+          <aside className="space-y-4">
+            <section className="rounded-[22px] border border-[#ebdccb] bg-white p-4">
+              <p className="font-semibold text-[#22304a]">Payment handling</p>
+              <label className="mt-3 block text-sm font-semibold text-[#22304a]">
+                Gateway record
+                <select name="gateway" defaultValue="BANK_TRANSFER" className="mt-2 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm">
+                  <option value="BANK_TRANSFER">Manual payment</option>
+                  <option value="STRIPE">Stripe - admin completed</option>
+                  <option value="PAYPAL">PayPal - admin completed</option>
+                </select>
+              </label>
+              <div className="mt-4 space-y-2">
+                <label className="block rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-3 text-sm">
+                  <input type="radio" name="paymentMode" value="MANUAL_REVIEW" defaultChecked className="mr-2" />
+                  Create pending order for admin mark-paid
+                </label>
+                <label className="block rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-3 text-sm">
+                  <input type="radio" name="paymentMode" value="AUTO_COMPLETE" className="mr-2" />
+                  Mark completed immediately
+                </label>
+              </div>
+              <label className="mt-4 block text-sm font-semibold text-[#22304a]">
+                Coupon code
+                <input name="couponCode" placeholder="Optional" className="mt-2 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm uppercase" />
+              </label>
+            </section>
+
+            <button className="w-full rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">
+              Create programme order
+            </button>
+            <p className="text-xs leading-5 text-[#617184]">
+              Manual orders appear in Orders for approval. Auto-completed orders unlock access immediately.
+            </p>
+          </aside>
+        </form>
+      </div>
+    </details>
+  );
+}
+
 function canMarkOrderPaid(order: {
   gateway: string;
   status: string;
@@ -294,13 +412,6 @@ function canCancelOrder(order: {
   status: string;
 }) {
   return !["FAILED", "CANCELLED"].includes(order.status);
-}
-
-function canUpdateStripeSubscription(order: {
-  gateway: string;
-  stripeSubscriptionId: string | null;
-}) {
-  return order.gateway === "STRIPE" && Boolean(order.stripeSubscriptionId);
 }
 
 function paymentMethodLabel(gateway: string) {
@@ -610,6 +721,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       </div>
     );
   }
+  const adminUserId = session.user.id;
 
   async function completeOrder(formData: FormData) {
     "use server";
@@ -683,31 +795,6 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Paid amount record updated&tone=success`);
   }
 
-  async function adjustStripeSubscriptionAmount(formData: FormData) {
-    "use server";
-    const orderId = String(formData.get("orderId") || "");
-    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
-    const amount = Number(formData.get("subscriptionAmount"));
-    const currency = String(formData.get("subscriptionCurrency") || "");
-    const note = String(formData.get("subscriptionNote") || "");
-
-    if (!orderId || !Number.isFinite(amount) || amount <= 0) {
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Enter a valid monthly subscription amount&tone=error`);
-    }
-
-    try {
-      await updateStripeSubscriptionAmount(orderId, { amount, currency, note });
-      revalidatePath("/admin");
-      revalidatePath("/parent");
-      revalidatePath("/student");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to update this Stripe subscription right now";
-      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(message)}&tone=error`);
-    }
-
-    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Stripe subscription amount updated for future invoices&tone=success`);
-  }
-
   async function deleteStudent(formData: FormData) {
     "use server";
     const userId = String(formData.get("userId") || "");
@@ -721,6 +808,40 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to delete this student right now&tone=error`);
     }
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Student deleted successfully&tone=danger`);
+  }
+
+  async function createProgramChangeOrder(formData: FormData) {
+    "use server";
+
+    const studentId = String(formData.get("studentId") || "");
+    const offerSlug = String(formData.get("offerSlug") || "");
+    const changeMode = String(formData.get("changeMode") || "add");
+    const paymentMode = String(formData.get("paymentMode") || "MANUAL_REVIEW");
+    const gateway = String(formData.get("gateway") || "BANK_TRANSFER");
+    const couponCode = String(formData.get("couponCode") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=students");
+
+    try {
+      await createAdminProgramEnrollmentOrder({
+        studentId,
+        offerSlug,
+        changeMode: changeMode === "switch" ? "switch" : "add",
+        paymentMode: paymentMode === "AUTO_COMPLETE" ? "AUTO_COMPLETE" : "MANUAL_REVIEW",
+        gateway: gateway === "STRIPE" || gateway === "PAYPAL" || gateway === "BANK_TRANSFER" ? gateway : "BANK_TRANSFER",
+        couponCode,
+        adminUserId,
+      });
+      revalidatePath("/admin");
+      revalidatePath("/admin/orders");
+      revalidatePath("/parent");
+      revalidatePath("/student");
+      revalidatePath("/teacher");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to create programme order.";
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(message)}&tone=error`);
+    }
+
+    redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Programme order created successfully&tone=success`);
   }
 
   async function resendCompletionEmail(formData: FormData) {
@@ -756,6 +877,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   };
 
   const data = await getAdminDashboardData(filters);
+  const registrationOptions = activeTab === "students" ? await getRegistrationOptions() : { offers: [], countries: [] };
   const teacherReportData = activeTab === "teacher-reports"
     ? await getAdminTeacherMonthlyReports({
         month: params?.teacherReportMonth,
@@ -1164,42 +1286,6 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           </button>
                         </form>
                       ) : null}
-                      {canUpdateStripeSubscription(order) ? (
-                        <form action={adjustStripeSubscriptionAmount} className="rounded-2xl border border-[#d7e6f4] bg-[#f8fbff] p-3">
-                          <input type="hidden" name="orderId" value={order.id} />
-                          <input type="hidden" name="returnUrl" value={currentOrderHref} />
-                          <label className="block text-xs font-semibold uppercase tracking-[0.12em] text-[#0f4d81]">
-                            Next Stripe monthly charge
-                          </label>
-                          <div className="mt-2 grid grid-cols-[1fr_72px] gap-2">
-                            <input
-                              name="subscriptionAmount"
-                              type="number"
-                              min="1"
-                              step="1"
-                              defaultValue={order.subscriptionAmountAdjustment?.amount ?? order.totalAmount}
-                              className="w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm text-[#22304a]"
-                            />
-                            <input
-                              name="subscriptionCurrency"
-                              defaultValue={order.subscriptionAmountAdjustment?.currency ?? order.currency}
-                              className="w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm uppercase text-[#22304a]"
-                            />
-                          </div>
-                          <textarea
-                            name="subscriptionNote"
-                            defaultValue={order.subscriptionAmountAdjustment?.note ?? ""}
-                            placeholder="Reason, e.g. client approved $50 monthly family price"
-                            className="mt-2 min-h-16 w-full rounded-xl border border-[#c9d7e6] px-3 py-2 text-sm text-[#22304a]"
-                          />
-                          <p className="mt-2 text-xs leading-5 text-[#617184]">
-                            Updates future Stripe invoices with no immediate proration.
-                          </p>
-                          <button className="mt-2 w-full rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">
-                            Update Stripe subscription
-                          </button>
-                        </form>
-                      ) : null}
                     </div>
                   </div>
                 </div>
@@ -1285,6 +1371,12 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         {student.registrationStatus.replace(/_/g, " ")}
                       </span>
                       <p className="pt-2 font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
+                      <AdminProgramChangePopup
+                        student={student}
+                        offers={registrationOptions.offers}
+                        action={createProgramChangeOrder}
+                        returnUrl={currentStudentHref}
+                      />
                       <form action={deleteStudent}>
                         <input type="hidden" name="userId" value={student.userId} />
                         <input type="hidden" name="returnUrl" value={currentStudentHref} />

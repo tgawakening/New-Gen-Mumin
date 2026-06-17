@@ -79,6 +79,9 @@ function formatPhone(
 }
 
 function registrationSourceLabel(notes: string | null | undefined) {
+  if (notes?.includes("admin-program-change")) {
+    return "Admin programme update";
+  }
   if (notes?.includes("parent-dashboard-add-program")) {
     return "Program enrollment";
   }
@@ -427,6 +430,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     const linkedParentNames = student.parents
       .map((entry) => formatPersonName(entry.parent.user.firstName, entry.parent.user.lastName))
       .filter(Boolean);
+    const primaryParent = student.parents[0]?.parent ?? null;
     const parentPhone =
       latestRegistration?.phoneNumber
         ? formatPhone(latestRegistration.phoneCountryCode, latestRegistration.phoneNumber)
@@ -447,6 +451,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       name:
         student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
       email: student.user.email,
+      parentEmail: primaryParent?.user.email ?? latestRegistration?.parentEmail ?? student.user.email,
       city,
       phone: parentPhone,
       enrollments: student.enrollments.map((enrollment) => ({

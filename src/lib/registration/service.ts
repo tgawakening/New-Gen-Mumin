@@ -439,8 +439,9 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
 
   return db.$transaction(async (tx) => {
     const completedFamilyAccess = await hasCompletedFamilyAccess(tx, payload, offerRecords);
+    const adminProgramChange = payload.notes?.includes("admin-program-change");
 
-    if (completedFamilyAccess) {
+    if (completedFamilyAccess && !adminProgramChange) {
       throw new Error(
         "This email is already registered for the selected Gen-Mumins programme. Kindly log in to continue from your dashboard.",
       );

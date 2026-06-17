@@ -101,6 +101,7 @@ export async function markOrderPaid(
   }
 
   await activateOrderEnrollments(order.id);
+  await applyAdminProgramSwitch(order.id);
 
   if (order.registration && !alreadySucceeded) {
     await resendOrderCompletionEmails(order.id, details.gateway ?? payment.gateway);
@@ -225,6 +226,54 @@ export async function recordManualPaidAmount(
         },
       });
     }
+  });
+}
+
+async function applyAdminProgramSwitch(orderId: string) {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      registration: {
+        include: {
+          items: {
+            include: {
+              offer: {
+                include: {
+                  programs: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const metadata =
+    typeof order?.metadata === "object" && order.metadata && !Array.isArray(order.metadata)
+      ? (order.metadata as Record<string, unknown>)
+      : {};
+  const change =
+    typeof metadata.adminProgramChange === "object" && metadata.adminProgramChange && !Array.isArray(metadata.adminProgramChange)
+      ? (metadata.adminProgramChange as Record<string, unknown>)
+      : null;
+
+  if (!order || !change || change.mode !== "switch" || typeof change.studentId !== "string") return;
+
+  const newProgramIds = new Set(
+    order.registration?.items.flatMap((item) => item.offer.programs.map((program) => program.programId)) ?? [],
+  );
+  if (!newProgramIds.size) return;
+
+  await db.enrollment.updateMany({
+    where: {
+      studentId: change.studentId,
+      programId: { notIn: [...newProgramIds] },
+      status: { in: ["PENDING", "CONFIRMED", "ACTIVE", "COMPLETED"] },
+    },
+    data: {
+      status: "CANCELLED",
+    },
   });
 }
 
