@@ -10,6 +10,7 @@ import {
   enrollmentMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
   getScheduleRosterStudentIds,
+  isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
 import { downloadZoomRecording } from "@/lib/zoom/client";
 
@@ -170,16 +171,24 @@ export async function POST(request: NextRequest) {
 
     const users = new Map<string, "teacher" | "student" | "parent">();
     users.set(schedule.teacher.user.id, "teacher");
-    for (const enrollment of schedule.program.enrollments) {
-      users.set(enrollment.student.user.id, "student");
-      users.set(enrollment.parent.user.id, "parent");
+
+    if (isLiveClassVisibleToStudents(schedule.title)) {
+      const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
+      const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+      for (const enrollment of schedule.program.enrollments) {
+        if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+        if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
+        users.set(enrollment.student.user.id, "student");
+        users.set(enrollment.parent.user.id, "parent");
+      }
     }
 
+    const title = cleanLiveClassTitle(schedule.title);
     await db.notification.createMany({
       data: [...users.entries()].map(([userId, role]) => ({
         userId,
         title: "Live class is now open",
-        body: `${schedule.title} has started on Zoom. Open your schedule to join.`,
+        body: `${title} has started on Zoom. Open your schedule to join.`,
         href: role === "teacher" ? "/teacher/schedule" : role === "parent" ? "/parent/schedule" : "/student/schedule",
       })),
     });
@@ -292,15 +301,18 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
-    const audienceGroup = getLiveClassAudienceGroup(schedule.title);
     const users = new Map<string, { role: "teacher" | "student" | "parent"; childId?: string }>();
     users.set(schedule.teacher.user.id, { role: "teacher" });
-    for (const enrollment of schedule.program.enrollments) {
-      if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
-      if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
-      users.set(enrollment.student.user.id, { role: "student" });
-      users.set(enrollment.parent.user.id, { role: "parent", childId: enrollment.studentId });
+
+    if (isLiveClassVisibleToStudents(schedule.title)) {
+      const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
+      const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+      for (const enrollment of schedule.program.enrollments) {
+        if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+        if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
+        users.set(enrollment.student.user.id, { role: "student" });
+        users.set(enrollment.parent.user.id, { role: "parent", childId: enrollment.studentId });
+      }
     }
 
     const title = cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title);

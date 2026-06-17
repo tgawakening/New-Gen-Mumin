@@ -68,11 +68,14 @@ async function createSession(request: NextRequest, formData: FormData, teacherUs
     );
 
     revalidateLiveSessionViews();
+    const shownToStudents = formData.get("showToStudents") === "on";
     return redirectTo(
       request,
       noticeHref(
         schedule.meetingUrl
-          ? "Zoom live session created successfully. Students and parents have been notified."
+          ? shownToStudents
+            ? "Zoom live session created successfully. Matching students and parents have been notified."
+            : "Internal Zoom live session created successfully. It will stay hidden from student and parent dashboards."
           : "Live session saved, but Zoom did not return a meeting link. Please check Zoom app scopes.",
         schedule.meetingUrl ? "success" : "error",
       ),

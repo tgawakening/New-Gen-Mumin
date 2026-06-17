@@ -73,7 +73,7 @@ export function getLiveClassAudienceGroup(title: string): LiveClassAudienceGroup
 }
 
 export function isLiveClassVisibleToStudents(title: string) {
-  return title.includes(VISIBLE_TO_STUDENTS_MARKER) && !title.includes(HIDDEN_FROM_STUDENTS_MARKER);
+  return !title.includes(HIDDEN_FROM_STUDENTS_MARKER);
 }
 
 export function getLiveClassAudienceLabel(titleOrGroup: string) {

@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
-import { cleanLiveClassTitle } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 import { downloadZoomRecording, findZoomRecordingDownloadUrl } from "@/lib/zoom/client";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
@@ -98,6 +98,7 @@ function includeRecordingRelations() {
 }
 
 function recordingIsVisibleToStudent(recording: any, studentId: string) {
+  if (!isLiveClassVisibleToStudents(recording.schedule.title)) return false;
   const rosterIds = recording.schedule.scheduleRosters.map((entry: { studentId: string }) => entry.studentId);
   return !rosterIds.length || rosterIds.includes(studentId);
 }
@@ -251,6 +252,7 @@ export async function userCanAccessRecording(recordingId: string, user: { id: st
 
   if (user.role === "ADMIN") return recording;
   if (user.role === "TEACHER" && recording.schedule.teacher.user.id === user.id) return recording;
+  if (!isLiveClassVisibleToStudents(recording.schedule.title)) return null;
   if (user.role === "STUDENT") {
     const student = await db.studentProfile.findUnique({ where: { userId: user.id }, select: { id: true } });
     if (student && recordingIsVisibleToStudent(recording, student.id)) {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { cleanLiveClassTitle } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 
 type ReportSchedule = {
   id: string;
@@ -232,8 +232,9 @@ export async function getAdminTeacherMonthlyReports(options: {
   ]);
 
   const reports = teachers.map((teacher) => {
-    const assignedSchedules = schedules.filter((schedule) => schedule.teacherId === teacher.id);
-    const coveredSchedules = schedules.filter((schedule) =>
+    const reportableSchedules = schedules.filter((schedule) => isLiveClassVisibleToStudents(schedule.title));
+    const assignedSchedules = reportableSchedules.filter((schedule) => schedule.teacherId === teacher.id);
+    const coveredSchedules = reportableSchedules.filter((schedule) =>
       schedule.lessonLogs.some((log) => log.teacherUserId === teacher.userId && schedule.teacher.userId !== teacher.userId) ||
       schedule.sessionOccurrences.some((occurrence) => occurrence.teacherUserId === teacher.userId && schedule.teacher.userId !== teacher.userId && isCompletedOccurrence(occurrence)),
     );

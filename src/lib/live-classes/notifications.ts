@@ -2,6 +2,11 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import {
+  countryMatchesLiveClassAudience,
+  getLiveClassAudienceGroup,
+  isLiveClassVisibleToStudents,
+} from "@/lib/live-classes/service";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 
 type ScheduleForReminder = {
@@ -12,6 +17,13 @@ type ScheduleForReminder = {
   endTime: string;
   timezone: string;
   meetingUrl: string | null;
+};
+
+type ScheduleWithRosters = ScheduleForReminder & {
+  scheduleRosters?: Array<{ studentId: string }>;
+  teacher?: {
+    programRosters?: Array<{ programId: string; studentId: string }>;
+  };
 };
 
 function reminderMinutes() {
@@ -66,6 +78,12 @@ export async function ensureStudentLiveClassReminders(userId: string) {
   const student = await db.studentProfile.findUnique({
     where: { userId },
     include: {
+      registrationStudents: {
+        select: {
+          countryCode: true,
+          countryName: true,
+        },
+      },
       enrollments: {
         where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
         include: {
@@ -73,6 +91,21 @@ export async function ensureStudentLiveClassReminders(userId: string) {
             include: {
               schedules: {
                 where: { meetingUrl: { not: null } },
+                include: {
+                  scheduleRosters: {
+                    select: { studentId: true },
+                  },
+                  teacher: {
+                    include: {
+                      programRosters: {
+                        select: {
+                          programId: true,
+                          studentId: true,
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -85,6 +118,13 @@ export async function ensureStudentLiveClassReminders(userId: string) {
   const now = new Date();
   for (const enrollment of student.enrollments) {
     for (const schedule of enrollment.program.schedules) {
+      if (!scheduleVisibleToStudent(schedule, student.id, enrollment.program.id, [
+        student.countryCode,
+        student.countryName,
+        ...student.registrationStudents.flatMap((entry) => [entry.countryCode, entry.countryName]),
+      ])) {
+        continue;
+      }
       await createReminder(userId, schedule, "/student/schedule", now);
     }
   }
@@ -94,13 +134,43 @@ export async function ensureParentLiveClassReminders(userId: string) {
   const parent = await db.parentProfile.findUnique({
     where: { userId },
     include: {
+      user: {
+        select: {
+          phoneCountryCode: true,
+        },
+      },
       enrollments: {
         where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
         include: {
+          student: {
+            include: {
+              registrationStudents: {
+                select: {
+                  countryCode: true,
+                  countryName: true,
+                },
+              },
+            },
+          },
           program: {
             include: {
               schedules: {
                 where: { meetingUrl: { not: null } },
+                include: {
+                  scheduleRosters: {
+                    select: { studentId: true },
+                  },
+                  teacher: {
+                    include: {
+                      programRosters: {
+                        select: {
+                          programId: true,
+                          studentId: true,
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -113,9 +183,38 @@ export async function ensureParentLiveClassReminders(userId: string) {
   const now = new Date();
   for (const enrollment of parent.enrollments) {
     for (const schedule of enrollment.program.schedules) {
+      if (!scheduleVisibleToStudent(schedule, enrollment.studentId, enrollment.program.id, [
+        enrollment.student.countryCode,
+        enrollment.student.countryName,
+        ...enrollment.student.registrationStudents.flatMap((entry) => [entry.countryCode, entry.countryName]),
+        parent.billingCountryCode,
+        parent.billingCountryName,
+        parent.user.phoneCountryCode,
+      ])) {
+        continue;
+      }
       await createReminder(userId, schedule, "/parent/schedule", now);
     }
   }
+}
+
+function scheduleVisibleToStudent(
+  schedule: ScheduleWithRosters,
+  studentId: string,
+  programId: string,
+  countryCodes: Array<string | null | undefined>,
+) {
+  if (!isLiveClassVisibleToStudents(schedule.title)) return false;
+
+  const scheduleRosterIds = schedule.scheduleRosters?.map((entry) => entry.studentId) ?? [];
+  const teacherRosterIds =
+    schedule.teacher?.programRosters
+      ?.filter((entry) => entry.programId === programId)
+      .map((entry) => entry.studentId) ?? [];
+  const visibleRosterIds = scheduleRosterIds.length ? scheduleRosterIds : teacherRosterIds;
+  if (visibleRosterIds.length && !visibleRosterIds.includes(studentId)) return false;
+
+  return countryMatchesLiveClassAudience(countryCodes, getLiveClassAudienceGroup(schedule.title));
 }
 
 export async function getUnreadNotifications(userId: string, take = 5) {
