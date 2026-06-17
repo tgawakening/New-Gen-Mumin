@@ -46,6 +46,14 @@ type ZoomMeetingRecordingsResponse = {
   recording_files?: ZoomRecordingFile[];
 };
 
+type ZoomUserRecordingsResponse = {
+  meetings?: Array<ZoomMeetingRecordingsResponse & {
+    id?: number | string;
+    uuid?: string;
+    start_time?: string;
+  }>;
+};
+
 async function readZoomError(response: Response) {
   const body = await response.text();
   if (!body) return `${response.status} ${response.statusText}`.trim();
@@ -239,6 +247,26 @@ function zoomMeetingRecordingsUrl(meetingId: string) {
   return `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings`;
 }
 
+function isoDateOnly(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function recordingSearchWindow(recordingStart?: Date | string | null) {
+  const center = recordingStart ? new Date(recordingStart) : new Date();
+  if (!Number.isFinite(center.getTime())) {
+    const to = new Date();
+    const from = new Date(to);
+    from.setUTCDate(from.getUTCDate() - 30);
+    return { from: isoDateOnly(from), to: isoDateOnly(to) };
+  }
+
+  const from = new Date(center);
+  from.setUTCDate(from.getUTCDate() - 1);
+  const to = new Date(center);
+  to.setUTCDate(to.getUTCDate() + 1);
+  return { from: isoDateOnly(from), to: isoDateOnly(to) };
+}
+
 export async function getZoomMeetingRecordings(meetingId: string) {
   const accessToken = await getZoomAccessToken();
   const response = await fetch(zoomMeetingRecordingsUrl(meetingId), {
@@ -258,6 +286,32 @@ export async function getZoomMeetingRecordings(meetingId: string) {
   return (await response.json()) as ZoomMeetingRecordingsResponse;
 }
 
+export async function getZoomUserRecordings(input: { recordingStart?: Date | string | null } = {}) {
+  const config = getZoomConfig();
+  const accessToken = await getZoomAccessToken();
+  const window = recordingSearchWindow(input.recordingStart);
+  const url = new URL(`https://api.zoom.us/v2/users/${encodeURIComponent(config.hostUserId)}/recordings`);
+  url.searchParams.set("from", window.from);
+  url.searchParams.set("to", window.to);
+  url.searchParams.set("page_size", "100");
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    const details = await readZoomError(response);
+    const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
+    throw new Error(`Zoom user recordings lookup failed: ${details}.${guidance}`);
+  }
+
+  return (await response.json()) as ZoomUserRecordingsResponse;
+}
+
 function sameRecordingTime(left?: string, right?: Date | string | null) {
   if (!left || !right) return false;
   const leftMs = new Date(left).getTime();
@@ -272,8 +326,27 @@ export async function findZoomRecordingDownloadUrl(payload: {
   recordingStart?: Date | string | null;
   fileType?: string | null;
 }) {
-  const recordings = await getZoomMeetingRecordings(payload.meetingId);
-  const files = recordings.recording_files ?? [];
+  let files: ZoomRecordingFile[] = [];
+  let meetingLookupError: unknown = null;
+
+  try {
+    const recordings = await getZoomMeetingRecordings(payload.meetingId);
+    files = recordings.recording_files ?? [];
+  } catch (error) {
+    meetingLookupError = error;
+  }
+
+  if (!files.length) {
+    const recordings = await getZoomUserRecordings({ recordingStart: payload.recordingStart });
+    files = (recordings.meetings ?? [])
+      .filter((meeting) => !payload.meetingId || String(meeting.id ?? "") === payload.meetingId || String(meeting.uuid ?? "") === payload.meetingId)
+      .flatMap((meeting) => meeting.recording_files ?? []);
+  }
+
+  if (!files.length && meetingLookupError) {
+    throw meetingLookupError;
+  }
+
   const playable = files.filter((file) => {
     const fileType = (file.file_type ?? "").toUpperCase();
     if (!file.download_url) return false;
@@ -303,7 +376,13 @@ function tail(value: string, length = 6) {
 export async function diagnoseZoomRecordingAccess() {
   const config = getZoomConfig();
   const accessToken = await getZoomAccessToken();
-  const response = await fetch("https://api.zoom.us/v2/meetings/123456789/recordings", {
+  const window = recordingSearchWindow();
+  const url = new URL(`https://api.zoom.us/v2/users/${encodeURIComponent(config.hostUserId)}/recordings`);
+  url.searchParams.set("from", window.from);
+  url.searchParams.set("to", window.to);
+  url.searchParams.set("page_size", "1");
+
+  const response = await fetch(url, {
     method: "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -311,18 +390,15 @@ export async function diagnoseZoomRecordingAccess() {
     cache: "no-store",
   });
 
-  const details = response.ok ? "Unexpectedly found placeholder meeting recordings." : await readZoomError(response);
-  const hasRecordingLookupScope =
-    response.ok ||
-    response.status === 404 ||
-    response.status === 300 ||
-    /meeting does not exist|not found|does not exist/i.test(details);
+  const details = response.ok ? "User recordings lookup succeeded." : await readZoomError(response);
+  const hasRecordingLookupScope = response.ok;
 
   return {
     zoomConfigured: true,
     accountIdTail: tail(config.accountId),
     clientIdTail: tail(config.clientId),
     hostUserIdTail: tail(config.hostUserId),
+    recordingsEndpoint: "users/{hostUserId}/recordings",
     recordingsEndpointStatus: response.status,
     hasRecordingLookupScope,
     details,
