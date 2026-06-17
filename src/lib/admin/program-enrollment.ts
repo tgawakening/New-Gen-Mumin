@@ -23,6 +23,7 @@ function parentName(user: { firstName: string; lastName: string | null; email: s
 
 export async function createAdminProgramEnrollmentOrder(input: {
   studentId: string;
+  studentIds?: string[];
   offerSlug: string;
   changeMode: AdminProgramChangeMode;
   paymentMode: AdminPaymentMode;
@@ -34,8 +35,9 @@ export async function createAdminProgramEnrollmentOrder(input: {
     throw new Error("Choose a student and programme offer.");
   }
 
-  const student = await db.studentProfile.findUnique({
-    where: { id: input.studentId },
+  const requestedStudentIds = [...new Set([...(input.studentIds?.length ? input.studentIds : [input.studentId])])];
+  const students = await db.studentProfile.findMany({
+    where: { id: { in: requestedStudentIds } },
     include: {
       user: true,
       parents: {
@@ -43,6 +45,11 @@ export async function createAdminProgramEnrollmentOrder(input: {
           parent: {
             include: {
               user: true,
+              students: {
+                select: {
+                  studentId: true,
+                },
+              },
             },
           },
         },
@@ -58,10 +65,15 @@ export async function createAdminProgramEnrollmentOrder(input: {
     },
   });
 
+  const student = students.find((entry) => entry.id === input.studentId) ?? students[0];
   if (!student) throw new Error("Student not found.");
 
   const parent = student.parents[0]?.parent;
   if (!parent) throw new Error("This student has no linked parent account.");
+
+  const allowedStudentIds = new Set(parent.students.map((entry) => entry.studentId));
+  const selectedStudents = students.filter((entry) => allowedStudentIds.has(entry.id));
+  if (!selectedStudents.length) throw new Error("No linked children were selected for this parent.");
 
   const phoneCountryCode =
     parent.user.phoneCountryCode || student.registrationStudents[0]?.registration.phoneCountryCode || "";
@@ -80,7 +92,6 @@ export async function createAdminProgramEnrollmentOrder(input: {
     student.countryName ||
     student.registrationStudents[0]?.registration.selectedCountryName ||
     "United Kingdom";
-  const childName = splitName(student.user.firstName, student.user.lastName, student.displayName || "Student");
   const parentParts = splitName(parent.user.firstName, parent.user.lastName, parentName(parent.user));
   const adminSource = input.changeMode === "switch" ? "admin-program-switch" : "admin-program-add";
 
@@ -94,17 +105,18 @@ export async function createAdminProgramEnrollmentOrder(input: {
     selectedCountryCode: countryCode,
     selectedCountryName: countryName,
     couponCode: input.couponCode?.trim() || "",
-    notes: `Source: admin-program-change; ${adminSource}; studentId=${student.id}; adminUserId=${input.adminUserId}`,
-    students: [
-      {
+    notes: `Source: admin-program-change; ${adminSource}; studentIds=${selectedStudents.map((entry) => entry.id).join(",")}; adminUserId=${input.adminUserId}`,
+    students: selectedStudents.map((selectedStudent) => {
+      const childName = splitName(selectedStudent.user.firstName, selectedStudent.user.lastName, selectedStudent.displayName || "Student");
+      return {
         firstName: childName.firstName,
         lastName: childName.lastName,
-        age: student.age ?? 8,
+        age: selectedStudent.age ?? 8,
         gender: "",
         selectedOfferSlugs: [input.offerSlug],
-        notes: `Source: ${adminSource}; existingChildId=${student.id}`,
-      },
-    ],
+        notes: `Source: ${adminSource}; existingChildId=${selectedStudent.id}`,
+      };
+    }),
   });
 
   const checkout = await createCheckoutDraft(registration.id, {
@@ -129,6 +141,7 @@ export async function createAdminProgramEnrollmentOrder(input: {
         ...metadata,
         adminProgramChange: {
           studentId: student.id,
+          studentIds: selectedStudents.map((entry) => entry.id),
           offerSlug: input.offerSlug,
           mode: input.changeMode,
           paymentMode: input.paymentMode,

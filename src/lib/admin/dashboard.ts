@@ -269,6 +269,21 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
             parent: {
               include: {
                 user: true,
+                students: {
+                  include: {
+                    student: {
+                      include: {
+                        user: true,
+                        enrollments: {
+                          where: { status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] } },
+                          include: {
+                            program: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
                 orders: {
                   orderBy: { createdAt: "desc" },
                   take: 3,
@@ -439,6 +454,15 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
             .find((phone) => phone !== "Pending") ?? "Pending";
     const childDetails = buildRegistrationChildren(latestRegistration);
     const childNames = childDetails.map((child) => child.name);
+    const manageableChildren = primaryParent?.students.map((entry) => ({
+      id: entry.student.id,
+      name:
+        entry.student.displayName ||
+        formatPersonName(entry.student.user.firstName, entry.student.user.lastName) ||
+        "Unnamed child",
+      age: entry.student.age,
+      programs: Array.from(new Set(entry.student.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)))),
+    })) ?? [];
     const pricingLabel = student.registrationStudents.some((entry) =>
       entry.items.some((item) => item.discountAmount > 0),
     )
@@ -493,6 +517,14 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       ],
       childNames: childNames.length ? childNames : [
         student.displayName || formatPersonName(student.user.firstName, student.user.lastName) || "Unnamed child",
+      ],
+      manageableChildren: manageableChildren.length ? manageableChildren : [
+        {
+          id: student.id,
+          name: student.displayName || formatPersonName(student.user.firstName, student.user.lastName) || "Unnamed child",
+          age: student.age,
+          programs: Array.from(new Set(student.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)))),
+        },
       ],
       createdAt: student.createdAt,
       age: student.age,

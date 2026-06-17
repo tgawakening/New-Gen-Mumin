@@ -258,7 +258,15 @@ async function applyAdminProgramSwitch(orderId: string) {
       ? (metadata.adminProgramChange as Record<string, unknown>)
       : null;
 
-  if (!order || !change || change.mode !== "switch" || typeof change.studentId !== "string") return;
+  if (!order || !change || change.mode !== "switch") return;
+
+  const studentIds = Array.isArray(change.studentIds)
+    ? change.studentIds.filter((value): value is string => typeof value === "string")
+    : typeof change.studentId === "string"
+      ? [change.studentId]
+      : [];
+
+  if (!studentIds.length) return;
 
   const newProgramIds = new Set(
     order.registration?.items.flatMap((item) => item.offer.programs.map((program) => program.programId)) ?? [],
@@ -267,7 +275,7 @@ async function applyAdminProgramSwitch(orderId: string) {
 
   await db.enrollment.updateMany({
     where: {
-      studentId: change.studentId,
+      studentId: { in: studentIds },
       programId: { notIn: [...newProgramIds] },
       status: { in: ["PENDING", "CONFIRMED", "ACTIVE", "COMPLETED"] },
     },

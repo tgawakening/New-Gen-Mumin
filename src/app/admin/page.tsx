@@ -310,6 +310,9 @@ function AdminProgramChangePopup({
         <form action={action} className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
           <input type="hidden" name="studentId" value={student.id} />
           <input type="hidden" name="returnUrl" value={returnUrl} />
+          {student.manageableChildren.map((child) => (
+            <input key={child.id} type="hidden" name="familyStudentIds" value={child.id} />
+          ))}
 
           <div className="space-y-4">
             <section className="rounded-[22px] border border-[#ebdccb] bg-white p-4">
@@ -322,6 +325,44 @@ function AdminProgramChangePopup({
                 )) : (
                   <span className="text-sm text-[#617184]">No active programmes yet.</span>
                 )}
+              </div>
+            </section>
+
+            <section className="rounded-[22px] border border-[#ebdccb] bg-white p-4">
+              <p className="font-semibold text-[#22304a]">Children to update</p>
+              <p className="mt-1 text-sm text-[#617184]">
+                Select one child or multiple children. The order total will be calculated for the selected children.
+              </p>
+              <div className="mt-3 grid gap-2 md:grid-cols-3">
+                <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-3 text-sm">
+                  <input type="radio" name="targetScope" value="selected" defaultChecked className="mr-2" />
+                  Selected child
+                </label>
+                <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-3 text-sm">
+                  <input type="radio" name="targetScope" value="all" className="mr-2" />
+                  All linked children
+                </label>
+                <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-3 text-sm">
+                  <input type="radio" name="targetScope" value="custom" className="mr-2" />
+                  Custom below
+                </label>
+              </div>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                {student.manageableChildren.map((child) => (
+                  <label key={child.id} className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-4 text-sm">
+                    <input
+                      type="checkbox"
+                      name="studentIds"
+                      value={child.id}
+                      defaultChecked={child.id === student.id}
+                      className="mr-2"
+                    />
+                    <span className="font-semibold text-[#22304a]">{child.name}</span>
+                    <p className="mt-1 text-[#617184]">
+                      Age {child.age ?? "Pending"} - {child.programs.join(", ") || "No active programmes"}
+                    </p>
+                  </label>
+                ))}
               </div>
             </section>
 
@@ -814,6 +855,15 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     "use server";
 
     const studentId = String(formData.get("studentId") || "");
+    const targetScope = String(formData.get("targetScope") || "selected");
+    const customStudentIds = formData.getAll("studentIds").filter((value): value is string => typeof value === "string" && value.length > 0);
+    const familyStudentIds = formData.getAll("familyStudentIds").filter((value): value is string => typeof value === "string" && value.length > 0);
+    const studentIds =
+      targetScope === "all"
+        ? familyStudentIds
+        : targetScope === "custom"
+          ? customStudentIds
+          : [studentId];
     const offerSlug = String(formData.get("offerSlug") || "");
     const changeMode = String(formData.get("changeMode") || "add");
     const paymentMode = String(formData.get("paymentMode") || "MANUAL_REVIEW");
@@ -824,6 +874,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     try {
       await createAdminProgramEnrollmentOrder({
         studentId,
+        studentIds: studentIds.length ? studentIds : [studentId],
         offerSlug,
         changeMode: changeMode === "switch" ? "switch" : "add",
         paymentMode: paymentMode === "AUTO_COMPLETE" ? "AUTO_COMPLETE" : "MANUAL_REVIEW",
