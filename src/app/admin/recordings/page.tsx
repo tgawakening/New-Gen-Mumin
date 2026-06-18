@@ -124,14 +124,17 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                       <p className="mt-1 text-sm text-[#617184]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      {recording.watchUrl ? (
+                      {recording.isReadyForPlayback && recording.watchUrl ? (
                         <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
                           Open
                         </Link>
                       ) : (
-                        <span className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
-                          Preparing Drive view
-                        </span>
+                        <form action={`/api/recordings/${recording.id}/prepare`} method="post">
+                          <input type="hidden" name="returnTo" value="/admin/recordings" />
+                          <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                            Prepare
+                          </button>
+                        </form>
                       )}
                       <form action={deleteRecordingAction}>
                         <input type="hidden" name="recordingId" value={recording.id} />
