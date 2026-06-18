@@ -1,8 +1,0 @@
-{
-  "crons": [
-    {
-      "path": "/api/recordings/process-pending?limit=3",
-      "schedule": "*/10 * * * *"
-    }
-  ]
-}
