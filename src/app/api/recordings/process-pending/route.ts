@@ -32,15 +32,29 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 3), 1), 10);
-  const results = await processPendingDriveRecordings(limit);
+  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 1), 1), 3);
+  const wait = url.searchParams.get("wait") === "1";
+
+  if (wait) {
+    const results = await processPendingDriveRecordings(limit);
+    return NextResponse.json({
+      mode: "completed",
+      processed: results.length,
+      succeeded: results.filter((result) => result.ok).length,
+      failed: results.filter((result) => !result.ok).length,
+      results,
+    });
+  }
+
+  void processPendingDriveRecordings(limit).catch((error) => {
+    console.error("Background pending recording processing failed.", error);
+  });
 
   return NextResponse.json({
-    processed: results.length,
-    succeeded: results.filter((result) => result.ok).length,
-    failed: results.filter((result) => !result.ok).length,
-    results,
-  });
+    mode: "started",
+    queued: limit,
+    message: "Pending recording processing started in the background.",
+  }, { status: 202 });
 }
 
 export async function POST(request: Request) {
