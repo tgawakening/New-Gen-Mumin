@@ -18,9 +18,11 @@ const BACKEND_ONLY_DISCOUNT_COUPONS = {
   PKSTUDENT: { code: "PKSTUDENT", discountAmount: 2000, currency: "PKR" },
   PKBUNDLE3K: { code: "PKBUNDLE3K", discountAmount: 2000, currency: "PKR" },
   PKSEERAH4K: { code: "PKSEERAH4K", discountAmount: 1000, currency: "PKR" },
+  PKSEERAH2K6K: { code: "PKSEERAH2K6K", discountAmount: 1500, currency: "PKR" },
 } as const;
 const PAKISTAN_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR = 3000;
 const PAKISTAN_SEERAH_LEADERSHIP_4K_TARGET_AMOUNT_PKR = 4000;
+const PAKISTAN_TWO_CHILD_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR = 6000;
 
 type RegistrationCoupon =
   | ReturnType<typeof getDiscountCoupon>
@@ -98,6 +100,18 @@ function isRegistrationCouponEligibleForSelection(
       selectedOfferSlugsByStudent.length === 1 &&
       selectedOfferSlugsByStudent[0]?.length === 1 &&
       selectedOfferSlugsByStudent[0][0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG
+    );
+  }
+
+  if (coupon.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKSEERAH2K6K.code) {
+    return (
+      countryCode?.toUpperCase() === "PK" &&
+      selectedOfferSlugsByStudent.length === 2 &&
+      selectedOfferSlugsByStudent.every(
+        (offerSlugs) =>
+          offerSlugs.length === 1 &&
+          offerSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+      )
     );
   }
 
@@ -535,6 +549,15 @@ export async function createRegistrationDraft(payload: RegistrationPayload) {
             selectedOfferSlugsByStudent[0]?.length === 1 &&
             selectedOfferSlugsByStudent[0][0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG
           ? PAKISTAN_SEERAH_LEADERSHIP_4K_TARGET_AMOUNT_PKR
+        : effectiveFallbackCoupon?.code === BACKEND_ONLY_DISCOUNT_COUPONS.PKSEERAH2K6K.code &&
+            currency === "PKR" &&
+            selectedOfferSlugsByStudent.length === 2 &&
+            selectedOfferSlugsByStudent.every(
+              (offerSlugs) =>
+                offerSlugs.length === 1 &&
+                offerSlugs[0] === SEERAH_LEADERSHIP_BUNDLE_OFFER_SLUG,
+            )
+          ? PAKISTAN_TWO_CHILD_SEERAH_LEADERSHIP_TARGET_AMOUNT_PKR
         : null;
     const privateStudentBundleTargetAmount =
       privateStudentBundleTargetTotal === null
