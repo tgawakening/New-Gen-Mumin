@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { deleteRecordingForAdmin, listAdminRecordings } from "@/lib/live-classes/recordings";
+import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings } from "@/lib/live-classes/recordings";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -59,6 +59,22 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     redirect(noticeHref("Recording removed from dashboards.", "danger"));
   }
 
+  async function processPendingRecordingsAction() {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
+
+    const results = await processPendingDriveRecordings(5);
+    revalidatePath("/admin/recordings");
+    revalidatePath("/teacher/recordings");
+    revalidatePath("/student/recordings");
+    revalidatePath("/parent/recordings");
+
+    const succeeded = results.filter((result) => result.ok).length;
+    const failed = results.filter((result) => !result.ok).length;
+    redirect(noticeHref(`Processed ${results.length} pending recordings: ${succeeded} ready, ${failed} failed.`, failed ? "error" : "success"));
+  }
+
   const recordings = await listAdminRecordings();
   const grouped = new Map<string, typeof recordings>();
   for (const recording of recordings) {
@@ -82,6 +98,11 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
             <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
               Admin home
             </Link>
+            <form action={processPendingRecordingsAction}>
+              <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                Process pending recordings
+              </button>
+            </form>
           </div>
         </div>
 

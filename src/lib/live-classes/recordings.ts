@@ -3,7 +3,13 @@ import "server-only";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
-import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
+import {
+  cleanLiveClassTitle,
+  enrollmentMatchesLiveClassAudience,
+  getLiveClassAudienceGroup,
+  getScheduleRosterStudentIds,
+  isLiveClassVisibleToStudents,
+} from "@/lib/live-classes/service";
 import { downloadZoomRecording, findZoomRecordingDownloadUrl } from "@/lib/zoom/client";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
@@ -293,11 +299,7 @@ export async function userCanAccessRecording(recordingId: string, user: { id: st
   return null;
 }
 
-export async function ensureRecordingDriveViewUrl(recordingId: string, user: { id: string; role: string }) {
-  const recording = await userCanAccessRecording(recordingId, user);
-  if (!recording) {
-    throw new Error("Recording not found or you do not have access.");
-  }
+async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<typeof userCanAccessRecording>>>) {
   if (recording.driveViewUrl) return recording.driveViewUrl;
   if (!recording.downloadUrl) {
     throw new Error("This recording is still being prepared for Google Drive viewing.");
@@ -351,6 +353,126 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
   }
 
   return driveRecording.webViewLink;
+}
+
+export async function ensureRecordingDriveViewUrl(recordingId: string, user: { id: string; role: string }) {
+  const recording = await userCanAccessRecording(recordingId, user);
+  if (!recording) {
+    throw new Error("Recording not found or you do not have access.");
+  }
+
+  const viewUrl = await importRecordingToDrive(recording);
+  await notifyRecordingReady(recording.id);
+  return viewUrl;
+}
+
+export async function processPendingDriveRecordings(limit = 3) {
+  const recordings = await db.liveClassRecording.findMany({
+    where: {
+      deletedAt: null,
+      driveFileId: null,
+      downloadUrl: { not: null },
+    },
+    include: includeRecordingRelations(),
+    orderBy: { availableAt: "desc" },
+    take: limit,
+  });
+
+  const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+  for (const recording of recordings) {
+    try {
+      await importRecordingToDrive(recording);
+      await notifyRecordingReady(recording.id);
+      results.push({ id: recording.id, ok: true });
+    } catch (error) {
+      console.error("Unable to process pending recording.", error);
+      results.push({
+        id: recording.id,
+        ok: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  return results;
+}
+
+export async function notifyRecordingReady(recordingId: string) {
+  const recording = await db.liveClassRecording.findFirst({
+    where: { id: recordingId, deletedAt: null, driveFileId: { not: null } },
+    include: {
+      schedule: {
+        include: {
+          teacher: { include: { user: true } },
+          program: {
+            include: {
+              enrollments: {
+                where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+                include: {
+                  parent: { include: { user: true } },
+                  student: {
+                    include: {
+                      user: true,
+                      registrationStudents: {
+                        select: {
+                          countryCode: true,
+                          countryName: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!recording) return;
+
+  const users = new Map<string, { role: "teacher" | "student" | "parent"; childId?: string }>();
+  users.set(recording.schedule.teacher.user.id, { role: "teacher" });
+
+  if (isLiveClassVisibleToStudents(recording.schedule.title)) {
+    const rosterStudentIds = new Set(await getScheduleRosterStudentIds(recording.scheduleId));
+    const audienceGroup = getLiveClassAudienceGroup(recording.schedule.title);
+    for (const enrollment of recording.schedule.program.enrollments) {
+      if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+      if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
+      users.set(enrollment.student.user.id, { role: "student" });
+      users.set(enrollment.parent.user.id, { role: "parent", childId: enrollment.studentId });
+    }
+  }
+
+  const title = cleanLiveClassTitle(recording.topic || recording.schedule.title);
+  for (const [userId, item] of users.entries()) {
+    const href =
+      item.role === "teacher"
+        ? "/teacher/recordings"
+        : item.role === "parent"
+          ? `/parent/recordings${item.childId ? `?child=${item.childId}` : ""}`
+          : "/student/recordings";
+
+    const existing = await db.notification.findFirst({
+      where: {
+        userId,
+        title: "Class recording ready",
+        href,
+        body: `${title} recording is now available.`,
+      },
+    });
+    if (existing) continue;
+
+    await db.notification.create({
+      data: {
+        userId,
+        title: "Class recording ready",
+        body: `${title} recording is now available.`,
+        href,
+      },
+    });
+  }
 }
 
 export async function getRecordingPlaybackDetails(recordingId: string, user: { id: string; role: string }) {

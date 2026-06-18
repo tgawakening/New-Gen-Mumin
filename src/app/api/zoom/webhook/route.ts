@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
 import { recordLiveClassSessionEnd, recordLiveClassSessionFromRecording, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
+import { notifyRecordingReady } from "@/lib/live-classes/recordings";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -301,34 +302,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const users = new Map<string, { role: "teacher" | "student" | "parent"; childId?: string }>();
-    users.set(schedule.teacher.user.id, { role: "teacher" });
-
-    if (isLiveClassVisibleToStudents(schedule.title)) {
-      const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
-      const audienceGroup = getLiveClassAudienceGroup(schedule.title);
-      for (const enrollment of schedule.program.enrollments) {
-        if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
-        if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
-        users.set(enrollment.student.user.id, { role: "student" });
-        users.set(enrollment.parent.user.id, { role: "parent", childId: enrollment.studentId });
-      }
-    }
-
-    const title = cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title);
-    await db.notification.createMany({
-      data: [...users.entries()].map(([userId, item]) => ({
-        userId,
-        title: "Class recording ready",
-        body: `${title} recording is now available.`,
-        href:
-          item.role === "teacher"
-            ? "/teacher/recordings"
-            : item.role === "parent"
-              ? `/parent/recordings${item.childId ? `?child=${item.childId}` : ""}`
-              : "/student/recordings",
-      })),
+    const savedRecording = await db.liveClassRecording.findUnique({
+      where: { recordingFileId: primaryFile.id ?? fallbackRecordingFileId(schedule.id, primaryFile.play_url!) },
+      select: { id: true, driveFileId: true },
     });
+    if (savedRecording?.driveFileId) {
+      await notifyRecordingReady(savedRecording.id);
+    } else {
+      const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+      const title = cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title);
+      await db.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          title: "Recording needs Drive preparation",
+          body: `${title} is available from Zoom but still needs to be copied to Google Drive.`,
+          href: "/admin/recordings",
+        })),
+      });
+    }
 
     return NextResponse.json({ received: true, recordings: 1 });
   }
