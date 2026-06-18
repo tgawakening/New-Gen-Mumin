@@ -7,13 +7,14 @@ import {
   MetricGrid,
   SectionCard,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { RecordingModal } from "@/components/recordings/RecordingModal";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { listParentChildRecordings } from "@/lib/live-classes/recordings";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string }>;
+  searchParams?: Promise<{ child?: string; recording?: string }>;
 };
 
 function formatDate(value: Date | null) {
@@ -37,6 +38,8 @@ export default async function ParentRecordingsPage({ searchParams }: PageProps) 
   const params = searchParams ? await searchParams : undefined;
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const recordings = selectedChild ? await listParentChildRecordings(session.user.id, selectedChild.id) : [];
+  const activeRecording = recordings.find((recording) => recording.id === params?.recording);
+  const baseRecordingsPath = selectedChild ? `/parent/recordings?child=${selectedChild.id}` : "/parent/recordings";
 
   return (
     <FamilyDashboardFrame
@@ -72,11 +75,14 @@ export default async function ParentRecordingsPage({ searchParams }: PageProps) 
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
                   <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {recording.teacherName} • {formatDate(recording.recordingStart ?? recording.availableAt)}
+                    {recording.teacherName} - {formatDate(recording.recordingStart ?? recording.availableAt)}
                   </p>
                   {recording.watchUrl ? (
-                    <Link href={recording.watchUrl} target="_blank" className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                      Watch recording
+                    <Link
+                      href={`${baseRecordingsPath}&recording=${recording.id}`}
+                      className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
+                    >
+                      {recording.isReadyForPlayback ? "Watch recording" : "Preparing recording"}
                     </Link>
                   ) : (
                     <span className="mt-4 inline-flex rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
@@ -94,6 +100,7 @@ export default async function ParentRecordingsPage({ searchParams }: PageProps) 
           </SectionCard>
         </>
       ) : null}
+      {activeRecording ? <RecordingModal recording={activeRecording} closeHref={baseRecordingsPath} /> : null}
     </FamilyDashboardFrame>
   );
 }

@@ -14,6 +14,8 @@ export type LiveClassRecordingSummary = {
   programTitle: string;
   teacherName: string;
   watchUrl: string | null;
+  playbackUrl: string | null;
+  isReadyForPlayback: boolean;
   storageProvider: string | null;
   fileType: string | null;
   recordingStart: Date | null;
@@ -32,6 +34,8 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     programTitle: displayProgramTitle(recording.schedule.program.title),
     teacherName: teacherName(recording.schedule.teacher),
     watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
+    playbackUrl: recording.driveFileId ? `/api/recordings/${recording.id}/media` : null,
+    isReadyForPlayback: Boolean(recording.driveFileId),
     storageProvider: recording.storageProvider ?? null,
     fileType: recording.fileType,
     recordingStart: recording.recordingStart,

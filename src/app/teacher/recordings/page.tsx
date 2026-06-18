@@ -2,10 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
+import { RecordingModal } from "@/components/recordings/RecordingModal";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { listTeacherRecordings } from "@/lib/live-classes/recordings";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+
+type PageProps = {
+  searchParams?: Promise<{ recording?: string }>;
+};
 
 function formatDate(value: Date | null) {
   return value
@@ -13,14 +18,16 @@ function formatDate(value: Date | null) {
     : "Date pending";
 }
 
-export default async function TeacherRecordingsPage() {
+export default async function TeacherRecordingsPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
+  const params = searchParams ? await searchParams : undefined;
   const recordings = await listTeacherRecordings(session.user.id);
+  const activeRecording = recordings.find((recording) => recording.id === params?.recording);
 
   return (
     <TeacherDashboardFrame
@@ -46,8 +53,8 @@ export default async function TeacherRecordingsPage() {
               <p className="mt-2 text-sm text-[#5f6b7a]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {recording.watchUrl ? (
-                  <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                    Watch recording
+                  <Link href={`/teacher/recordings?recording=${recording.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                    {recording.isReadyForPlayback ? "Watch recording" : "Preparing recording"}
                   </Link>
                 ) : (
                   <span className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
@@ -64,6 +71,7 @@ export default async function TeacherRecordingsPage() {
           ) : null}
         </div>
       </TeacherSection>
+      {activeRecording ? <RecordingModal recording={activeRecording} closeHref="/teacher/recordings" /> : null}
     </TeacherDashboardFrame>
   );
 }
