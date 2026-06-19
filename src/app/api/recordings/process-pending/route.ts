@@ -15,7 +15,7 @@ function hasSecretAccess(request: Request) {
   );
   if (!acceptedSecrets.length) return false;
   return (
-    acceptedSecrets.some((secret) => authorization === `Bearer ${secret}`) ||
+    acceptedSecrets.some((secret) => authorization === `Bearer ${secret}` || authorization === secret) ||
     acceptedSecrets.includes(cronSecret)
   );
 }
