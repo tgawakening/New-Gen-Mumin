@@ -398,7 +398,7 @@ async function releaseRecordingImportClaim(recordingId: string, error: unknown) 
 }
 
 async function resetInterruptedRecordingImports() {
-  await db.liveClassRecording.updateMany({
+  const result = await db.liveClassRecording.updateMany({
     where: {
       deletedAt: null,
       driveFileId: null,
@@ -408,6 +408,8 @@ async function resetInterruptedRecordingImports() {
       storageProvider: "zoom",
     },
   });
+
+  return result.count;
 }
 
 async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<typeof userCanAccessRecording>>>, options: { claimed?: boolean } = {}) {
@@ -490,6 +492,18 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
 
 export async function processPendingDriveRecordings(limit = 1) {
   const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
+  await db.liveClassRecording.updateMany({
+    where: {
+      deletedAt: null,
+      driveFileId: null,
+      storageProvider: RECORDING_PROCESSING_PROVIDER,
+      updatedAt: { lt: staleBefore },
+    },
+    data: {
+      storageProvider: "zoom",
+    },
+  });
+
   const activeImports = await db.liveClassRecording.findMany({
     where: {
       deletedAt: null,
@@ -544,6 +558,10 @@ export async function processPendingDriveRecordings(limit = 1) {
   }
 
   return results;
+}
+
+export async function resetPendingRecordingImportsForAdmin() {
+  return resetInterruptedRecordingImports();
 }
 
 export async function notifyRecordingReady(recordingId: string) {

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings } from "@/lib/live-classes/recordings";
+import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings, resetPendingRecordingImportsForAdmin } from "@/lib/live-classes/recordings";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -95,6 +95,16 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     redirect(noticeHref("No recording was ready to process. If items are stuck on Processing, wait a few minutes and try again.", "success"));
   }
 
+  async function resetProcessingRecordingsAction() {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
+
+    const count = await resetPendingRecordingImportsForAdmin();
+    revalidatePath("/admin/recordings");
+    redirect(noticeHref(`Reset ${count} stuck processing recording${count === 1 ? "" : "s"}.`, "success"));
+  }
+
   const recordings = await listAdminRecordings();
   const grouped = new Map<string, typeof recordings>();
   for (const recording of recordings) {
@@ -121,6 +131,11 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
             <form action={processPendingRecordingsAction}>
               <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
                 Process pending recordings
+              </button>
+            </form>
+            <form action={resetProcessingRecordingsAction}>
+              <button className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                Reset stuck processing
               </button>
             </form>
           </div>
