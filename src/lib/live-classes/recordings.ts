@@ -14,7 +14,7 @@ import { downloadZoomRecording, findZoomRecordingDownloadUrl } from "@/lib/zoom/
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const RECORDING_PROCESSING_PROVIDER = "processing";
-const RECORDING_PROCESSING_STALE_MS = 20 * 60 * 1000;
+const RECORDING_PROCESSING_STALE_MS = 3 * 60 * 1000;
 
 export type LiveClassRecordingSummary = {
   id: string;
