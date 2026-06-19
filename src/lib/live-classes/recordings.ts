@@ -13,6 +13,8 @@ import {
 import { downloadZoomRecording, findZoomRecordingDownloadUrl } from "@/lib/zoom/client";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
+const RECORDING_PROCESSING_PROVIDER = "processing";
+const RECORDING_PROCESSING_STALE_MS = 20 * 60 * 1000;
 
 export type LiveClassRecordingSummary = {
   id: string;
@@ -299,60 +301,103 @@ export async function userCanAccessRecording(recordingId: string, user: { id: st
   return null;
 }
 
-async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<typeof userCanAccessRecording>>>) {
+async function claimRecordingForDriveImport(recordingId: string) {
+  const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
+  const result = await db.liveClassRecording.updateMany({
+    where: {
+      id: recordingId,
+      driveFileId: null,
+      OR: [
+        { storageProvider: { not: RECORDING_PROCESSING_PROVIDER } },
+        { updatedAt: { lt: staleBefore } },
+      ],
+    },
+    data: {
+      storageProvider: RECORDING_PROCESSING_PROVIDER,
+    },
+  });
+
+  return result.count > 0;
+}
+
+async function releaseRecordingImportClaim(recordingId: string) {
+  await db.liveClassRecording.updateMany({
+    where: {
+      id: recordingId,
+      driveFileId: null,
+      storageProvider: RECORDING_PROCESSING_PROVIDER,
+    },
+    data: {
+      storageProvider: "zoom",
+    },
+  });
+}
+
+async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<typeof userCanAccessRecording>>>, options: { claimed?: boolean } = {}) {
   if (recording.driveViewUrl) return recording.driveViewUrl;
   if (!recording.downloadUrl) {
     throw new Error("This recording is still being prepared for Google Drive viewing.");
   }
+  if (!options.claimed) {
+    const claimed = await claimRecordingForDriveImport(recording.id);
+    if (!claimed) {
+      throw new Error("This recording is already being prepared. Please refresh after a minute.");
+    }
+  }
 
-  let downloadUrl = recording.downloadUrl;
-  let downloaded: Awaited<ReturnType<typeof downloadZoomRecording>>;
   try {
-    downloaded = await downloadZoomRecording(downloadUrl);
-  } catch (directDownloadError) {
-    if (!recording.meetingId) throw directDownloadError;
+    let downloadUrl = recording.downloadUrl;
+    let downloaded: Awaited<ReturnType<typeof downloadZoomRecording>>;
+    try {
+      downloaded = await downloadZoomRecording(downloadUrl);
+    } catch (directDownloadError) {
+      if (!recording.meetingId) throw directDownloadError;
 
-    const freshDownloadUrl = await findZoomRecordingDownloadUrl({
-      meetingId: recording.meetingId,
-      recordingFileId: recording.recordingFileId,
-      recordingStart: recording.recordingStart,
+      const freshDownloadUrl = await findZoomRecordingDownloadUrl({
+        meetingId: recording.meetingId,
+        recordingFileId: recording.recordingFileId,
+        recordingStart: recording.recordingStart,
+        fileType: recording.fileType,
+      });
+      if (!freshDownloadUrl) throw directDownloadError;
+
+      downloadUrl = freshDownloadUrl;
+      downloaded = await downloadZoomRecording(downloadUrl);
+    }
+
+    const driveRecording = await uploadLiveClassRecordingToDrive({
+      programId: recording.schedule.programId,
+      teacherUserId: recording.schedule.teacher.user.id,
+      scheduleId: recording.scheduleId,
+      recordingFileId: recording.recordingFileId ?? recording.id,
+      title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+      buffer: downloaded.buffer,
+      mimeType: downloaded.mimeType,
       fileType: recording.fileType,
+      recordingStart: recording.recordingStart,
     });
-    if (!freshDownloadUrl) throw directDownloadError;
 
-    downloadUrl = freshDownloadUrl;
-    downloaded = await downloadZoomRecording(downloadUrl);
+    await db.liveClassRecording.update({
+      where: { id: recording.id },
+      data: {
+        playUrl: driveRecording.webViewLink ?? recording.playUrl,
+        driveFileId: driveRecording.id,
+        driveViewUrl: driveRecording.webViewLink,
+        driveFolderId: driveRecording.folderId,
+        storageProvider: "google-drive",
+        downloadUrl,
+      },
+    });
+
+    if (!driveRecording.webViewLink) {
+      throw new Error("Google Drive did not return a viewing link for this recording.");
+    }
+
+    return driveRecording.webViewLink;
+  } catch (error) {
+    await releaseRecordingImportClaim(recording.id);
+    throw error;
   }
-
-  const driveRecording = await uploadLiveClassRecordingToDrive({
-    programId: recording.schedule.programId,
-    teacherUserId: recording.schedule.teacher.user.id,
-    scheduleId: recording.scheduleId,
-    recordingFileId: recording.recordingFileId ?? recording.id,
-    title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
-    buffer: downloaded.buffer,
-    mimeType: downloaded.mimeType,
-    fileType: recording.fileType,
-    recordingStart: recording.recordingStart,
-  });
-
-  await db.liveClassRecording.update({
-    where: { id: recording.id },
-    data: {
-      playUrl: driveRecording.webViewLink ?? recording.playUrl,
-      driveFileId: driveRecording.id,
-      driveViewUrl: driveRecording.webViewLink,
-      driveFolderId: driveRecording.folderId,
-      storageProvider: "google-drive",
-      downloadUrl,
-    },
-  });
-
-  if (!driveRecording.webViewLink) {
-    throw new Error("Google Drive did not return a viewing link for this recording.");
-  }
-
-  return driveRecording.webViewLink;
 }
 
 export async function ensureRecordingDriveViewUrl(recordingId: string, user: { id: string; role: string }) {
@@ -372,6 +417,10 @@ export async function processPendingDriveRecordings(limit = 3) {
       deletedAt: null,
       driveFileId: null,
       downloadUrl: { not: null },
+      OR: [
+        { storageProvider: { not: RECORDING_PROCESSING_PROVIDER } },
+        { updatedAt: { lt: new Date(Date.now() - RECORDING_PROCESSING_STALE_MS) } },
+      ],
     },
     include: includeRecordingRelations(),
     orderBy: { availableAt: "desc" },
@@ -381,7 +430,12 @@ export async function processPendingDriveRecordings(limit = 3) {
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
   for (const recording of recordings) {
     try {
-      await importRecordingToDrive(recording);
+      const claimed = await claimRecordingForDriveImport(recording.id);
+      if (!claimed) {
+        results.push({ id: recording.id, ok: false, error: "Already being prepared." });
+        continue;
+      }
+      await importRecordingToDrive(recording, { claimed: true });
       await notifyRecordingReady(recording.id);
       results.push({ id: recording.id, ok: true });
     } catch (error) {
