@@ -24,6 +24,9 @@ export type LiveClassRecordingSummary = {
   watchUrl: string | null;
   playbackUrl: string | null;
   isReadyForPlayback: boolean;
+  processingStatus: "ready" | "processing" | "failed" | "pending";
+  processingStatusLabel: string;
+  processingError: string | null;
   storageProvider: string | null;
   fileType: string | null;
   recordingStart: Date | null;
@@ -35,7 +38,50 @@ function teacherName(teacher: { user: { firstName: string; lastName: string | nu
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
 }
 
+function shortErrorMessage(error: unknown) {
+  const raw = error instanceof Error ? error.message : String(error ?? "Unknown recording import error.");
+  return raw.replace(/\s+/g, " ").trim().slice(0, 160) || "Unknown recording import error.";
+}
+
+function failedStorageProvider(error: unknown) {
+  return `failed:${shortErrorMessage(error)}`.slice(0, 190);
+}
+
+function recordingProcessingState(recording: { driveFileId?: string | null; storageProvider?: string | null }) {
+  if (recording.driveFileId) {
+    return {
+      processingStatus: "ready" as const,
+      processingStatusLabel: "Ready",
+      processingError: null,
+    };
+  }
+
+  const provider = recording.storageProvider ?? "";
+  if (provider === RECORDING_PROCESSING_PROVIDER) {
+    return {
+      processingStatus: "processing" as const,
+      processingStatusLabel: "Processing now",
+      processingError: null,
+    };
+  }
+
+  if (provider.startsWith("failed:")) {
+    return {
+      processingStatus: "failed" as const,
+      processingStatusLabel: "Failed, retry",
+      processingError: provider.slice("failed:".length) || "Recording import failed.",
+    };
+  }
+
+  return {
+    processingStatus: "pending" as const,
+    processingStatusLabel: "Pending",
+    processingError: null,
+  };
+}
+
 function mapRecording(recording: any): LiveClassRecordingSummary {
+  const processingState = recordingProcessingState(recording);
   return {
     id: recording.id,
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
@@ -44,6 +90,7 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
     playbackUrl: recording.driveFileId ? `/api/recordings/${recording.id}/media` : null,
     isReadyForPlayback: Boolean(recording.driveFileId),
+    ...processingState,
     storageProvider: recording.storageProvider ?? null,
     fileType: recording.fileType,
     recordingStart: recording.recordingStart,
@@ -147,7 +194,9 @@ export async function listStudentRecordings(studentUserId: string) {
       orderBy: { availableAt: "desc" },
     });
 
-    return collapseRecordingsBySession(recordings.filter((recording) => recordingIsVisibleToStudent(recording, student.id))).map(mapRecording);
+    return collapseRecordingsBySession(
+      recordings.filter((recording) => recording.driveFileId && recordingIsVisibleToStudent(recording, student.id)),
+    ).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -186,7 +235,9 @@ export async function listParentChildRecordings(parentUserId: string, childId: s
       orderBy: { availableAt: "desc" },
     });
 
-    return collapseRecordingsBySession(recordings.filter((recording) => recordingIsVisibleToStudent(recording, childId))).map(mapRecording);
+    return collapseRecordingsBySession(
+      recordings.filter((recording) => recording.driveFileId && recordingIsVisibleToStudent(recording, childId)),
+    ).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -209,7 +260,7 @@ export async function listTeacherRecordings(teacherUserId: string) {
       orderBy: { availableAt: "desc" },
     });
 
-    return collapseRecordingsBySession(recordings).map(mapRecording);
+    return collapseRecordingsBySession(recordings.filter((recording) => recording.driveFileId)).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -320,7 +371,7 @@ async function claimRecordingForDriveImport(recordingId: string) {
   return result.count > 0;
 }
 
-async function releaseRecordingImportClaim(recordingId: string) {
+async function releaseRecordingImportClaim(recordingId: string, error: unknown) {
   await db.liveClassRecording.updateMany({
     where: {
       id: recordingId,
@@ -328,7 +379,7 @@ async function releaseRecordingImportClaim(recordingId: string) {
       storageProvider: RECORDING_PROCESSING_PROVIDER,
     },
     data: {
-      storageProvider: "zoom",
+      storageProvider: failedStorageProvider(error),
     },
   });
 }
@@ -395,7 +446,7 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
 
     return driveRecording.webViewLink;
   } catch (error) {
-    await releaseRecordingImportClaim(recording.id);
+    await releaseRecordingImportClaim(recording.id, error);
     throw error;
   }
 }

@@ -18,10 +18,6 @@ type RecordingModalProps = {
   closeHref: string;
 };
 
-function appendRecordingParam(path: string, recordingId: string) {
-  return `${path}${path.includes("?") ? "&" : "?"}recording=${encodeURIComponent(recordingId)}`;
-}
-
 function formatDate(value: Date | null) {
   return value
     ? new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(value)
@@ -29,8 +25,6 @@ function formatDate(value: Date | null) {
 }
 
 export function RecordingModal({ recording, closeHref }: RecordingModalProps) {
-  const returnTo = appendRecordingParam(closeHref, recording.id);
-
   return (
     <div className="fixed inset-0 z-[180] overflow-y-auto bg-[#1b2740]/55 px-4 py-6 backdrop-blur-sm sm:px-6">
       <Link href={closeHref} className="fixed inset-0" aria-label="Close recording player" />
@@ -58,15 +52,8 @@ export function RecordingModal({ recording, closeHref }: RecordingModalProps) {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">Preparing recording</p>
             <h3 className="mt-3 text-2xl font-semibold text-[#17233c]">This replay is still being prepared</h3>
             <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-[#486079]">
-              Zoom has sent the recording details, but the Google Drive playback file is not attached yet. Prepare it once to copy the replay into
-              the correct Google Drive folder and enable website playback.
+              Zoom has sent the recording details, and Gen-M is copying the replay into the correct Google Drive folder for website playback.
             </p>
-            <form action={`/api/recordings/${recording.id}/prepare`} method="post" className="mt-6">
-              <input type="hidden" name="returnTo" value={returnTo} />
-              <button className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#17233c]">
-                Prepare recording
-              </button>
-            </form>
           </div>
         )}
       </div>

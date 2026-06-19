@@ -24,6 +24,19 @@ function formatDate(value: Date | null) {
     : "Date pending";
 }
 
+function statusBadgeClasses(status: string) {
+  switch (status) {
+    case "ready":
+      return "bg-[#edf8ef] text-[#2f6b4b]";
+    case "processing":
+      return "bg-[#fff7e6] text-[#9a5b11]";
+    case "failed":
+      return "bg-[#fdeeee] text-[#a23c3c]";
+    default:
+      return "bg-white text-[#617184]";
+  }
+}
+
 export default async function AdminRecordingsPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   const params = searchParams ? await searchParams : {};
@@ -146,6 +159,16 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
                       <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
                       <p className="mt-1 text-sm text-[#617184]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClasses(recording.processingStatus)}`}>
+                          {recording.processingStatusLabel}
+                        </span>
+                        {recording.processingError ? (
+                          <span className="max-w-xl text-xs leading-5 text-[#a23c3c]">
+                            {recording.processingError}
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {recording.isReadyForPlayback && recording.watchUrl ? (
@@ -156,7 +179,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                         <form action={`/api/recordings/${recording.id}/prepare`} method="post">
                           <input type="hidden" name="returnTo" value="/admin/recordings" />
                           <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                            Prepare
+                            {recording.processingStatus === "processing" ? "Processing" : recording.processingStatus === "failed" ? "Retry" : "Prepare"}
                           </button>
                         </form>
                       )}

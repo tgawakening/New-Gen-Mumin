@@ -60,7 +60,7 @@ export default async function StudentRecordingsPage({ searchParams }: PageProps)
                   href={`/student/recordings?recording=${recording.id}`}
                   className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
                 >
-                  {recording.isReadyForPlayback ? "Watch recording" : "Preparing recording"}
+                  Watch recording
                 </Link>
               ) : (
                 <span className="mt-4 inline-flex rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">

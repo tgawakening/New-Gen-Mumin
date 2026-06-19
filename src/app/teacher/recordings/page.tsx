@@ -54,7 +54,7 @@ export default async function TeacherRecordingsPage({ searchParams }: PageProps)
               <div className="mt-4 flex flex-wrap gap-2">
                 {recording.watchUrl ? (
                   <Link href={`/teacher/recordings?recording=${recording.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                    {recording.isReadyForPlayback ? "Watch recording" : "Preparing recording"}
+                    Watch recording
                   </Link>
                 ) : (
                   <span className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#617184]">
