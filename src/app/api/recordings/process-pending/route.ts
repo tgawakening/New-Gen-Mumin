@@ -32,7 +32,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const limit = Math.min(Math.max(Number(url.searchParams.get("limit") || 1), 1), 3);
+  const limit = 1;
   const wait = url.searchParams.get("wait") === "1";
 
   if (wait) {
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     mode: "started",
     queued: limit,
-    message: "Pending recording processing started in the background.",
+    message: "Pending recording processing started in the background. Recordings are imported one at a time.",
   }, { status: 202 });
 }
 

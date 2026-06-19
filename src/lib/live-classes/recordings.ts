@@ -354,6 +354,19 @@ export async function userCanAccessRecording(recordingId: string, user: { id: st
 
 async function claimRecordingForDriveImport(recordingId: string) {
   const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
+  const activeImport = await db.liveClassRecording.findFirst({
+    where: {
+      id: { not: recordingId },
+      deletedAt: null,
+      driveFileId: null,
+      storageProvider: RECORDING_PROCESSING_PROVIDER,
+      updatedAt: { gte: staleBefore },
+    },
+    select: { id: true },
+  });
+
+  if (activeImport) return false;
+
   const result = await db.liveClassRecording.updateMany({
     where: {
       id: recordingId,
@@ -462,7 +475,20 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
   return viewUrl;
 }
 
-export async function processPendingDriveRecordings(limit = 3) {
+export async function processPendingDriveRecordings(limit = 1) {
+  const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
+  const activeImport = await db.liveClassRecording.findFirst({
+    where: {
+      deletedAt: null,
+      driveFileId: null,
+      storageProvider: RECORDING_PROCESSING_PROVIDER,
+      updatedAt: { gte: staleBefore },
+    },
+    select: { id: true },
+  });
+
+  if (activeImport) return [];
+
   const recordings = await db.liveClassRecording.findMany({
     where: {
       deletedAt: null,
@@ -470,12 +496,12 @@ export async function processPendingDriveRecordings(limit = 3) {
       downloadUrl: { not: null },
       OR: [
         { storageProvider: { not: RECORDING_PROCESSING_PROVIDER } },
-        { updatedAt: { lt: new Date(Date.now() - RECORDING_PROCESSING_STALE_MS) } },
+        { updatedAt: { lt: staleBefore } },
       ],
     },
     include: includeRecordingRelations(),
     orderBy: { availableAt: "desc" },
-    take: limit,
+    take: Math.min(Math.max(limit, 1), 1),
   });
 
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
