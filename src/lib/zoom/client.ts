@@ -242,6 +242,67 @@ export async function downloadZoomRecording(downloadUrl: string) {
   };
 }
 
+function parseContentRange(value: string | null) {
+  const match = value?.match(/^bytes\s+(\d+)-(\d+)\/(\d+|\*)$/i);
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  const total = match[3] === "*" ? null : Number(match[3]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || (total !== null && !Number.isFinite(total))) return null;
+  return { start, end, total };
+}
+
+async function fetchZoomRecordingRange(downloadUrl: string, accessToken: string, start: number, end: number, withBearer: boolean) {
+  return fetch(downloadUrl, {
+    method: "GET",
+    headers: {
+      Range: `bytes=${start}-${end}`,
+      ...(withBearer ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    cache: "no-store",
+  });
+}
+
+export async function downloadZoomRecordingRange(downloadUrl: string, start: number, chunkSize: number) {
+  const accessToken = await getZoomAccessToken();
+  const safeStart = Math.max(0, Math.floor(start));
+  const safeEnd = safeStart + Math.max(1, Math.floor(chunkSize)) - 1;
+
+  let finalDownloadUrl = downloadUrl;
+  let response = await fetchZoomRecordingRange(finalDownloadUrl, accessToken, safeStart, safeEnd, true);
+  if (!response.ok) {
+    const tokenUrl = new URL(finalDownloadUrl);
+    tokenUrl.searchParams.set("access_token", accessToken);
+    finalDownloadUrl = tokenUrl.toString();
+    response = await fetchZoomRecordingRange(finalDownloadUrl, accessToken, safeStart, safeEnd, false);
+  }
+
+  if (!response.ok) {
+    const details = await readZoomError(response);
+    const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
+    throw new Error(`Zoom recording chunk download failed: ${details}.${guidance}`);
+  }
+
+  if (response.status !== 206) {
+    throw new Error("Zoom did not return a byte-range response for this recording. Please retry after Zoom finishes preparing the file.");
+  }
+
+  const range = parseContentRange(response.headers.get("content-range"));
+  if (!range || range.total === null) {
+    throw new Error("Zoom recording chunk response did not include a total file size.");
+  }
+
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    mimeType: response.headers.get("content-type") ?? "video/mp4",
+    start: range.start,
+    end: range.end,
+    total: range.total,
+    done: range.end + 1 >= range.total,
+    downloadUrl: finalDownloadUrl,
+  };
+}
+
 function zoomMeetingRecordingsUrl(meetingId: string) {
   const encodedMeetingId = meetingId.includes("/") ? encodeURIComponent(encodeURIComponent(meetingId)) : encodeURIComponent(meetingId);
   return `https://api.zoom.us/v2/meetings/${encodedMeetingId}/recordings`;

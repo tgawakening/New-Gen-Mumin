@@ -3,7 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { driveRequest, driveUpload, getDriveRootFolderId } from "@/lib/google-drive/client";
+import { driveRequest, driveResumableUploadRequest, driveUpload, driveUploadResponse, getDriveRootFolderId } from "@/lib/google-drive/client";
 
 export type DriveMaterial = {
   id: string;
@@ -452,6 +452,122 @@ export async function uploadLiveClassRecordingToDrive(input: {
     id: uploaded.id,
     webViewLink: uploaded.webViewLink ?? null,
     folderId: recordingsFolderId,
+  };
+}
+
+export async function startLiveClassRecordingResumableUpload(input: {
+  programId: string;
+  teacherUserId: string;
+  scheduleId: string;
+  recordingFileId: string;
+  title: string;
+  mimeType: string;
+  fileType?: string | null;
+  recordingStart?: Date | null;
+  totalBytes: number;
+}) {
+  const [program, teacher] = await Promise.all([
+    db.program.findUnique({ where: { id: input.programId } }),
+    db.teacherProfile.findUnique({ where: { userId: input.teacherUserId }, include: { user: true } }),
+  ]);
+  if (!program) throw new Error("Program not found.");
+  if (!teacher) throw new Error("Teacher not found.");
+
+  const recordingsFolderId = await ensureTeacherProgramSubfolder({
+    programId: input.programId,
+    teacherUserId: input.teacherUserId,
+    subfolder: "Recordings",
+  });
+  const extension = (input.fileType ?? "mp4").toLowerCase() || "mp4";
+  const dateLabel = input.recordingStart ? input.recordingStart.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  const fileName = `${input.title} - ${dateLabel}.${extension}`;
+  const response = await driveUploadResponse("/files?uploadType=resumable&fields=id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=UTF-8",
+      "X-Upload-Content-Type": input.mimeType || "video/mp4",
+      "X-Upload-Content-Length": String(input.totalBytes),
+    },
+    body: JSON.stringify({
+      name: fileName,
+      parents: [recordingsFolderId],
+      copyRequiresWriterPermission: true,
+      appProperties: {
+        genMumin: "live-class-recording",
+        programId: input.programId,
+        programTitle: displayProgramTitle(program.title),
+        teacherUserId: input.teacherUserId,
+        teacherName: teacherFolderName(teacher),
+        scheduleId: input.scheduleId,
+        recordingFileId: input.recordingFileId,
+        folderName: "Recordings",
+        visibility: "students_parents",
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Google Drive resumable upload session failed: ${await response.text()}`);
+  }
+
+  const sessionUrl = response.headers.get("location");
+  if (!sessionUrl) throw new Error("Google Drive did not return a resumable upload session.");
+
+  return {
+    sessionUrl,
+    folderId: recordingsFolderId,
+    fileName,
+  };
+}
+
+export async function uploadLiveClassRecordingResumableChunk(input: {
+  sessionUrl: string;
+  buffer: Buffer;
+  start: number;
+  end: number;
+  totalBytes: number;
+}) {
+  const result = await driveResumableUploadRequest<DriveFile>(input.sessionUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Length": String(input.buffer.length),
+      "Content-Range": `bytes ${input.start}-${input.end}/${input.totalBytes}`,
+      "Content-Type": "application/octet-stream",
+    },
+    body: input.buffer as unknown as BodyInit,
+  });
+
+  if (!result.complete) {
+    const match = result.range?.match(/bytes=(\d+)-(\d+)/i);
+    const uploadedEnd = match ? Number(match[2]) : input.end;
+    return {
+      complete: false as const,
+      nextOffset: Number.isFinite(uploadedEnd) ? uploadedEnd + 1 : input.end + 1,
+      file: null,
+    };
+  }
+
+  const uploaded = result.file;
+  if (!uploaded) throw new Error("Google Drive did not return uploaded recording details.");
+
+  await driveRequest(`/files/${uploaded.id}/permissions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "reader", type: "anyone" }),
+  });
+  await driveRequest(`/files/${uploaded.id}?fields=id,webViewLink,copyRequiresWriterPermission`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ copyRequiresWriterPermission: true }),
+  }).catch(() => undefined);
+
+  return {
+    complete: true as const,
+    nextOffset: input.totalBytes,
+    file: {
+      id: uploaded.id,
+      webViewLink: uploaded.webViewLink ?? null,
+    },
   };
 }
 

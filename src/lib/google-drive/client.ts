@@ -200,6 +200,48 @@ export async function driveUpload<T>(path: string, init: RequestInit = {}) {
   return parseDriveResponse<T>(response);
 }
 
+export async function driveUploadResponse(path: string, init: RequestInit = {}) {
+  const accessToken = await getAccessToken();
+  return fetch(`https://www.googleapis.com/upload/drive/v3${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+}
+
+export async function driveResumableUploadRequest<T>(sessionUrl: string, init: RequestInit = {}) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(sessionUrl, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      ...(init.headers ?? {}),
+    },
+    cache: "no-store",
+  });
+
+  if (response.status === 308) {
+    return {
+      complete: false as const,
+      range: response.headers.get("range"),
+      file: null,
+    };
+  }
+
+  if (!response.ok) {
+    throw new Error(`Google Drive resumable upload failed: ${await response.text()}`);
+  }
+
+  return {
+    complete: true as const,
+    range: response.headers.get("range"),
+    file: await parseDriveResponse<T>(response),
+  };
+}
+
 export async function driveMediaRequest(fileId: string, rangeHeader?: string | null) {
   const accessToken = await getAccessToken();
   const response = await fetch(

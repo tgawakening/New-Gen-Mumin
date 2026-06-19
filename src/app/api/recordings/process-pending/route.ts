@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
-import { getRecordingProcessingQueueStatus, startPendingDriveRecordingsProcessing } from "@/lib/live-classes/recordings";
+import { getRecordingProcessingQueueStatus, processPendingDriveRecordings } from "@/lib/live-classes/recordings";
 
 export const dynamic = "force-dynamic";
 
@@ -31,17 +31,21 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  startPendingDriveRecordingsProcessing(1);
+  const results = await processPendingDriveRecordings(1);
   const queue = await getRecordingProcessingQueueStatus();
 
   return NextResponse.json(
     {
-      mode: "started",
-      queued: 1,
+      mode: "chunk-processed",
+      processed: results.length,
+      succeeded: results.filter((result) => result.ok).length,
+      failed: results.filter((result) => !result.ok).length,
       queue,
-      message: "Pending recording processing started in the background.",
+      results,
+      message: results.length
+        ? "One recording chunk was processed. Cron will continue the next chunk on the next run."
+        : "No recording chunk was processed.",
     },
-    { status: 202 },
   );
 }
 

@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { deleteRecordingForAdmin, listAdminRecordings, resetPendingRecordingImportsForAdmin, startPendingDriveRecordingsProcessing } from "@/lib/live-classes/recordings";
+import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings, resetPendingRecordingImportsForAdmin } from "@/lib/live-classes/recordings";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -77,13 +77,18 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
-    startPendingDriveRecordingsProcessing(1);
+    const results = await processPendingDriveRecordings(1);
     revalidatePath("/admin/recordings");
     revalidatePath("/teacher/recordings");
     revalidatePath("/student/recordings");
     revalidatePath("/parent/recordings");
 
-    redirect(noticeHref("Recording processing started in the background. Refresh after a few minutes to see progress.", "success"));
+    const failed = results.find((result) => !result.ok);
+    if (failed) {
+      redirect(noticeHref(failed.error ?? "Recording chunk processing failed.", "error"));
+    }
+
+    redirect(noticeHref(results.length ? "One recording chunk was processed. Keep cron enabled to continue the remaining chunks." : "No pending recording chunk was ready.", "success"));
   }
 
   async function resetProcessingRecordingsAction() {
@@ -173,6 +178,11 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClasses(recording.processingStatus)}`}>
                           {recording.processingStatusLabel}
                         </span>
+                        {recording.processingProgressLabel ? (
+                          <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#617184]">
+                            {recording.processingProgressLabel}
+                          </span>
+                        ) : null}
                         {recording.processingError ? (
                           <span className="max-w-xl text-xs leading-5 text-[#a23c3c]">
                             {recording.processingError}

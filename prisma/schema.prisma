@@ -343,10 +343,15 @@ model LiveClassRecording {
   fileType        String?
   playUrl         String
   downloadUrl     String?
-  driveFileId     String?
-  driveViewUrl    String?
-  driveFolderId   String?
-  storageProvider String        @default("zoom")
+    driveFileId     String?
+    driveViewUrl    String?
+    driveFolderId   String?
+    driveUploadSessionUrl String?       @db.Text
+    driveUploadOffset BigInt            @default(0)
+    driveUploadTotal  BigInt?
+    driveUploadUpdatedAt DateTime?
+    driveUploadFileName String?
+    storageProvider String        @default("zoom")
   recordingStart  DateTime?
   recordingEnd    DateTime?
   fileSize        BigInt?
