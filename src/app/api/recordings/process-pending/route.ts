@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
-import { startPendingDriveRecordingsProcessing } from "@/lib/live-classes/recordings";
+import { getRecordingProcessingQueueStatus, startPendingDriveRecordingsProcessing } from "@/lib/live-classes/recordings";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +32,13 @@ export async function GET(request: Request) {
   }
 
   startPendingDriveRecordingsProcessing(1);
+  const queue = await getRecordingProcessingQueueStatus();
 
   return NextResponse.json(
     {
       mode: "started",
       queued: 1,
+      queue,
       message: "Pending recording processing started in the background.",
     },
     { status: 202 },

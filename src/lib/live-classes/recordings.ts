@@ -427,6 +427,8 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
   try {
     let downloadUrl = recording.downloadUrl;
     let downloaded: Awaited<ReturnType<typeof downloadZoomRecording>>;
+    const title = cleanLiveClassTitle(recording.topic || recording.schedule.title);
+    console.info(`[recording-import] Zoom download starting for ${recording.id}: ${title}`);
     try {
       downloaded = await downloadZoomRecording(downloadUrl);
     } catch (directDownloadError) {
@@ -443,18 +445,21 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
       downloadUrl = freshDownloadUrl;
       downloaded = await downloadZoomRecording(downloadUrl);
     }
+    console.info(`[recording-import] Zoom download complete for ${recording.id}: ${title}`);
 
+    console.info(`[recording-import] Google Drive upload starting for ${recording.id}: ${title}`);
     const driveRecording = await uploadLiveClassRecordingToDrive({
       programId: recording.schedule.programId,
       teacherUserId: recording.schedule.teacher.user.id,
       scheduleId: recording.scheduleId,
       recordingFileId: recording.recordingFileId ?? recording.id,
-      title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+      title,
       buffer: downloaded.buffer,
       mimeType: downloaded.mimeType,
       fileType: recording.fileType,
       recordingStart: recording.recordingStart,
     });
+    console.info(`[recording-import] Google Drive upload complete for ${recording.id}: ${title}`);
 
     await db.liveClassRecording.update({
       where: { id: recording.id },
@@ -547,6 +552,7 @@ export async function processPendingDriveRecordings(limit = 1) {
       await importRecordingToDrive(recording, { claimed: true });
       await notifyRecordingReady(recording.id);
       results.push({ id: recording.id, ok: true });
+      console.info(`[recording-import] Recording ready for dashboards: ${recording.id}`);
     } catch (error) {
       console.error("Unable to process pending recording.", error);
       results.push({
@@ -561,15 +567,72 @@ export async function processPendingDriveRecordings(limit = 1) {
 }
 
 export function startPendingDriveRecordingsProcessing(limit = 1) {
+  console.info(`[recording-import] Background pending processing requested. Limit: ${limit}`);
   void processPendingDriveRecordings(limit).catch((error) => {
     console.error("Background pending recording processing failed.", error);
   });
 }
 
 export function startRecordingDriveViewUrlPreparation(recordingId: string, user: { id: string; role: string }) {
+  console.info(`[recording-import] Background preparation requested for recording ${recordingId} by ${user.role}.`);
   void ensureRecordingDriveViewUrl(recordingId, user).catch((error) => {
     console.error("Background recording preparation failed.", error);
   });
+}
+
+export async function getRecordingProcessingQueueStatus() {
+  const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
+  const [processing, pending, failed, ready] = await Promise.all([
+    db.liveClassRecording.findMany({
+      where: {
+        deletedAt: null,
+        driveFileId: null,
+        storageProvider: RECORDING_PROCESSING_PROVIDER,
+      },
+      include: includeRecordingRelations(),
+      orderBy: { updatedAt: "asc" },
+      take: 5,
+    }),
+    db.liveClassRecording.count({
+      where: {
+        deletedAt: null,
+        driveFileId: null,
+        downloadUrl: { not: null },
+        OR: [
+          { storageProvider: "zoom" },
+          { storageProvider: { startsWith: "failed:" } },
+          { storageProvider: RECORDING_PROCESSING_PROVIDER, updatedAt: { lt: staleBefore } },
+        ],
+      },
+    }),
+    db.liveClassRecording.count({
+      where: {
+        deletedAt: null,
+        driveFileId: null,
+        storageProvider: { startsWith: "failed:" },
+      },
+    }),
+    db.liveClassRecording.count({
+      where: {
+        deletedAt: null,
+        driveFileId: { not: null },
+      },
+    }),
+  ]);
+
+  return {
+    processing: processing.map((recording) => ({
+      id: recording.id,
+      title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+      teacher: teacherName(recording.schedule.teacher),
+      updatedAt: recording.updatedAt,
+      minutesSinceUpdate: Math.max(0, Math.round((Date.now() - recording.updatedAt.getTime()) / 60000)),
+      stale: recording.updatedAt < staleBefore,
+    })),
+    pending,
+    failed,
+    ready,
+  };
 }
 
 export async function resetPendingRecordingImportsForAdmin() {
