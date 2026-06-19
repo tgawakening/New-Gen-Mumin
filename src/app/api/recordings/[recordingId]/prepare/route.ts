@@ -43,21 +43,16 @@ export async function POST(request: Request, { params }: RouteProps) {
 
   try {
     const { recordingId } = await params;
-    void ensureRecordingDriveViewUrl(recordingId, {
+    await ensureRecordingDriveViewUrl(recordingId, {
       id: session.user.id,
       role: session.user.role,
-    })
-      .then(() => {
-        revalidatePath("/admin/recordings");
-        revalidatePath("/teacher/recordings");
-        revalidatePath("/student/recordings");
-        revalidatePath("/parent/recordings");
-      })
-      .catch((error) => {
-        console.error("Background recording preparation failed.", error);
-      });
+    });
+    revalidatePath("/admin/recordings");
+    revalidatePath("/teacher/recordings");
+    revalidatePath("/student/recordings");
+    revalidatePath("/parent/recordings");
 
-    return NextResponse.redirect(publicRedirectUrl(request, withNotice(returnTo, "Recording preparation started. Refresh after a minute.", "success")), 303);
+    return NextResponse.redirect(publicRedirectUrl(request, withNotice(returnTo, "Recording finished processing.", "success")), 303);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to prepare this recording right now.";
     return NextResponse.redirect(publicRedirectUrl(request, withNotice(returnTo, message, "error")), 303);

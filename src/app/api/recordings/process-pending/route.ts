@@ -31,30 +31,19 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const url = new URL(request.url);
   const limit = 1;
-  const wait = url.searchParams.get("wait") === "1";
-
-  if (wait) {
-    const results = await processPendingDriveRecordings(limit);
-    return NextResponse.json({
-      mode: "completed",
-      processed: results.length,
-      succeeded: results.filter((result) => result.ok).length,
-      failed: results.filter((result) => !result.ok).length,
-      results,
-    });
-  }
-
-  void processPendingDriveRecordings(limit).catch((error) => {
-    console.error("Background pending recording processing failed.", error);
-  });
+  const results = await processPendingDriveRecordings(limit);
 
   return NextResponse.json({
-    mode: "started",
-    queued: limit,
-    message: "Pending recording processing started in the background. Recordings are imported one at a time.",
-  }, { status: 202 });
+    mode: "completed",
+    processed: results.length,
+    succeeded: results.filter((result) => result.ok).length,
+    failed: results.filter((result) => !result.ok).length,
+    message: results.length
+      ? "Pending recording processing completed for one recording."
+      : "No recording was processed. Another import may still be active.",
+    results,
+  });
 }
 
 export async function POST(request: Request) {

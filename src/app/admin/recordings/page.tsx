@@ -77,18 +77,22 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
-    void processPendingDriveRecordings(1)
-      .then(() => {
-        revalidatePath("/admin/recordings");
-        revalidatePath("/teacher/recordings");
-        revalidatePath("/student/recordings");
-        revalidatePath("/parent/recordings");
-      })
-      .catch((error) => {
-        console.error("Background pending recording processing failed.", error);
-      });
+    const results = await processPendingDriveRecordings(1);
+    revalidatePath("/admin/recordings");
+    revalidatePath("/teacher/recordings");
+    revalidatePath("/student/recordings");
+    revalidatePath("/parent/recordings");
 
-    redirect(noticeHref("Pending recording processing started. Refresh after a minute.", "success"));
+    const completed = results.filter((result) => result.ok).length;
+    const failed = results.filter((result) => !result.ok).length;
+    if (completed) {
+      redirect(noticeHref("One recording finished processing. Click again to process the next recording.", "success"));
+    }
+    if (failed) {
+      redirect(noticeHref(results[0]?.error ?? "Recording processing failed.", "error"));
+    }
+
+    redirect(noticeHref("No recording was ready to process. If items are stuck on Processing, wait a few minutes and try again.", "success"));
   }
 
   const recordings = await listAdminRecordings();
