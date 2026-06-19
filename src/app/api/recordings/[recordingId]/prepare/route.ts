@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
-import { ensureRecordingDriveViewUrl } from "@/lib/live-classes/recordings";
+import { startRecordingDriveViewUrlPreparation } from "@/lib/live-classes/recordings";
 
 type RouteProps = {
   params: Promise<{ recordingId: string }>;
@@ -43,7 +43,7 @@ export async function POST(request: Request, { params }: RouteProps) {
 
   try {
     const { recordingId } = await params;
-    await ensureRecordingDriveViewUrl(recordingId, {
+    startRecordingDriveViewUrlPreparation(recordingId, {
       id: session.user.id,
       role: session.user.role,
     });
@@ -52,7 +52,7 @@ export async function POST(request: Request, { params }: RouteProps) {
     revalidatePath("/student/recordings");
     revalidatePath("/parent/recordings");
 
-    return NextResponse.redirect(publicRedirectUrl(request, withNotice(returnTo, "Recording finished processing.", "success")), 303);
+    return NextResponse.redirect(publicRedirectUrl(request, withNotice(returnTo, "Recording processing started. Refresh after a few minutes to see progress.", "success")), 303);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to prepare this recording right now.";
     return NextResponse.redirect(publicRedirectUrl(request, withNotice(returnTo, message, "error")), 303);

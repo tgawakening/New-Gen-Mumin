@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { env } from "@/lib/env";
-import { processPendingDriveRecordings } from "@/lib/live-classes/recordings";
+import { startPendingDriveRecordingsProcessing } from "@/lib/live-classes/recordings";
 
 export const dynamic = "force-dynamic";
 
@@ -31,19 +31,16 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const limit = 1;
-  const results = await processPendingDriveRecordings(limit);
+  startPendingDriveRecordingsProcessing(1);
 
-  return NextResponse.json({
-    mode: "completed",
-    processed: results.length,
-    succeeded: results.filter((result) => result.ok).length,
-    failed: results.filter((result) => !result.ok).length,
-    message: results.length
-      ? "Pending recording processing completed for one recording."
-      : "No recording was processed. Another import may still be active.",
-    results,
-  });
+  return NextResponse.json(
+    {
+      mode: "started",
+      queued: 1,
+      message: "Pending recording processing started in the background.",
+    },
+    { status: 202 },
+  );
 }
 
 export async function POST(request: Request) {

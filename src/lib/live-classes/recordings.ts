@@ -14,7 +14,7 @@ import { downloadZoomRecording, findZoomRecordingDownloadUrl } from "@/lib/zoom/
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const RECORDING_PROCESSING_PROVIDER = "processing";
-const RECORDING_PROCESSING_STALE_MS = 3 * 60 * 1000;
+const RECORDING_PROCESSING_STALE_MS = 45 * 60 * 1000;
 
 export type LiveClassRecordingSummary = {
   id: string;
@@ -558,6 +558,18 @@ export async function processPendingDriveRecordings(limit = 1) {
   }
 
   return results;
+}
+
+export function startPendingDriveRecordingsProcessing(limit = 1) {
+  void processPendingDriveRecordings(limit).catch((error) => {
+    console.error("Background pending recording processing failed.", error);
+  });
+}
+
+export function startRecordingDriveViewUrlPreparation(recordingId: string, user: { id: string; role: string }) {
+  void ensureRecordingDriveViewUrl(recordingId, user).catch((error) => {
+    console.error("Background recording preparation failed.", error);
+  });
 }
 
 export async function resetPendingRecordingImportsForAdmin() {

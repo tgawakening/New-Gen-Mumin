@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings, resetPendingRecordingImportsForAdmin } from "@/lib/live-classes/recordings";
+import { deleteRecordingForAdmin, listAdminRecordings, resetPendingRecordingImportsForAdmin, startPendingDriveRecordingsProcessing } from "@/lib/live-classes/recordings";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -77,22 +77,13 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
-    const results = await processPendingDriveRecordings(1);
+    startPendingDriveRecordingsProcessing(1);
     revalidatePath("/admin/recordings");
     revalidatePath("/teacher/recordings");
     revalidatePath("/student/recordings");
     revalidatePath("/parent/recordings");
 
-    const completed = results.filter((result) => result.ok).length;
-    const failed = results.filter((result) => !result.ok).length;
-    if (completed) {
-      redirect(noticeHref("One recording finished processing. Click again to process the next recording.", "success"));
-    }
-    if (failed) {
-      redirect(noticeHref(results[0]?.error ?? "Recording processing failed.", "error"));
-    }
-
-    redirect(noticeHref("No recording was ready to process. If items are stuck on Processing, wait a few minutes and try again.", "success"));
+    redirect(noticeHref("Recording processing started in the background. Refresh after a few minutes to see progress.", "success"));
   }
 
   async function resetProcessingRecordingsAction() {
