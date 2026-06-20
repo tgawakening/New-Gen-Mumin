@@ -5,12 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
-import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
 import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings, resetPendingRecordingImportsForAdmin, syncRecentZoomRecordingsForAdmin } from "@/lib/live-classes/recordings";
 
 type PageProps = {
-  searchParams?: Promise<{ notice?: string; tone?: string }>;
+  searchParams?: Promise<{ notice?: string | string[]; tone?: string | string[] }>;
 };
 
 function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
@@ -37,9 +36,22 @@ function statusBadgeClasses(status: string) {
   }
 }
 
+function firstParam(value?: string | string[]) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function noticeClasses(tone?: string) {
+  if (tone === "error" || tone === "danger") {
+    return "border-[#efb3b3] bg-[#fff4f4] text-[#a23c3c]";
+  }
+  return "border-[#bfe4ca] bg-[#effaf3] text-[#2f6b4b]";
+}
+
 export default async function AdminRecordingsPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   const params = searchParams ? await searchParams : {};
+  const notice = firstParam(params.notice);
+  const tone = firstParam(params.tone);
 
   if (!session || session.user.role !== "ADMIN") {
     return (
@@ -158,7 +170,11 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
           </div>
         </div>
 
-        <ActionToast message={params.notice} tone={params.tone} />
+        {notice ? (
+          <div className={`rounded-[22px] border px-5 py-4 text-sm font-semibold shadow-sm ${noticeClasses(tone)}`}>
+            {notice}
+          </div>
+        ) : null}
 
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[24px] border border-[#eadfce] bg-white p-5 shadow-sm">
