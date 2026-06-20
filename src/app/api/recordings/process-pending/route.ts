@@ -31,22 +31,34 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const results = await processPendingDriveRecordings(1);
-  const queue = await getRecordingProcessingQueueStatus();
+  try {
+    const results = await processPendingDriveRecordings(1);
+    const queue = await getRecordingProcessingQueueStatus();
 
-  return NextResponse.json(
-    {
-      mode: "chunk-processed",
-      processed: results.length,
-      succeeded: results.filter((result) => result.ok).length,
-      failed: results.filter((result) => !result.ok).length,
-      queue,
-      results,
-      message: results.length
-        ? "One recording chunk was processed. Cron will continue the next chunk on the next run."
-        : "No recording chunk was processed.",
-    },
-  );
+    return NextResponse.json(
+      {
+        ok: true,
+        mode: "chunk-processed",
+        processed: results.length,
+        succeeded: results.filter((result) => result.ok).length,
+        failed: results.filter((result) => !result.ok).length,
+        queue,
+        results,
+        message: results.length
+          ? "One recording chunk was processed. Cron will continue the next chunk on the next run."
+          : "No recording chunk was processed.",
+      },
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown recording cron error.";
+    console.error("Recording cron processing failed.", error);
+    return NextResponse.json({
+      ok: false,
+      mode: "processing-error",
+      error: message,
+      message: "Recording processing failed, but the cron endpoint stayed reachable. Check DigitalOcean logs for details.",
+    });
+  }
 }
 
 export async function POST(request: Request) {
