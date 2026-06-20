@@ -3,9 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
 import { recordLiveClassSessionEnd, recordLiveClassSessionFromRecording, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
-import { notifyRecordingReady } from "@/lib/live-classes/recordings";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -13,7 +11,6 @@ import {
   getScheduleRosterStudentIds,
   isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
-import { downloadZoomRecording } from "@/lib/zoom/client";
 
 function webhookSecret() {
   return env.success ? env.data.ZOOM_WEBHOOK_SECRET_TOKEN : undefined;
@@ -231,25 +228,6 @@ export async function POST(request: NextRequest) {
           recordingEnd,
         });
       }
-      let driveRecording: { id: string; webViewLink: string | null; folderId: string } | null = null;
-      if (driveColumnsAvailable && file.download_url) {
-        try {
-          const downloaded = await downloadZoomRecording(file.download_url);
-          driveRecording = await uploadLiveClassRecordingToDrive({
-            programId: schedule.program.id,
-            teacherUserId: schedule.teacher.user.id,
-            scheduleId: schedule.id,
-            recordingFileId,
-            title: cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title),
-            buffer: downloaded.buffer,
-            mimeType: downloaded.mimeType,
-            fileType: file.file_type ?? null,
-            recordingStart,
-          });
-        } catch (error) {
-          console.error("Unable to copy Zoom recording to Google Drive.", error);
-        }
-      }
       try {
         await db.liveClassRecording.upsert({
           where: {
@@ -261,14 +239,14 @@ export async function POST(request: NextRequest) {
             meetingId,
             topic: payload.payload?.object?.topic ?? schedule.title,
             fileType: file.file_type ?? null,
-            playUrl: driveRecording?.webViewLink ?? file.play_url!,
+            playUrl: file.play_url!,
             downloadUrl: file.download_url ?? null,
             ...(driveColumnsAvailable
               ? {
-                  driveFileId: driveRecording?.id ?? null,
-                  driveViewUrl: driveRecording?.webViewLink ?? null,
-                  driveFolderId: driveRecording?.folderId ?? null,
-                  storageProvider: driveRecording ? "google-drive" : "zoom",
+                  driveFileId: null,
+                  driveViewUrl: null,
+                  driveFolderId: null,
+                  storageProvider: "zoom",
                 }
               : {}),
             recordingStart,
@@ -276,14 +254,11 @@ export async function POST(request: NextRequest) {
             fileSize: typeof file.file_size === "number" ? BigInt(file.file_size) : null,
           },
           update: {
-            playUrl: driveRecording?.webViewLink ?? file.play_url!,
+            playUrl: file.play_url!,
             downloadUrl: file.download_url ?? null,
             ...(driveColumnsAvailable
               ? {
-                  driveFileId: driveRecording?.id ?? undefined,
-                  driveViewUrl: driveRecording?.webViewLink ?? undefined,
-                  driveFolderId: driveRecording?.folderId ?? undefined,
-                  storageProvider: driveRecording ? "google-drive" : "zoom",
+                  storageProvider: "zoom",
                 }
               : {}),
             fileType: file.file_type ?? null,
@@ -304,18 +279,16 @@ export async function POST(request: NextRequest) {
 
     const savedRecording = await db.liveClassRecording.findUnique({
       where: { recordingFileId: primaryFile.id ?? fallbackRecordingFileId(schedule.id, primaryFile.play_url!) },
-      select: { id: true, driveFileId: true },
+      select: { id: true },
     });
-    if (savedRecording?.driveFileId) {
-      await notifyRecordingReady(savedRecording.id);
-    } else {
+    if (savedRecording) {
       const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
       const title = cleanLiveClassTitle(payload.payload?.object?.topic ?? schedule.title);
       await db.notification.createMany({
         data: admins.map((admin) => ({
           userId: admin.id,
-          title: "Recording needs Drive preparation",
-          body: `${title} is available from Zoom but still needs to be copied to Google Drive.`,
+          title: "Recording ready for Drive import",
+          body: `${title} is available from Zoom and queued for Google Drive processing.`,
           href: "/admin/recordings",
         })),
       });

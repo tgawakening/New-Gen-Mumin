@@ -10,7 +10,7 @@ import {
   getScheduleRosterStudentIds,
   isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
-import { downloadZoomRecordingRange, findZoomRecordingDownloadUrl } from "@/lib/zoom/client";
+import { downloadZoomRecordingRange, findZoomRecordingDownloadUrl, getZoomUserRecordings } from "@/lib/zoom/client";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const RECORDING_PROCESSING_PROVIDER = "processing";
@@ -114,6 +114,36 @@ function isPlayableVideoRecording(recording: { fileType?: string | null; topic?:
   if (fileType && !["MP4", "M4A"].includes(fileType)) return false;
 
   return true;
+}
+
+function choosePrimaryZoomRecordingFile(files: Array<{
+  id?: string;
+  play_url?: string;
+  download_url?: string;
+  file_type?: string;
+  file_size?: number;
+  recording_start?: string;
+  recording_end?: string;
+}>) {
+  const playable = files.filter((file) => {
+    const fileType = (file.file_type ?? "").toUpperCase();
+    const playUrl = (file.play_url ?? "").toLowerCase();
+    if (!file.play_url) return false;
+    if (["CHAT", "CC", "TRANSCRIPT", "TIMELINE", "SUMMARY"].includes(fileType)) return false;
+    if (playUrl.includes("file_type=chat")) return false;
+    return true;
+  });
+
+  return (
+    playable.find((file) => (file.file_type ?? "").toUpperCase() === "MP4") ??
+    playable.find((file) => (file.file_type ?? "").toUpperCase() === "M4A") ??
+    playable[0] ??
+    null
+  );
+}
+
+function fallbackZoomRecordingFileId(scheduleId: string, playUrl: string) {
+  return `${scheduleId}-${Buffer.from(playUrl).toString("base64url").slice(0, 32)}`;
 }
 
 function collapseRecordingsBySession(recordings: any[]) {
@@ -695,6 +725,78 @@ export async function getRecordingProcessingQueueStatus() {
     failed,
     ready,
   };
+}
+
+export async function syncRecentZoomRecordingsForAdmin() {
+  const zoomRecordings = await getZoomUserRecordings();
+  let imported = 0;
+  let skipped = 0;
+
+  for (const meeting of zoomRecordings.meetings ?? []) {
+    const meetingCandidates = [meeting.id, meeting.uuid].map((value) => (value ? String(value) : null)).filter((value): value is string => Boolean(value));
+    if (!meetingCandidates.length) {
+      skipped += 1;
+      continue;
+    }
+
+    const schedule = await db.classSchedule.findFirst({
+      where: {
+        OR: [
+          { meetingId: { in: meetingCandidates } },
+          { recurringSeriesId: { in: meetingCandidates } },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        meetingId: true,
+      },
+    });
+    if (!schedule) {
+      skipped += 1;
+      continue;
+    }
+
+    const primaryFile = choosePrimaryZoomRecordingFile(meeting.recording_files ?? []);
+    if (!primaryFile?.play_url) {
+      skipped += 1;
+      continue;
+    }
+
+    const recordingFileId = primaryFile.id ?? fallbackZoomRecordingFileId(schedule.id, primaryFile.play_url);
+    const recordingStart = primaryFile.recording_start ? new Date(primaryFile.recording_start) : null;
+    const recordingEnd = primaryFile.recording_end ? new Date(primaryFile.recording_end) : null;
+
+    await db.liveClassRecording.upsert({
+      where: { recordingFileId },
+      create: {
+        scheduleId: schedule.id,
+        recordingFileId,
+        meetingId: meetingCandidates[0],
+        topic: meeting.topic ?? schedule.title,
+        fileType: primaryFile.file_type ?? null,
+        playUrl: primaryFile.play_url,
+        downloadUrl: primaryFile.download_url ?? null,
+        storageProvider: "zoom",
+        recordingStart,
+        recordingEnd,
+        fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
+      },
+      update: {
+        playUrl: primaryFile.play_url,
+        downloadUrl: primaryFile.download_url ?? null,
+        storageProvider: "zoom",
+        fileType: primaryFile.file_type ?? null,
+        recordingStart,
+        recordingEnd,
+        fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
+        deletedAt: null,
+      },
+    });
+    imported += 1;
+  }
+
+  return { imported, skipped };
 }
 
 export async function resetPendingRecordingImportsForAdmin() {

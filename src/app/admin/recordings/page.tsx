@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings, resetPendingRecordingImportsForAdmin } from "@/lib/live-classes/recordings";
+import { deleteRecordingForAdmin, listAdminRecordings, processPendingDriveRecordings, resetPendingRecordingImportsForAdmin, syncRecentZoomRecordingsForAdmin } from "@/lib/live-classes/recordings";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -101,6 +101,20 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     redirect(noticeHref(`Reset ${count} stuck processing recording${count === 1 ? "" : "s"}.`, "success"));
   }
 
+  async function syncZoomRecordingsAction() {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
+
+    try {
+      const result = await syncRecentZoomRecordingsForAdmin();
+      revalidatePath("/admin/recordings");
+      redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success"));
+    } catch (error) {
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to sync Zoom recordings.", "error"));
+    }
+  }
+
   const recordings = await listAdminRecordings();
   const grouped = new Map<string, typeof recordings>();
   for (const recording of recordings) {
@@ -127,6 +141,11 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
             <form action={processPendingRecordingsAction}>
               <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
                 Process pending recordings
+              </button>
+            </form>
+            <form action={syncZoomRecordingsAction}>
+              <button className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                Sync from Zoom
               </button>
             </form>
             <form action={resetProcessingRecordingsAction}>
