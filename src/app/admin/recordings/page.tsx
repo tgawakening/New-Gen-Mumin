@@ -106,13 +106,15 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
+    let result: Awaited<ReturnType<typeof syncRecentZoomRecordingsForAdmin>>;
     try {
-      const result = await syncRecentZoomRecordingsForAdmin();
+      result = await syncRecentZoomRecordingsForAdmin();
       revalidatePath("/admin/recordings");
-      redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success"));
     } catch (error) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to sync Zoom recordings.", "error"));
     }
+
+    redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success"));
   }
 
   const recordings = await listAdminRecordings();
