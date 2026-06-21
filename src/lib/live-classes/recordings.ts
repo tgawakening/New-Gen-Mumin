@@ -16,6 +16,7 @@ const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const
 const RECORDING_PROCESSING_PROVIDER = "processing";
 const RECORDING_PROCESSING_STALE_MS = 45 * 60 * 1000;
 const RECORDING_CHUNK_BYTES = 8 * 1024 * 1024;
+const RECORDING_CHUNK_ACTIVE_GRACE_MS = 90 * 1000;
 
 export type LiveClassRecordingSummary = {
   id: string;
@@ -482,6 +483,13 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
       downloaded = await downloadZoomRecordingRange(downloadUrl, offset, RECORDING_CHUNK_BYTES);
     }
     console.info(`[recording-import] Zoom chunk download complete for ${recording.id}: ${title} bytes ${downloaded.start}-${downloaded.end}/${downloaded.total}`);
+    const totalBytes = recording.fileSize ? Number(recording.fileSize) : downloaded.total;
+    if (!recording.fileSize && downloaded.total <= downloaded.end + 1 && downloaded.buffer.length >= RECORDING_CHUNK_BYTES) {
+      throw new Error("Zoom did not provide a reliable total recording size. Sync from Zoom again before importing this recording.");
+    }
+    if (!Number.isFinite(totalBytes) || totalBytes <= downloaded.end) {
+      throw new Error("Recording total file size is not available yet. Please sync from Zoom again or retry after Zoom finishes processing.");
+    }
 
     let sessionUrl = recording.driveUploadSessionUrl;
     let folderId = recording.driveFolderId;
@@ -496,7 +504,7 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
         mimeType: downloaded.mimeType,
         fileType: recording.fileType,
         recordingStart: recording.recordingStart,
-        totalBytes: downloaded.total,
+        totalBytes,
       });
       sessionUrl = session.sessionUrl;
       folderId = session.folderId;
@@ -509,7 +517,7 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
       buffer: downloaded.buffer,
       start: downloaded.start,
       end: downloaded.end,
-      totalBytes: downloaded.total,
+      totalBytes,
     });
     console.info(`[recording-import] Google Drive chunk upload complete for ${recording.id}: ${title} next byte ${driveUpload.nextOffset}`);
 
@@ -520,14 +528,14 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
           driveFolderId: folderId,
           driveUploadSessionUrl: sessionUrl,
           driveUploadOffset: BigInt(driveUpload.nextOffset),
-          driveUploadTotal: BigInt(downloaded.total),
+          driveUploadTotal: BigInt(totalBytes),
           driveUploadUpdatedAt: new Date(),
           driveUploadFileName: fileName,
           storageProvider: RECORDING_PROCESSING_PROVIDER,
           downloadUrl,
         },
       });
-      throw new Error(`Recording upload is ${Math.round((driveUpload.nextOffset / downloaded.total) * 100)}% complete. Cron will continue it on the next run.`);
+      throw new Error(`Recording upload is ${Math.round((driveUpload.nextOffset / totalBytes) * 100)}% complete. Cron will continue it on the next run.`);
     }
 
     await db.liveClassRecording.update({
@@ -538,8 +546,8 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
         driveViewUrl: driveUpload.file.webViewLink,
         driveFolderId: folderId,
         driveUploadSessionUrl: null,
-        driveUploadOffset: BigInt(downloaded.total),
-        driveUploadTotal: BigInt(downloaded.total),
+        driveUploadOffset: BigInt(totalBytes),
+        driveUploadTotal: BigInt(totalBytes),
         driveUploadUpdatedAt: new Date(),
         driveUploadFileName: fileName,
         storageProvider: "google-drive",
@@ -601,6 +609,8 @@ export async function processPendingDriveRecordings(limit = 1) {
   if (recordings.length > 1) {
     await resetInterruptedRecordingImports();
     recordings = [];
+  } else if (recordings.length === 1 && recordings[0].updatedAt > new Date(Date.now() - RECORDING_CHUNK_ACTIVE_GRACE_MS)) {
+    return [];
   }
 
   if (!recordings.length) {
