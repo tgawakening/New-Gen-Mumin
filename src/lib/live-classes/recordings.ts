@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { startLiveClassRecordingResumableUpload, uploadLiveClassRecordingResumableChunk } from "@/lib/google-drive/materials";
+import { getDriveRecordingPlaybackStatus, startLiveClassRecordingResumableUpload, uploadLiveClassRecordingResumableChunk } from "@/lib/google-drive/materials";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -14,6 +14,7 @@ import { downloadZoomRecordingRange, findZoomRecordingDownloadUrl, getZoomUserRe
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const RECORDING_PROCESSING_PROVIDER = "processing";
+const RECORDING_DRIVE_PROCESSING_PROVIDER = "drive-processing";
 const RECORDING_PROCESSING_STALE_MS = 45 * 60 * 1000;
 const RECORDING_CHUNK_BYTES = 8 * 1024 * 1024;
 const RECORDING_CHUNK_ACTIVE_GRACE_MS = 90 * 1000;
@@ -26,7 +27,7 @@ export type LiveClassRecordingSummary = {
   watchUrl: string | null;
   playbackUrl: string | null;
   isReadyForPlayback: boolean;
-  processingStatus: "ready" | "processing" | "failed" | "pending";
+  processingStatus: "ready" | "processing" | "drive-processing" | "failed" | "pending";
   processingStatusLabel: string;
   processingError: string | null;
   processingProgressLabel: string | null;
@@ -51,7 +52,9 @@ function failedStorageProvider(error: unknown) {
 }
 
 function recordingProcessingState(recording: { driveFileId?: string | null; storageProvider?: string | null }) {
-  if (recording.driveFileId) {
+  const provider = recording.storageProvider ?? "";
+
+  if (recording.driveFileId && provider === "google-drive") {
     return {
       processingStatus: "ready" as const,
       processingStatusLabel: "Ready",
@@ -59,7 +62,14 @@ function recordingProcessingState(recording: { driveFileId?: string | null; stor
     };
   }
 
-  const provider = recording.storageProvider ?? "";
+  if (recording.driveFileId && provider === RECORDING_DRIVE_PROCESSING_PROVIDER) {
+    return {
+      processingStatus: "drive-processing" as const,
+      processingStatusLabel: "Drive processing",
+      processingError: null,
+    };
+  }
+
   if (provider === RECORDING_PROCESSING_PROVIDER) {
     return {
       processingStatus: "processing" as const,
@@ -91,8 +101,8 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     programTitle: displayProgramTitle(recording.schedule.program.title),
     teacherName: teacherName(recording.schedule.teacher),
     watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
-    playbackUrl: recording.driveFileId ? `/api/recordings/${recording.id}/media` : null,
-    isReadyForPlayback: Boolean(recording.driveFileId),
+    playbackUrl: recording.driveFileId && recording.storageProvider === "google-drive" ? `/api/recordings/${recording.id}/media` : null,
+    isReadyForPlayback: Boolean(recording.driveFileId && recording.storageProvider === "google-drive"),
     ...processingState,
     processingProgressLabel: recording.driveUploadTotal
       ? `${Math.min(99, Math.round((Number(recording.driveUploadOffset ?? BigInt(0)) / Number(recording.driveUploadTotal)) * 100))}% uploaded`
@@ -231,7 +241,7 @@ export async function listStudentRecordings(studentUserId: string) {
     });
 
     return collapseRecordingsBySession(
-      recordings.filter((recording) => recording.driveFileId && recordingIsVisibleToStudent(recording, student.id)),
+      recordings.filter((recording) => recording.driveFileId && recording.storageProvider === "google-drive" && recordingIsVisibleToStudent(recording, student.id)),
     ).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
@@ -272,7 +282,7 @@ export async function listParentChildRecordings(parentUserId: string, childId: s
     });
 
     return collapseRecordingsBySession(
-      recordings.filter((recording) => recording.driveFileId && recordingIsVisibleToStudent(recording, childId)),
+      recordings.filter((recording) => recording.driveFileId && recording.storageProvider === "google-drive" && recordingIsVisibleToStudent(recording, childId)),
     ).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
@@ -296,7 +306,7 @@ export async function listTeacherRecordings(teacherUserId: string) {
       orderBy: { availableAt: "desc" },
     });
 
-    return collapseRecordingsBySession(recordings.filter((recording) => recording.driveFileId)).map(mapRecording);
+    return collapseRecordingsBySession(recordings.filter((recording) => recording.driveFileId && recording.storageProvider === "google-drive")).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
       console.error("Live class recordings table is not available yet.", error);
@@ -550,7 +560,7 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
         driveUploadTotal: BigInt(totalBytes),
         driveUploadUpdatedAt: new Date(),
         driveUploadFileName: fileName,
-        storageProvider: "google-drive",
+        storageProvider: RECORDING_DRIVE_PROCESSING_PROVIDER,
         downloadUrl,
       },
     });
@@ -559,7 +569,7 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
       throw new Error("Google Drive did not return a viewing link for this recording.");
     }
 
-    return driveUpload.file.webViewLink;
+    throw new Error("Recording uploaded to Google Drive. Cron will notify dashboards after Drive finishes playback processing.");
   } catch (error) {
     if (error instanceof Error && error.message.includes("Cron will continue it on the next run")) {
       throw error;
@@ -581,6 +591,44 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
 }
 
 export async function processPendingDriveRecordings(limit = 1) {
+  const driveProcessing = await db.liveClassRecording.findMany({
+    where: {
+      deletedAt: null,
+      driveFileId: { not: null },
+      storageProvider: RECORDING_DRIVE_PROCESSING_PROVIDER,
+    },
+    include: includeRecordingRelations(),
+    orderBy: { updatedAt: "asc" },
+    take: Math.min(Math.max(limit, 1), 1),
+  });
+
+  const results: Array<{ id: string; ok: boolean; error?: string }> = [];
+  for (const recording of driveProcessing) {
+    try {
+      const playback = await getDriveRecordingPlaybackStatus(recording.driveFileId!);
+      if (!playback.isReadyForPlayback) {
+        results.push({ id: recording.id, ok: true, error: "Google Drive is still preparing playback." });
+        continue;
+      }
+
+      await db.liveClassRecording.update({
+        where: { id: recording.id },
+        data: {
+          driveViewUrl: playback.webViewLink ?? recording.driveViewUrl,
+          playUrl: playback.webViewLink ?? recording.playUrl,
+          storageProvider: "google-drive",
+        },
+      });
+      await notifyRecordingReady(recording.id);
+      results.push({ id: recording.id, ok: true });
+      console.info(`[recording-import] Drive playback ready for dashboards: ${recording.id}`);
+    } catch (error) {
+      results.push({ id: recording.id, ok: false, error: error instanceof Error ? error.message : "Unknown Drive processing error" });
+    }
+  }
+
+  if (results.length) return results;
+
   const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
   await db.liveClassRecording.updateMany({
     where: {
@@ -630,7 +678,6 @@ export async function processPendingDriveRecordings(limit = 1) {
     });
   }
 
-  const results: Array<{ id: string; ok: boolean; error?: string }> = [];
   for (const recording of recordings) {
     try {
       const alreadyProcessing = recording.storageProvider === RECORDING_PROCESSING_PROVIDER;
@@ -642,11 +689,9 @@ export async function processPendingDriveRecordings(limit = 1) {
         }
       }
       await importRecordingToDrive(recording, { claimed: true });
-      await notifyRecordingReady(recording.id);
       results.push({ id: recording.id, ok: true });
-      console.info(`[recording-import] Recording ready for dashboards: ${recording.id}`);
     } catch (error) {
-      if (error instanceof Error && error.message.includes("Cron will continue it on the next run")) {
+      if (error instanceof Error && (error.message.includes("Cron will continue it on the next run") || error.message.includes("Cron will notify dashboards"))) {
         console.info(`[recording-import] ${error.message}`);
         results.push({ id: recording.id, ok: true });
         continue;
@@ -679,7 +724,7 @@ export function startRecordingDriveViewUrlPreparation(recordingId: string, user:
 
 export async function getRecordingProcessingQueueStatus() {
   const staleBefore = new Date(Date.now() - RECORDING_PROCESSING_STALE_MS);
-  const [processing, pending, failed, ready] = await Promise.all([
+  const [processing, pending, failed, ready, driveProcessing] = await Promise.all([
     db.liveClassRecording.findMany({
       where: {
         deletedAt: null,
@@ -713,6 +758,14 @@ export async function getRecordingProcessingQueueStatus() {
       where: {
         deletedAt: null,
         driveFileId: { not: null },
+        storageProvider: "google-drive",
+      },
+    }),
+    db.liveClassRecording.count({
+      where: {
+        deletedAt: null,
+        driveFileId: { not: null },
+        storageProvider: RECORDING_DRIVE_PROCESSING_PROVIDER,
       },
     }),
   ]);
@@ -734,6 +787,7 @@ export async function getRecordingProcessingQueueStatus() {
     pending,
     failed,
     ready,
+    driveProcessing,
   };
 }
 
@@ -815,7 +869,7 @@ export async function resetPendingRecordingImportsForAdmin() {
 
 export async function notifyRecordingReady(recordingId: string) {
   const recording = await db.liveClassRecording.findFirst({
-    where: { id: recordingId, deletedAt: null, driveFileId: { not: null } },
+    where: { id: recordingId, deletedAt: null, driveFileId: { not: null }, storageProvider: "google-drive" },
     include: {
       schedule: {
         include: {
@@ -906,7 +960,7 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
     availableAt: recording.availableAt,
     driveViewUrl: recording.driveViewUrl,
     driveFileId: recording.driveFileId,
-    isReadyForPlayback: Boolean(recording.driveFileId),
+    isReadyForPlayback: Boolean(recording.driveFileId && recording.storageProvider === "google-drive"),
     fileType: recording.fileType,
   };
 }

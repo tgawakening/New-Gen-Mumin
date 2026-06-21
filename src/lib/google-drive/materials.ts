@@ -571,6 +571,28 @@ export async function uploadLiveClassRecordingResumableChunk(input: {
   };
 }
 
+export async function getDriveRecordingPlaybackStatus(fileId: string) {
+  const file = await driveRequest<{
+    id: string;
+    webViewLink?: string;
+    mimeType?: string;
+    videoMediaMetadata?: {
+      durationMillis?: string;
+      width?: number;
+      height?: number;
+    };
+  }>(`/files/${fileId}?fields=id,webViewLink,mimeType,videoMediaMetadata`);
+
+  const mimeType = file.mimeType ?? "";
+  const isVideo = mimeType.startsWith("video/");
+  const processedVideo = Boolean(file.videoMediaMetadata?.durationMillis || file.videoMediaMetadata?.width || file.videoMediaMetadata?.height);
+
+  return {
+    webViewLink: file.webViewLink ?? null,
+    isReadyForPlayback: !isVideo || processedVideo,
+  };
+}
+
 export async function uploadStudentSubmissionFile(input: {
   studentId: string;
   studentName: string;
