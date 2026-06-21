@@ -15,7 +15,6 @@ import {
   Trophy,
 } from "lucide-react";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
-import { FamilyNavLinkClient } from "@/components/dashboard/family/FamilyNavLinkClient";
 import { MobileFamilyNavRailClient } from "@/components/dashboard/family/MobileFamilyNavRailClient";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
@@ -155,25 +154,7 @@ export function FamilyDashboardFrame({
         </div>
       </div>
 
-      <div className="section-container py-5 sm:py-6 xl:grid xl:grid-cols-[220px_minmax(0,1fr)] xl:gap-5 xl:py-8">
-        <aside className="hidden min-h-full xl:block">
-          <div className="dashboard-sticky-sidebar overflow-visible rounded-[22px] bg-[#22304a] p-2 text-white shadow-[0_20px_50px_rgba(34,48,74,0.18)] xl:rounded-[24px] xl:p-4">
-            <p className="hidden text-xs font-semibold uppercase tracking-[0.2em] text-[#f2c58f] xl:block">
-              Dashboard map
-            </p>
-              <div className="space-y-2 xl:mt-4">
-              {navItems.map((item) => (
-                <FamilyNavLinkClient
-                  key={item.href}
-                  href={item.href}
-                  label={item.label}
-                  icon={item.icon}
-                />
-              ))}
-            </div>
-          </div>
-        </aside>
-
+      <div className="section-container py-5 sm:py-6 xl:py-8">
         <div className="min-w-0 space-y-5 sm:space-y-6">
           {pendingReason ? <PendingAccessNotice message={pendingReason} /> : null}
           {children}

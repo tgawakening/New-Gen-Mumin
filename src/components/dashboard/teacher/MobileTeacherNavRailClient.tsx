@@ -43,7 +43,7 @@ export function MobileTeacherNavRailClient({ navItems }: { navItems: NavItem[] }
   }
 
   return (
-    <div className="relative mt-5 xl:hidden">
+    <div className="relative mt-5">
       {canScrollLeft ? (
         <button
           type="button"
@@ -66,7 +66,7 @@ export function MobileTeacherNavRailClient({ navItems }: { navItems: NavItem[] }
       ) : null}
       <nav
         ref={railRef}
-        className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:-mx-2 sm:px-2 [&::-webkit-scrollbar]:hidden"
         aria-label="Teaching suite sections"
       >
         {navItems.map((item) => (
