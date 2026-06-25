@@ -16,7 +16,8 @@ const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const
 const RECORDING_PROCESSING_PROVIDER = "processing";
 const RECORDING_DRIVE_PROCESSING_PROVIDER = "drive-processing";
 const RECORDING_PROCESSING_STALE_MS = 45 * 60 * 1000;
-const RECORDING_CHUNK_BYTES = 16 * 1024 * 1024;
+const RECORDING_CHUNK_BYTES = 32 * 1024 * 1024;
+const RECORDING_DRIVE_PROCESSING_CHECK_LIMIT = 8;
 const RECORDING_CHUNK_ACTIVE_GRACE_MS = 90 * 1000;
 
 export type LiveClassRecordingSummary = {
@@ -599,7 +600,7 @@ export async function processPendingDriveRecordings(limit = 1) {
     },
     include: includeRecordingRelations(),
     orderBy: { updatedAt: "asc" },
-    take: Math.min(Math.max(limit, 1), 1),
+    take: RECORDING_DRIVE_PROCESSING_CHECK_LIMIT,
   });
 
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
