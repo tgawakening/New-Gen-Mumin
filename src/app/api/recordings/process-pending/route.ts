@@ -45,8 +45,8 @@ export async function GET(request: Request) {
         queue,
         results,
         message: results.length
-          ? "One recording chunk was processed. Cron will continue the next chunk on the next run."
-          : "No recording chunk was processed.",
+          ? "Recording processor ran. It may check Drive playback readiness and upload the next Zoom chunk."
+          : "No recording work was ready.",
       },
     );
   } catch (error) {

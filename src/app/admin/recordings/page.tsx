@@ -100,7 +100,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
       redirect(noticeHref(failed.error ?? "Recording chunk processing failed.", "error"));
     }
 
-    redirect(noticeHref(results.length ? "One recording chunk was processed. Keep cron enabled to continue the remaining chunks." : "No pending recording chunk was ready.", "success"));
+    redirect(noticeHref(results.length ? "Recording processor ran. Keep cron enabled to continue uploads and Drive playback checks." : "No pending recording work was ready.", "success"));
   }
 
   async function resetProcessingRecordingsAction() {
