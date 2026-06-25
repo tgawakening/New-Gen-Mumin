@@ -203,6 +203,41 @@ function includeRecordingRelations() {
   } as const;
 }
 
+function isDriveResumableUploadError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return message.includes("Google Drive resumable upload failed");
+}
+
+async function repairUploadedRecordingStates() {
+  const recordings = await db.liveClassRecording.findMany({
+    where: {
+      deletedAt: null,
+      driveFileId: { not: null },
+      storageProvider: {
+        in: ["zoom", RECORDING_PROCESSING_PROVIDER],
+      },
+    },
+    select: { id: true },
+  });
+  if (!recordings.length) return [];
+
+  await db.liveClassRecording.updateMany({
+    where: {
+      deletedAt: null,
+      driveFileId: { not: null },
+      storageProvider: {
+        in: ["zoom", RECORDING_PROCESSING_PROVIDER],
+      },
+    },
+    data: {
+      storageProvider: "google-drive",
+      driveUploadSessionUrl: null,
+      driveUploadUpdatedAt: new Date(),
+    },
+  });
+  return recordings.map((recording) => recording.id);
+}
+
 function recordingIsVisibleToStudent(recording: any, studentId: string) {
   if (!isLiveClassVisibleToStudents(recording.schedule.title)) return false;
   const rosterIds = recording.schedule.scheduleRosters.map((entry: { studentId: string }) => entry.studentId);
@@ -561,7 +596,7 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
         driveUploadTotal: BigInt(totalBytes),
         driveUploadUpdatedAt: new Date(),
         driveUploadFileName: fileName,
-        storageProvider: RECORDING_DRIVE_PROCESSING_PROVIDER,
+        storageProvider: "google-drive",
         downloadUrl,
       },
     });
@@ -570,10 +605,23 @@ async function importRecordingToDrive(recording: NonNullable<Awaited<ReturnType<
       throw new Error("Google Drive did not return a viewing link for this recording.");
     }
 
-    throw new Error("Recording uploaded to Google Drive. Cron will notify dashboards after Drive finishes playback processing.");
+    return driveUpload.file.webViewLink;
   } catch (error) {
     if (error instanceof Error && error.message.includes("Cron will continue it on the next run")) {
       throw error;
+    }
+    if (isDriveResumableUploadError(error) && recording.driveUploadSessionUrl) {
+      await db.liveClassRecording.update({
+        where: { id: recording.id },
+        data: {
+          driveUploadSessionUrl: null,
+          driveUploadOffset: BigInt(0),
+          driveUploadTotal: null,
+          driveUploadUpdatedAt: new Date(),
+          storageProvider: "zoom",
+        },
+      });
+      throw new Error("Google Drive upload session expired. Recording import was reset and will restart on the next cron run.");
     }
     await releaseRecordingImportClaim(recording.id, error);
     throw error;
@@ -592,6 +640,11 @@ export async function ensureRecordingDriveViewUrl(recordingId: string, user: { i
 }
 
 export async function processPendingDriveRecordings(limit = 1) {
+  const repairedRecordingIds = await repairUploadedRecordingStates();
+  for (const recordingId of repairedRecordingIds) {
+    await notifyRecordingReady(recordingId);
+  }
+
   const driveProcessing = await db.liveClassRecording.findMany({
     where: {
       deletedAt: null,
@@ -606,17 +659,13 @@ export async function processPendingDriveRecordings(limit = 1) {
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];
   for (const recording of driveProcessing) {
     try {
-      const playback = await getDriveRecordingPlaybackStatus(recording.driveFileId!);
-      if (!playback.isReadyForPlayback) {
-        results.push({ id: recording.id, ok: true, error: "Google Drive is still preparing playback." });
-        continue;
-      }
+      const playback = await getDriveRecordingPlaybackStatus(recording.driveFileId!).catch(() => null);
 
       await db.liveClassRecording.update({
         where: { id: recording.id },
         data: {
-          driveViewUrl: playback.webViewLink ?? recording.driveViewUrl,
-          playUrl: playback.webViewLink ?? recording.playUrl,
+          driveViewUrl: playback?.webViewLink ?? recording.driveViewUrl,
+          playUrl: playback?.webViewLink ?? recording.playUrl,
           storageProvider: "google-drive",
         },
       });
@@ -688,9 +737,10 @@ export async function processPendingDriveRecordings(limit = 1) {
         }
       }
       await importRecordingToDrive(recording, { claimed: true });
+      await notifyRecordingReady(recording.id);
       results.push({ id: recording.id, ok: true });
     } catch (error) {
-      if (error instanceof Error && (error.message.includes("Cron will continue it on the next run") || error.message.includes("Cron will notify dashboards"))) {
+      if (error instanceof Error && error.message.includes("Cron will continue it on the next run")) {
         console.info(`[recording-import] ${error.message}`);
         results.push({ id: recording.id, ok: true });
         continue;
@@ -829,6 +879,11 @@ export async function syncRecentZoomRecordingsForAdmin() {
     const recordingFileId = primaryFile.id ?? fallbackZoomRecordingFileId(schedule.id, primaryFile.play_url);
     const recordingStart = primaryFile.recording_start ? new Date(primaryFile.recording_start) : null;
     const recordingEnd = primaryFile.recording_end ? new Date(primaryFile.recording_end) : null;
+    const existingRecording = await db.liveClassRecording.findUnique({
+      where: { recordingFileId },
+      select: { driveFileId: true, storageProvider: true },
+    });
+    const shouldPreserveDriveState = Boolean(existingRecording?.driveFileId);
 
     await db.liveClassRecording.upsert({
       where: { recordingFileId },
@@ -846,9 +901,9 @@ export async function syncRecentZoomRecordingsForAdmin() {
         fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
       },
       update: {
-        playUrl: primaryFile.play_url,
+        playUrl: shouldPreserveDriveState ? undefined : primaryFile.play_url,
         downloadUrl: primaryFile.download_url ?? null,
-        storageProvider: "zoom",
+        storageProvider: shouldPreserveDriveState ? existingRecording?.storageProvider ?? "google-drive" : "zoom",
         fileType: primaryFile.file_type ?? null,
         recordingStart,
         recordingEnd,
