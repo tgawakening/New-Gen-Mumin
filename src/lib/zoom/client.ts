@@ -54,6 +54,10 @@ type ZoomUserRecordingsResponse = {
   }>;
 };
 
+type CreateZoomMeetingOptions = {
+  hostUserId?: string | null;
+};
+
 async function readZoomError(response: Response) {
   const body = await response.text();
   if (!body) return `${response.status} ${response.statusText}`.trim();
@@ -131,11 +135,12 @@ export function isZoomConfigured() {
   );
 }
 
-export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
+export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload, options: CreateZoomMeetingOptions = {}) {
   const config = getZoomConfig();
   const accessToken = await getZoomAccessToken();
+  const hostUserId = options.hostUserId?.trim() || config.hostUserId;
   const response = await fetch(
-    `https://api.zoom.us/v2/users/${encodeURIComponent(config.hostUserId)}/meetings`,
+    `https://api.zoom.us/v2/users/${encodeURIComponent(hostUserId)}/meetings`,
     {
       method: "POST",
       headers: {
@@ -173,7 +178,7 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload) {
     const details = await readZoomError(response);
     const guidance =
       response.status === 401
-        ? " Check that the Zoom app is Server-to-Server OAuth, is activated, has scopes meeting:write:meeting and meeting:write:meeting:admin, and that ZOOM_HOST_USER_ID belongs to the same Zoom account."
+        ? " Check that the Zoom app is Server-to-Server OAuth, is activated, has scopes meeting:write:meeting and meeting:write:meeting:admin, and that the Zoom host user belongs to the same Zoom account."
         : "";
     throw new Error(`Zoom meeting creation failed: ${details}.${guidance}`);
   }
@@ -240,6 +245,31 @@ export async function downloadZoomRecording(downloadUrl: string) {
     buffer: Buffer.from(await response.arrayBuffer()),
     mimeType: response.headers.get("content-type") ?? "video/mp4",
   };
+}
+
+function getTeacherHostMap() {
+  if (!env.success || !env.data.ZOOM_TEACHER_HOSTS_JSON) return {};
+
+  try {
+    const parsed = JSON.parse(env.data.ZOOM_TEACHER_HOSTS_JSON) as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .map(([email, hostUserId]) => [email.trim().toLowerCase(), typeof hostUserId === "string" ? hostUserId.trim() : ""])
+        .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1])),
+    );
+  } catch {
+    throw new Error("ZOOM_TEACHER_HOSTS_JSON must be valid JSON, for example {\"teacher@example.com\":\"teacher@example.com\"}.");
+  }
+}
+
+export function getZoomHostUserIdForTeacherEmail(email: string | null | undefined) {
+  if (!email) return null;
+  return getTeacherHostMap()[email.trim().toLowerCase()] ?? null;
+}
+
+function getZoomRecordingHostUserIds() {
+  const config = getZoomConfig();
+  return [...new Set([config.hostUserId, ...Object.values(getTeacherHostMap())].filter(Boolean))];
 }
 
 function parseContentRange(value: string | null) {
@@ -348,29 +378,41 @@ export async function getZoomMeetingRecordings(meetingId: string) {
 }
 
 export async function getZoomUserRecordings(input: { recordingStart?: Date | string | null } = {}) {
-  const config = getZoomConfig();
   const accessToken = await getZoomAccessToken();
   const window = recordingSearchWindow(input.recordingStart);
-  const url = new URL(`https://api.zoom.us/v2/users/${encodeURIComponent(config.hostUserId)}/recordings`);
-  url.searchParams.set("from", window.from);
-  url.searchParams.set("to", window.to);
-  url.searchParams.set("page_size", "100");
+  const meetings: ZoomUserRecordingsResponse["meetings"] = [];
+  let lastError: string | null = null;
 
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-    },
-    cache: "no-store",
-  });
+  for (const hostUserId of getZoomRecordingHostUserIds()) {
+    const url = new URL(`https://api.zoom.us/v2/users/${encodeURIComponent(hostUserId)}/recordings`);
+    url.searchParams.set("from", window.from);
+    url.searchParams.set("to", window.to);
+    url.searchParams.set("page_size", "100");
 
-  if (!response.ok) {
-    const details = await readZoomError(response);
-    const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
-    throw new Error(`Zoom user recordings lookup failed: ${details}.${guidance}`);
+    const response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const details = await readZoomError(response);
+      const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
+      lastError = `Zoom user recordings lookup failed for ${hostUserId}: ${details}.${guidance}`;
+      continue;
+    }
+
+    const payload = (await response.json()) as ZoomUserRecordingsResponse;
+    meetings.push(...(payload.meetings ?? []));
   }
 
-  return (await response.json()) as ZoomUserRecordingsResponse;
+  if (!meetings.length && lastError) {
+    throw new Error(lastError);
+  }
+
+  return { meetings };
 }
 
 function sameRecordingTime(left?: string, right?: Date | string | null) {

@@ -7,7 +7,7 @@ import {
   sendTeacherZoomMeetingApprovedEmail,
 } from "@/lib/email/notifications";
 import { durationMinutes, nextWeeklyOccurrence, toZoomLocalStartTime } from "@/lib/live-classes/time";
-import { createRecurringZoomMeeting, isZoomConfigured } from "@/lib/zoom/client";
+import { createRecurringZoomMeeting, getZoomHostUserIdForTeacherEmail, isZoomConfigured } from "@/lib/zoom/client";
 import { DEFAULT_OFFERS, getCatalogOfferProgramSlugs } from "@/lib/registration/catalog";
 import { isArabicTajweedSlug } from "@/lib/genm/curriculum";
 
@@ -166,21 +166,25 @@ function isAlternativeHostLicenseError(error: unknown) {
   return message.includes("alternative host") && (message.includes("not licensed") || message.includes("code 1115"));
 }
 
-async function createZoomMeetingAllowingBasicUsers(payload: Parameters<typeof createRecurringZoomMeeting>[0]) {
+async function createZoomMeetingAllowingBasicUsers(
+  payload: Parameters<typeof createRecurringZoomMeeting>[0],
+  options?: Parameters<typeof createRecurringZoomMeeting>[1],
+) {
   try {
-    return await createRecurringZoomMeeting(payload);
+    return await createRecurringZoomMeeting(payload, options);
   } catch (error) {
     if (!payload.alternativeHosts?.length || !isAlternativeHostLicenseError(error)) {
       throw error;
     }
 
     const { alternativeHosts: _alternativeHosts, ...meetingWithoutAlternativeHosts } = payload;
-    return createRecurringZoomMeeting(meetingWithoutAlternativeHosts);
+    return createRecurringZoomMeeting(meetingWithoutAlternativeHosts, options);
   }
 }
 
 async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string, teacherEmail: string) {
   if (!input.createZoomMeeting) return null;
+  const hostUserId = getZoomHostUserIdForTeacherEmail(teacherEmail);
 
   return createZoomMeetingAllowingBasicUsers({
     topic: cleanLiveClassTitle(input.title),
@@ -194,8 +198,12 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
     muteUponEntry: input.muteUponEntry,
     autoRecording: input.autoRecording,
     passcode: input.passcode,
-    alternativeHosts: [teacherEmail],
-  });
+    alternativeHosts: hostUserId ? [] : [teacherEmail],
+  }, { hostUserId });
+}
+
+function zoomHostOptionsForTeacherEmail(email: string) {
+  return { hostUserId: getZoomHostUserIdForTeacherEmail(email) };
 }
 
 function isRosterTableUnavailable(error: unknown) {
@@ -735,7 +743,7 @@ export async function approveTeacherLiveClass(scheduleId: string, approvedByUser
     startTime: toZoomLocalStartTime(nextWeeklyOccurrence(schedule.weekday, schedule.startTime)),
     durationMinutes: durationMinutes(schedule.startTime, schedule.endTime),
     weekday: schedule.weekday,
-  });
+  }, zoomHostOptionsForTeacherEmail(schedule.teacher.user.email));
 
   const updated = await db.classSchedule.update({
     where: { id: schedule.id },
@@ -809,7 +817,7 @@ export async function syncScheduleToZoom(scheduleId: string) {
     startTime: toZoomLocalStartTime(nextWeeklyOccurrence(schedule.weekday, schedule.startTime)),
     durationMinutes: durationMinutes(schedule.startTime, schedule.endTime),
     weekday: schedule.weekday,
-  });
+  }, zoomHostOptionsForTeacherEmail(schedule.teacher.user.email));
 
   const updated = await db.classSchedule.update({
     where: { id: schedule.id },
