@@ -19,7 +19,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ course?: string; lesson?: string; submitted?: string }>;
+  searchParams?: Promise<{ course?: string; lesson?: string; submitted?: string; task?: string }>;
 };
 
 type Attachment = {
@@ -95,7 +95,11 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
 
   const child = dashboard.child;
   const params = searchParams ? await searchParams : {};
-  const selectedCourse = child.courses.find((course) => course.id === params.course) ?? child.courses[0] ?? null;
+  const linkedTask = params.task ? child.assignments.find((assignment) => assignment.id === params.task) ?? null : null;
+  const linkedTaskCourse = linkedTask
+    ? child.courses.find((course) => courseOwnsProgramTitle(course, linkedTask.programTitle)) ?? null
+    : null;
+  const selectedCourse = linkedTaskCourse ?? child.courses.find((course) => course.id === params.course) ?? child.courses[0] ?? null;
   const selectedProgramIds = selectedCourse?.programIds?.length ? selectedCourse.programIds : selectedCourse?.programId ? [selectedCourse.programId] : [];
   let materials: Awaited<ReturnType<typeof listMaterials>> = [];
   if (selectedProgramIds.length) {
@@ -477,7 +481,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
         <div id="student-assignments" />
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
           {selectedAssignments.map((assignment) => (
-            <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
+            <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5" open={assignment.id === params.task}>
               <summary className="cursor-pointer list-none">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>

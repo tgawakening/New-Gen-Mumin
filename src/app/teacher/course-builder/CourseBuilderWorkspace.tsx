@@ -10,6 +10,7 @@ import { TeacherInfoList, TeacherSection } from "@/components/dashboard/teacher/
 import { QuizQuestionBuilderClient } from "@/components/dashboard/teacher/QuizQuestionBuilderClient";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { sendStudentTaskAssignedEmail } from "@/lib/email/notifications";
 import { displayProgramTitle, genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, isArabicTajweedSlug, type GenMProgramSlug } from "@/lib/genm/curriculum";
 import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
 import { uploadTeacherMaterial } from "@/lib/google-drive/materials";
@@ -80,6 +81,27 @@ function splitLinks(value: string | null) {
 
 function getUploadFiles(formData: FormData, fieldName: string) {
   return formData.getAll(fieldName).filter((entry): entry is File => entry instanceof File && entry.size > 0);
+}
+
+function userDisplayName(user: { firstName: string; lastName: string; email: string }) {
+  return `${user.firstName} ${user.lastName}`.trim() || user.email;
+}
+
+function canSendTaskEmail(email: string | null | undefined) {
+  return Boolean(email && !email.toLowerCase().endsWith("@genmumin.local"));
+}
+
+function formatTaskDueDate(dueDate: Date | null) {
+  if (!dueDate) return "No due date set";
+  return dueDate.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function taskCompletionPath(assignmentId: string) {
+  return `/student/courses?task=${encodeURIComponent(assignmentId)}#student-assignments`;
 }
 
 function errorRedirect(path: string, message: string) {
@@ -265,6 +287,111 @@ async function ensureLessonTextColumns() {
     // The deploy database may already have these column types or may restrict DDL.
     // If it cannot be changed here, the normal Prisma error below still reports the publish failure.
   }
+}
+
+async function notifyTaskLearners(input: {
+  assignmentId: string;
+  programId: string;
+  teacherUserId: string;
+  teacherName: string;
+  taskTitle: string;
+  dueDate: Date | null;
+}) {
+  const [program, teacher] = await Promise.all([
+    db.program.findUnique({
+      where: { id: input.programId },
+      include: {
+        enrollments: {
+          where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
+          include: {
+            student: { include: { user: true } },
+            parent: { include: { user: true } },
+          },
+        },
+      },
+    }),
+    db.teacherProfile.findUnique({
+      where: { userId: input.teacherUserId },
+      select: {
+        id: true,
+        programRosters: {
+          where: { programId: input.programId },
+          select: { studentId: true },
+        },
+      },
+    }),
+  ]);
+
+  if (!program || !teacher) return;
+
+  const rosterStudentIds = new Set(teacher.programRosters.map((entry) => entry.studentId));
+  const targetEnrollments = rosterStudentIds.size
+    ? program.enrollments.filter((enrollment) => rosterStudentIds.has(enrollment.studentId))
+    : program.enrollments;
+
+  if (!targetEnrollments.length) return;
+
+  const completionPath = taskCompletionPath(input.assignmentId);
+  const notificationRows: Array<{ userId: string; title: string; body: string; href: string }> = [];
+  const emailRecipients = new Map<
+    string,
+    { toEmail: string; recipientName: string; studentName: string }
+  >();
+
+  for (const enrollment of targetEnrollments) {
+    const studentName = enrollment.student.displayName || userDisplayName(enrollment.student.user);
+    const body = `${input.taskTitle} is ready for ${studentName}.`;
+
+    notificationRows.push({
+      userId: enrollment.student.userId,
+      title: "New task assigned",
+      body,
+      href: completionPath,
+    });
+
+    notificationRows.push({
+      userId: enrollment.parent.userId,
+      title: "New student task assigned",
+      body,
+      href: `/parent/courses?child=${enrollment.studentId}`,
+    });
+
+    const studentEmail = enrollment.student.user.email;
+    const parentEmail = enrollment.parent.user.email;
+    const toEmail = canSendTaskEmail(studentEmail) ? studentEmail : canSendTaskEmail(parentEmail) ? parentEmail : null;
+    if (!toEmail || emailRecipients.has(toEmail.toLowerCase())) continue;
+
+    emailRecipients.set(toEmail.toLowerCase(), {
+      toEmail,
+      recipientName: toEmail === parentEmail ? userDisplayName(enrollment.parent.user) : studentName,
+      studentName,
+    });
+  }
+
+  if (notificationRows.length) {
+    await db.notification.createMany({ data: notificationRows });
+  }
+
+  const emailResults = await Promise.allSettled(
+    Array.from(emailRecipients.values()).map((recipient) =>
+      sendStudentTaskAssignedEmail({
+        toEmail: recipient.toEmail,
+        recipientName: recipient.recipientName,
+        studentName: recipient.studentName,
+        programTitle: displayProgramTitle(program.title),
+        taskTitle: input.taskTitle,
+        teacherName: input.teacherName,
+        dueDateLabel: formatTaskDueDate(input.dueDate),
+        completionPath,
+      }),
+    ),
+  );
+
+  emailResults.forEach((result) => {
+    if (result.status === "rejected") {
+      console.error("Task assignment email failed", result.reason);
+    }
+  });
 }
 
 export function CourseBuilderWorkspace({
@@ -830,7 +957,8 @@ export function CourseBuilderWorkspace({
       purpose: "task",
     });
 
-    await db.assignment.create({
+    const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
+    const assignment = await db.assignment.create({
       data: {
         programId,
         title,
@@ -847,9 +975,22 @@ export function CourseBuilderWorkspace({
           familyNote,
           attachments,
         }),
-        dueDate: dueDateRaw ? new Date(dueDateRaw) : null,
+        dueDate,
       },
     });
+
+    try {
+      await notifyTaskLearners({
+        assignmentId: assignment.id,
+        programId,
+        teacherUserId,
+        teacherName: dashboard.teacherName,
+        taskTitle: title,
+        dueDate,
+      });
+    } catch (error) {
+      console.error("Unable to notify learners about assigned task", error);
+    }
 
     revalidatePath("/teacher");
     revalidatePath("/teacher/course-builder");

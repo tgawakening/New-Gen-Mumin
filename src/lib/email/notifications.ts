@@ -464,3 +464,33 @@ export async function sendLiveClassScheduledEmail(input: {
     }),
   });
 }
+
+export async function sendStudentTaskAssignedEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  studentName: string;
+  programTitle: string;
+  taskTitle: string;
+  teacherName: string;
+  dueDateLabel: string;
+  completionPath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "New task assigned",
+    template: "studentTaskAssigned",
+    html: renderGenMuminsEmailTemplate({
+      heading: "New task assigned",
+      preview: `${input.taskTitle} has been uploaded for ${input.studentName}.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.teacherName} uploaded a new task for ${input.studentName}.`,
+      sections: [
+        { label: "Student", value: input.studentName },
+        { label: "Programme", value: input.programTitle },
+        { label: "Task", value: input.taskTitle },
+        { label: "Due date", value: input.dueDateLabel },
+        { label: "Next step", value: "Open the task page, review the instructions, and submit the completed work." },
+      ],
+      callToAction: { label: "Complete task", href: resolveHref(input.completionPath) },
+    }),
+  });
+}
