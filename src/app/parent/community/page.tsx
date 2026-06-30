@@ -40,6 +40,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
 
   const selectedChildId = community.selectedChild?.id ?? dashboard.children[0]?.id;
   const visibleMessages = community.memberships.reduce((sum, membership) => sum + membership.room.messages.length, 0);
+  const projectCount = community.memberships.reduce((sum, membership) => sum + membership.room.projects.length, 0);
 
   return (
     <FamilyDashboardFrame
@@ -54,6 +55,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
           { label: "Children", value: String(community.children.length), hint: "Linked learners." },
           { label: "Rooms", value: String(community.memberships.length), hint: "Supervised spaces assigned." },
           { label: "Messages", value: String(visibleMessages), hint: "Recent visible discussion items." },
+          { label: "Projects", value: String(projectCount), hint: "Guided collaboration work." },
           { label: "Mode", value: "Read-only", hint: "Parents see transparency without entering student rooms." },
         ]}
       />
@@ -74,6 +76,26 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                 <p className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#5f6b7a]">
                   {membership.room.description ?? "Mentor-supervised class room."}
                 </p>
+                {membership.room.projects.map((project) => (
+                  <div key={project.id} className="rounded-[20px] border border-[#eadfce] bg-white p-4 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-[#22304a]">{project.title}</p>
+                        <p className="mt-1 text-xs text-[#6d7785]">
+                          {project.dueDate ? `Due ${formatDate(project.dueDate)}` : "No due date"} - {project.tasks.length} guided steps
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[#fbf6ef] px-3 py-1 text-xs font-semibold text-[#22304a]">
+                        {project.submissions.length ? "Submitted" : "Open"}
+                      </span>
+                    </div>
+                    {project.submissions.map((submission) => (
+                      <p key={submission.id} className="mt-3 whitespace-pre-wrap rounded-2xl bg-[#fbf6ef] px-4 py-3 leading-6 text-[#4d5a6b]">
+                        {submission.submissionText}
+                      </p>
+                    ))}
+                  </div>
+                ))}
                 {membership.room.messages.map((message) => (
                   <div key={message.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">

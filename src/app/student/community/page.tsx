@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { getStudentCommunityData, postCommunityMessage } from "@/lib/community/rooms";
+import { getStudentCommunityData, postCommunityMessage, submitCommunityProjectWork } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   CompactList,
@@ -15,7 +15,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ posted?: string; flagged?: string; error?: string }>;
+  searchParams?: Promise<{ posted?: string; flagged?: string; project?: string; error?: string }>;
 };
 
 function displayName(user: { firstName: string; lastName: string; role: string }) {
@@ -65,6 +65,29 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
     }
   }
 
+  async function submitProject(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "STUDENT") redirect("/auth/login");
+
+    const projectId = String(formData.get("projectId") || "");
+    const submissionText = String(formData.get("submissionText") || "");
+    try {
+      await submitCommunityProjectWork({
+        userId: currentSession.user.id,
+        projectId,
+        submissionText,
+      });
+
+      revalidatePath("/student/community");
+      redirect("/student/community?project=1");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to submit project work.";
+      redirect(`/student/community?error=${encodeURIComponent(message)}`);
+    }
+  }
+
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
@@ -78,6 +101,8 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
           params.error ??
           (params.flagged
             ? "Message received and sent to mentors for review because it may contain private contact details or a link."
+            : params.project
+              ? "Project work submitted for mentor review."
             : params.posted
               ? "Message posted."
               : undefined)
@@ -102,6 +127,62 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                 <div className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#5f6b7a]">
                   {membership.room.description ?? "Mentor-supervised room."}
                 </div>
+                {membership.room.projects.length ? (
+                  <div className="space-y-3">
+                    {membership.room.projects.map((project) => (
+                      <details key={project.id} className="rounded-[22px] border border-[#eadfce] bg-white p-4" open={project.submissions.length === 0}>
+                        <summary className="cursor-pointer list-none">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-[#22304a]">{project.title}</p>
+                              <p className="mt-1 text-xs text-[#6d7785]">
+                                {project.dueDate ? `Due ${formatDate(project.dueDate)}` : "No due date"} - {project.tasks.length} guided steps
+                              </p>
+                            </div>
+                            <span className="rounded-full bg-[#fbf6ef] px-3 py-1 text-xs font-semibold text-[#22304a]">
+                              {project.submissions.length ? "Submitted" : "Open"}
+                            </span>
+                          </div>
+                        </summary>
+                        <div className="mt-4 grid gap-4">
+                          {project.description ? <p className="text-sm leading-7 text-[#4d5a6b]">{project.description}</p> : null}
+                          <div className="grid gap-2">
+                            {project.tasks.map((task) => (
+                              <div key={task.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm">
+                                <p className="font-semibold text-[#22304a]">{task.title}</p>
+                                {task.description ? <p className="mt-1 text-[#617184]">{task.description}</p> : null}
+                              </div>
+                            ))}
+                          </div>
+                          <form action={submitProject} className="grid gap-3 rounded-[18px] bg-[#fbf6ef] p-4">
+                            <input type="hidden" name="projectId" value={project.id} />
+                            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                              Share completed project work
+                              <textarea
+                                name="submissionText"
+                                rows={4}
+                                maxLength={1500}
+                                required
+                                placeholder="Paste your project answer, reflection, script, or presentation summary. Do not include phone numbers, emails, or external links."
+                                className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 text-sm"
+                              />
+                            </label>
+                            <button className="w-fit rounded-full bg-[#2f6b4b] px-5 py-2.5 text-sm font-semibold text-white">
+                              Submit project work
+                            </button>
+                          </form>
+                          {project.submissions.map((submission) => (
+                            <div key={submission.id} className="rounded-2xl border border-[#dfe7ef] bg-white px-4 py-3 text-sm">
+                              <p className="font-semibold text-[#22304a]">Your latest submission</p>
+                              <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{submission.submissionText}</p>
+                              {submission.mentorFeedback ? <p className="mt-2 text-[#2f6b4b]">Mentor feedback: {submission.mentorFeedback}</p> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                ) : null}
                 <form action={postMessage} className="grid gap-3 rounded-[22px] border border-[#eadfce] bg-white p-4">
                   <input type="hidden" name="roomId" value={membership.room.id} />
                   <label className="grid gap-2 text-sm font-semibold text-[#22304a]">

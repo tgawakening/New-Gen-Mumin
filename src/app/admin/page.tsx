@@ -1072,6 +1072,21 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
             <RevenueBreakdown items={data.revenueByGateway} />
 
+            <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">Community</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Gen-Mumin Quest safety console</h2>
+                  <p className="mt-1 text-sm leading-7 text-[#617184]">
+                    Create supervised circles, launch team projects, and review flagged student messages.
+                  </p>
+                </div>
+                <Link href="/admin/community" className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white">
+                  Open community
+                </Link>
+              </div>
+            </section>
+
             <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
               <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
                 <h2 className="text-2xl font-semibold text-[#22304a]">Recent registrations</h2>
