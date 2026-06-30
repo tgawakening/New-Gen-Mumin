@@ -74,7 +74,7 @@ export function TeacherHomeDashboard({
                           rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
                         >
-                          Join class
+                          Start as member
                         </a>
                         <Link
                           href={entry.meetingUrl}
