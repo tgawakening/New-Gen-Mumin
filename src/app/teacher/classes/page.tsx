@@ -308,7 +308,15 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
                           rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                         >
-                          Start as member
+                          Start as host
+                        </a>
+                        <a
+                          href={`/teacher/live-sessions/${classInfo.id}/start?mode=member`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full bg-[#eef6ff] px-4 py-2 text-sm font-semibold text-[#0f4d81]"
+                        >
+                          Join as member
                         </a>
                         <Link
                           href={classInfo.meetingUrl}

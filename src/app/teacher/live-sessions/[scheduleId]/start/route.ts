@@ -4,6 +4,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
+import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
   params: Promise<{
@@ -35,6 +36,8 @@ export async function GET(_request: Request, context: RouteContext) {
     return redirectTo(_request, "/auth/login");
   }
 
+  const mode = new URL(_request.url).searchParams.get("mode");
+  const startAsMember = mode === "member";
   const { scheduleId } = await context.params;
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: session.user.id },
@@ -57,24 +60,34 @@ export async function GET(_request: Request, context: RouteContext) {
     },
   });
 
-  if (!schedule?.meetingUrl) {
+  if (!schedule?.meetingId && !schedule?.meetingUrl) {
     const params = new URLSearchParams({
-      notice: "Zoom join link is not available for this session yet.",
+      notice: "Zoom link is not available for this session yet.",
       tone: "error",
     });
     return redirectTo(_request, `/teacher/live-sessions?${params.toString()}`);
   }
 
   try {
+    const zoomUrl = startAsMember
+      ? schedule.meetingUrl
+      : schedule.meetingId
+        ? await getZoomMeetingStartUrl(schedule.meetingId)
+        : schedule.meetingUrl;
+
+    if (!zoomUrl) {
+      throw new Error(startAsMember ? "Zoom join link is not available for this session yet." : "Zoom host start link is not available for this session yet.");
+    }
+
     await recordLiveClassSessionOccurrence({
       scheduleId: schedule.id,
       teacherUserId: session.user.id,
       meetingId: schedule.meetingId,
-      source: "teacher-start",
+      source: startAsMember ? "teacher-member-start" : "teacher-start",
     });
-    return NextResponse.redirect(schedule.meetingUrl);
+    return NextResponse.redirect(zoomUrl);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to open the teacher join link.";
+    const message = error instanceof Error ? error.message : "Unable to open the teacher Zoom link.";
     const params = new URLSearchParams({
       notice: message,
       tone: "error",

@@ -80,7 +80,15 @@ export default async function TeacherSchedulePage() {
                     rel="noreferrer"
                     className="inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Start as member
+                    Start as host
+                  </a>
+                  <a
+                    href={`/teacher/live-sessions/${entry.id}/start?mode=member`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex rounded-full bg-[#eef6ff] px-4 py-2 text-sm font-semibold text-[#0f4d81]"
+                  >
+                    Join as member
                   </a>
                   <Link
                     href={entry.meetingUrl}

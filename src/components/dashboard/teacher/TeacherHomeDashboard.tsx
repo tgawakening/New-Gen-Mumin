@@ -74,7 +74,15 @@ export function TeacherHomeDashboard({
                           rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
                         >
-                          Start as member
+                          Start as host
+                        </a>
+                        <a
+                          href={`/teacher/live-sessions/${entry.id}/start?mode=member`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full bg-[#eef6ff] px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
+                        >
+                          Join as member
                         </a>
                         <Link
                           href={entry.meetingUrl}
