@@ -308,14 +308,14 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
                           rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                         >
-                          Start as host
+                          Join class
                         </a>
                         <Link
                           href={classInfo.meetingUrl}
                           target="_blank"
                           className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
                         >
-                          Public link
+                          Open Zoom link
                         </Link>
                       </div>
                     ) : null}

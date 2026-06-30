@@ -4,7 +4,6 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
-import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
   params: Promise<{
@@ -58,25 +57,24 @@ export async function GET(_request: Request, context: RouteContext) {
     },
   });
 
-  if (!schedule?.meetingId) {
+  if (!schedule?.meetingUrl) {
     const params = new URLSearchParams({
-      notice: "Zoom start link is not available for this session yet.",
+      notice: "Zoom join link is not available for this session yet.",
       tone: "error",
     });
     return redirectTo(_request, `/teacher/live-sessions?${params.toString()}`);
   }
 
   try {
-    const startUrl = await getZoomMeetingStartUrl(schedule.meetingId);
     await recordLiveClassSessionOccurrence({
       scheduleId: schedule.id,
       teacherUserId: session.user.id,
       meetingId: schedule.meetingId,
       source: "teacher-start",
     });
-    return NextResponse.redirect(startUrl);
+    return NextResponse.redirect(schedule.meetingUrl);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unable to open the teacher start link.";
+    const message = error instanceof Error ? error.message : "Unable to open the teacher join link.";
     const params = new URLSearchParams({
       notice: message,
       tone: "error",

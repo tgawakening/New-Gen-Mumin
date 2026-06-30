@@ -7,7 +7,7 @@ import {
   sendTeacherZoomMeetingApprovedEmail,
 } from "@/lib/email/notifications";
 import { durationMinutes, nextWeeklyOccurrence, toZoomLocalStartTime } from "@/lib/live-classes/time";
-import { createRecurringZoomMeeting, getZoomHostUserIdForTeacherEmail, isZoomConfigured } from "@/lib/zoom/client";
+import { createRecurringZoomMeeting, isZoomConfigured } from "@/lib/zoom/client";
 import { DEFAULT_OFFERS, getCatalogOfferProgramSlugs } from "@/lib/registration/catalog";
 import { isArabicTajweedSlug } from "@/lib/genm/curriculum";
 
@@ -182,9 +182,8 @@ async function createZoomMeetingAllowingBasicUsers(
   }
 }
 
-async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string, teacherEmail: string) {
+async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string) {
   if (!input.createZoomMeeting) return null;
-  const hostUserId = getZoomHostUserIdForTeacherEmail(teacherEmail);
 
   return createZoomMeetingAllowingBasicUsers({
     topic: cleanLiveClassTitle(input.title),
@@ -198,12 +197,8 @@ async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programT
     muteUponEntry: input.muteUponEntry,
     autoRecording: input.autoRecording,
     passcode: input.passcode,
-    alternativeHosts: hostUserId ? [] : [teacherEmail],
-  }, { hostUserId });
-}
-
-function zoomHostOptionsForTeacherEmail(email: string) {
-  return { hostUserId: getZoomHostUserIdForTeacherEmail(email) };
+    alternativeHosts: [],
+  });
 }
 
 function isRosterTableUnavailable(error: unknown) {
@@ -601,7 +596,7 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
         muteUponEntry: input.muteUponEntry,
         autoRecording: input.autoRecording,
         passcode: input.passcode,
-        alternativeHosts: teachers.map((teacher) => teacher.user.email),
+        alternativeHosts: [],
       })
     : null;
 
@@ -675,7 +670,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
 
-  const meeting = await createZoomMeetingForTeacher(input, program.title, teacher.user.email);
+  const meeting = await createZoomMeetingForTeacher(input, program.title);
 
   const schedule = await db.classSchedule.create({
     data: {
@@ -743,7 +738,7 @@ export async function approveTeacherLiveClass(scheduleId: string, approvedByUser
     startTime: toZoomLocalStartTime(nextWeeklyOccurrence(schedule.weekday, schedule.startTime)),
     durationMinutes: durationMinutes(schedule.startTime, schedule.endTime),
     weekday: schedule.weekday,
-  }, zoomHostOptionsForTeacherEmail(schedule.teacher.user.email));
+  });
 
   const updated = await db.classSchedule.update({
     where: { id: schedule.id },
@@ -817,7 +812,7 @@ export async function syncScheduleToZoom(scheduleId: string) {
     startTime: toZoomLocalStartTime(nextWeeklyOccurrence(schedule.weekday, schedule.startTime)),
     durationMinutes: durationMinutes(schedule.startTime, schedule.endTime),
     weekday: schedule.weekday,
-  }, zoomHostOptionsForTeacherEmail(schedule.teacher.user.email));
+  });
 
   const updated = await db.classSchedule.update({
     where: { id: schedule.id },

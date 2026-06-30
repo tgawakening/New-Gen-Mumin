@@ -2114,7 +2114,7 @@ export function CourseBuilderWorkspace({
                       Mute on entry
                     </label>
                     <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
-                      <input name="joinBeforeHost" type="checkbox" className="h-4 w-4" />
+                      <input name="joinBeforeHost" type="checkbox" defaultChecked className="h-4 w-4" />
                       Join before host
                     </label>
                     <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a] md:col-span-2">

@@ -143,7 +143,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
             Mute on entry
           </label>
           <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
-            <input name="joinBeforeHost" type="checkbox" className="h-4 w-4" />
+            <input name="joinBeforeHost" type="checkbox" defaultChecked className="h-4 w-4" />
             Join before host
           </label>
           <label className="flex items-center gap-3 rounded-2xl border border-[#dce4ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a] xl:col-span-4">
@@ -190,7 +190,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                     rel="noreferrer"
                     className="rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Start as host
+                    Join class
                   </a>
                 ) : null}
                 {entry.meetingUrl ? (
@@ -200,7 +200,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                     rel="noreferrer"
                     className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
                   >
-                    Copy/open public link
+                    Open Zoom link
                   </a>
                 ) : null}
                 <Link

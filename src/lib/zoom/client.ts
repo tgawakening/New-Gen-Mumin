@@ -160,8 +160,8 @@ export async function createRecurringZoomMeeting(payload: ZoomMeetingPayload, op
           weekly_days: toZoomWeeklyDay(payload.weekday),
         },
         settings: {
-          join_before_host: payload.joinBeforeHost ?? false,
-          waiting_room: payload.waitingRoom ?? true,
+          join_before_host: payload.joinBeforeHost ?? true,
+          waiting_room: payload.waitingRoom ?? false,
           approval_type: 2,
           registration_type: 1,
           mute_upon_entry: payload.muteUponEntry ?? true,

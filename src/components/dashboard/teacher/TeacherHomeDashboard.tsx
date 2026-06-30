@@ -74,14 +74,14 @@ export function TeacherHomeDashboard({
                           rel="noreferrer"
                           className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
                         >
-                          Start as host
+                          Join class
                         </a>
                         <Link
                           href={entry.meetingUrl}
                           target="_blank"
                           className="rounded-full border border-[#cdd9e4] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
                         >
-                          Public link
+                          Open Zoom link
                         </Link>
                       </div>
                     ) : null}

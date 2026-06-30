@@ -80,14 +80,14 @@ export default async function TeacherSchedulePage() {
                     rel="noreferrer"
                     className="inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
                   >
-                    Start as host
+                    Join class
                   </a>
                   <Link
                     href={entry.meetingUrl}
                     target="_blank"
                     className="inline-flex rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
                   >
-                    Public link
+                    Open Zoom link
                   </Link>
                 </div>
               ) : null}
