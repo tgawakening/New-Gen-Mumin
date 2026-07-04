@@ -36,6 +36,7 @@ export type LiveClassRecordingSummary = {
   fileType: string | null;
   recordingStart: Date | null;
   recordingEnd: Date | null;
+  durationMinutes: number | null;
   availableAt: Date;
 };
 
@@ -96,6 +97,11 @@ function recordingProcessingState(recording: { driveFileId?: string | null; stor
 
 function mapRecording(recording: any): LiveClassRecordingSummary {
   const processingState = recordingProcessingState(recording);
+  const durationMinutes =
+    recording.recordingStart && recording.recordingEnd
+      ? Math.max(0, Math.round((recording.recordingEnd.getTime() - recording.recordingStart.getTime()) / 60000))
+      : null;
+
   return {
     id: recording.id,
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
@@ -112,6 +118,7 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     fileType: recording.fileType,
     recordingStart: recording.recordingStart,
     recordingEnd: recording.recordingEnd,
+    durationMinutes,
     availableAt: recording.availableAt,
   };
 }
@@ -1018,3 +1025,4 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
     fileType: recording.fileType,
   };
 }
+

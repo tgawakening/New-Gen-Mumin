@@ -23,6 +23,13 @@ function formatDate(value: Date | null) {
     : "Date pending";
 }
 
+function formatDuration(minutes: number | null) {
+  if (minutes === null) return "Length pending";
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+}
 function statusBadgeClasses(status: string) {
   switch (status) {
     case "ready":
@@ -210,7 +217,11 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
                       <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
-                      <p className="mt-1 text-sm text-[#617184]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
+                      <p className="mt-1 text-sm text-[#617184]">
+                        {formatDate(recording.recordingStart ?? recording.availableAt)}
+                        {" - "}
+                        {formatDuration(recording.durationMinutes)}
+                      </p>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClasses(recording.processingStatus)}`}>
                           {recording.processingStatusLabel}
@@ -263,3 +274,6 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     </div>
   );
 }
+
+
+
