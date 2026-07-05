@@ -15,6 +15,8 @@ export function getTeacherNavItems() {
     { label: "Feedback", href: "/teacher/feedback", icon: "journal" },
     { label: "Missions", href: "/teacher/missions", icon: "quiz" },
     { label: "Reports", href: "/teacher/reports", icon: "reports" },
+    { label: "Hours Log", href: "/teacher/hours-log", icon: "reports" },
     { label: "Profile", href: "/teacher/profile", icon: "profile" },
   ];
 }
+

@@ -494,3 +494,25 @@ export async function sendStudentTaskAssignedEmail(input: {
     }),
   });
 }
+
+export async function sendTeacherHoursSubmittedEmail(input: {
+  teacherName: string;
+  teacherEmail: string;
+  periodLabel: string;
+  totalLabel: string;
+  entryCount: number;
+  dashboardPath: string;
+}) {
+  await sendAdminFacingEmail(
+    "teacherHoursSubmitted",
+    "Teacher hours log submitted",
+    `${input.teacherName} submitted an hours log for review.`,
+    [
+      { label: "Teacher", value: `${input.teacherName} (${input.teacherEmail})` },
+      { label: "Period", value: input.periodLabel },
+      { label: "Total hours", value: input.totalLabel },
+      { label: "Rows", value: String(input.entryCount) },
+      { label: "Admin link", value: resolveHref(input.dashboardPath) },
+    ],
+  );
+}

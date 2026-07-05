@@ -116,6 +116,8 @@ model TeacherProfile {
   programRosters     TeacherStudentRoster[]
   user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   programAssignments TeacherProgram[]
+  hoursLogEntries    TeacherHoursLogEntry[]
+  hoursSubmissions   TeacherHoursSubmission[]
 }
 
 model TeacherProgram {
@@ -295,6 +297,7 @@ model ClassSchedule {
   recordings        LiveClassRecording[]
   scheduleRosters   ClassScheduleRoster[]
   sessionOccurrences LiveClassSessionOccurrence[]
+  hoursLogEntries TeacherHoursLogEntry[]
 
   @@index([createdByUserId], map: "ClassSchedule_createdByUserId_fkey")
   @@index([programId], map: "ClassSchedule_programId_fkey")
@@ -380,12 +383,54 @@ model LiveClassSessionOccurrence {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
   schedule       ClassSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  hoursLogEntries TeacherHoursLogEntry[]
 
   @@index([scheduleId, teacherUserId, occurrenceDate, source])
   @@index([scheduleId, startedAt])
   @@index([teacherUserId, occurrenceDate])
 }
 
+model TeacherHoursLogEntry {
+  id              String                 @id @default(cuid())
+  teacherId       String
+  scheduleId      String?
+  occurrenceId    String?                @unique
+  source          TeacherHoursLogSource  @default(MANUAL)
+  status          TeacherHoursLogStatus  @default(DRAFT)
+  title           String
+  programTitle    String?
+  sessionDate     DateTime
+  startTime       String?
+  durationMinutes Int
+  mode            String                 @default("Website / TGA Zoom")
+  notes           String?                @db.LongText
+  submittedAt     DateTime?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  occurrence      LiveClassSessionOccurrence? @relation(fields: [occurrenceId], references: [id], onDelete: SetNull)
+  schedule        ClassSchedule?         @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  teacher         TeacherProfile         @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, sessionDate])
+  @@index([status, submittedAt])
+  @@index([scheduleId], map: "TeacherHoursLogEntry_scheduleId_fkey")
+}
+
+model TeacherHoursSubmission {
+  id           String         @id @default(cuid())
+  teacherId    String
+  periodStart  DateTime
+  periodEnd    DateTime
+  monthKey     String
+  totalMinutes Int
+  entryCount   Int
+  note         String?        @db.LongText
+  submittedAt  DateTime       @default(now())
+  teacher      TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+
+  @@index([teacherId, periodStart, periodEnd])
+  @@index([monthKey, submittedAt])
+}
 model Registration {
   id                  String                  @id @default(cuid())
   parentProfileId     String?
@@ -1231,6 +1276,15 @@ enum AttendanceStatus {
   EXCUSED
 }
 
+enum TeacherHoursLogSource {
+  TRACKED
+  MANUAL
+}
+
+enum TeacherHoursLogStatus {
+  DRAFT
+  SUBMITTED
+}
 enum QuizType {
   PRE_LESSON
   POST_LESSON
@@ -1357,3 +1411,6 @@ enum ModerationFlagStatus {
   ESCALATED
   DISMISSED
 }
+
+
+
