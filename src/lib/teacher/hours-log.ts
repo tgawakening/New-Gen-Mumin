@@ -1,13 +1,35 @@
-﻿import "server-only";
+import "server-only";
 
 import { TeacherHoursLogSource, TeacherHoursLogStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 import { sendTeacherHoursSubmittedEmail } from "@/lib/email/notifications";
+import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
+
+export type HoursLogFilter = {
+  month?: string | null;
+  start?: string | null;
+  end?: string | null;
+};
 
 export function monthKey(date: Date) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function parseIsoDate(value?: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function addOneDay(value: Date) {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return next;
+}
+
+function formatPeriodDate(value: Date) {
+  return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(value);
 }
 
 export function parseHoursMonth(value?: string | null) {
@@ -19,8 +41,32 @@ export function parseHoursMonth(value?: string | null) {
     key,
     startsAt,
     endsAt,
+    startInput: startsAt.toISOString().slice(0, 10),
+    endInput: new Date(endsAt.getTime() - 86400000).toISOString().slice(0, 10),
     label: new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric", timeZone: "UTC" }).format(startsAt),
+    mode: "month" as const,
   };
+}
+
+export function parseHoursPeriod(filter?: HoursLogFilter | string | null) {
+  const values = typeof filter === "string" ? { month: filter } : filter ?? {};
+  const customStart = parseIsoDate(values.start);
+  const customEnd = parseIsoDate(values.end);
+
+  if (customStart && customEnd && customEnd >= customStart) {
+    const endsAt = addOneDay(customEnd);
+    return {
+      key: monthKey(customStart),
+      startsAt: customStart,
+      endsAt,
+      startInput: customStart.toISOString().slice(0, 10),
+      endInput: customEnd.toISOString().slice(0, 10),
+      label: `${formatPeriodDate(customStart)} to ${formatPeriodDate(customEnd)}`,
+      mode: "range" as const,
+    };
+  }
+
+  return parseHoursMonth(values.month);
 }
 
 export function formatHoursMinutes(minutes: number) {
@@ -92,14 +138,14 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
   }
 }
 
-export async function getTeacherHoursLogData(userId: string, month?: string | null) {
+export async function getTeacherHoursLogData(userId: string, filter?: HoursLogFilter | string | null) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId },
     include: { user: true },
   });
   if (!teacher) return null;
 
-  const period = parseHoursMonth(month);
+  const period = parseHoursPeriod(filter);
   await syncTrackedHours(teacher, period.startsAt, period.endsAt);
 
   const [entries, submissions] = await Promise.all([
@@ -111,7 +157,11 @@ export async function getTeacherHoursLogData(userId: string, month?: string | nu
       orderBy: [{ sessionDate: "asc" }, { startTime: "asc" }],
     }),
     db.teacherHoursSubmission.findMany({
-      where: { teacherId: teacher.id, monthKey: period.key },
+      where: {
+        teacherId: teacher.id,
+        periodStart: { lt: period.endsAt },
+        periodEnd: { gt: period.startsAt },
+      },
       orderBy: { submittedAt: "desc" },
     }),
   ]);
@@ -137,8 +187,8 @@ export async function getTeacherHoursLogData(userId: string, month?: string | nu
   };
 }
 
-export async function getAdminTeacherHoursLogData(month?: string | null) {
-  const period = parseHoursMonth(month);
+export async function getAdminTeacherHoursLogData(filter?: HoursLogFilter | string | null) {
+  const period = parseHoursPeriod(filter);
   const teachers = await db.teacherProfile.findMany({
     where: { isActive: true },
     include: { user: true },
@@ -156,7 +206,10 @@ export async function getAdminTeacherHoursLogData(month?: string | null) {
       orderBy: [{ sessionDate: "asc" }, { startTime: "asc" }],
     }),
     db.teacherHoursSubmission.findMany({
-      where: { monthKey: period.key },
+      where: {
+        periodStart: { lt: period.endsAt },
+        periodEnd: { gt: period.startsAt },
+      },
       include: { teacher: { include: { user: true } } },
       orderBy: { submittedAt: "desc" },
     }),
@@ -303,9 +356,8 @@ export async function submitTeacherHours(input: {
     periodLabel: `${input.periodStart.toISOString().slice(0, 10)} to ${new Date(input.periodEnd.getTime() - 86400000).toISOString().slice(0, 10)}`,
     totalLabel: formatHoursMinutes(totalMinutes),
     entryCount: entries.length,
-    dashboardPath: `/admin/hours-log?month=${monthKey(input.periodStart)}`,
+    dashboardPath: `/admin/hours-log?start=${input.periodStart.toISOString().slice(0, 10)}&end=${new Date(input.periodEnd.getTime() - 86400000).toISOString().slice(0, 10)}`,
   });
 
   return submission;
 }
-

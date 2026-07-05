@@ -2,9 +2,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
-import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import {
   addTeacherHoursEntry,
   deleteTeacherHoursEntry,
@@ -16,12 +16,33 @@ import {
 } from "@/lib/teacher/hours-log";
 
 type PageProps = {
-  searchParams?: Promise<{ month?: string; notice?: string; tone?: string }>;
+  searchParams?: Promise<{ month?: string; start?: string; end?: string; notice?: string; tone?: string }>;
 };
 
-function noticeHref(month: string, message: string, tone: "success" | "error" = "success") {
-  const params = new URLSearchParams({ month, notice: message, tone });
+function noticeHref(filter: { month?: string; start?: string; end?: string }, message: string, tone: "success" | "error" = "success") {
+  const params = new URLSearchParams({ notice: message, tone });
+  if (filter.month) params.set("month", filter.month);
+  if (filter.start) params.set("start", filter.start);
+  if (filter.end) params.set("end", filter.end);
   return `/teacher/hours-log?${params.toString()}`;
+}
+
+function filterFromForm(formData: FormData) {
+  return {
+    month: String(formData.get("month") || ""),
+    start: String(formData.get("filterStart") || ""),
+    end: String(formData.get("filterEnd") || ""),
+  };
+}
+
+function HiddenFilterFields({ month, start, end }: { month: string; start: string; end: string }) {
+  return (
+    <>
+      <input type="hidden" name="month" value={month} />
+      <input type="hidden" name="filterStart" value={start} />
+      <input type="hidden" name="filterEnd" value={end} />
+    </>
+  );
 }
 
 function formatDateInput(value: Date) {
@@ -56,7 +77,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
 
   const params = searchParams ? await searchParams : {};
-  const data = await getTeacherHoursLogData(session.user.id, params.month);
+  const data = await getTeacherHoursLogData(session.user.id, params);
   if (!data) redirect("/teacher-registration");
 
   async function addManualEntry(formData: FormData) {
@@ -64,11 +85,11 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
 
-    const month = String(formData.get("month") || "");
+    const filter = filterFromForm(formData);
     const sessionDate = parseDate(formData.get("sessionDate"));
     const title = String(formData.get("title") || "").trim();
     const durationMinutes = asNumber(formData.get("durationMinutes"));
-    if (!sessionDate || !title || durationMinutes <= 0) redirect(noticeHref(month, "Add title, date, and duration before saving.", "error"));
+    if (!sessionDate || !title || durationMinutes <= 0) redirect(noticeHref(filter, "Add title, date, and duration before saving.", "error"));
 
     try {
       await addTeacherHoursEntry({
@@ -83,9 +104,9 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
       });
       revalidatePath("/teacher/hours-log");
     } catch (error) {
-      redirect(noticeHref(month, error instanceof Error ? error.message : "Unable to add hours row.", "error"));
+      redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to add hours row.", "error"));
     }
-    redirect(noticeHref(month, "Hours row added."));
+    redirect(noticeHref(filter, "Hours row added."));
   }
 
   async function updateEntry(formData: FormData) {
@@ -93,11 +114,11 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
 
-    const month = String(formData.get("month") || "");
+    const filter = filterFromForm(formData);
     const sessionDate = parseDate(formData.get("sessionDate"));
     const title = String(formData.get("title") || "").trim();
     const durationMinutes = asNumber(formData.get("durationMinutes"));
-    if (!sessionDate || !title) redirect(noticeHref(month, "Title and date are required.", "error"));
+    if (!sessionDate || !title) redirect(noticeHref(filter, "Title and date are required.", "error"));
 
     try {
       await updateTeacherHoursEntry({
@@ -113,23 +134,23 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
       });
       revalidatePath("/teacher/hours-log");
     } catch (error) {
-      redirect(noticeHref(month, error instanceof Error ? error.message : "Unable to update row.", "error"));
+      redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to update row.", "error"));
     }
-    redirect(noticeHref(month, "Hours row updated."));
+    redirect(noticeHref(filter, "Hours row updated."));
   }
 
   async function deleteEntry(formData: FormData) {
     "use server";
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
-    const month = String(formData.get("month") || "");
+    const filter = filterFromForm(formData);
     try {
       await deleteTeacherHoursEntry(currentSession.user.id, String(formData.get("entryId") || ""));
       revalidatePath("/teacher/hours-log");
     } catch (error) {
-      redirect(noticeHref(month, error instanceof Error ? error.message : "Unable to delete row.", "error"));
+      redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to delete row.", "error"));
     }
-    redirect(noticeHref(month, "Manual hours row deleted."));
+    redirect(noticeHref(filter, "Manual hours row deleted."));
   }
 
   async function submitHoursAction(formData: FormData) {
@@ -137,10 +158,10 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
 
-    const month = String(formData.get("month") || "");
+    const filter = filterFromForm(formData);
     const periodStart = parseDate(formData.get("periodStart"));
     const periodEndInput = parseDate(formData.get("periodEnd"));
-    if (!periodStart || !periodEndInput) redirect(noticeHref(month, "Choose period start and end dates.", "error"));
+    if (!periodStart || !periodEndInput) redirect(noticeHref(filter, "Choose period start and end dates.", "error"));
 
     try {
       await submitTeacherHours({
@@ -152,11 +173,16 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
       revalidatePath("/teacher/hours-log");
       revalidatePath("/admin/hours-log");
     } catch (error) {
-      redirect(noticeHref(month, error instanceof Error ? error.message : "Unable to submit hours.", "error"));
+      redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to submit hours.", "error"));
     }
-    redirect(noticeHref(month, "Hours submitted to admin."));
+    redirect(noticeHref(filter, "Hours submitted to admin."));
   }
 
+  const currentFilter = {
+    month: params.month || data.period.key,
+    start: params.start || "",
+    end: params.end || "",
+  };
   const monthOptions = Array.from({ length: 6 }, (_, index) => {
     const date = new Date();
     date.setUTCDate(1);
@@ -181,13 +207,30 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
         ]}
       />
 
-      <TeacherSection eyebrow="Period" title="Choose month">
-        <form className="flex flex-wrap gap-3">
-          <select name="month" defaultValue={data.period.key} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-            {monthOptions.map((month) => <option key={month.key} value={month.key}>{month.label}</option>)}
-          </select>
-          <button className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">View</button>
-        </form>
+      <TeacherSection eyebrow="Period" title="Choose monthly or weekly hours">
+        <div className="grid gap-4 xl:grid-cols-2">
+          <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#fbf6ef] p-4">
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              Monthly view
+              <select name="month" defaultValue={currentFilter.month} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                {monthOptions.map((month) => <option key={month.key} value={month.key}>{month.label}</option>)}
+              </select>
+            </label>
+            <button className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">View month</button>
+          </form>
+          <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#fbf6ef] p-4">
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              From
+              <input name="start" type="date" defaultValue={data.period.startInput} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              To
+              <input name="end" type="date" defaultValue={data.period.endInput} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+            </label>
+            <button className="rounded-full bg-[#2f6b4b] px-5 py-3 text-sm font-semibold text-white">View selected dates</button>
+          </form>
+        </div>
+        <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#617184]">Showing: {data.period.label}</p>
       </TeacherSection>
 
       <TeacherSection eyebrow="Spreadsheet" title="Teaching hours rows">
@@ -215,7 +258,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
                     <details>
                       <summary className="cursor-pointer rounded-full border border-[#cdd9e4] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f4d81]">Edit row</summary>
                       <form action={updateEntry} className="mt-3 grid min-w-[320px] gap-2 rounded-2xl bg-[#fbf6ef] p-3">
-                        <input type="hidden" name="month" value={data.period.key} />
+                        <HiddenFilterFields month={currentFilter.month} start={currentFilter.start} end={currentFilter.end} />
                         <input type="hidden" name="entryId" value={entry.id} />
                         <input name="title" defaultValue={entry.title} className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
                         <input name="programTitle" defaultValue={entry.programTitle ?? ""} placeholder="Programme" className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
@@ -226,13 +269,11 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
                         </div>
                         <input name="mode" defaultValue={entry.mode} className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
                         <textarea name="notes" rows={2} defaultValue={entry.notes ?? ""} placeholder="Notes" className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
-                        <div className="flex flex-wrap gap-2">
-                          <button className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save</button>
-                        </div>
+                        <button className="w-fit rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save</button>
                       </form>
                       {entry.source === "MANUAL" && entry.status === "DRAFT" ? (
                         <form action={deleteEntry} className="mt-2">
-                          <input type="hidden" name="month" value={data.period.key} />
+                          <HiddenFilterFields month={currentFilter.month} start={currentFilter.start} end={currentFilter.end} />
                           <input type="hidden" name="entryId" value={entry.id} />
                           <button className="rounded-full border border-[#efb3b3] bg-white px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete manual row</button>
                         </form>
@@ -242,7 +283,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
                 </tr>
               ))}
               {!data.entries.length ? (
-                <tr><td colSpan={6} className="px-4 py-6 text-center text-[#617184]">No hours rows yet for this month.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-[#617184]">No hours rows yet for {data.period.label}.</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -252,7 +293,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
       <div className="grid gap-6 xl:grid-cols-2">
         <TeacherSection eyebrow="Manual row" title="Add outside website class">
           <form action={addManualEntry} className="grid gap-3">
-            <input type="hidden" name="month" value={data.period.key} />
+            <HiddenFilterFields month={currentFilter.month} start={currentFilter.start} end={currentFilter.end} />
             <input name="title" placeholder="Session title" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             <input name="programTitle" placeholder="Programme / student group" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             <div className="grid gap-3 md:grid-cols-3">
@@ -274,10 +315,10 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
 
         <TeacherSection eyebrow="Submit" title="Send hours to admin">
           <form action={submitHoursAction} className="grid gap-3">
-            <input type="hidden" name="month" value={data.period.key} />
+            <HiddenFilterFields month={currentFilter.month} start={currentFilter.start} end={currentFilter.end} />
             <div className="grid gap-3 md:grid-cols-2">
-              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">Start date<input name="periodStart" type="date" defaultValue={formatDateInput(data.period.startsAt)} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></label>
-              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">End date<input name="periodEnd" type="date" defaultValue={formatDateInput(new Date(data.period.endsAt.getTime() - 86400000))} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></label>
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">Start date<input name="periodStart" type="date" defaultValue={data.period.startInput} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></label>
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">End date<input name="periodEnd" type="date" defaultValue={data.period.endInput} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></label>
             </div>
             <textarea name="note" rows={3} placeholder="Any note for admin/payroll" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             <button className="w-fit rounded-full bg-[#2f6b4b] px-5 py-3 text-sm font-semibold text-white">Submit selected period</button>

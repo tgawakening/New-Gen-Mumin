@@ -1,4 +1,4 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 
@@ -13,7 +13,7 @@ const STATUS_BADGE: Record<string, string> = {
 };
 
 type PageProps = {
-  searchParams?: Promise<{ month?: string; notice?: string; tone?: string }>;
+  searchParams?: Promise<{ month?: string; start?: string; end?: string; notice?: string; tone?: string }>;
 };
 
 function formatDate(value: Date) {
@@ -52,7 +52,7 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
     );
   }
 
-  const data = await getAdminTeacherHoursLogData(params.month);
+  const data = await getAdminTeacherHoursLogData(params);
   const totalMinutes = data.reports.reduce((sum, report) => sum + report.totalMinutes, 0);
   const submittedMinutes = data.reports.reduce((sum, report) => sum + report.submittedMinutes, 0);
   const rowCount = data.reports.reduce((sum, report) => sum + report.entries.length, 0);
@@ -66,7 +66,7 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Admin / Payroll</p>
               <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">Teacher Hours Log</h1>
               <p className="mt-3 max-w-4xl text-sm leading-7 text-[#617184]">
-                Website-tracked classes and teacher-added outside sessions are grouped here for monthly payroll review.
+                Website-tracked classes and teacher-added outside sessions are grouped here for monthly or weekly payroll review.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -86,13 +86,29 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
         </section>
 
         <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
-          <form className="flex flex-wrap items-center gap-3">
-            <label className="text-sm font-semibold text-[#22304a]">Month</label>
-            <select name="month" defaultValue={data.period.key} className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a]">
-              {monthOptions().map((month) => <option key={month.key} value={month.key}>{month.label}</option>)}
-            </select>
-            <button className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">View month</button>
-          </form>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#fbfdff] p-4">
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                Monthly view
+                <select name="month" defaultValue={params.month || data.period.key} className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a]">
+                  {monthOptions().map((month) => <option key={month.key} value={month.key}>{month.label}</option>)}
+                </select>
+              </label>
+              <button className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">View month</button>
+            </form>
+            <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#fbfdff] p-4">
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                From
+                <input name="start" type="date" defaultValue={data.period.startInput} className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a]" />
+              </label>
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                To
+                <input name="end" type="date" defaultValue={data.period.endInput} className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a]" />
+              </label>
+              <button className="rounded-full bg-[#2f6b4b] px-5 py-3 text-sm font-semibold text-white">View selected dates</button>
+            </form>
+          </div>
+          <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#617184]">Showing: {data.period.label}</p>
         </section>
 
         <div className="space-y-5">

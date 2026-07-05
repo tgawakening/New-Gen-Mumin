@@ -3,8 +3,9 @@ export function getTeacherNavItems() {
     { label: "Dashboard", href: "/teacher", icon: "home" },
     { label: "Roster", href: "/teacher/roster", icon: "check" },
     { label: "Live Sessions", href: "/teacher/live-sessions", icon: "video" },
-    { label: "Recordings", href: "/teacher/recordings", icon: "video" },
     { label: "Classes", href: "/teacher/classes", icon: "classes" },
+    { label: "Hours Log", href: "/teacher/hours-log", icon: "reports" },
+    { label: "Recordings", href: "/teacher/recordings", icon: "video" },
     { label: "Schedule", href: "/teacher/schedule", icon: "calendar" },
     { label: "Course Builder", href: "/teacher/course-builder", icon: "builder" },
     { label: "Lesson Log", href: "/teacher/lesson-log", icon: "lesson" },
@@ -15,8 +16,6 @@ export function getTeacherNavItems() {
     { label: "Feedback", href: "/teacher/feedback", icon: "journal" },
     { label: "Missions", href: "/teacher/missions", icon: "quiz" },
     { label: "Reports", href: "/teacher/reports", icon: "reports" },
-    { label: "Hours Log", href: "/teacher/hours-log", icon: "reports" },
     { label: "Profile", href: "/teacher/profile", icon: "profile" },
   ];
 }
-
