@@ -127,9 +127,20 @@ export default async function AdminFeedbackPage() {
               <h1 className="mt-2 text-2xl font-semibold text-[#22304a]">Weekly Feedback Console</h1>
               <p className="mt-1 text-sm text-[#617184]">Review student, parent, and teacher signals across the platform.</p>
             </div>
-            <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
-              Back to admin
-            </Link>
+            <div className="flex flex-wrap gap-2">
+              <Link href="/api/admin/feedback/export?audience=PARENT" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                Export parent feedback
+              </Link>
+              <Link href="/api/admin/feedback/export?audience=TEACHER" className="rounded-full bg-[#2f6b4b] px-4 py-2 text-sm font-semibold text-white">
+                Export teacher feedback
+              </Link>
+              <Link href="/api/admin/feedback/export" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                Export all
+              </Link>
+              <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                Back to admin
+              </Link>
+            </div>
           </div>
         </div>
 
