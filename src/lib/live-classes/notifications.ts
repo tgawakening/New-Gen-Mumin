@@ -1,9 +1,12 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { sendLiveClassStartedEmail } from "@/lib/email/notifications";
 import { env } from "@/lib/env";
 import {
+  cleanLiveClassTitle,
   countryMatchesLiveClassAudience,
+  enrollmentMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
   isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
@@ -223,4 +226,138 @@ export async function getUnreadNotifications(userId: string, take = 5) {
     orderBy: { createdAt: "desc" },
     take,
   });
+}
+
+const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+function notificationPersonName(user: { firstName: string; lastName: string | null; email: string }) {
+  return `${user.firstName} ${user.lastName ?? ""}`.trim() || user.firstName || user.email;
+}
+
+function canSendLiveClassEmail(email: string | null | undefined) {
+  return Boolean(email && !email.endsWith("@genmumin.local"));
+}
+
+function teacherName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
+  return notificationPersonName(teacher.user);
+}
+
+export async function notifyRosteredUsersClassStarted(scheduleId: string) {
+  const schedule = await db.classSchedule.findUnique({
+    where: { id: scheduleId },
+    include: {
+      scheduleRosters: { select: { studentId: true } },
+      teacher: {
+        include: {
+          user: true,
+          programRosters: { select: { programId: true, studentId: true } },
+        },
+      },
+      program: {
+        include: {
+          enrollments: {
+            where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
+            include: {
+              parent: { include: { user: true } },
+              student: {
+                include: {
+                  user: true,
+                  registrationStudents: { select: { countryCode: true, countryName: true } },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!schedule?.meetingUrl || !isLiveClassVisibleToStudents(schedule.title)) return;
+
+  const now = new Date();
+  const title = cleanLiveClassTitle(schedule.title);
+  const audienceGroup = getLiveClassAudienceGroup(schedule.title);
+  const scheduleRosterIds = schedule.scheduleRosters.map((entry) => entry.studentId);
+  const defaultRosterIds = schedule.teacher.programRosters
+    .filter((entry) => entry.programId === schedule.programId)
+    .map((entry) => entry.studentId);
+  const visibleRosterIds = new Set(scheduleRosterIds.length ? scheduleRosterIds : defaultRosterIds);
+  const hasRosterFilter = visibleRosterIds.size > 0;
+  const scheduleLabel = `${WEEKDAY_LABELS[schedule.weekday] ?? "Weekly class"} ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}`;
+  const emailRecipients = new Map<string, { toEmail: string; recipientName: string }>();
+  const notificationRecipients = new Map<string, { href: string }>();
+
+  for (const enrollment of schedule.program.enrollments) {
+    if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+    if (hasRosterFilter && !visibleRosterIds.has(enrollment.studentId)) continue;
+
+    notificationRecipients.set(enrollment.student.user.id, { href: "/student/schedule" });
+    if (canSendLiveClassEmail(enrollment.student.user.email)) {
+      emailRecipients.set(enrollment.student.user.email.toLowerCase(), {
+        toEmail: enrollment.student.user.email,
+        recipientName: notificationPersonName(enrollment.student.user),
+      });
+    }
+
+    if (enrollment.parent?.user.id) {
+      notificationRecipients.set(enrollment.parent.user.id, { href: `/parent/schedule?child=${enrollment.studentId}` });
+      if (canSendLiveClassEmail(enrollment.parent.user.email)) {
+        emailRecipients.set(enrollment.parent.user.email.toLowerCase(), {
+          toEmail: enrollment.parent.user.email,
+          recipientName: notificationPersonName(enrollment.parent.user),
+        });
+      }
+    }
+  }
+
+  for (const [userId, recipient] of notificationRecipients.entries()) {
+    const existing = await db.notification.findFirst({
+      where: {
+        userId,
+        title: "Live class is now open",
+        href: recipient.href,
+        createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
+      },
+    });
+    if (existing) continue;
+
+    await db.notification.create({
+      data: {
+        userId,
+        title: "Live class is now open",
+        body: `${title} has started on Zoom. Click to join as a participant.`,
+        href: recipient.href,
+      },
+    });
+  }
+
+  const recentEmailLogs = await db.emailLog.findMany({
+    where: {
+      template: "liveClassStarted",
+      toEmail: { in: [...emailRecipients.values()].map((recipient) => recipient.toEmail) },
+      createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
+    },
+    select: { toEmail: true },
+  });
+  const recentlyEmailed = new Set(recentEmailLogs.map((log) => log.toEmail.toLowerCase()));
+  const emailResults = await Promise.allSettled(
+    [...emailRecipients.values()]
+      .filter((recipient) => !recentlyEmailed.has(recipient.toEmail.toLowerCase()))
+      .map((recipient) =>
+        sendLiveClassStartedEmail({
+          ...recipient,
+          programTitle: schedule.program.title,
+          sessionTitle: title,
+          teacherName: teacherName(schedule.teacher),
+          schedule: scheduleLabel,
+          joinUrl: schedule.meetingUrl!,
+        }),
+      ),
+  );
+
+  for (const result of emailResults) {
+    if (result.status === "rejected") {
+      console.error("Unable to send live class started email", result.reason);
+    }
+  }
 }

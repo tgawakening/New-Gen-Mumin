@@ -465,6 +465,33 @@ export async function sendLiveClassScheduledEmail(input: {
   });
 }
 
+export async function sendLiveClassStartedEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  programTitle: string;
+  sessionTitle: string;
+  teacherName: string;
+  schedule: string;
+  joinUrl: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Zoom class has started",
+    template: "liveClassStarted",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Zoom class has started",
+      preview: `${input.sessionTitle} is now open on Zoom.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.teacherName} has started ${input.sessionTitle} for ${input.programTitle}.`,
+      sections: [
+        { label: "Programme", value: input.programTitle },
+        { label: "Session", value: input.sessionTitle },
+        { label: "Schedule", value: input.schedule },
+        { label: "Next step", value: "Click the button below to join the Zoom class as a participant." },
+      ],
+      callToAction: { label: "Join Zoom class", href: resolveHref(input.joinUrl) },
+    }),
+  });
+}
 export async function sendStudentTaskAssignedEmail(input: {
   toEmail: string;
   recipientName: string;

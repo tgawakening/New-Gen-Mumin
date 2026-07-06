@@ -4,6 +4,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
+import { notifyRosteredUsersClassStarted } from "@/lib/live-classes/notifications";
 import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
 
 type RouteContext = {
@@ -85,6 +86,12 @@ export async function GET(_request: Request, context: RouteContext) {
       meetingId: schedule.meetingId,
       source: startAsMember ? "teacher-member-start" : "teacher-start",
     });
+
+    try {
+      await notifyRosteredUsersClassStarted(schedule.id);
+    } catch (notificationError) {
+      console.error("Unable to notify rostered users that class started", notificationError);
+    }
     return NextResponse.redirect(zoomUrl);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to open the teacher Zoom link.";

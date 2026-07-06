@@ -61,6 +61,23 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
       if (!child) throw new Error("Child is not available for this parent.");
 
       const selectedProgrammes = formData.getAll("programmes").map(String);
+      const requiredFields = [
+        ["parentName", "Parent name"],
+        ["childName", "Child name"],
+        ["childAgeGroup", "Child age group"],
+        ["enjoying", "Class enjoyment"],
+        ["understanding", "Lesson understanding"],
+        ["homePractice", "Home practice"],
+        ["confidence", "Child confidence"],
+        ["goingWell", "What is going well"],
+        ["improvement", "What can be improved"],
+        ["concern", "Concern"],
+        ["contactRequest", "Contact request"],
+        ["satisfaction", "Overall satisfaction"],
+      ] as const;
+      const missingField = requiredFields.find(([name]) => !String(formData.get(name) || "").trim());
+      if (missingField) throw new Error(`${missingField[1]} is required.`);
+      if (!selectedProgrammes.length) throw new Error("Please select at least one programme/class.");
 
       await submitWeeklyFeedback({
         audience: FeedbackAudience.PARENT,
@@ -225,13 +242,13 @@ export default async function ParentFeedbackPage({ searchParams }: PageProps) {
                   content: (
                     <>
                       <Field label="What is going well?">
-                        <textarea name="goingWell" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                        <textarea name="goingWell" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                       </Field>
                       <Field label="What can be improved?">
-                        <textarea name="improvement" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                        <textarea name="improvement" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                       </Field>
                       <Field label="Any concern you want us to know?">
-                        <textarea name="concern" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                        <textarea name="concern" rows={3} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                       </Field>
                       <div className="grid gap-4 md:grid-cols-2">
                         <Choice name="contactRequest" label="Would you like management to contact you?" options={["No", "Yes", "Only if needed"]} />
@@ -277,7 +294,7 @@ function RatingField({ name, label, low, high, defaultValue }: { name: string; l
         <div className="flex justify-between text-xs font-semibold text-[#6d7785]">
           {[1, 2, 3, 4, 5].map((value) => <span key={value}>{value}</span>)}
         </div>
-        <input name={name} type="range" min="1" max="5" defaultValue={defaultValue} className="mt-2 w-full accent-[#f39f5f]" />
+        <input name={name} type="range" min="1" max="5" required defaultValue={defaultValue} className="mt-2 w-full accent-[#f39f5f]" />
         <div className="mt-1 flex justify-between text-xs text-[#8a94a3]">
           <span>{low}</span>
           <span>{high}</span>
