@@ -24,6 +24,8 @@ export type LiveClassRecordingSummary = {
   id: string;
   title: string;
   programTitle: string;
+  programSlug: string;
+  teacherId: string;
   teacherName: string;
   watchUrl: string | null;
   playbackUrl: string | null;
@@ -106,6 +108,8 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     id: recording.id,
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
     programTitle: displayProgramTitle(recording.schedule.program.title),
+    programSlug: recording.schedule.program.slug,
+    teacherId: recording.schedule.teacherId,
     teacherName: teacherName(recording.schedule.teacher),
     watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
     playbackUrl: recording.driveFileId && recording.storageProvider === "google-drive" ? `/api/recordings/${recording.id}/media` : null,
@@ -170,10 +174,9 @@ function collapseRecordingsBySession(recordings: any[]) {
   const grouped = new Map<string, any>();
 
   for (const recording of visible) {
-    const key = [
-      recording.scheduleId,
-      recording.recordingStart ? recording.recordingStart.toISOString().slice(0, 10) : recording.availableAt.toISOString().slice(0, 10),
-    ].join("|");
+    const recordingTime = recording.recordingStart ?? recording.availableAt;
+    const sessionKey = recordingTime instanceof Date ? recordingTime.toISOString() : String(recordingTime ?? recording.id);
+    const key = [recording.scheduleId, sessionKey].join("|");
     const existing = grouped.get(key);
     if (!existing) {
       grouped.set(key, recording);
@@ -182,12 +185,20 @@ function collapseRecordingsBySession(recordings: any[]) {
 
     const currentType = (recording.fileType ?? "").toUpperCase();
     const existingType = (existing.fileType ?? "").toUpperCase();
+    const currentSize = Number(recording.fileSize ?? BigInt(0));
+    const existingSize = Number(existing.fileSize ?? BigInt(0));
     if (currentType === "MP4" && existingType !== "MP4") {
+      grouped.set(key, recording);
+    } else if (currentType === existingType && currentSize > existingSize) {
       grouped.set(key, recording);
     }
   }
 
-  return [...grouped.values()];
+  return [...grouped.values()].sort((left, right) => {
+    const leftDate = left.recordingStart ?? left.availableAt;
+    const rightDate = right.recordingStart ?? right.availableAt;
+    return rightDate.getTime() - leftDate.getTime();
+  });
 }
 
 function includeRecordingRelations() {
@@ -1016,6 +1027,8 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
     id: recording.id,
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
     programTitle: displayProgramTitle(recording.schedule.program.title),
+    programSlug: recording.schedule.program.slug,
+    teacherId: recording.schedule.teacherId,
     teacherName: teacherName(recording.schedule.teacher),
     recordingStart: recording.recordingStart,
     availableAt: recording.availableAt,
