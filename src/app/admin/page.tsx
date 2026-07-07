@@ -14,6 +14,12 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/dashboard";
 import { createAdminProgramEnrollmentOrder } from "@/lib/admin/program-enrollment";
+import {
+  formatRevenueGbp,
+  formatRevenueMoney,
+  getAdminRevenueOverview,
+  type AdminRevenueOverview,
+} from "@/lib/admin/revenue";
 import { getAdminTeacherMonthlyReports } from "@/lib/admin/teacher-monthly-reports";
 import {
   markOrderCancelled,
@@ -43,6 +49,7 @@ type PageProps = {
     studentPage?: string;
     teacherReportMonth?: string;
     teacherReportTeacher?: string;
+    revenueMonth?: string;
     notice?: string;
     tone?: string;
   }>;
@@ -935,6 +942,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
         teacherId: params?.teacherReportTeacher && params.teacherReportTeacher !== "ALL" ? params.teacherReportTeacher : undefined,
       })
     : null;
+  const revenueOverview = activeTab === "home" ? await getAdminRevenueOverview(params?.revenueMonth) : null;
   const adminNavItems = [
     ...TABS.map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
     { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
@@ -1073,6 +1081,8 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
             </section>
 
             <RevenueBreakdown items={data.revenueByGateway} />
+
+            {revenueOverview ? <MonthlyRevenueOverview revenue={revenueOverview} /> : null}
 
             <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1579,6 +1589,119 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   );
 }
 
+function MonthlyRevenueOverview({ revenue }: { revenue: AdminRevenueOverview }) {
+  const maxMethodAmount = Math.max(...revenue.methods.map((item) => item.gbpAmount), 1);
+
+  return (
+    <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Monthly revenue</p>
+          <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{revenue.period.label}</h2>
+          <p className="mt-1 text-sm leading-7 text-[#617184]">
+            GBP equivalent across completed checkout orders and monthly subscription records.
+          </p>
+        </div>
+        <form className="flex flex-wrap items-center gap-2">
+          <input type="hidden" name="tab" value="home" />
+          <input
+            type="month"
+            name="revenueMonth"
+            defaultValue={revenue.period.key}
+            className="rounded-full border border-[#c9d7e6] bg-white px-4 py-3 text-sm font-semibold text-[#22304a] outline-none"
+          />
+          <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white">
+            View month
+          </button>
+        </form>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-3">
+        <div className="rounded-[22px] bg-[#f7fbff] p-5">
+          <p className="text-sm text-[#617184]">Total for month</p>
+          <p className="mt-2 text-3xl font-semibold text-[#22304a]">{formatRevenueGbp(revenue.totalGbp)}</p>
+        </div>
+        <div className="rounded-[22px] bg-[#f9f5ef] p-5">
+          <p className="text-sm text-[#617184]">Checkout orders</p>
+          <p className="mt-2 text-2xl font-semibold text-[#22304a]">{formatRevenueGbp(revenue.orderGbp)}</p>
+          <p className="mt-1 text-xs text-[#6d7785]">{revenue.orderCount} paid orders</p>
+        </div>
+        <div className="rounded-[22px] bg-[#effaf3] p-5">
+          <p className="text-sm text-[#617184]">Monthly ledger</p>
+          <p className="mt-2 text-2xl font-semibold text-[#22304a]">{formatRevenueGbp(revenue.monthlyGbp)}</p>
+          <p className="mt-1 text-xs text-[#6d7785]">{revenue.monthlyRecordCount} subscription records</p>
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <div className="rounded-[22px] border border-[#e6edf4] p-5">
+          <h3 className="text-lg font-semibold text-[#22304a]">Payment method split</h3>
+          <div className="mt-4 space-y-4">
+            {revenue.methods.length ? revenue.methods.map((item) => (
+              <div key={`${item.source}-${item.label}-${item.currency}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="font-semibold text-[#22304a]">{item.label} - {item.currency}</span>
+                  <span className="text-[#617184]">
+                    {formatRevenueMoney(item.originalAmount, item.currency)} / {formatRevenueGbp(item.gbpAmount)}
+                  </span>
+                </div>
+                <div className="mt-2 h-2 rounded-full bg-[#edf2f7]">
+                  <div
+                    className="h-2 rounded-full bg-[#0f4d81]"
+                    style={{ width: `${Math.max(7, Math.round((item.gbpAmount / maxMethodAmount) * 100))}%` }}
+                  />
+                </div>
+                <p className="mt-1 text-xs text-[#6d7785]">{item.source} - {item.count} record{item.count === 1 ? "" : "s"}</p>
+              </div>
+            )) : (
+              <p className="rounded-2xl bg-[#f8f4ee] px-4 py-3 text-sm text-[#617184]">
+                No paid records found for this month yet.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          <div className="rounded-[22px] border border-[#e6edf4] p-5">
+            <h3 className="text-lg font-semibold text-[#22304a]">Currency totals</h3>
+            <div className="mt-4 space-y-3">
+              {revenue.currencies.length ? revenue.currencies.map((item) => (
+                <div key={item.currency} className="flex items-center justify-between gap-3 rounded-2xl bg-[#f8fafc] px-4 py-3 text-sm">
+                  <span className="font-semibold text-[#22304a]">{item.currency}</span>
+                  <span className="text-right text-[#617184]">
+                    {formatRevenueMoney(item.originalAmount, item.currency)}<br />
+                    <span className="text-xs">{formatRevenueGbp(item.gbpAmount)}</span>
+                  </span>
+                </div>
+              )) : <p className="text-sm text-[#617184]">No currency totals yet.</p>}
+            </div>
+          </div>
+
+          <div className="rounded-[22px] border border-[#e6edf4] p-5">
+            <h3 className="text-lg font-semibold text-[#22304a]">Latest paid records</h3>
+            <div className="mt-4 space-y-3">
+              {revenue.recentRows.length ? revenue.recentRows.map((row) => (
+                <div key={row.id} className="rounded-2xl bg-[#f8fafc] px-4 py-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-semibold text-[#22304a]">{row.label}</p>
+                      <p className="text-xs text-[#617184]">{row.parentName}</p>
+                      <p className="text-xs text-[#6d7785]">{row.detail}</p>
+                    </div>
+                    <div className="text-right text-xs font-semibold text-[#22304a]">
+                      {formatRevenueMoney(row.amount, row.currency)}
+                      <p className="mt-1 font-normal text-[#6d7785]">{row.date ? formatDate(row.date) : "No date"}</p>
+                    </div>
+                  </div>
+                </div>
+              )) : <p className="text-sm text-[#617184]">No paid records yet.</p>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[22px] border border-[#dce4ed] bg-white p-5 shadow-sm">
