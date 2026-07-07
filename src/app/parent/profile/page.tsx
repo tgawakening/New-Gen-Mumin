@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { getParentPaymentSummary, monthlyPaymentDisplay } from "@/lib/payments/monthly-ledger";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -26,6 +27,7 @@ export default async function ParentProfilePage({ searchParams }: PageProps) {
     redirect("/registration");
   }
 
+  const paymentSummary = await getParentPaymentSummary(session.user.id);
   const params = searchParams ? await searchParams : undefined;
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
@@ -36,7 +38,7 @@ export default async function ParentProfilePage({ searchParams }: PageProps) {
       title="Profile"
       subtitle="Review guardian billing details and the selected learner profile in a more compact layout."
       navItems={getParentNavItems(selectedChild?.id)}
-      pendingReason={dashboard.pendingReason}
+      pendingReason={dashboard.pendingReason ?? paymentSummary?.pendingReason}
     >
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
@@ -71,6 +73,25 @@ export default async function ParentProfilePage({ searchParams }: PageProps) {
         ]}
       />
 
+      <SectionCard eyebrow="Billing" title="Monthly payment status">
+        <div className="grid gap-3">
+          {paymentSummary?.records.slice(0, 8).map((record) => (
+            <div key={record.id} className="rounded-2xl border border-[#eadfce] bg-[#fbf6ef] px-4 py-4 text-sm text-[#22304a]">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-semibold">{record.childName} - {record.programmeTitle}</p>
+                  <p className="mt-1 text-[#617184]">{record.method} {record.gateway ? `- ${record.gateway}` : ""} - {monthlyPaymentDisplay(record)}</p>
+                </div>
+                <span className={`rounded-full px-3 py-1 text-xs font-semibold ${record.status === "PENDING" || record.status === "FAILED" ? "bg-[#fff7eb] text-[#8a6326]" : "bg-[#effaf3] text-[#2f6b4b]"}`}>{record.status.replace(/_/g, " ")}</span>
+              </div>
+              <p className="mt-2 text-xs text-[#617184]">Due: {new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(record.dueDate)}{record.paidAt || record.activatedAt ? ` - Activated: ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(record.paidAt ?? record.activatedAt!)}` : ""}</p>
+            </div>
+          ))}
+          {!paymentSummary?.records.length ? (
+            <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm text-[#617184]">Monthly payment records will appear here after your next billing cycle is generated.</p>
+          ) : null}
+        </div>
+      </SectionCard>
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard eyebrow="Guardian" title="Parent details">
           <CompactDetailGrid

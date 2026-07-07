@@ -940,6 +940,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
     { key: "recordings", label: "Recordings", href: "/admin/recordings", icon: BookOpen },
     { key: "hours-log", label: "Hours Log", href: "/admin/hours-log", icon: ClipboardCheck },
+    { key: "monthly-payments", label: "Monthly Payments", href: "/admin/monthly-payments", icon: Banknote },
     { key: "community", label: "Community", href: "/admin/community", icon: Users },
     { key: "feedback", label: "Feedback", href: "/admin/feedback", icon: FileText },
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },

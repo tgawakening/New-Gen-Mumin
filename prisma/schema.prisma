@@ -55,6 +55,7 @@ model ParentProfile {
   user               User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   students           ParentStudent[]
   registrations      Registration[]
+  monthlyPayments    MonthlyPaymentRecord[]
 }
 
 model ParentStudent {
@@ -102,6 +103,7 @@ model StudentProfile {
   scheduleRosters         ClassScheduleRoster[]
   user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   feedbackResponses       WeeklyFeedbackResponse[]
+  monthlyPayments         MonthlyPaymentRecord[]
 }
 
 model TeacherProfile {
@@ -540,6 +542,7 @@ model Enrollment {
   student               StudentProfile         @relation(fields: [studentId], references: [id], onDelete: Cascade)
   journalEntries        JournalEntry[]
   orderItems            OrderItem[]
+  monthlyPayments       MonthlyPaymentRecord[]
 
   @@unique([studentId, programId])
   @@index([parentId, status])
@@ -778,6 +781,7 @@ model OrderItem {
   order              Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   registrationItem   RegistrationItem? @relation(fields: [registrationItemId], references: [id])
   subscription       Subscription?
+  monthlyPayments    MonthlyPaymentRecord[]
 
   @@index([enrollmentId], map: "OrderItem_enrollmentId_fkey")
   @@index([offerId], map: "OrderItem_offerId_fkey")
@@ -854,8 +858,54 @@ model Subscription {
   updatedAt              DateTime           @updatedAt
   orderItemId            String             @unique
   orderItem              OrderItem          @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  monthlyPayments        MonthlyPaymentRecord[]
 }
 
+model MonthlyPaymentRecord {
+  id                     String                    @id @default(cuid())
+  parentId               String
+  studentId              String
+  enrollmentId           String?
+  orderItemId            String?
+  subscriptionId         String?
+  monthKey               String
+  billingPeriodStart     DateTime
+  billingPeriodEnd       DateTime
+  dueDate                DateTime
+  status                 MonthlyPaymentStatus      @default(PENDING)
+  method                 MonthlyPaymentMethod
+  gateway                PaymentGateway?
+  amount                 Int
+  currency               String
+  childName              String
+  programmeTitle         String
+  providerSubscriptionId String?
+  providerInvoiceId      String?
+  paidAt                 DateTime?
+  activatedAt            DateTime?
+  activatedByUserId      String?
+  pendingNotifiedAt      DateTime?
+  reminderSentAt         DateTime?
+  receiptSentAt          DateTime?
+  failureNotifiedAt      DateTime?
+  adminNote              String?                   @db.LongText
+  metadata               Json?
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+  enrollment             Enrollment?               @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  orderItem              OrderItem?                @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  parent                 ParentProfile             @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  student                StudentProfile            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subscription           Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@unique([enrollmentId, monthKey])
+  @@index([parentId, monthKey, status])
+  @@index([studentId, monthKey])
+  @@index([status, dueDate])
+  @@index([method, status, dueDate])
+  @@index([orderItemId], map: "MonthlyPaymentRecord_orderItemId_fkey")
+  @@index([subscriptionId], map: "MonthlyPaymentRecord_subscriptionId_fkey")
+}
 model ScholarshipApplication {
   id                String            @id @default(cuid())
   studentId         String?
@@ -1330,6 +1380,19 @@ enum PaymentStatus {
   REFUNDED
 }
 
+enum MonthlyPaymentStatus {
+  ACTIVE
+  PENDING
+  PAID
+  FAILED
+  ADMIN_ACTIVATED
+  CANCELLED
+}
+
+enum MonthlyPaymentMethod {
+  AUTO
+  MANUAL
+}
 enum SubscriptionStatus {
   INCOMPLETE
   ACTIVE

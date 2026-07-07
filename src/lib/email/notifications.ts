@@ -522,6 +522,108 @@ export async function sendStudentTaskAssignedEmail(input: {
   });
 }
 
+function paymentRowsHtml(rows: Array<{ childName: string; programmeTitle: string; amountLabel: string }>) {
+  return rows.map((row) => `${row.childName} - ${row.programmeTitle}: ${row.amountLabel}`).join("\n");
+}
+
+export async function sendMonthlyPaymentReceiptEmail(input: {
+  toEmail: string;
+  parentName: string;
+  monthLabel: string;
+  totalLabel: string;
+  gatewayLabel: string;
+  rows: Array<{ childName: string; programmeTitle: string; amountLabel: string }>;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Gen-Mumins monthly payment received",
+    template: "monthlyPaymentReceipt",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Monthly payment received",
+      preview: `Your ${input.monthLabel} Gen-Mumins payment has been received.`,
+      intro: `Assalamu alaikum ${input.parentName}, your monthly Gen-Mumins payment has been received through ${input.gatewayLabel}.`,
+      sections: [
+        { label: "Month", value: input.monthLabel },
+        { label: "Children / programmes", value: paymentRowsHtml(input.rows) },
+        { label: "Total", value: input.totalLabel },
+      ],
+      callToAction: { label: "Open parent dashboard", href: resolveHref("/parent/profile") },
+    }),
+  });
+}
+
+export async function sendMonthlyPaymentPendingEmail(input: {
+  toEmail: string;
+  parentName: string;
+  monthLabel: string;
+  totalLabel: string;
+  rows: Array<{ childName: string; programmeTitle: string; amountLabel: string }>;
+  reminder?: boolean;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: input.reminder ? "Reminder: Gen-Mumins monthly payment pending" : "Gen-Mumins monthly payment pending",
+    template: input.reminder ? "monthlyPaymentReminder" : "monthlyPaymentPending",
+    html: renderGenMuminsEmailTemplate({
+      heading: input.reminder ? "Monthly payment still pending" : "Monthly payment pending",
+      preview: `Your ${input.monthLabel} Gen-Mumins payment is pending.`,
+      intro: `Assalamu alaikum ${input.parentName}, your Gen-Mumins monthly payment is pending. Please complete payment to keep learning access active.`,
+      sections: [
+        { label: "Month", value: input.monthLabel },
+        { label: "Children / programmes", value: paymentRowsHtml(input.rows) },
+        { label: "Total", value: input.totalLabel },
+        { label: "JazzCash", value: "Areej - details used for initial manual payment" },
+        { label: "Meezan Bank", value: "Areej - bank details used for initial manual payment" },
+        { label: "EasyPaisa", value: "Irshad Ahmad - 03326725419" },
+        { label: "After payment", value: "Send payment screenshot to WhatsApp 03181602388 so admin can activate your status." },
+      ],
+      callToAction: { label: "Open parent dashboard", href: resolveHref("/parent/profile") },
+    }),
+  });
+}
+
+export async function sendMonthlyPaymentActivatedEmail(input: {
+  toEmail: string;
+  parentName: string;
+  monthLabel: string;
+  totalLabel: string;
+  rows: Array<{ childName: string; programmeTitle: string; amountLabel: string }>;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Gen-Mumins payment status activated",
+    template: "monthlyPaymentActivated",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Payment status activated",
+      preview: `Your ${input.monthLabel} Gen-Mumins access has been activated.`,
+      intro: `Assalamu alaikum ${input.parentName}, admin has activated your monthly payment status.`,
+      sections: [
+        { label: "Month", value: input.monthLabel },
+        { label: "Children / programmes", value: paymentRowsHtml(input.rows) },
+        { label: "Total", value: input.totalLabel },
+      ],
+      callToAction: { label: "Open parent dashboard", href: resolveHref("/parent") },
+    }),
+  });
+}
+
+export async function sendAdminMonthlyPaymentActivatedEmail(input: {
+  parentName: string;
+  parentEmail: string;
+  monthLabel: string;
+  totalLabel: string;
+}) {
+  await sendAdminFacingEmail(
+    "adminMonthlyPaymentActivated",
+    "Monthly payment activated by admin",
+    `${input.parentName}'s monthly payment status was activated from the admin dashboard.`,
+    [
+      { label: "Parent", value: `${input.parentName} (${input.parentEmail})` },
+      { label: "Month", value: input.monthLabel },
+      { label: "Total", value: input.totalLabel },
+    ],
+  );
+}
 export async function sendTeacherHoursSubmittedEmail(input: {
   teacherName: string;
   teacherEmail: string;
