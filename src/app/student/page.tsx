@@ -156,6 +156,12 @@ export default async function StudentDashboardPage() {
         },
       ];
 
+  const houseLeaderboard = quest.leaderboard;
+  const topHousePoints = Math.max(1, ...houseLeaderboard.map((entry) => entry.points));
+  const myHouseRank = Math.max(1, houseLeaderboard.findIndex((entry) => entry.isMine) + 1);
+  const myHouseStanding = houseLeaderboard.find((entry) => entry.isMine) ?? houseLeaderboard[0];
+  const nextHouseAhead = houseLeaderboard.find((entry) => !entry.isMine && entry.points > (myHouseStanding?.points ?? 0));
+  const pointsToNextRank = nextHouseAhead ? Math.max(0, nextHouseAhead.points - (myHouseStanding?.points ?? 0) + 1) : 0;
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
@@ -184,6 +190,95 @@ export default async function StudentDashboardPage() {
         circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
         avatarVariant={avatarVariantForGender(child.profile.gender)}
       />
+      <section className="overflow-hidden rounded-[34px] border border-[#eadfce] bg-white shadow-sm">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
+          <div className="relative overflow-hidden bg-[#10223d] p-5 text-white sm:p-7">
+            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#f39f5f] via-[#f7c56f] to-[#2f6b4b]" />
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#f7c56f]">House leaderboard</p>
+            <h2 className="mt-3 text-3xl font-semibold leading-tight">Your house challenge</h2>
+            <p className="mt-3 max-w-xl text-sm leading-7 text-white/75">
+              Earn points from missions, quizzes, live classes, tasks, reflections, and good effort. The goal is teamwork, not fastest clicks.
+            </p>
+
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[22px] bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">My house</p>
+                <p className="mt-2 text-xl font-semibold">{house.name}</p>
+                <p className="mt-1 text-xs text-white/65">{house.virtue}</p>
+              </div>
+              <div className="rounded-[22px] bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">Rank</p>
+                <p className="mt-2 text-3xl font-semibold">#{myHouseRank}</p>
+                <p className="mt-1 text-xs text-white/65">Current house position</p>
+              </div>
+              <div className="rounded-[22px] bg-white/10 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">My points</p>
+                <p className="mt-2 text-3xl font-semibold">{quest.studentTotal || stats.housePoints}</p>
+                <p className="mt-1 text-xs text-white/65">Your contribution</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Link href="/student/missions" className="rounded-full bg-[#f39f5f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#e07e2b]">
+                Earn points
+              </Link>
+              <Link href="/student/quizzes" className="rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15">
+                Open quizzes
+              </Link>
+              {pointsToNextRank > 0 ? (
+                <span className="rounded-full bg-white/10 px-4 py-3 text-xs font-semibold text-white/80">
+                  {pointsToNextRank} points to climb one rank
+                </span>
+              ) : (
+                <span className="rounded-full bg-white/10 px-4 py-3 text-xs font-semibold text-white/80">
+                  Keep leading with steady effort
+                </span>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-end gap-3 rounded-[28px] bg-white/8 px-4 pt-4">
+              <img src="/gen-mumin-chars/ali-superhero.png" alt="Ali Gen-Mumin character" className="h-36 w-28 rounded-3xl object-cover object-[50%_12%] sm:h-44 sm:w-36" />
+              <img src="/gen-mumin-chars/rania-superhero.png" alt="Rania Gen-Mumin character" className="h-36 w-28 rounded-3xl object-cover object-[50%_12%] sm:h-44 sm:w-36" />
+              <p className="pb-5 text-sm leading-6 text-white/70">Boys and girls help their houses grow through learning and adab.</p>
+            </div>
+          </div>
+
+          <div className="bg-[#fffaf3] p-5 sm:p-7">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Live standings</p>
+                <h3 className="mt-2 text-2xl font-semibold text-[#22304a]">House points board</h3>
+              </div>
+              <span className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#617184] shadow-sm">Updates after activities</span>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              {houseLeaderboard.slice(0, 6).map((entry, index) => {
+                const percentage = Math.max(8, Math.round((entry.points / topHousePoints) * 100));
+                return (
+                  <div key={entry.id} className={`rounded-[24px] border p-4 shadow-sm ${entry.isMine ? "border-[#22304a] bg-white" : "border-[#eadfce] bg-white/80"}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white" style={{ backgroundColor: entry.color ?? "#245d85" }}>
+                          #{index + 1}
+                        </span>
+                        <div>
+                          <p className="font-semibold text-[#22304a]">{entry.name}{entry.isMine ? " - your house" : ""}</p>
+                          <p className="text-xs text-[#617184]">{entry.virtue ?? "Team effort"}</p>
+                        </div>
+                      </div>
+                      <span className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">{entry.points} pts</span>
+                    </div>
+                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-[#ece3d5]">
+                      <div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: entry.color ?? "#245d85" }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <div className="sr-only">
         <ul>
@@ -440,3 +535,5 @@ export default async function StudentDashboardPage() {
     </FamilyDashboardFrame>
   );
 }
+
+

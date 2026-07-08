@@ -7,33 +7,35 @@ import { db } from "@/lib/db";
 const STARTER_HOUSES = [
   {
     slug: "ilm",
-    name: "House of Ilm",
-    virtue: "Knowledge",
-    description: "Earn points through learning, curiosity, and careful revision.",
+    name: "Blue House",
+    virtue: "Learning",
+    description: "Earn points through learning, effort, attendance, quizzes, and tasks.",
     color: "#245d85",
   },
   {
     slug: "amanah",
-    name: "House of Amanah",
-    virtue: "Trust",
-    description: "Earn points through responsibility, honesty, and reliable teamwork.",
+    name: "Green House",
+    virtue: "Teamwork",
+    description: "Earn points through responsibility, participation, and steady teamwork.",
     color: "#2f6b4b",
   },
   {
     slug: "sabr",
-    name: "House of Sabr",
-    virtue: "Patience",
-    description: "Earn points through consistency, reflection, and steady practice.",
-    color: "#8a6326",
+    name: "Yellow House",
+    virtue: "Consistency",
+    description: "Earn points through regular practice, reflections, and weekly progress.",
+    color: "#c27a2c",
   },
   {
     slug: "shujaah",
-    name: "House of Shuja'ah",
-    virtue: "Courage",
-    description: "Earn points through confidence, leadership, and thoughtful participation.",
+    name: "Red House",
+    virtue: "Confidence",
+    description: "Earn points through courage, leadership, and thoughtful participation.",
     color: "#9a4545",
   },
 ] as const;
+
+const STARTER_HOUSE_SLUGS = STARTER_HOUSES.map((house) => house.slug);
 
 const STARTER_MISSIONS = [
   {
@@ -43,11 +45,11 @@ const STARTER_MISSIONS = [
     basePoints: 25,
     questions: [
       {
-        prompt: "Which quality is most connected to Amanah?",
+        prompt: "Which quality helps a house team grow?",
         type: MissionQuestionType.MCQ,
         points: 5,
-        answer: "Trustworthiness",
-        choices: ["Trustworthiness", "Carelessness", "Showing off", "Anger"],
+        answer: "Teamwork",
+        choices: ["Teamwork", "Carelessness", "Showing off", "Anger"],
       },
       {
         prompt: "The Prophet Muhammad was known as Al-Amin before prophethood.",
@@ -135,7 +137,7 @@ export async function ensureStudentHouse(studentId: string) {
   });
   if (existing) return existing;
 
-  const houses = await db.house.findMany({ orderBy: { sortOrder: "asc" } });
+  const houses = await db.house.findMany({ where: { slug: { in: [...STARTER_HOUSE_SLUGS] } }, orderBy: { sortOrder: "asc" } });
   const house = houses[deterministicIndex(studentId, houses.length)];
 
   return db.houseMembership.create({
@@ -182,11 +184,32 @@ export async function getStudentQuestData(studentId: string, programIds: string[
     where: { studentId },
     _sum: { points: true },
   });
+  const houses = await db.house.findMany({ where: { slug: { in: [...STARTER_HOUSE_SLUGS] } }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
+  const houseRows = await db.housePointLedger.groupBy({
+    by: ["houseId"],
+    _sum: { points: true },
+    _count: { houseId: true },
+  });
+  const totals = new Map(houseRows.map((row) => [row.houseId, { points: row._sum.points ?? 0, entries: row._count.houseId }]));
+  const leaderboard = houses
+    .map((house) => ({
+      id: house.id,
+      slug: house.slug,
+      name: house.name,
+      virtue: house.virtue,
+      color: house.color,
+      description: house.description,
+      points: totals.get(house.id)?.points ?? 0,
+      entries: totals.get(house.id)?.entries ?? 0,
+      isMine: house.id === membership.houseId,
+    }))
+    .sort((left, right) => right.points - left.points || left.name.localeCompare(right.name));
 
   return {
     membership,
     missions,
     pointLedger,
+    leaderboard,
     houseTotal: houseTotal._sum.points ?? 0,
     studentTotal: studentTotal._sum.points ?? 0,
   };
@@ -263,3 +286,8 @@ export async function submitMissionAttempt(input: {
 
   return { score, pointsAwarded };
 }
+
+
+
+
+
