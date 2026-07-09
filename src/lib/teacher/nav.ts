@@ -14,7 +14,7 @@ export function getTeacherNavItems() {
     { label: "Quizzes", href: "/teacher/quizzes", icon: "quiz" },
     { label: "Journal", href: "/teacher/journal", icon: "journal" },
     { label: "Feedback", href: "/teacher/feedback", icon: "journal" },
-    { label: "Missions", href: "/teacher/missions", icon: "quiz" },
+    { label: "Missions & Sunnah", href: "/teacher/missions", icon: "quiz" },
     { label: "Reports", href: "/teacher/reports", icon: "reports" },
     { label: "Profile", href: "/teacher/profile", icon: "profile" },
   ];

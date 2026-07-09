@@ -74,7 +74,25 @@ const STARTER_MISSIONS = [
     ],
   },
 ] as const;
+export const SUNNAH_TRACKER_PREFIX = "__SUNNAH_TRACKER__:";
 
+export function buildSunnahTrackerDescription(description?: string | null) {
+  return `${SUNNAH_TRACKER_PREFIX}${JSON.stringify({ description: description?.trim() || null })}`;
+}
+
+export function parseSunnahTrackerDescription(description?: string | null) {
+  if (!description?.startsWith(SUNNAH_TRACKER_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(description.slice(SUNNAH_TRACKER_PREFIX.length)) as { description?: unknown };
+    return { description: typeof parsed.description === "string" ? parsed.description : null };
+  } catch {
+    return { description: null };
+  }
+}
+
+export function isSunnahTrackerMission(mission: { description?: string | null }) {
+  return Boolean(parseSunnahTrackerDescription(mission.description));
+}
 function deterministicIndex(seed: string, length: number) {
   const score = seed.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
   return score % length;
@@ -230,6 +248,8 @@ export async function submitMissionAttempt(input: {
   }
 
   const membership = await ensureStudentHouse(input.studentId);
+  const sunnahTracker = isSunnahTrackerMission(mission);
+  const generalReflection = String(input.formData.get("reflection") || "").trim();
   const attemptCount = await db.missionAttempt.count({
     where: { missionId: mission.id, studentId: input.studentId },
   });
@@ -246,7 +266,8 @@ export async function submitMissionAttempt(input: {
   });
 
   for (const question of mission.questions) {
-    const answer = String(input.formData.get(`answer-${question.id}`) || "").trim();
+    const rawAnswer = input.formData.get(`answer-${question.id}`);
+    const answer = rawAnswer === null && sunnahTracker ? "false" : String(rawAnswer || "").trim();
     const answerKey = question.answerKey as { answer?: string } | null;
     const correctAnswer = answerKey?.answer?.trim().toLowerCase();
     const isObjective = ["MCQ", "TRUE_FALSE", "FILL_IN_BLANK"].includes(question.type);
@@ -268,6 +289,10 @@ export async function submitMissionAttempt(input: {
     });
   }
 
+  if (generalReflection) {
+    reflection = generalReflection;
+  }
+
   const pointsAwarded = mission.basePoints + score;
   await db.missionAttempt.update({
     where: { id: attempt.id },
@@ -279,15 +304,11 @@ export async function submitMissionAttempt(input: {
       studentId: input.studentId,
       points: pointsAwarded,
       reason: `${input.studentName} completed ${mission.title}`,
-      sourceType: "MISSION",
+      sourceType: sunnahTracker ? "SUNNAH_TRACKER" : "MISSION",
       sourceId: mission.id,
     },
   });
 
   return { score, pointsAwarded };
 }
-
-
-
-
 

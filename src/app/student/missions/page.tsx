@@ -4,7 +4,12 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { submitMissionAttempt, getStudentQuestData } from "@/lib/community/quest";
+import {
+  getStudentQuestData,
+  isSunnahTrackerMission,
+  parseSunnahTrackerDescription,
+  submitMissionAttempt,
+} from "@/lib/community/quest";
 import { db } from "@/lib/db";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
@@ -15,7 +20,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ completed?: string }>;
+  searchParams?: Promise<{ completed?: string; type?: string }>;
 };
 
 export default async function StudentMissionsPage({ searchParams }: PageProps) {
@@ -33,6 +38,8 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
   });
   const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? []);
   const params = searchParams ? await searchParams : {};
+  const sunnahOnly = params.type === "sunnah";
+  const visibleMissions = sunnahOnly ? quest.missions.filter(isSunnahTrackerMission) : quest.missions;
 
   async function submitMission(formData: FormData) {
     "use server";
@@ -52,40 +59,57 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
 
     revalidatePath("/student");
     revalidatePath("/student/missions");
-    redirect("/student/missions?completed=1");
+    revalidatePath("/parent/sunnah-tracker");
+    redirect(`/student/missions${sunnahOnly ? "?type=sunnah&" : "?"}completed=1`);
   }
 
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
-      title="Daily Missions"
-      subtitle="Complete short Islamic learning missions, earn house points, and build a steady streak."
+      title={sunnahOnly ? "Sunnah Tracker" : "Daily Missions"}
+      subtitle={
+        sunnahOnly
+          ? "Tick today's Sunnah tasks, add an optional note, and save your daily record."
+          : "Complete short Islamic learning missions, earn house points, and build a steady streak."
+      }
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <ActionToast message={params.completed ? "Mission completed. House points awarded." : undefined} />
+      <ActionToast
+        message={
+          params.completed
+            ? sunnahOnly
+              ? "Sunnah tracker submitted. House points awarded."
+              : "Mission completed. House points awarded."
+            : undefined
+        }
+      />
 
       <MetricGrid
         metrics={[
           { label: "House", value: quest.membership.house.name, hint: quest.membership.house.virtue },
-          { label: "My points", value: String(quest.studentTotal), hint: "Your earned mission points." },
+          { label: "My points", value: String(quest.studentTotal), hint: "Your earned points." },
           { label: "House points", value: String(quest.houseTotal), hint: "Total points from your house." },
-          { label: "Missions", value: String(quest.missions.length), hint: "Currently available missions." },
+          { label: sunnahOnly ? "Trackers" : "Missions", value: String(visibleMissions.length), hint: sunnahOnly ? "Daily Sunnah templates." : "Currently available missions." },
         ]}
       />
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
-        <SectionCard eyebrow="Mission board" title="Available missions" icon="sparkles">
+        <SectionCard eyebrow={sunnahOnly ? "Sunnah tracker" : "Mission board"} title={sunnahOnly ? "Today's Sunnah tasks" : "Available missions"} icon="sparkles">
           <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
-            {quest.missions.map((mission) => {
+            {visibleMissions.map((mission) => {
               const latestAttempt = mission.attempts[0] ?? null;
+              const sunnahTracker = isSunnahTrackerMission(mission);
+              const sunnahDetails = parseSunnahTrackerDescription(mission.description);
               return (
                 <div key={mission.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h3 className="text-lg font-semibold text-[#22304a]">{mission.title}</h3>
                       <p className="mt-2 text-sm leading-6 text-[#5f6b7a]">
-                        {mission.description ?? "Complete this mission to earn house points."}
+                        {sunnahTracker
+                          ? sunnahDetails?.description ?? "Tick each Sunnah task completed today."
+                          : mission.description ?? "Complete this mission to earn house points."}
                       </p>
                     </div>
                     <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
@@ -95,18 +119,26 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
 
                   {latestAttempt ? (
                     <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
-                      Latest attempt: {latestAttempt.pointsAwarded} points - {formatDate(latestAttempt.submittedAt)}
+                      Latest submission: {latestAttempt.pointsAwarded} points - {formatDate(latestAttempt.submittedAt)}
                     </p>
                   ) : null}
 
-                  <details className="mt-4 rounded-[18px] bg-white p-4">
+                  <details className="mt-4 rounded-[18px] bg-white p-4" open={sunnahTracker && !latestAttempt}>
                     <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                      {latestAttempt ? "Try again" : "Start mission"}
+                      {sunnahTracker ? "Open checklist" : latestAttempt ? "Try again" : "Start mission"}
                     </summary>
                     <form action={submitMission} className="mt-4 space-y-3">
                       <input type="hidden" name="missionId" value={mission.id} />
                       {mission.questions.map((question) => {
                         const meta = question.meta as { choices?: string[] } | null;
+                        if (sunnahTracker) {
+                          return (
+                            <label key={question.id} className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf4] px-4 py-3 text-sm font-semibold text-[#22304a]">
+                              <input type="checkbox" name={`answer-${question.id}`} value="true" className="mt-1 h-5 w-5 accent-[#2f6b4b]" />
+                              <span>{question.prompt}</span>
+                            </label>
+                          );
+                        }
                         return (
                           <label key={question.id} className="grid gap-2 text-sm font-semibold text-[#22304a]">
                             {question.prompt}
@@ -131,14 +163,25 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                           </label>
                         );
                       })}
+                      {sunnahTracker ? (
+                        <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                          Optional parent/student note
+                          <textarea name="reflection" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Anything to mention for today?" />
+                        </label>
+                      ) : null}
                       <button disabled={child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                        Submit mission
+                        {sunnahTracker ? "Submit Sunnah tracker" : "Submit mission"}
                       </button>
                     </form>
                   </details>
                 </div>
               );
             })}
+            {!visibleMissions.length ? (
+              <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
+                {sunnahOnly ? "Sunnah tracker templates will appear here after a teacher publishes them." : "Created missions will appear here."}
+              </p>
+            ) : null}
           </div>
         </SectionCard>
 
@@ -153,7 +196,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
             ))}
             {!quest.pointLedger.length ? (
               <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
-                Complete your first mission to start the points ledger.
+                Complete your first activity to start the points ledger.
               </p>
             ) : null}
           </div>
