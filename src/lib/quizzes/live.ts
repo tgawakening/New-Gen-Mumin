@@ -83,13 +83,35 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
   });
   if (!quiz) return null;
 
-  const studentIds = [...new Set(session.responses.map((response) => response.studentId))];
-  const students = studentIds.length
+  const rosterStudents = await db.studentProfile.findMany({
+    where: {
+      enrollments: {
+        some: {
+          programId: quiz.programId,
+          status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+        },
+      },
+    },
+    include: {
+      user: true,
+      houseMembership: { include: { house: true } },
+      registrationStudents: { select: { gender: true }, orderBy: { createdAt: "desc" }, take: 1 },
+    },
+    orderBy: [{ displayName: "asc" }, { createdAt: "asc" }],
+  });
+  const responseStudentIds = session.responses.map((response) => response.studentId);
+  const missingResponseStudents = responseStudentIds.filter((studentId) => !rosterStudents.some((student) => student.id === studentId));
+  const extraStudents = missingResponseStudents.length
     ? await db.studentProfile.findMany({
-        where: { id: { in: studentIds } },
-        include: { user: true, houseMembership: { include: { house: true } } },
+        where: { id: { in: missingResponseStudents } },
+        include: {
+          user: true,
+          houseMembership: { include: { house: true } },
+          registrationStudents: { select: { gender: true }, orderBy: { createdAt: "desc" }, take: 1 },
+        },
       })
     : [];
+  const students = [...rosterStudents, ...extraStudents];
   const studentById = new Map(students.map((student) => [student.id, student]));
 
   return {
@@ -97,11 +119,18 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
     quiz,
     settings: quizSettings(quiz.meta),
     leaderboard: await getHouseLeaderboard(),
+    roster: students.map((student) => ({
+      id: student.id,
+      name: student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
+      gender: student.registrationStudents[0]?.gender ?? null,
+      houseName: student.houseMembership?.house.name ?? "No house",
+    })),
     responses: session.responses.map((response) => {
       const student = studentById.get(response.studentId);
       return {
         ...response,
         studentName: student?.displayName || `${student?.user.firstName ?? "Student"} ${student?.user.lastName ?? ""}`.trim(),
+        studentGender: student?.registrationStudents[0]?.gender ?? null,
         houseName: student?.houseMembership?.house.name ?? "No house",
       };
     }),
@@ -275,3 +304,4 @@ export function liveQuizMessage(response: { isCorrect: boolean | null }) {
   if (response.isCorrect === false) return QUIZ_INCORRECT_MESSAGE;
   return QUIZ_PARTICIPATION_MESSAGE;
 }
+

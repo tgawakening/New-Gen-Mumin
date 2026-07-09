@@ -88,11 +88,16 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
       if (!prompt) continue;
       const type = String(formData.get(`type-${index}`) || "MCQ");
       const points = Math.max(1, Number(formData.get(`points-${index}`) || 1));
-      const answer = String(formData.get(`answer-${index}`) || "").trim();
-      const choices = String(formData.get(`choices-${index}`) || "")
+      const optionChoices = [1, 2, 3, 4]
+        .map((choiceIndex) => String(formData.get(`choice-${index}-${choiceIndex}`) || "").trim())
+        .filter(Boolean);
+      const legacyChoices = String(formData.get(`choices-${index}`) || "")
         .split(/\n|,/)
         .map((choice) => choice.trim())
         .filter(Boolean);
+      const choices = optionChoices.length ? optionChoices : legacyChoices;
+      const correctChoiceIndex = Number(formData.get(`correct-${index}`) || 0);
+      const answer = choices[correctChoiceIndex - 1] || String(formData.get(`answer-${index}`) || "").trim();
 
       await db.quizQuestion.create({
         data: {
@@ -199,3 +204,4 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
     </TeacherDashboardFrame>
   );
 }
+

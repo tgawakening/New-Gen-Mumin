@@ -23,7 +23,7 @@ const choiceStyles = [
   "border-[#16a34a] bg-[#edfff4] text-[#14532d]",
   "border-[#a855f7] bg-[#f6edff] text-[#581c87]",
 ];
-const choiceIcons = ["??", "??", "??", "??"];
+const choiceIcons = ["A", "B", "C", "D"];
 
 function choicesFromMeta(meta: unknown) {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return [];
@@ -70,7 +70,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
       <meta httpEquiv="refresh" content="7" />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
-      <section className="overflow-hidden rounded-[34px] bg-[#10223d] text-white shadow-lg">
+      <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
         <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#f7c56f]">Gen-Mumin House Challenge</p>
@@ -90,7 +90,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
         </div>
       </section>
 
-      <SectionCard eyebrow="Live question" title={live.quiz.title}>
+      <SectionCard eyebrow="Live game" title={live.quiz.title}>
         {live.session.status === "ENDED" ? (
           <div className="rounded-[28px] bg-[#fbf6ef] p-6 text-center text-sm text-[#617184]">
             <p className="text-2xl font-semibold text-[#22304a]">Quiz finished ??</p>
@@ -98,15 +98,15 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
             <Link href="/student/quizzes" className="mt-4 inline-flex rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Back to quizzes</Link>
           </div>
         ) : live.currentQuestion ? (
-          <div className="grid gap-5 xl:grid-cols-[1fr_330px]">
-            <div className="rounded-[32px] bg-[#fffaf3] p-5 sm:p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question now live</p>
-              <h3 className="mt-3 text-3xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
+          <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
+            <div className="rounded-[32px] bg-[#fffaf3] p-5 shadow-sm sm:p-7">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question on screen</p>
+              <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
               <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 
               {live.currentResponse ? (
                 <div className={`mt-6 rounded-[30px] p-6 text-center ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
-                  <p className="text-5xl">{live.currentResponse.isCorrect ? "??" : "??"}</p>
+                  <p className="text-5xl">{live.currentResponse.isCorrect ? "Correct" : "Submitted"}</p>
                   <p className="mt-3 text-2xl font-semibold text-[#22304a]">Answer received</p>
                   <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
@@ -121,7 +121,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                       {choices.map((choice, index) => (
                         <label key={choice} className={`flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 px-5 py-5 text-lg font-semibold shadow-sm transition hover:-translate-y-1 hover:shadow-md ${choiceStyles[index % choiceStyles.length]}`}>
                           <input type="radio" name="answer" value={choice} required className="h-5 w-5 accent-[#22304a]" />
-                          <span className="text-3xl" aria-hidden="true">{choiceIcons[index % choiceIcons.length]}</span>
+                          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-2xl font-bold" aria-hidden="true">{choiceIcons[index % choiceIcons.length]}</span>
                           <span>{choice}</span>
                         </label>
                       ))}
@@ -134,8 +134,8 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                   ) : (
                     <input name="answer" required className="w-full rounded-[28px] border-2 border-[#d8e3ed] bg-white px-5 py-5 text-lg font-semibold text-[#22304a]" placeholder="Type your answer" />
                   )}
-                  <button disabled={dashboard.child.accessLocked} className="w-full rounded-[28px] bg-[#22304a] px-6 py-5 text-lg font-semibold text-white shadow-md transition hover:-translate-y-0.5 disabled:opacity-50 sm:w-auto">
-                    Lock in my answer
+                  <button disabled={dashboard.child.accessLocked} className="w-full rounded-[28px] bg-[#22304a] px-6 py-5 text-xl font-semibold text-white shadow-md transition hover:-translate-y-0.5 disabled:opacity-50">
+                    Lock in answer
                   </button>
                 </form>
               )}
@@ -176,3 +176,4 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     </FamilyDashboardFrame>
   );
 }
+
