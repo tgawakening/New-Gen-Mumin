@@ -52,6 +52,7 @@ type ZoomUserRecordingsResponse = {
     uuid?: string;
     start_time?: string;
   }>;
+  next_page_token?: string;
 };
 
 type CreateZoomMeetingOptions = {
@@ -342,6 +343,28 @@ function isoDateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function recordingSearchWindows(input: { recordingStart?: Date | string | null; from?: Date | string | null; to?: Date | string | null } = {}) {
+  if (input.from || input.to) {
+    const safeTo = input.to ? new Date(input.to) : new Date();
+    const safeFrom = input.from ? new Date(input.from) : new Date(safeTo);
+    if (!Number.isFinite(safeFrom.getTime())) safeFrom.setUTCDate(safeTo.getUTCDate() - 30);
+    if (!Number.isFinite(safeTo.getTime())) safeTo.setTime(Date.now());
+
+    const windows: Array<{ from: string; to: string }> = [];
+    const cursor = new Date(safeFrom);
+    while (cursor <= safeTo) {
+      const windowStart = new Date(cursor);
+      const windowEnd = new Date(cursor);
+      windowEnd.setUTCDate(windowEnd.getUTCDate() + 29);
+      if (windowEnd > safeTo) windowEnd.setTime(safeTo.getTime());
+      windows.push({ from: isoDateOnly(windowStart), to: isoDateOnly(windowEnd) });
+      cursor.setUTCDate(cursor.getUTCDate() + 30);
+    }
+    return windows.length ? windows : [{ from: isoDateOnly(safeFrom), to: isoDateOnly(safeTo) }];
+  }
+
+  return [recordingSearchWindow(input.recordingStart)];
+}
 function recordingSearchWindow(recordingStart?: Date | string | null) {
   const center = recordingStart ? new Date(recordingStart) : new Date();
   if (!Number.isFinite(center.getTime())) {
@@ -377,35 +400,42 @@ export async function getZoomMeetingRecordings(meetingId: string) {
   return (await response.json()) as ZoomMeetingRecordingsResponse;
 }
 
-export async function getZoomUserRecordings(input: { recordingStart?: Date | string | null } = {}) {
+export async function getZoomUserRecordings(input: { recordingStart?: Date | string | null; from?: Date | string | null; to?: Date | string | null } = {}) {
   const accessToken = await getZoomAccessToken();
-  const window = recordingSearchWindow(input.recordingStart);
+  const windows = recordingSearchWindows(input);
   const meetings: ZoomUserRecordingsResponse["meetings"] = [];
   let lastError: string | null = null;
 
   for (const hostUserId of getZoomRecordingHostUserIds()) {
-    const url = new URL(`https://api.zoom.us/v2/users/${encodeURIComponent(hostUserId)}/recordings`);
-    url.searchParams.set("from", window.from);
-    url.searchParams.set("to", window.to);
-    url.searchParams.set("page_size", "100");
+    for (const window of windows) {
+      let nextPageToken = "";
+      do {
+        const url = new URL(`https://api.zoom.us/v2/users/${encodeURIComponent(hostUserId)}/recordings`);
+        url.searchParams.set("from", window.from);
+        url.searchParams.set("to", window.to);
+        url.searchParams.set("page_size", "100");
+        if (nextPageToken) url.searchParams.set("next_page_token", nextPageToken);
 
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-      cache: "no-store",
-    });
+        const response = await fetch(url, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          cache: "no-store",
+        });
 
-    if (!response.ok) {
-      const details = await readZoomError(response);
-      const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
-      lastError = `Zoom user recordings lookup failed for ${hostUserId}: ${details}.${guidance}`;
-      continue;
+        if (!response.ok) {
+          const details = await readZoomError(response);
+          const guidance = response.status === 401 || response.status === 403 ? recordingScopeGuidance() : "";
+          lastError = `Zoom user recordings lookup failed for ${hostUserId}: ${details}.${guidance}`;
+          break;
+        }
+
+        const payload = (await response.json()) as ZoomUserRecordingsResponse;
+        meetings.push(...(payload.meetings ?? []));
+        nextPageToken = payload.next_page_token ?? "";
+      } while (nextPageToken);
     }
-
-    const payload = (await response.json()) as ZoomUserRecordingsResponse;
-    meetings.push(...(payload.meetings ?? []));
   }
 
   if (!meetings.length && lastError) {

@@ -859,7 +859,10 @@ export async function getRecordingProcessingQueueStatus() {
 }
 
 export async function syncRecentZoomRecordingsForAdmin() {
-  const zoomRecordings = await getZoomUserRecordings();
+  const to = new Date();
+  const from = new Date(to);
+  from.setUTCMonth(from.getUTCMonth() - 6);
+  const zoomRecordings = await getZoomUserRecordings({ from, to });
   let imported = 0;
   let skipped = 0;
 
