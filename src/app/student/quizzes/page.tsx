@@ -5,6 +5,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
+import Link from "next/link";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import {
   QUIZ_CORRECT_MESSAGE,
@@ -14,6 +15,7 @@ import {
   ensureStudentHouseMembership,
   getHouseLeaderboard,
 } from "@/lib/community/house-points";
+import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   FamilyDashboardFrame,
@@ -36,9 +38,10 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
   const child = dashboard.child;
   const params = searchParams ? await searchParams : {};
   const totalAttempts = child.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0);
-  const [houseMembership, houseLeaderboard] = await Promise.all([
+  const [houseMembership, houseLeaderboard, activeLiveQuizzes] = await Promise.all([
     ensureStudentHouseMembership(child.id),
     getHouseLeaderboard(),
+    listStudentActiveLiveQuizzes(session.user.id),
   ]);
   const student = await db.studentProfile.findUnique({
     where: { userId: session.user.id },
@@ -243,6 +246,22 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
         ]}
       />
 
+      {activeLiveQuizzes.length ? (
+        <SectionCard eyebrow="Live now" title="Join live quiz">
+          <div className="grid gap-4 md:grid-cols-2">
+            {activeLiveQuizzes.map((liveQuiz) => (
+              <div key={liveQuiz.id} className="rounded-[24px] bg-[#22304a] p-5 text-white shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d7aa]">{liveQuiz.status}</p>
+                <h3 className="mt-2 text-xl font-semibold">{liveQuiz.quiz?.title ?? "Live quiz"}</h3>
+                <p className="mt-2 text-sm text-white/75">{liveQuiz.quiz?.program.title ?? "Programme"}</p>
+                <Link href={`/student/quizzes/live/${liveQuiz.id}`} className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
+                  Join quiz
+                </Link>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
       <SectionCard eyebrow="Assessment system" title="Quiz activity">
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
           {quizForms.map((quiz) => {

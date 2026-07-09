@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getHouseLeaderboard } from "@/lib/community/house-points";
+import { createLiveQuizSession } from "@/lib/quizzes/live";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { ActionToast } from "@/components/dashboard/ActionToast";
@@ -109,6 +110,17 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
     redirect("/teacher/quizzes?reviewed=1");
   }
 
+  async function startLiveQuizAction(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+    const quizId = String(formData.get("quizId") || "");
+    const liveSession = await createLiveQuizSession({ quizId, teacherUserId: currentSession.user.id });
+    revalidatePath("/teacher/quizzes");
+    revalidatePath("/student/quizzes");
+    redirect(`/teacher/quizzes/live/${liveSession.id}`);
+  }
   async function deleteQuizAction(formData: FormData) {
     "use server";
 
@@ -202,6 +214,12 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
                     {quiz.isPublished ? "Published" : "Draft"}
                   </span>
+                  <form action={startLiveQuizAction}>
+                    <input type="hidden" name="quizId" value={quiz.id} />
+                    <button className="rounded-full bg-[#2f6b4b] px-3 py-1.5 text-xs font-semibold text-white">
+                      Start live
+                    </button>
+                  </form>
                   <Link href={`/teacher/quizzes/create?editId=${quiz.id}`} className="rounded-full bg-[#22304a] px-3 py-1.5 text-xs font-semibold text-white">
                     Edit
                   </Link>

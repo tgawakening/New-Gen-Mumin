@@ -659,6 +659,39 @@ model QuizAnswer {
   @@index([attemptId], map: "QuizAnswer_attemptId_fkey")
 }
 
+model QuizLiveSession {
+  id                       String             @id @default(cuid())
+  quizId                   String
+  teacherUserId            String
+  status                   String             @default("WAITING")
+  currentQuestionId        String?
+  currentQuestionStartedAt DateTime?
+  startedAt                DateTime?
+  endedAt                  DateTime?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  responses                QuizLiveResponse[]
+
+  @@index([quizId, status])
+  @@index([teacherUserId, status])
+}
+
+model QuizLiveResponse {
+  id                 String          @id @default(cuid())
+  sessionId          String
+  questionId         String
+  studentId          String
+  answer             Json
+  isCorrect          Boolean?
+  earnedPoints       Int             @default(0)
+  housePointsAwarded Int             @default(0)
+  answeredAt         DateTime        @default(now())
+  session            QuizLiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, questionId, studentId])
+  @@index([studentId, answeredAt])
+  @@index([questionId])
+}
 model Assignment {
   id           String                 @id @default(cuid())
   programId    String
