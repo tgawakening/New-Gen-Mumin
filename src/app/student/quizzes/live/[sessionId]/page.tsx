@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
@@ -67,7 +68,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <meta httpEquiv="refresh" content="7" />
+      <LiveQuizAutoRefresh intervalMs={3000} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
@@ -92,10 +93,16 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
 
       <SectionCard eyebrow="Live game" title={live.quiz.title}>
         {live.session.status === "ENDED" ? (
-          <div className="rounded-[28px] bg-[#fbf6ef] p-6 text-center text-sm text-[#617184]">
-            <p className="text-2xl font-semibold text-[#22304a]">Quiz finished ??</p>
-            <p className="mt-2">Well done to everyone for taking part. Every effort counts.</p>
-            <Link href="/student/quizzes" className="mt-4 inline-flex rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Back to quizzes</Link>
+          <div className="grid gap-5 rounded-[32px] bg-[#0b1630] p-6 text-white md:grid-cols-[1fr_240px] md:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Game complete</p>
+              <h3 className="mt-3 text-3xl font-semibold">Amazing effort from every learner.</h3>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
+                Well done to everyone for taking part. Every effort counts, and the house points have been saved.
+              </p>
+              <Link href="/student/quizzes" className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a]">Back to quizzes</Link>
+            </div>
+            <img src="/gen-mumin-chars/ali-superhero.png" alt="Ali Gen-Mumin character" className="mx-auto h-56 w-44 rounded-[28px] object-cover object-[50%_12%]" />
           </div>
         ) : live.currentQuestion ? (
           <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
@@ -105,13 +112,26 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 
               {live.currentResponse ? (
-                <div className={`mt-6 rounded-[30px] p-6 text-center ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
-                  <p className="text-5xl">{live.currentResponse.isCorrect ? "Correct" : "Submitted"}</p>
-                  <p className="mt-3 text-2xl font-semibold text-[#22304a]">Answer received</p>
-                  <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
-                  <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                    <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">+{live.currentResponse.housePointsAwarded} house points</span>
-                    <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
+                <div className={`mt-6 overflow-hidden rounded-[32px] text-center shadow-sm ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
+                  <div className="grid gap-4 p-5 sm:p-6 md:grid-cols-[1fr_180px] md:items-center md:text-left">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
+                        {live.currentResponse.isCorrect ? "Correct answer" : "Good effort"}
+                      </p>
+                      <h3 className="mt-2 text-3xl font-semibold text-[#22304a]">
+                        {live.currentResponse.isCorrect ? "Brilliant. Your house earned points." : "Submitted. Keep going."}
+                      </h3>
+                      <p className="mt-3 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
+                      <div className="mt-5 flex flex-wrap items-center justify-center gap-3 md:justify-start">
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">+{live.currentResponse.housePointsAwarded} house points</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">Waiting for teacher</span>
+                        <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
+                      </div>
+                    </div>
+                    <img src={live.currentResponse.isCorrect ? "/gen-mumin-chars/ali-superhero.png" : "/gen-mumin-chars/rania-superhero.png"} alt="Gen-Mumin quiz mascot" className="mx-auto h-48 w-36 rounded-[28px] object-cover object-[50%_12%]" />
+                  </div>
+                  <div className="border-t border-white/70 bg-white/55 px-5 py-4 text-sm font-semibold text-[#22304a]">
+                    Keep this page open. The next question will appear automatically.
                   </div>
                 </div>
               ) : (
@@ -128,8 +148,8 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                     </div>
                   ) : live.currentQuestion.type === "TRUE_FALSE" ? (
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <label className="flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 border-[#16a34a] bg-[#edfff4] px-5 py-5 text-xl font-semibold text-[#14532d] shadow-sm transition hover:-translate-y-1"><input type="radio" name="answer" value="true" required className="h-5 w-5 accent-[#22304a]" />? True</label>
-                      <label className="flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 border-[#f97316] bg-[#fff4e8] px-5 py-5 text-xl font-semibold text-[#7c2d12] shadow-sm transition hover:-translate-y-1"><input type="radio" name="answer" value="false" required className="h-5 w-5 accent-[#22304a]" />?? False</label>
+                      <label className="flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 border-[#16a34a] bg-[#edfff4] px-5 py-5 text-xl font-semibold text-[#14532d] shadow-sm transition hover:-translate-y-1"><input type="radio" name="answer" value="true" required className="h-5 w-5 accent-[#22304a]" /><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-2xl font-bold">T</span>True</label>
+                      <label className="flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 border-[#f97316] bg-[#fff4e8] px-5 py-5 text-xl font-semibold text-[#7c2d12] shadow-sm transition hover:-translate-y-1"><input type="radio" name="answer" value="false" required className="h-5 w-5 accent-[#22304a]" /><span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/70 text-2xl font-bold">F</span>False</label>
                     </div>
                   ) : (
                     <input name="answer" required className="w-full rounded-[28px] border-2 border-[#d8e3ed] bg-white px-5 py-5 text-lg font-semibold text-[#22304a]" placeholder="Type your answer" />
@@ -176,4 +196,3 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     </FamilyDashboardFrame>
   );
 }
-
