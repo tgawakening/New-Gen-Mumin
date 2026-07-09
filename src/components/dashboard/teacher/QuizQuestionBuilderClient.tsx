@@ -26,7 +26,7 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
   }
 
   function removeQuestion(index: number) {
-    setQuestions((current) => current.filter((question) => question !== index));
+    setQuestions((current) => (current.length > 1 ? current.filter((question) => question !== index) : current));
   }
 
   return (
@@ -47,23 +47,20 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
 
       <div className="grid items-start gap-3">
         {questions.map((index, position) => (
-          <details key={index} className="rounded-[18px] border border-[#eadfce] bg-[#fbf6ef] p-3" open={position === 0}>
-            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#22304a] [&::-webkit-details-marker]:hidden">
-              <span>Question {position + 1}</span>
+          <section key={index} className="rounded-[18px] border border-[#eadfce] bg-[#fbf6ef] p-3">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-[#22304a]">Question {position + 1}</p>
               {questions.length > 1 ? (
                 <button
                   type="button"
                   title="Delete this question"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    removeQuestion(index);
-                  }}
+                  onClick={() => removeQuestion(index)}
                   className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-white text-[#b24646] transition hover:bg-[#fff4f4]"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               ) : null}
-            </summary>
+            </div>
             <div className="mt-3 grid gap-3">
               <label className="grid gap-1 text-xs font-semibold text-[#617184]">
                 Question prompt
@@ -97,7 +94,7 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
                 </label>
               </div>
             </div>
-          </details>
+          </section>
         ))}
       </div>
     </div>
