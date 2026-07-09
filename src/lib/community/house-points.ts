@@ -3,11 +3,11 @@ import "server-only";
 import { db } from "@/lib/db";
 
 const DEFAULT_HOUSES = [
-  { slug: "red-house", name: "Dar Al-Arqam", virtue: "Courage", color: "#dc2626", sortOrder: 1 },
-  { slug: "green-house", name: "House of Khadijah", virtue: "Sincerity", color: "#16a34a", sortOrder: 2 },
-  { slug: "yellow-house", name: "House of Abu Bakr", virtue: "Truthfulness", color: "#facc15", sortOrder: 3 },
-  { slug: "blue-house", name: "House of Umar", virtue: "Justice", color: "#2563eb", sortOrder: 4 },
-  { slug: "white-house", name: "House of Fatimah", virtue: "Service", color: "#f8fafc", sortOrder: 5 },
+  { slug: "red-house", name: "Red House", virtue: "Courage", color: "#dc2626", sortOrder: 1 },
+  { slug: "green-house", name: "Green House", virtue: "Growth", color: "#16a34a", sortOrder: 2 },
+  { slug: "yellow-house", name: "Yellow House", virtue: "Joy", color: "#facc15", sortOrder: 3 },
+  { slug: "blue-house", name: "Blue House", virtue: "Wisdom", color: "#2563eb", sortOrder: 4 },
+  { slug: "white-house", name: "White House", virtue: "Sincerity", color: "#f8fafc", sortOrder: 5 },
 ] as const;
 
 export const QUIZ_CORRECT_MESSAGE = "Excellent work! You got it correct and earned points for your house.";
@@ -136,4 +136,5 @@ export async function awardHousePointsForQuizAttempt(input: {
     participationPoints,
   };
 }
+
 
