@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
@@ -15,6 +16,14 @@ type PageProps = {
   params: Promise<{ sessionId: string }>;
   searchParams?: Promise<{ notice?: string; error?: string }>;
 };
+
+const choiceStyles = [
+  "border-[#f97316] bg-[#fff4e8] text-[#7c2d12]",
+  "border-[#2563eb] bg-[#edf4ff] text-[#1e3a8a]",
+  "border-[#16a34a] bg-[#edfff4] text-[#14532d]",
+  "border-[#a855f7] bg-[#f6edff] text-[#581c87]",
+];
+const choiceIcons = ["??", "??", "??", "??"];
 
 function choicesFromMeta(meta: unknown) {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return [];
@@ -48,97 +57,119 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
   }
 
   const choices = live.currentQuestion ? choicesFromMeta(live.currentQuestion.meta) : [];
+  const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
 
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
       title="Live Quiz"
-      subtitle="Answer carefully. Correct answers inside the time window earn full points for your house."
+      subtitle="Team quiz time. Correct answers inside the window earn full points for your house."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
       <meta httpEquiv="refresh" content="7" />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House</p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <span className="inline-flex h-12 w-12 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: live.houseMembership.house.color ?? "#f8fafc" }} />
-            <div>
-              <h2 className="text-2xl font-semibold text-[#22304a]">{live.houseMembership.house.name}</h2>
-              <p className="text-sm text-[#617184]">Every effort counts. Your house is cheering you on.</p>
+      <section className="overflow-hidden rounded-[34px] bg-[#10223d] text-white shadow-lg">
+        <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#f7c56f]">Gen-Mumin House Challenge</p>
+            <h2 className="mt-3 text-3xl font-semibold leading-tight sm:text-4xl">Answer together. Win as a house.</h2>
+            <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
+              This is not a fastest-finger podium. Everyone who answers correctly in {live.settings.responseWindowSeconds} seconds earns full points.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">{live.houseMembership.house.name}</span>
+              <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">Trait: {live.houseMembership.house.virtue}</span>
             </div>
           </div>
-        </div>
-        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Answer window</p>
-          <p className="mt-2 text-4xl font-semibold text-[#22304a]">{live.settings.responseWindowSeconds}s</p>
-          <p className="mt-2 text-sm text-[#617184]">Speed does not rank students. Correct answers in the window get full points.</p>
+          <div className="flex items-end justify-center gap-3 rounded-[28px] bg-white/8 px-4 pt-4">
+            <img src="/gen-mumin-chars/ali-superhero.png" alt="Ali Gen-Mumin character" className="h-44 w-36 rounded-3xl object-cover object-[50%_12%] sm:h-56 sm:w-44" />
+            <img src="/gen-mumin-chars/rania-superhero.png" alt="Rania Gen-Mumin character" className="h-44 w-36 rounded-3xl object-cover object-[50%_12%] sm:h-56 sm:w-44" />
+          </div>
         </div>
       </section>
 
       <SectionCard eyebrow="Live question" title={live.quiz.title}>
         {live.session.status === "ENDED" ? (
-          <div className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#617184]">
-            This live quiz has ended. <Link href="/student/quizzes" className="font-semibold text-[#22304a]">Back to quizzes</Link>
+          <div className="rounded-[28px] bg-[#fbf6ef] p-6 text-center text-sm text-[#617184]">
+            <p className="text-2xl font-semibold text-[#22304a]">Quiz finished ??</p>
+            <p className="mt-2">Well done to everyone for taking part. Every effort counts.</p>
+            <Link href="/student/quizzes" className="mt-4 inline-flex rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Back to quizzes</Link>
           </div>
         ) : live.currentQuestion ? (
-          <div className="grid gap-5 lg:grid-cols-[1fr_300px]">
-            <div className="rounded-[28px] bg-[#fbf6ef] p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Question</p>
-              <h3 className="mt-3 text-2xl font-semibold text-[#22304a]">{live.currentQuestion.prompt}</h3>
-              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points</p>
+          <div className="grid gap-5 xl:grid-cols-[1fr_330px]">
+            <div className="rounded-[32px] bg-[#fffaf3] p-5 sm:p-6">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question now live</p>
+              <h3 className="mt-3 text-3xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
+              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 
               {live.currentResponse ? (
-                <div className="mt-5 rounded-[24px] bg-white p-5">
-                  <p className="text-lg font-semibold text-[#22304a]">Answer received</p>
-                  <p className="mt-2 text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
-                  <p className="mt-3 rounded-full bg-[#effaf3] px-4 py-2 text-sm font-semibold text-[#2f6b4b]">
-                    +{live.currentResponse.housePointsAwarded} house points this question
-                  </p>
+                <div className={`mt-6 rounded-[30px] p-6 text-center ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
+                  <p className="text-5xl">{live.currentResponse.isCorrect ? "??" : "??"}</p>
+                  <p className="mt-3 text-2xl font-semibold text-[#22304a]">Answer received</p>
+                  <p className="mx-auto mt-2 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                    <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">+{live.currentResponse.housePointsAwarded} house points</span>
+                    <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
+                  </div>
                 </div>
               ) : (
-                <form action={submitAnswerAction} className="mt-5 space-y-4">
+                <form action={submitAnswerAction} className="mt-6 space-y-5">
                   {live.currentQuestion.type === "MCQ" && choices.length ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      {choices.map((choice) => (
-                        <label key={choice} className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white px-4 py-4 text-sm font-semibold text-[#22304a] shadow-sm">
-                          <input type="radio" name="answer" value={choice} required />
-                          {choice}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {choices.map((choice, index) => (
+                        <label key={choice} className={`flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 px-5 py-5 text-lg font-semibold shadow-sm transition hover:-translate-y-1 hover:shadow-md ${choiceStyles[index % choiceStyles.length]}`}>
+                          <input type="radio" name="answer" value={choice} required className="h-5 w-5 accent-[#22304a]" />
+                          <span className="text-3xl" aria-hidden="true">{choiceIcons[index % choiceIcons.length]}</span>
+                          <span>{choice}</span>
                         </label>
                       ))}
                     </div>
                   ) : live.currentQuestion.type === "TRUE_FALSE" ? (
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white px-4 py-4 text-sm font-semibold text-[#22304a] shadow-sm"><input type="radio" name="answer" value="true" required />True</label>
-                      <label className="flex cursor-pointer items-center gap-3 rounded-2xl bg-white px-4 py-4 text-sm font-semibold text-[#22304a] shadow-sm"><input type="radio" name="answer" value="false" required />False</label>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 border-[#16a34a] bg-[#edfff4] px-5 py-5 text-xl font-semibold text-[#14532d] shadow-sm transition hover:-translate-y-1"><input type="radio" name="answer" value="true" required className="h-5 w-5 accent-[#22304a]" />? True</label>
+                      <label className="flex min-h-[104px] cursor-pointer items-center gap-4 rounded-[28px] border-2 border-[#f97316] bg-[#fff4e8] px-5 py-5 text-xl font-semibold text-[#7c2d12] shadow-sm transition hover:-translate-y-1"><input type="radio" name="answer" value="false" required className="h-5 w-5 accent-[#22304a]" />?? False</label>
                     </div>
                   ) : (
-                    <input name="answer" required className="w-full rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 text-sm" placeholder="Type your answer" />
+                    <input name="answer" required className="w-full rounded-[28px] border-2 border-[#d8e3ed] bg-white px-5 py-5 text-lg font-semibold text-[#22304a]" placeholder="Type your answer" />
                   )}
-                  <button disabled={dashboard.child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:opacity-50">
-                    Submit answer
+                  <button disabled={dashboard.child.accessLocked} className="w-full rounded-[28px] bg-[#22304a] px-6 py-5 text-lg font-semibold text-white shadow-md transition hover:-translate-y-0.5 disabled:opacity-50 sm:w-auto">
+                    Lock in my answer
                   </button>
                 </form>
               )}
             </div>
 
-            <div className="rounded-[28px] bg-[#22304a] p-5 text-white">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d7aa]">House leaderboard</p>
+            <div className="rounded-[32px] bg-[#22304a] p-5 text-white">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#f3d7aa]">House leaderboard</p>
+              <div className="mt-4 flex items-center gap-3 rounded-[24px] bg-white/10 p-3">
+                <img src="/gen-mumin-chars/ali-superhero.png" alt="Ali avatar" className="h-14 w-14 rounded-2xl object-cover object-[50%_12%]" />
+                <img src="/gen-mumin-chars/rania-superhero.png" alt="Rania avatar" className="h-14 w-14 rounded-2xl object-cover object-[50%_12%]" />
+                <p className="text-sm text-white/75">Boys and girls earn together for their houses.</p>
+              </div>
               <div className="mt-4 space-y-3">
                 {live.leaderboard.map((house, index) => (
-                  <div key={house.id} className="flex items-center justify-between gap-3 rounded-2xl bg-white/10 px-4 py-3 text-sm">
-                    <span className="font-semibold">{index + 1}. {house.name}</span>
-                    <span>{house.points} pts</span>
+                  <div key={house.id} className="rounded-2xl bg-white/10 p-4 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-semibold">#{index + 1} {house.name}</span>
+                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-[#22304a]">{house.points} pts</span>
+                    </div>
+                    <p className="mt-1 text-xs text-white/65">{house.virtue}</p>
                   </div>
                 ))}
               </div>
             </div>
           </div>
         ) : (
-          <div className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#617184]">
-            Waiting for your teacher to open the first question. This page refreshes automatically.
+          <div className="grid gap-5 rounded-[32px] bg-[#10223d] p-6 text-white md:grid-cols-[1fr_280px] md:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Waiting room</p>
+              <h3 className="mt-3 text-3xl font-semibold">Waiting for your teacher to open the next question.</h3>
+              <p className="mt-3 text-sm leading-7 text-white/75">Keep this page open. It refreshes automatically, and your answer cards will appear here when the teacher starts.</p>
+              <div className="mt-5"><LiveQuizCelebrationClient tone="ready" label="Test quiz sound" /></div>
+            </div>
+            <img src="/gen-mumin-chars/rania-superhero.png" alt="Rania waiting mascot" className="mx-auto h-56 w-44 rounded-[28px] object-cover object-[50%_12%]" />
           </div>
         )}
       </SectionCard>
