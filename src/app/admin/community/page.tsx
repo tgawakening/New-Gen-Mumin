@@ -5,6 +5,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility, Mod
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { ensureDefaultHouses, getHouseLeaderboard } from "@/lib/community/house-points";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 
 type PageProps = {
@@ -47,7 +48,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
   if (!session || session.user.role !== "ADMIN") redirect("/admin");
 
   const params = searchParams ? await searchParams : {};
-  const [flaggedMessages, recentRooms, programs] = await Promise.all([
+  const [flaggedMessages, recentRooms, programs, houses, houseLeaderboard, studentsForHouses] = await Promise.all([
     db.communityMessage.findMany({
       where: { status: CommunityMessageStatus.FLAGGED },
       orderBy: { createdAt: "desc" },
@@ -92,8 +93,51 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
       orderBy: { sortOrder: "asc" },
       select: { id: true, title: true },
     }),
+    ensureDefaultHouses(),
+    getHouseLeaderboard(),
+    db.studentProfile.findMany({
+      where: { enrollments: { some: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } } } },
+      include: { user: true, houseMembership: { include: { house: true } } },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
   ]);
 
+  async function assignHouse(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+
+    const studentId = String(formData.get("studentId") || "");
+    const houseId = String(formData.get("houseId") || "");
+    if (!studentId || !houseId) redirect(noticeHref("Choose a student and house.", "error"));
+
+    await db.houseMembership.upsert({
+      where: { studentId },
+      create: { studentId, houseId },
+      update: { houseId },
+    });
+
+    revalidatePath("/admin/community");
+    revalidatePath("/student/quizzes");
+    revalidatePath("/parent/quizzes");
+    revalidatePath("/teacher/quizzes");
+    redirect(noticeHref("Student house updated."));
+  }
+
+  async function resetHousePoints() {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    await db.housePointLedger.deleteMany({});
+    revalidatePath("/admin/community");
+    revalidatePath("/student/quizzes");
+    revalidatePath("/parent/quizzes");
+    revalidatePath("/teacher/quizzes");
+    redirect(noticeHref("House points reset."));
+  }
   async function createRoom(formData: FormData) {
     "use server";
 
@@ -320,6 +364,59 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
           </div>
         </div>
 
+        <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+          <div className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">House system</p>
+                <h2 className="mt-2 text-xl font-semibold text-[#22304a]">House leaderboard</h2>
+              </div>
+              <form action={resetHousePoints}>
+                <button className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
+                  Reset points
+                </button>
+              </form>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {houseLeaderboard.map((house, index) => (
+                <div key={house.id} className="rounded-2xl bg-[#fbf6ef] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="h-9 w-9 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: house.color ?? "#f8fafc" }} />
+                    <span className="text-xs font-semibold text-[#617184]">#{index + 1}</span>
+                  </div>
+                  <p className="mt-3 font-semibold text-[#22304a]">{house.name}</p>
+                  <p className="text-2xl font-semibold text-[#0f4d81]">{house.points} pts</p>
+                  <p className="text-xs text-[#617184]">{house.virtue}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">House assignment</p>
+              <h2 className="mt-2 text-xl font-semibold text-[#22304a]">Assign student to house</h2>
+            </div>
+            <form action={assignHouse} className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+              <select name="studentId" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                <option value="">Choose active student</option>
+                {studentsForHouses.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {(student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim())} - {student.houseMembership?.house.name ?? "No house"}
+                  </option>
+                ))}
+              </select>
+              <select name="houseId" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                <option value="">Choose house</option>
+                {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
+              </select>
+              <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white">Assign</button>
+            </form>
+            <p className="text-sm leading-7 text-[#617184]">
+              Students without a house are automatically placed into the least-filled house when they open quizzes, but admin can override it here.
+            </p>
+          </div>
+        </section>
         <section className="grid gap-5 xl:grid-cols-2">
           <div className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
             <div>

@@ -6,6 +6,11 @@ import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
+import {
+  awardHousePointsForQuizAttempt,
+  ensureStudentHouseMembership,
+  getHouseLeaderboard,
+} from "@/lib/community/house-points";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   ChildSelector,
@@ -35,6 +40,9 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const totalAttempts = selectedChild?.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0) ?? 0;
   const bestScore = selectedChild?.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore;
+  const [houseMembership, houseLeaderboard] = selectedChild
+    ? await Promise.all([ensureStudentHouseMembership(selectedChild.id), getHouseLeaderboard()])
+    : [null, []];
   const quizForms = selectedChild
     ? await db.quiz.findMany({
         where: {
@@ -92,6 +100,8 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
     const attemptCount = await db.quizAttempt.count({ where: { quizId, studentId: childId } });
     let autoScore = 0;
     let hasManual = false;
+    let correctCount = 0;
+    let objectiveQuestionCount = 0;
     const attempt = await db.quizAttempt.create({
       data: {
         quizId,
@@ -107,7 +117,11 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
       const correctAnswer = answerKey?.answer?.trim().toLowerCase();
       const isObjective = ["MCQ", "TRUE_FALSE", "FILL_IN_BLANK"].includes(question.type);
       const isCorrect = Boolean(isObjective && correctAnswer && answer.toLowerCase() === correctAnswer);
-      if (isObjective && isCorrect) autoScore += question.points;
+      if (isObjective) objectiveQuestionCount += 1;
+      if (isObjective && isCorrect) {
+        autoScore += question.points;
+        correctCount += 1;
+      }
       if (!isObjective) hasManual = true;
 
       await db.quizAnswer.create({
@@ -124,6 +138,15 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
     await db.quizAttempt.update({
       where: { id: attempt.id },
       data: { autoScore, manualScore: hasManual ? null : autoScore },
+    });
+
+    await awardHousePointsForQuizAttempt({
+      attemptId: attempt.id,
+      studentId: childId,
+      quizTitle: quiz.title,
+      objectiveScore: autoScore,
+      correctCount,
+      totalObjectiveQuestions: objectiveQuestionCount,
     });
 
     const teachers = await db.teacherProgram.findMany({
@@ -167,12 +190,38 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
 
       {selectedChild ? (
         <>
+          {houseMembership ? (
+            <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Learner house</p>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  <span className="inline-flex h-12 w-12 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: houseMembership.house.color ?? "#f8fafc" }} />
+                  <div>
+                    <h2 className="text-2xl font-semibold text-[#22304a]">{houseMembership.house.name}</h2>
+                    <p className="text-sm text-[#617184]">Quiz points, attendance, homework, and future Sunnah tracker points can feed this house total.</p>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House leaderboard</p>
+                <div className="mt-3 space-y-2">
+                  {houseLeaderboard.map((house, index) => (
+                    <div key={house.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-2 text-sm">
+                      <span className="font-semibold text-[#22304a]">{index + 1}. {house.name}</span>
+                      <span className="font-semibold text-[#0f4d81]">{house.points} pts</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           <MetricGrid
             metrics={[
               { label: "Quizzes", value: String(selectedChild.quizzes.length), hint: "Published assessments for the learner." },
               { label: "Attempts", value: String(totalAttempts), hint: "Total attempt history recorded." },
               { label: "Best score", value: bestScore === undefined ? "Pending" : String(bestScore), hint: "Highest recorded score." },
-              { label: "Question types", value: "4", hint: "MCQ, true/false, short answer, and fill-in-blank." },
+              { label: "House", value: houseMembership?.house.name.replace(" House", "") ?? "Pending", hint: "Quiz points support the learner house." },
             ]}
           />
 

@@ -1,0 +1,1 @@
+ALTER TABLE `Quiz` ADD COLUMN `meta` JSON NULL;

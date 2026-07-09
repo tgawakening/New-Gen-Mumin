@@ -82,7 +82,7 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
                 </label>
                 <label className="grid gap-1 text-xs font-semibold text-[#617184]">
                   Points
-                  <input name={`points-${index}`} type="number" min="1" defaultValue={initialQuestions[position]?.points ?? 1} className="min-h-11 rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
+                  <input name={`points-${index}`} type="number" min="1" defaultValue={initialQuestions[position]?.points ?? 10} className="min-h-11 rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" />
                 </label>
               </div>
 

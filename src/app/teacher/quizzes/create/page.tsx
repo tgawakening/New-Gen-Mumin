@@ -66,6 +66,13 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
       type: String(formData.get("type") || "PRE_LESSON") as "PRE_LESSON" | "POST_LESSON",
       isPublished: formData.get("isPublished") === "on",
       timeLimitSeconds: Number(formData.get("timeLimitMinutes") || 0) > 0 ? Number(formData.get("timeLimitMinutes")) * 60 : null,
+      meta: {
+        kahootStyle: true,
+        fairScoring: true,
+        responseWindowSeconds: Math.max(1, Number(formData.get("responseWindowSeconds") || 10)),
+        participationPoints: Math.max(0, Number(formData.get("participationPoints") || 1)),
+        streakBonusPoints: Math.max(0, Number(formData.get("streakBonusPoints") || 5)),
+      },
     };
 
     const quiz = quizId
@@ -153,6 +160,23 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
             </label>
           </div>
 
+          <div className="grid gap-4 rounded-[22px] border border-[#eadfce] bg-[#fbf6ef] p-4 md:grid-cols-3">
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              Full-point answer window
+              <input name="responseWindowSeconds" type="number" min="1" defaultValue={10} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              <span className="text-xs font-normal text-[#617184]">Anyone correct inside this window gets full points. No fastest-wins scoring.</span>
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              Participation points
+              <input name="participationPoints" type="number" min="0" defaultValue={1} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              <span className="text-xs font-normal text-[#617184]">Optional points for taking part.</span>
+            </label>
+            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+              Perfect quiz bonus
+              <input name="streakBonusPoints" type="number" min="0" defaultValue={5} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              <span className="text-xs font-normal text-[#617184]">Bonus when every objective answer is correct.</span>
+            </label>
+          </div>
           <QuizQuestionBuilderClient
             initialQuestions={editingQuiz?.questions.map((question) => {
               const answerKey = question.answerKey as { answer?: string } | null;
@@ -162,7 +186,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
                 type: question.type,
                 answer: answerKey?.answer ?? "",
                 choices: Array.isArray(meta?.choices) ? meta.choices.join(", ") : "",
-                points: question.points,
+                points: question.points || 10,
               };
             })}
           />

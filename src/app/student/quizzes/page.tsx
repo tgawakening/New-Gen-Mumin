@@ -6,6 +6,14 @@ import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
+import {
+  QUIZ_CORRECT_MESSAGE,
+  QUIZ_INCORRECT_MESSAGE,
+  QUIZ_PARTICIPATION_MESSAGE,
+  awardHousePointsForQuizAttempt,
+  ensureStudentHouseMembership,
+  getHouseLeaderboard,
+} from "@/lib/community/house-points";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   FamilyDashboardFrame,
@@ -14,7 +22,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ submitted?: string }>;
+  searchParams?: Promise<{ submitted?: string; result?: string }>;
 };
 
 export default async function StudentQuizzesPage({ searchParams }: PageProps) {
@@ -28,6 +36,10 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
   const child = dashboard.child;
   const params = searchParams ? await searchParams : {};
   const totalAttempts = child.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0);
+  const [houseMembership, houseLeaderboard] = await Promise.all([
+    ensureStudentHouseMembership(child.id),
+    getHouseLeaderboard(),
+  ]);
   const student = await db.studentProfile.findUnique({
     where: { userId: session.user.id },
     include: {
@@ -51,6 +63,19 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
       },
     },
   });
+  const resultAttempt = params.result
+    ? await db.quizAttempt.findFirst({
+        where: { id: params.result, studentId: child.id },
+        include: {
+          quiz: { include: { questions: { orderBy: { sortOrder: "asc" } }, program: true } },
+          answers: true,
+        },
+      })
+    : null;
+  const resultHousePoints = resultAttempt
+    ? await db.housePointLedger.findFirst({ where: { sourceType: "QUIZ", sourceId: resultAttempt.id, studentId: child.id } })
+    : null;
+
   const quizForms = student?.enrollments.flatMap((enrollment) =>
     enrollment.program.quizzes.map((quiz) => ({
       ...quiz,
@@ -81,6 +106,8 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
     const attemptCount = await db.quizAttempt.count({ where: { quizId, studentId: currentStudent.id } });
     let autoScore = 0;
     let hasManual = false;
+    let correctCount = 0;
+    let objectiveQuestionCount = 0;
     const attempt = await db.quizAttempt.create({
       data: {
         quizId,
@@ -96,7 +123,11 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
       const correctAnswer = answerKey?.answer?.trim().toLowerCase();
       const isObjective = ["MCQ", "TRUE_FALSE", "FILL_IN_BLANK"].includes(question.type);
       const isCorrect = Boolean(isObjective && correctAnswer && answer.toLowerCase() === correctAnswer);
-      if (isObjective && isCorrect) autoScore += question.points;
+      if (isObjective) objectiveQuestionCount += 1;
+      if (isObjective && isCorrect) {
+        autoScore += question.points;
+        correctCount += 1;
+      }
       if (!isObjective) hasManual = true;
 
       await db.quizAnswer.create({
@@ -113,6 +144,15 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
     await db.quizAttempt.update({
       where: { id: attempt.id },
       data: { autoScore, manualScore: hasManual ? null : autoScore },
+    });
+
+    await awardHousePointsForQuizAttempt({
+      attemptId: attempt.id,
+      studentId: currentStudent.id,
+      quizTitle: quiz.title,
+      objectiveScore: autoScore,
+      correctCount,
+      totalObjectiveQuestions: objectiveQuestionCount,
     });
 
     const teachers = await db.teacherProgram.findMany({
@@ -132,7 +172,7 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
 
     revalidatePath("/student/quizzes");
     revalidatePath("/teacher/quizzes");
-    redirect("/student/quizzes?submitted=1");
+    redirect(`/student/quizzes?submitted=1&result=${attempt.id}`);
   }
 
   return (
@@ -145,12 +185,61 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
     >
       <ActionToast message={params.submitted ? "Quiz submitted successfully. Your teacher has been notified." : undefined} />
 
+      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Your house</p>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <span className="inline-flex h-12 w-12 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: houseMembership.house.color ?? "#f8fafc" }} />
+            <div>
+              <h2 className="text-2xl font-semibold text-[#22304a]">{houseMembership.house.name}</h2>
+              <p className="text-sm text-[#617184]">{houseMembership.house.virtue} team points grow when you learn and take part.</p>
+            </div>
+          </div>
+        </div>
+        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House leaderboard</p>
+          <div className="mt-3 space-y-2">
+            {houseLeaderboard.map((house, index) => (
+              <div key={house.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-2 text-sm">
+                <span className="font-semibold text-[#22304a]">{index + 1}. {house.name}</span>
+                <span className="font-semibold text-[#0f4d81]">{house.points} pts</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {resultAttempt ? (
+        <SectionCard eyebrow="Quiz recognition" title="Well done for taking part">
+          <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
+            <div className="rounded-[24px] bg-[#fbf6ef] p-5">
+              <h3 className="text-xl font-semibold text-[#22304a]">{resultAttempt.quiz.title}</h3>
+              <p className="mt-2 text-sm leading-7 text-[#5f6b7a]">{QUIZ_PARTICIPATION_MESSAGE}</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {resultAttempt.answers.map((answer, index) => (
+                  <div key={answer.id} className="rounded-2xl bg-white p-4 text-sm">
+                    <p className="font-semibold text-[#22304a]">Question {index + 1}</p>
+                    <p className="mt-2 text-[#5f6b7a]">{answer.isCorrect ? QUIZ_CORRECT_MESSAGE : answer.isCorrect === false ? QUIZ_INCORRECT_MESSAGE : "Your teacher will review this answer."}</p>
+                    <p className="mt-2 text-xs font-semibold text-[#0f4d81]">{answer.earnedPoints ?? 0} quiz points</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="rounded-[24px] bg-[#22304a] p-5 text-white">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d7aa]">House points earned</p>
+              <p className="mt-3 text-5xl font-semibold">+{resultHousePoints?.points ?? 0}</p>
+              <p className="mt-3 text-sm leading-6 text-white/80">Added to {houseMembership.house.name}. Correct answers earn full points; speed does not decide the winner.</p>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
       <MetricGrid
         metrics={[
           { label: "Published quizzes", value: String(child.quizzes.length), hint: "Pre-lesson and post-lesson assessments." },
           { label: "Attempts", value: String(totalAttempts), hint: "Total quiz attempt history." },
           { label: "Best score", value: child.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore?.toString() ?? "Pending", hint: "Highest recorded objective/manual score." },
-          { label: "Question types", value: "5", hint: "MCQ, multiple select, true/false, short answer, fill-in-blank." },
+          { label: "House", value: houseMembership.house.name.replace(" House", ""), hint: "Quiz points support your house team." },
         ]}
       />
 

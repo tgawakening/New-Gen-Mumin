@@ -596,6 +596,7 @@ model Quiz {
   type             QuizType
   isPublished      Boolean        @default(false)
   timeLimitSeconds Int?
+  meta             Json?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   program          Program        @relation(fields: [programId], references: [id], onDelete: Cascade)

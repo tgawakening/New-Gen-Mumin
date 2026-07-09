@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
+import { getHouseLeaderboard } from "@/lib/community/house-points";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { ActionToast } from "@/components/dashboard/ActionToast";
@@ -22,6 +23,7 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const assignedProgramIds = dashboard.rosters.map((roster) => roster.programId);
+  const houseLeaderboard = await getHouseLeaderboard();
   const quizLibrary = await db.quiz.findMany({
     where: { programId: { in: assignedProgramIds } },
     include: {
@@ -151,6 +153,22 @@ export default async function TeacherQuizzesPage({ searchParams }: PageProps) {
         }
         tone={params.error ? "error" : "success"}
       />
+
+      <TeacherSection eyebrow="House system" title="Live house leaderboard">
+        <div className="grid gap-3 md:grid-cols-5">
+          {houseLeaderboard.map((house, index) => (
+            <div key={house.id} className="rounded-[22px] border border-[#eadfce] bg-[#fbf6ef] p-4">
+              <div className="flex items-center justify-between gap-2">
+                <span className="h-8 w-8 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: house.color ?? "#f8fafc" }} />
+                <span className="text-xs font-semibold text-[#617184]">#{index + 1}</span>
+              </div>
+              <h3 className="mt-3 text-sm font-semibold text-[#22304a]">{house.name}</h3>
+              <p className="mt-1 text-2xl font-semibold text-[#0f4d81]">{house.points}</p>
+              <p className="text-xs text-[#617184]">{house.virtue}</p>
+            </div>
+          ))}
+        </div>
+      </TeacherSection>
 
       <TeacherMetricGrid
         metrics={[
