@@ -247,21 +247,34 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
       />
 
       {activeLiveQuizzes.length ? (
-        <SectionCard eyebrow="Live now" title="Join live quiz">
+        <SectionCard eyebrow="Live now" title="A live quiz has started">
           <div className="grid gap-4 md:grid-cols-2">
             {activeLiveQuizzes.map((liveQuiz) => (
-              <div key={liveQuiz.id} className="rounded-[24px] bg-[#22304a] p-5 text-white shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d7aa]">{liveQuiz.status}</p>
-                <h3 className="mt-2 text-xl font-semibold">{liveQuiz.quiz?.title ?? "Live quiz"}</h3>
-                <p className="mt-2 text-sm text-white/75">{liveQuiz.quiz?.program.title ?? "Programme"}</p>
-                <Link href={`/student/quizzes/live/${liveQuiz.id}`} className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
-                  Join quiz
-                </Link>
+              <div key={liveQuiz.id} className="overflow-hidden rounded-[30px] bg-[#0b1630] text-white shadow-lg">
+                <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-[1fr_150px] lg:items-center">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Teacher opened the game</p>
+                    <h3 className="mt-3 text-2xl font-semibold">{liveQuiz.quiz?.title ?? "Live quiz"}</h3>
+                    <p className="mt-2 text-sm leading-6 text-white/75">
+                      Join now. Questions will appear one by one as your teacher opens them, and your house points update after each answer.
+                    </p>
+                    <Link href={`/student/quizzes/live/${liveQuiz.id}`} className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
+                      Enter live quiz
+                    </Link>
+                  </div>
+                  <img src="/gen-mumin-chars/ali-superhero.png" alt="Gen-Mumin live quiz character" className="mx-auto h-44 w-32 rounded-[26px] object-cover object-[50%_12%]" />
+                </div>
               </div>
             ))}
           </div>
         </SectionCard>
-      ) : null}
+      ) : (
+        <SectionCard eyebrow="Live quiz lobby" title="Waiting for teacher">
+          <div className="rounded-[28px] bg-[#fbf6ef] p-5 text-sm leading-7 text-[#5f6b7a]">
+            Live quizzes will appear here only when your teacher starts the game during class. Keep this tab ready during a live session.
+          </div>
+        </SectionCard>
+      )}
       <SectionCard eyebrow="Assessment system" title="Quiz activity">
         <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
           {quizForms.map((quiz) => {
@@ -282,42 +295,9 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
               <p className="mt-3 text-sm text-[#5f6b7a]">
                 Latest score: {latestAttempt?.manualScore ?? latestAttempt?.autoScore ?? "Not attempted"}
               </p>
-              <details className="group mt-4 rounded-[18px] bg-white p-4">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm font-semibold text-[#22304a]">
-                  <span>Start quiz</span>
-                  <span className="rounded-full bg-[#22304a] px-3 py-1.5 text-xs text-white group-open:hidden">Open</span>
-                  <span className="hidden rounded-full border border-[#d8e3ed] px-3 py-1.5 text-xs group-open:inline">Close</span>
-                </summary>
-                <div className="mt-4 rounded-2xl border border-[#eadfce] bg-[#fff9f2] p-4 text-sm leading-6 text-[#5f6b7a]">
-                  Questions are shown only after you start this quiz. Answer carefully, then submit once; your teacher will be notified automatically.
-                </div>
-                <form action={submitQuizAction} className="mt-4 space-y-3">
-                  <input type="hidden" name="quizId" value={quiz.id} />
-                  {quiz.questions.map((question) => {
-                    const meta = question.meta as { choices?: string[] } | null;
-                    return (
-                      <label key={question.id} className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                        {question.prompt}
-                        {question.type === "MCQ" && meta?.choices?.length ? (
-                          <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                            <option value="">Select answer</option>
-                            {meta.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-                          </select>
-                        ) : question.type === "TRUE_FALSE" ? (
-                          <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                            <option value="">Select answer</option>
-                            <option value="true">True</option>
-                            <option value="false">False</option>
-                          </select>
-                        ) : (
-                          <input name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Type your answer" />
-                        )}
-                      </label>
-                    );
-                  })}
-                  <button disabled={child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Submit quiz</button>
-                </form>
-              </details>
+              <div className="mt-4 rounded-[18px] border border-[#eadfce] bg-white p-4 text-sm leading-6 text-[#5f6b7a]">
+                This quiz is listed for your learning record. If the teacher runs it live, it will appear above as a game and questions will open one by one.
+              </div>
             </div>
           )})}
           {!quizForms.length ? (

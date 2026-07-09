@@ -211,35 +211,31 @@ export async function getStudentLiveQuizSession(sessionId: string, studentUserId
   };
 }
 
-export async function listStudentActiveLiveQuizzes(studentUserId: string) {
-  const student = await db.studentProfile.findUnique({
-    where: { userId: studentUserId },
-    select: { id: true },
-  });
-  if (!student) return [];
-
+export async function listStudentActiveLiveQuizzesByStudentId(studentId: string) {
   const enrollments = await db.enrollment.findMany({
-    where: { studentId: student.id, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
     select: { programId: true },
   });
   const programIds = enrollments.map((enrollment) => enrollment.programId);
   if (!programIds.length) return [];
 
+  const quizIds = (
+    await db.quiz.findMany({
+      where: { isPublished: true, programId: { in: programIds } },
+      select: { id: true },
+    })
+  ).map((quiz) => quiz.id);
+  if (!quizIds.length) return [];
+
   const sessions = await db.quizLiveSession.findMany({
     where: {
-      status: { in: ["WAITING", "LIVE"] },
-      quizId: {
-        in: (
-          await db.quiz.findMany({
-            where: { isPublished: true, programId: { in: programIds } },
-            select: { id: true },
-          })
-        ).map((quiz) => quiz.id),
-      },
+      status: "LIVE",
+      quizId: { in: quizIds },
     },
     orderBy: { updatedAt: "desc" },
     take: 10,
   });
+  if (!sessions.length) return [];
 
   const quizzes = await db.quiz.findMany({
     where: { id: { in: sessions.map((session) => session.quizId) } },
@@ -251,6 +247,16 @@ export async function listStudentActiveLiveQuizzes(studentUserId: string) {
     ...session,
     quiz: quizById.get(session.quizId),
   })).filter((session) => session.quiz);
+}
+
+export async function listStudentActiveLiveQuizzes(studentUserId: string) {
+  const student = await db.studentProfile.findUnique({
+    where: { userId: studentUserId },
+    select: { id: true },
+  });
+  if (!student) return [];
+
+  return listStudentActiveLiveQuizzesByStudentId(student.id);
 }
 
 export async function submitLiveQuizAnswer(input: { sessionId: string; studentUserId: string; answer: string }) {
@@ -304,4 +310,3 @@ export function liveQuizMessage(response: { isCorrect: boolean | null }) {
   if (response.isCorrect === false) return QUIZ_INCORRECT_MESSAGE;
   return QUIZ_PARTICIPATION_MESSAGE;
 }
-

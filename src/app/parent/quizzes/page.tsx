@@ -6,6 +6,7 @@ import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
+import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
 import {
   awardHousePointsForQuizAttempt,
   ensureStudentHouseMembership,
@@ -40,9 +41,9 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
   const totalAttempts = selectedChild?.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0) ?? 0;
   const bestScore = selectedChild?.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore;
-  const [houseMembership, houseLeaderboard] = selectedChild
-    ? await Promise.all([ensureStudentHouseMembership(selectedChild.id), getHouseLeaderboard()])
-    : [null, []];
+  const [houseMembership, houseLeaderboard, activeLiveQuizzes] = selectedChild
+    ? await Promise.all([ensureStudentHouseMembership(selectedChild.id), getHouseLeaderboard(), listStudentActiveLiveQuizzesByStudentId(selectedChild.id)])
+    : [null, [], []];
   const quizForms = selectedChild
     ? await db.quiz.findMany({
         where: {
@@ -225,6 +226,27 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
             ]}
           />
 
+          {activeLiveQuizzes.length ? (
+            <SectionCard eyebrow="Live now" title={`Live quiz started for ${selectedChild.name}`}>
+              <div className="grid gap-4 md:grid-cols-2">
+                {activeLiveQuizzes.map((liveQuiz) => (
+                  <div key={liveQuiz.id} className="overflow-hidden rounded-[30px] bg-[#0b1630] text-white shadow-lg">
+                    <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-[1fr_150px] lg:items-center">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Teacher opened the game</p>
+                        <h3 className="mt-3 text-2xl font-semibold">{liveQuiz.quiz?.title ?? "Live quiz"}</h3>
+                        <p className="mt-2 text-sm leading-6 text-white/75">
+                          The child should open the student dashboard quiz screen to answer. Questions appear one by one during the live class.
+                        </p>
+                      </div>
+                      <img src="/gen-mumin-chars/rania-superhero.png" alt="Gen-Mumin live quiz character" className="mx-auto h-44 w-32 rounded-[26px] object-cover object-[50%_12%]" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </SectionCard>
+          ) : null}
+
           <SectionCard eyebrow="Assessment overview" title={`${selectedChild.name}'s quiz activity`}>
             <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
               {quizForms.map((quiz) => {
@@ -254,40 +276,9 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
                       </p>
                     ) : null}
                   </div>
-                  <details className="mt-4 rounded-[18px] bg-white p-4">
-                    <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                      Start quiz for {selectedChild.name}
-                    </summary>
-                    <form action={submitParentQuizAction} className="mt-4 space-y-3">
-                      <input type="hidden" name="childId" value={selectedChild.id} />
-                      <input type="hidden" name="quizId" value={quiz.id} />
-                      {quiz.questions.map((question) => {
-                        const meta = question.meta as { choices?: string[] } | null;
-                        return (
-                          <label key={question.id} className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                            {question.prompt}
-                            {question.type === "MCQ" && meta?.choices?.length ? (
-                              <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                                <option value="">Select answer</option>
-                                {meta.choices.map((choice) => <option key={choice} value={choice}>{choice}</option>)}
-                              </select>
-                            ) : question.type === "TRUE_FALSE" ? (
-                              <select name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                                <option value="">Select answer</option>
-                                <option value="true">True</option>
-                                <option value="false">False</option>
-                              </select>
-                            ) : (
-                              <input name={`answer-${question.id}`} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Type answer" />
-                            )}
-                          </label>
-                        );
-                      })}
-                      <button disabled={selectedChild.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                        Submit quiz
-                      </button>
-                    </form>
-                  </details>
+                  <div className="mt-4 rounded-[18px] border border-[#eadfce] bg-white p-4 text-sm leading-6 text-[#5f6b7a]">
+                    Questions stay hidden from the dashboard until the teacher runs the quiz live. Live quizzes appear above when the class game starts.
+                  </div>
                 </div>
               )})}
               {!quizForms.length ? (
