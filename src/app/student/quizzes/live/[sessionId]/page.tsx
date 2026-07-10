@@ -53,6 +53,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     if (!answer) redirect(`/student/quizzes/live/${sessionId}?error=Choose or type an answer first`);
     await submitLiveQuizAnswer({ sessionId, studentUserId: currentSession.user.id, answer });
     revalidatePath(`/student/quizzes/live/${sessionId}`);
+    revalidatePath(`/teacher/quizzes/live/${sessionId}`);
     revalidatePath("/teacher/quizzes");
     redirect(`/student/quizzes/live/${sessionId}?notice=Answer submitted`);
   }
@@ -68,7 +69,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <LiveQuizAutoRefresh intervalMs={3000} enabled={live.session.status !== "ENDED"} />
+      <LiveQuizAutoRefresh intervalMs={1200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
@@ -112,8 +113,12 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 
               {live.currentResponse ? (
-                <div className={`mt-6 overflow-hidden rounded-[32px] text-center shadow-sm ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
-                  <div className="grid gap-4 p-5 sm:p-6 md:grid-cols-[1fr_180px] md:items-center md:text-left">
+                <div className={`relative mt-6 overflow-hidden rounded-[32px] text-center shadow-sm ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
+                  <div className="pointer-events-none absolute inset-x-0 top-4 flex justify-center gap-2 opacity-80">
+                    <span className="animate-bounce rounded-full bg-white px-3 py-1 text-xs font-bold text-[#22304a]">Great effort</span>
+                    <span className="animate-pulse rounded-full bg-[#f7c56f] px-3 py-1 text-xs font-bold text-[#22304a]">House points</span>
+                  </div>
+                  <div className="grid gap-4 p-5 pt-16 sm:p-6 sm:pt-16 md:grid-cols-[1fr_180px] md:items-center md:text-left">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">
                         {live.currentResponse.isCorrect ? "Correct answer" : "Good effort"}

@@ -175,7 +175,7 @@ export default async function StudentDashboardPage() {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <LiveQuizAutoRefresh intervalMs={10000} enabled />
+      <LiveQuizAutoRefresh intervalMs={3000} enabled />
       {activeLiveQuizzes.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

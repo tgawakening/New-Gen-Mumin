@@ -144,7 +144,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
-      <LiveQuizAutoRefresh intervalMs={10000} enabled />
+      <LiveQuizAutoRefresh intervalMs={3000} enabled />
       {liveQuizEntries.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

@@ -66,6 +66,8 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
     const questionId = String(formData.get("questionId") || "");
     await setLiveQuizQuestion({ sessionId, teacherUserId: currentSession.user.id, questionId });
     revalidatePath(`/teacher/quizzes/live/${sessionId}`);
+    revalidatePath(`/student/quizzes/live/${sessionId}`);
+    revalidatePath(`/parent/quizzes/live/${sessionId}`);
     revalidatePath("/student/quizzes");
     redirect(`/teacher/quizzes/live/${sessionId}?notice=Question is live`);
   }
@@ -76,6 +78,8 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
     if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
     await endLiveQuizSession({ sessionId, teacherUserId: currentSession.user.id });
     revalidatePath(`/teacher/quizzes/live/${sessionId}`);
+    revalidatePath(`/student/quizzes/live/${sessionId}`);
+    revalidatePath(`/parent/quizzes/live/${sessionId}`);
     revalidatePath("/student/quizzes");
     redirect(`/teacher/quizzes/live/${sessionId}?notice=Live quiz ended`);
   }
@@ -86,7 +90,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
       subtitle="Project this screen in class. Students answer from their dashboards while houses earn points together."
       navItems={getTeacherNavItems()}
     >
-      <LiveQuizAutoRefresh intervalMs={2500} enabled={live.session.status !== "ENDED"} />
+      <LiveQuizAutoRefresh intervalMs={1200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
