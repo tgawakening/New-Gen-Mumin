@@ -7,6 +7,7 @@ import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/te
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { QUIZ_CORRECT_MESSAGE, QUIZ_INCORRECT_MESSAGE } from "@/lib/community/house-points";
 import { endLiveQuizSession, getTeacherLiveQuizSession, setLiveQuizQuestion } from "@/lib/quizzes/live";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
@@ -175,7 +176,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
           </div>
         </TeacherSection>
 
-        <TeacherSection eyebrow="Round results" title="Recognition and house podium">
+        <TeacherSection eyebrow="Round results" title="Recognition and house leaderboard">
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="rounded-[28px] bg-[#effaf3] p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#2f6b4b]">Correct answers</p>
@@ -184,6 +185,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
                     <img src={avatarForGender(response.studentGender)} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
                     <span>{response.studentName} +{response.housePointsAwarded}</span>
+                    <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
                 ))}
                 {!correctResponses.length ? <p className="text-sm text-[#617184]">Correct submissions will appear live.</p> : null}
@@ -196,6 +198,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
                     <img src={avatarForGender(response.studentGender)} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
                     <span>{response.studentName}</span>
+                    <span className="text-xs font-normal text-[#617184]">{QUIZ_INCORRECT_MESSAGE}</span>
                   </div>
                 ))}
                 {!effortResponses.length ? <p className="text-sm text-[#617184]">Encouragement appears after answers.</p> : null}

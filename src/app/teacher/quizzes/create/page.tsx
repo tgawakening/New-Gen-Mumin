@@ -70,7 +70,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
         kahootStyle: true,
         fairScoring: true,
         responseWindowSeconds: Math.max(1, Number(formData.get("responseWindowSeconds") || 10)),
-        participationPoints: Math.max(0, Number(formData.get("participationPoints") || 1)),
+        participationPoints: Math.max(0, Number(formData.get("participationPoints") || 0)),
         streakBonusPoints: Math.max(0, Number(formData.get("streakBonusPoints") || 5)),
       },
     };
@@ -173,7 +173,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Participation points
-              <input name="participationPoints" type="number" min="0" defaultValue={1} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              <input name="participationPoints" type="number" min="0" defaultValue={0} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
               <span className="text-xs font-normal text-[#617184]">Optional points for taking part.</span>
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
@@ -204,4 +204,3 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
     </TeacherDashboardFrame>
   );
 }
-

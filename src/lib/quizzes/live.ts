@@ -21,7 +21,7 @@ function quizSettings(meta: unknown) {
   const value = meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as QuizMeta) : {};
   return {
     responseWindowSeconds: Math.max(1, Number(value.responseWindowSeconds ?? 10)),
-    participationPoints: Math.max(0, Number(value.participationPoints ?? 1)),
+    participationPoints: Math.max(0, Number(value.participationPoints ?? 0)),
     streakBonusPoints: Math.max(0, Number(value.streakBonusPoints ?? 5)),
   };
 }
@@ -274,14 +274,24 @@ export async function submitLiveQuizAnswer(input: { sessionId: string; studentUs
   const secondsTaken = Math.max(0, Math.round((answeredAt.getTime() - live.session.currentQuestionStartedAt.getTime()) / 1000));
   const withinWindow = secondsTaken <= live.settings.responseWindowSeconds;
   const earnedPoints = isCorrect && withinWindow ? live.currentQuestion.points : 0;
-  const housePointsAwarded = earnedPoints + live.settings.participationPoints;
+  const currentQuestionIndex = live.quiz.questions.findIndex((question) => question.id === live.currentQuestion?.id);
+  const responseByQuestionId = new Map(live.session.responses.map((response) => [response.questionId, response]));
+  let consecutiveCorrectBefore = 0;
+  for (let index = currentQuestionIndex - 1; index >= 0; index -= 1) {
+    const previousResponse = responseByQuestionId.get(live.quiz.questions[index]?.id);
+    if (!previousResponse?.isCorrect) break;
+    consecutiveCorrectBefore += 1;
+  }
+  const streakBonusPoints = isCorrect && withinWindow && consecutiveCorrectBefore > 0 ? live.settings.streakBonusPoints : 0;
+  const participationPoints = live.settings.participationPoints;
+  const housePointsAwarded = earnedPoints + participationPoints + streakBonusPoints;
 
   const response = await db.quizLiveResponse.create({
     data: {
       sessionId: live.session.id,
       questionId: live.currentQuestion.id,
       studentId: live.student.id,
-      answer: { value: input.answer, secondsTaken, withinWindow },
+      answer: { value: input.answer, secondsTaken, withinWindow, streakBonusPoints, participationPoints },
       isCorrect,
       earnedPoints,
       housePointsAwarded,

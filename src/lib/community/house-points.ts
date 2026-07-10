@@ -109,7 +109,7 @@ export async function awardHousePointsForQuizAttempt(input: {
     };
   }
 
-  const participationPoints = Math.max(0, input.participationPoints ?? 1);
+  const participationPoints = Math.max(0, input.participationPoints ?? 0);
   const bonusPoints =
     input.totalObjectiveQuestions > 0 && input.correctCount === input.totalObjectiveQuestions
       ? Math.max(0, input.streakBonusPoints ?? 5)
@@ -136,5 +136,3 @@ export async function awardHousePointsForQuizAttempt(input: {
     participationPoints,
   };
 }
-
-
