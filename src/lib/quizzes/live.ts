@@ -56,6 +56,16 @@ export async function createLiveQuizSession(input: { quizId: string; teacherUser
   }
   if (!quiz.questions.length) throw new Error("Add at least one question before starting live quiz.");
 
+  const existingSession = await db.quizLiveSession.findFirst({
+    where: {
+      quizId: quiz.id,
+      teacherUserId: input.teacherUserId,
+      status: { in: ["WAITING", "LIVE"] },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (existingSession) return existingSession;
+
   return db.quizLiveSession.create({
     data: {
       quizId: quiz.id,
@@ -247,13 +257,21 @@ export async function listStudentActiveLiveQuizzesByStudentId(studentId: string)
   });
   if (!sessions.length) return [];
 
+  const latestSessionByQuizId = new Map<string, (typeof sessions)[number]>();
+  for (const session of sessions) {
+    if (!latestSessionByQuizId.has(session.quizId)) {
+      latestSessionByQuizId.set(session.quizId, session);
+    }
+  }
+  const uniqueSessions = [...latestSessionByQuizId.values()];
+
   const quizzes = await db.quiz.findMany({
-    where: { id: { in: sessions.map((session) => session.quizId) } },
+    where: { id: { in: uniqueSessions.map((session) => session.quizId) } },
     include: { program: true },
   });
   const quizById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
 
-  return sessions.map((session) => ({
+  return uniqueSessions.map((session) => ({
     ...session,
     quiz: quizById.get(session.quizId),
   })).filter((session) => session.quiz);

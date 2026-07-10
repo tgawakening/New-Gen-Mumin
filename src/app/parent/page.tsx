@@ -116,7 +116,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   const showAddChildModal = params?.addChild === "1";
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && selectedChild && !hasFullGenM(selectedChild);
   const activity = selectedChild ? buildParentActivity(selectedChild) : null;
-  const liveQuizEntries = (
+  const liveQuizRows = (
     await Promise.all(
       dashboard.children.map(async (child) => ({
         child,
@@ -124,6 +124,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       })),
     )
   ).flatMap((entry) => entry.quizzes.map((quiz) => ({ child: entry.child, quiz })));
+  const liveQuizEntries = [...new Map(liveQuizRows.map((entry) => [`${entry.child.id}-${entry.quiz.quizId}`, entry])).values()];
 
   let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
   if (showAddChildModal || showProgramEnrollmentModal) {
