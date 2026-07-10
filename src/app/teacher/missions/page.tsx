@@ -10,13 +10,21 @@ import {
   formatDate,
 } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { buildSunnahTrackerDescription, isSunnahTrackerMission, parseSunnahTrackerDescription } from "@/lib/community/quest";
+import { buildSunnahTrackerDescription, ensureStudentHouse, isSunnahTrackerMission, parseSunnahTrackerDescription } from "@/lib/community/quest";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
+function userName(user: { firstName: string; lastName: string | null; email: string }) {
+  return `${user.firstName} ${user.lastName ?? ""}`.trim() || user.email;
+}
+
+function answerValue(answer: unknown) {
+  const value = typeof answer === "object" && answer !== null && "value" in answer ? (answer as { value?: unknown }).value : answer;
+  return String(value ?? "");
+}
 type PageProps = {
-  searchParams?: Promise<{ created?: string; deleted?: string }>;
+  searchParams?: Promise<{ created?: string; deleted?: string; reviewed?: string; submission?: string }>;
 };
 
 export default async function TeacherMissionsPage({ searchParams }: PageProps) {
@@ -38,6 +46,33 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
     },
   });
   const params = searchParams ? await searchParams : {};
+  const rawSunnahAttempts = await db.missionAttempt.findMany({
+    where: {
+      submittedAt: { not: null },
+      mission: { programId: { in: programIds.length ? programIds : ["__none__"] } },
+    },
+    orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
+    take: 60,
+    include: {
+      mission: { include: { program: true, questions: { orderBy: { sortOrder: "asc" } } } },
+      answers: { include: { question: true }, orderBy: { question: { sortOrder: "asc" } } },
+      student: {
+        include: {
+          user: true,
+          parents: { include: { parent: { include: { user: true } } } },
+        },
+      },
+    },
+  });
+  const recentSunnahAttempts = rawSunnahAttempts.filter((attempt) => isSunnahTrackerMission(attempt.mission)).slice(0, 20);
+  const reviewLedgers = recentSunnahAttempts.length
+    ? await db.housePointLedger.findMany({
+        where: { sourceType: "SUNNAH_REVIEW", sourceId: { in: recentSunnahAttempts.map((attempt) => attempt.id) } },
+        orderBy: { awardedAt: "desc" },
+      })
+    : [];
+  const reviewByAttempt = new Map(reviewLedgers.map((entry) => [entry.sourceId, entry]));
+
 
   async function getTeacherAssignedProgramIds(userId: string) {
     "use server";
@@ -164,13 +199,72 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
     redirect("/teacher/missions?deleted=1");
   }
 
+  async function reviewSunnahSubmission(formData: FormData) {
+    "use server";
+
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+    const assignedProgramIds = await getTeacherAssignedProgramIds(currentSession.user.id);
+
+    const attemptId = String(formData.get("attemptId") || "");
+    const feedback = String(formData.get("feedback") || "").trim();
+    const extraPoints = Math.max(0, Number(formData.get("extraPoints") || 0));
+    if (!feedback && extraPoints <= 0) throw new Error("Add a message or extra points before sending feedback.");
+
+    const attempt = await db.missionAttempt.findUnique({
+      where: { id: attemptId },
+      include: {
+        mission: true,
+        student: {
+          include: {
+            user: true,
+            parents: { include: { parent: { include: { user: true } } } },
+          },
+        },
+      },
+    });
+    if (!attempt || !attempt.mission.programId || !assignedProgramIds.includes(attempt.mission.programId) || !isSunnahTrackerMission(attempt.mission)) {
+      throw new Error("This Sunnah tracker submission is not available for this teacher.");
+    }
+
+    const notificationBody = feedback || `You earned ${extraPoints} extra Sunnah tracker point${extraPoints === 1 ? "" : "s"}.`;
+    if (extraPoints > 0) {
+      const membership = await ensureStudentHouse(attempt.studentId);
+      await db.housePointLedger.create({
+        data: {
+          houseId: membership.houseId,
+          studentId: attempt.studentId,
+          points: extraPoints,
+          reason: feedback ? `Teacher feedback: ${feedback}` : `Teacher awarded extra Sunnah tracker points for ${attempt.mission.title}`,
+          sourceType: "SUNNAH_REVIEW",
+          sourceId: attempt.id,
+        },
+      });
+    }
+
+    const notifyUsers = Array.from(new Set([attempt.student.userId, ...attempt.student.parents.map((link) => link.parent.userId)]));
+    await db.notification.createMany({
+      data: notifyUsers.map((userId) => ({
+        userId,
+        title: "Sunnah tracker feedback",
+        body: `${userName(attempt.student.user)} - ${notificationBody}`,
+        href: "/student/missions?type=sunnah",
+      })),
+    });
+
+    revalidatePath("/teacher/missions");
+    revalidatePath("/student/missions");
+    revalidatePath("/parent/sunnah-tracker");
+    redirect("/teacher/missions?reviewed=1");
+  }
+
   return (
     <TeacherDashboardFrame
       title="Missions & Sunnah"
       subtitle="Create daily missions, reflection challenges, and checkbox-based Sunnah trackers for house points."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.created ? "Mission created." : params.deleted ? "Mission deleted." : undefined} />
+      <ActionToast message={params.created ? "Mission created." : params.deleted ? "Mission deleted." : params.reviewed ? "Sunnah feedback sent." : undefined} />
 
       <TeacherMetricGrid
         metrics={[
@@ -178,8 +272,76 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
           { label: "Sunnah trackers", value: String(missions.filter(isSunnahTrackerMission).length), hint: "Daily checklist templates." },
           { label: "Published", value: String(missions.filter((mission) => mission.status === "PUBLISHED").length), hint: "Visible to families." },
           { label: "Submissions", value: String(missions.reduce((sum, mission) => sum + mission.attempts.length, 0)), hint: "Student/parent records." },
+          { label: "Sunnah reviews", value: String(recentSunnahAttempts.length), hint: "Recent checklist submissions." },
         ]}
       />
+
+      <TeacherSection eyebrow="Review" title="Recent Sunnah tracker submissions">
+        <div className="space-y-4">
+          {recentSunnahAttempts.map((attempt) => {
+            const existingReview = reviewByAttempt.get(attempt.id);
+            return (
+              <div key={attempt.id} id={attempt.id} className={`rounded-[22px] border p-4 text-sm ${params.submission === attempt.id ? "border-[#f0a85a] bg-[#fff7e8]" : "border-[#eadfce] bg-[#fbf6ef]"}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b46a2c]">{attempt.mission.program?.title ?? "Programme"}</p>
+                    <h3 className="mt-1 text-lg font-semibold text-[#22304a]">{attempt.mission.title}</h3>
+                    <p className="mt-1 text-[#5f6b7a]">
+                      {userName(attempt.student.user)} submitted on {formatDate(attempt.submittedAt ?? attempt.createdAt)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
+                    {attempt.pointsAwarded} auto points
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-2 md:grid-cols-2">
+                  {attempt.answers.map((answer) => {
+                    const checked = answerValue(answer.answer).toLowerCase() === "true";
+                    return (
+                      <div key={answer.id} className="rounded-2xl bg-white px-4 py-3">
+                        <p className="font-semibold text-[#22304a]">{checked ? "Completed" : "Not completed"}</p>
+                        <p className="mt-1 leading-6 text-[#5f6b7a]">{answer.question.prompt}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {attempt.reflection ? (
+                  <div className="mt-3 rounded-2xl bg-white px-4 py-3">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b46a2c]">Parent/student note</p>
+                    <p className="mt-1 leading-6 text-[#4d5a6b]">{attempt.reflection}</p>
+                  </div>
+                ) : null}
+
+                {existingReview ? (
+                  <p className="mt-3 rounded-2xl bg-[#eef8f0] px-4 py-3 text-sm font-semibold text-[#2f6b4b]">
+                    Reviewed - {existingReview.points} extra point(s) awarded on {formatDate(existingReview.awardedAt)}
+                  </p>
+                ) : null}
+
+                <form action={reviewSunnahSubmission} className="mt-4 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[120px_minmax(0,1fr)_auto]">
+                  <input type="hidden" name="attemptId" value={attempt.id} />
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Points
+                    <input name="extraPoints" type="number" min="0" defaultValue="0" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                    Message to student/parent
+                    <input name="feedback" placeholder="Good effort, keep practicing this Sunnah daily." className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                  </label>
+                  <button className="self-end rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Send feedback</button>
+                </form>
+              </div>
+            );
+          })}
+          {!recentSunnahAttempts.length ? (
+            <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
+              Sunnah tracker submissions will appear here as soon as parents or students submit them.
+            </p>
+          ) : null}
+        </div>
+      </TeacherSection>
 
       <div className="grid gap-6 2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <TeacherSection eyebrow="Create" title="New mission">

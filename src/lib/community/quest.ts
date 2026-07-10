@@ -309,6 +309,28 @@ export async function submitMissionAttempt(input: {
     },
   });
 
+  if (sunnahTracker && mission.programId) {
+    const teachers = await db.teacherProfile.findMany({
+      where: {
+        OR: [
+          { programAssignments: { some: { programId: mission.programId } } },
+          { programRosters: { some: { programId: mission.programId, studentId: input.studentId } } },
+        ],
+      },
+      select: { userId: true },
+    });
+    const teacherUserIds = Array.from(new Set(teachers.map((teacher) => teacher.userId)));
+    if (teacherUserIds.length) {
+      await db.notification.createMany({
+        data: teacherUserIds.map((userId) => ({
+          userId,
+          title: "Sunnah tracker submitted",
+          body: `${input.studentName} submitted ${mission.title}. Review the checklist and award feedback if needed.`,
+          href: `/teacher/missions?submission=${attempt.id}`,
+        })),
+      });
+    }
+  }
+
   return { score, pointsAwarded };
 }
-
