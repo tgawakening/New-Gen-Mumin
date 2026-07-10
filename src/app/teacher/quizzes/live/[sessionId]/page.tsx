@@ -70,6 +70,9 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
     revalidatePath(`/student/quizzes/live/${sessionId}`);
     revalidatePath(`/parent/quizzes/live/${sessionId}`);
     revalidatePath("/student/quizzes");
+    revalidatePath("/student");
+    revalidatePath("/parent");
+    revalidatePath("/parent/quizzes");
     redirect(`/teacher/quizzes/live/${sessionId}?notice=Question is live`);
   }
 
@@ -82,6 +85,9 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
     revalidatePath(`/student/quizzes/live/${sessionId}`);
     revalidatePath(`/parent/quizzes/live/${sessionId}`);
     revalidatePath("/student/quizzes");
+    revalidatePath("/student");
+    revalidatePath("/parent");
+    revalidatePath("/parent/quizzes");
     redirect(`/teacher/quizzes/live/${sessionId}?notice=Live quiz ended`);
   }
 

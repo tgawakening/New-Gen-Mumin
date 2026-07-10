@@ -38,14 +38,6 @@ type StudentQuestHubProps = {
   avatarVariant?: "boy" | "girl" | "neutral";
 };
 
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "GM";
-}
 
 function metricIcon(label: string) {
   const normalized = label.toLowerCase();
@@ -79,36 +71,13 @@ function AvatarCharacter({
   name: string;
   variant?: StudentQuestHubProps["avatarVariant"];
 }) {
-  const isGirl = variant === "girl";
-  const isBoy = variant === "boy";
-  const robe = isGirl ? "bg-[#17243a]" : isBoy ? "bg-[#263f34]" : "bg-[#245d85]";
+  const src = variant === "girl" ? "/gen-mumin-chars/rania-superhero.png" : "/gen-mumin-chars/ali-superhero.png";
+  const alt = variant === "girl" ? "Rania Gen-Mumin character" : "Ali Gen-Mumin character";
 
   return (
-    <div className="relative mx-auto h-[190px] w-[170px] sm:h-[220px] sm:w-[190px]" aria-hidden="true">
-      <div className="absolute bottom-0 left-1/2 h-28 w-32 -translate-x-1/2 rounded-[38px_38px_28px_28px] bg-[#22304a]/10 blur-xl" />
-      <div className={`absolute bottom-4 left-1/2 h-28 w-24 -translate-x-1/2 rounded-[34px_34px_22px_22px] ${robe} shadow-[0_18px_30px_rgba(34,48,74,0.24)]`} />
-      {isGirl ? (
-        <>
-          <div className="absolute left-1/2 top-8 h-28 w-28 -translate-x-1/2 rounded-[56px_56px_30px_30px] bg-[#d8c7aa] shadow-sm" />
-          <div className="absolute left-1/2 top-[102px] h-10 w-24 -translate-x-1/2 rounded-b-[40px] bg-[#d8c7aa]" />
-        </>
-      ) : (
-        <div className="absolute left-1/2 top-9 h-9 w-24 -translate-x-1/2 rounded-[30px_30px_12px_12px] bg-[#2c2527]" />
-      )}
-      {isBoy ? (
-        <div className="absolute left-[52px] top-8 h-8 w-20 -rotate-12 rounded-full border-y-4 border-[#e9eef4] bg-[#26334d]" />
-      ) : null}
-      <div className="absolute left-1/2 top-[58px] h-20 w-20 -translate-x-1/2 rounded-full bg-[#f2c79e] shadow-[inset_0_-8px_0_rgba(165,94,58,0.12)]" />
-      <div className="absolute left-[61px] top-[89px] h-3 w-3 rounded-full bg-[#26334d]" />
-      <div className="absolute right-[61px] top-[89px] h-3 w-3 rounded-full bg-[#26334d]" />
-      <div className="absolute left-[60px] top-[84px] h-1 w-4 rounded-full bg-[#2c2527]/70" />
-      <div className="absolute right-[60px] top-[84px] h-1 w-4 rounded-full bg-[#2c2527]/70" />
-      <div className="absolute left-1/2 top-[108px] h-2 w-8 -translate-x-1/2 rounded-full border-b-2 border-[#9b5b43]" />
-      <div className="absolute bottom-[48px] left-8 h-12 w-6 rotate-[-12deg] rounded-full bg-[#f2c79e]" />
-      <div className="absolute bottom-[48px] right-8 h-12 w-6 rotate-[12deg] rounded-full bg-[#f2c79e]" />
-      <div className="absolute bottom-7 left-1/2 flex h-14 w-14 -translate-x-1/2 items-center justify-center rounded-2xl border border-white/70 bg-white text-lg font-bold text-[#22304a] shadow-lg">
-        {initials(name)}
-      </div>
+    <div className="relative mx-auto flex h-[190px] w-[170px] items-end justify-center overflow-hidden rounded-[28px] bg-[#f7efe5] sm:h-[220px] sm:w-[190px]" aria-label={`${name} Gen-Mumin character`}>
+      <div className="absolute inset-x-5 bottom-1 h-12 rounded-full bg-[#22304a]/10 blur-xl" />
+      <img src={src} alt={alt} className="relative z-10 h-full w-full object-cover object-[50%_12%]" />
     </div>
   );
 }

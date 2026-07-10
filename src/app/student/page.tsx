@@ -10,6 +10,7 @@ import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/l
 import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
+import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
   FamilyDashboardFrame,
@@ -162,7 +163,7 @@ export default async function StudentDashboardPage() {
       ];
 
   const houseLeaderboard = quest.leaderboard;
-  const topHousePoints = Math.max(1, ...houseLeaderboard.map((entry) => entry.points));
+  const totalHousePoints = houseLeaderboard.reduce((sum, entry) => sum + entry.points, 0);
   const myHouseRank = Math.max(1, houseLeaderboard.findIndex((entry) => entry.isMine) + 1);
   const myHouseStanding = houseLeaderboard.find((entry) => entry.isMine) ?? houseLeaderboard[0];
   const nextHouseAhead = houseLeaderboard.find((entry) => !entry.isMine && entry.points > (myHouseStanding?.points ?? 0));
@@ -273,32 +274,18 @@ export default async function StudentDashboardPage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Live standings</p>
                 <h3 className="mt-2 text-2xl font-semibold text-[#22304a]">House points board</h3>
               </div>
-              <span className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#617184] shadow-sm">Updates after activities</span>
+              <span className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#617184] shadow-sm">{totalHousePoints} collective points earned</span>
             </div>
 
             <div className="mt-5 space-y-3">
-              {houseLeaderboard.slice(0, 6).map((entry, index) => {
-                const percentage = Math.max(8, Math.round((entry.points / topHousePoints) * 100));
-                return (
-                  <div key={entry.id} className={`rounded-[24px] border p-4 shadow-sm ${entry.isMine ? "border-[#22304a] bg-white" : "border-[#eadfce] bg-white/80"}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-11 w-11 items-center justify-center rounded-2xl text-sm font-bold text-white" style={{ backgroundColor: entry.color ?? "#245d85" }}>
-                          #{index + 1}
-                        </span>
-                        <div>
-                          <p className="font-semibold text-[#22304a]">{entry.name}{entry.isMine ? " - your house" : ""}</p>
-                          <p className="text-xs text-[#617184]">{entry.virtue ?? "Team effort"}</p>
-                        </div>
-                      </div>
-                      <span className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">{entry.points} pts</span>
-                    </div>
-                    <div className="mt-3 h-3 overflow-hidden rounded-full bg-[#ece3d5]">
-                      <div className="h-full rounded-full" style={{ width: `${percentage}%`, backgroundColor: entry.color ?? "#245d85" }} />
-                    </div>
+              {houseLeaderboard.map((entry, index) => (
+                <div key={entry.id} className="grid gap-3 sm:grid-cols-[86px_minmax(0,1fr)] sm:items-center">
+                  <div className="flex justify-center">
+                    <img src={index % 2 === 0 ? "/gen-mumin-chars/ali-superhero.png" : "/gen-mumin-chars/rania-superhero.png"} alt="Gen-Mumin house character" className="h-20 w-16 rounded-2xl bg-white object-cover object-[50%_12%] shadow-sm" />
                   </div>
-                );
-              })}
+                  <HouseLeaderboardRow rank={index + 1} name={entry.name} color={entry.color} virtue={entry.virtue} points={entry.points} isMine={entry.isMine} />
+                </div>
+              ))}
             </div>
           </div>
         </div>

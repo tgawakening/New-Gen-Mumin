@@ -250,6 +250,7 @@ export async function listStudentActiveLiveQuizzesByStudentId(studentId: string)
   const sessions = await db.quizLiveSession.findMany({
     where: {
       status: "LIVE",
+      currentQuestionId: { not: null },
       quizId: { in: quizIds },
     },
     orderBy: { updatedAt: "desc" },
