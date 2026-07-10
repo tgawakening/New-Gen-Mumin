@@ -17,6 +17,7 @@ import {
 } from "@/lib/community/house-points";
 import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import {
   FamilyDashboardFrame,
   MetricGrid,
@@ -203,10 +204,7 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House leaderboard</p>
           <div className="mt-3 space-y-2">
             {houseLeaderboard.map((house, index) => (
-              <div key={house.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-2 text-sm">
-                <span className="font-semibold text-[#22304a]">{index + 1}. {house.name}</span>
-                <span className="font-semibold text-[#0f4d81]">{house.points} pts</span>
-              </div>
+              <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} />
             ))}
           </div>
         </div>
@@ -242,7 +240,7 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
           { label: "Published quizzes", value: String(child.quizzes.length), hint: "Pre-lesson and post-lesson assessments." },
           { label: "Attempts", value: String(totalAttempts), hint: "Total quiz attempt history." },
           { label: "Best score", value: child.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore?.toString() ?? "Pending", hint: "Highest recorded objective/manual score." },
-          { label: "House", value: houseMembership.house.name.replace(" House", ""), hint: "Quiz points support your house team." },
+          { label: "House trait", value: houseMembership.house.virtue, hint: `${houseMembership.house.name} quiz points support your house team.` },
         ]}
       />
 

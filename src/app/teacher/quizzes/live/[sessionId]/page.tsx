@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
@@ -212,11 +213,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
 
           <div className="mt-5 grid gap-3 md:grid-cols-5">
             {live.leaderboard.map((house, index) => (
-              <div key={house.id} className={`rounded-[24px] p-4 ${index === 0 ? "bg-[#f7c56f] text-[#22304a]" : "bg-[#22304a] text-white"}`}>
-                <p className="text-sm font-semibold">#{index + 1} {house.name}</p>
-                <p className="mt-3 text-3xl font-semibold">{house.points}</p>
-                <p className="mt-1 text-xs opacity-75">{house.virtue}</p>
-              </div>
+              <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} dark={index !== 0} />
             ))}
           </div>
         </TeacherSection>

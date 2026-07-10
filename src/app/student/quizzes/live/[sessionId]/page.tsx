@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { HouseBadge, HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
@@ -81,7 +82,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               This is not a fastest-finger podium. Everyone who answers correctly in {live.settings.responseWindowSeconds} seconds earns full points.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">{live.houseMembership.house.name}</span>
+              <HouseBadge name={live.houseMembership.house.name} color={live.houseMembership.house.color} dark />
               <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">Trait: {live.houseMembership.house.virtue}</span>
             </div>
           </div>
@@ -175,13 +176,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               </div>
               <div className="mt-4 space-y-3">
                 {live.leaderboard.map((house, index) => (
-                  <div key={house.id} className="rounded-2xl bg-white/10 p-4 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-semibold">#{index + 1} {house.name}</span>
-                      <span className="rounded-full bg-white px-3 py-1 font-semibold text-[#22304a]">{house.points} pts</span>
-                    </div>
-                    <p className="mt-1 text-xs text-white/65">{house.virtue}</p>
-                  </div>
+                  <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} dark />
                 ))}
               </div>
             </div>

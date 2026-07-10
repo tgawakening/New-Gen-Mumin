@@ -14,6 +14,7 @@ import {
   getHouseLeaderboard,
 } from "@/lib/community/house-points";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -208,10 +209,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House leaderboard</p>
                 <div className="mt-3 space-y-2">
                   {houseLeaderboard.map((house, index) => (
-                    <div key={house.id} className="flex items-center justify-between gap-3 rounded-2xl bg-[#fbf6ef] px-4 py-2 text-sm">
-                      <span className="font-semibold text-[#22304a]">{index + 1}. {house.name}</span>
-                      <span className="font-semibold text-[#0f4d81]">{house.points} pts</span>
-                    </div>
+                    <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} />
                   ))}
                 </div>
               </div>
@@ -223,7 +221,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
               { label: "Quizzes", value: String(selectedChild.quizzes.length), hint: "Published assessments for the learner." },
               { label: "Attempts", value: String(totalAttempts), hint: "Total attempt history recorded." },
               { label: "Best score", value: bestScore === undefined ? "Pending" : String(bestScore), hint: "Highest recorded score." },
-              { label: "House", value: houseMembership?.house.name.replace(" House", "") ?? "Pending", hint: "Quiz points support the learner house." },
+              { label: "House trait", value: houseMembership?.house.virtue ?? "Pending", hint: houseMembership ? `${houseMembership.house.name} quiz points support the learner house.` : "Quiz points support the learner house." },
             ]}
           />
 
