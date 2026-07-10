@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
@@ -236,8 +237,11 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
                         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Teacher opened the game</p>
                         <h3 className="mt-3 text-2xl font-semibold">{liveQuiz.quiz?.title ?? "Live quiz"}</h3>
                         <p className="mt-2 text-sm leading-6 text-white/75">
-                          The child should open the student dashboard quiz screen to answer. Questions appear one by one during the live class.
+                          Open the answer screen for this selected learner. Questions appear one by one during the live class.
                         </p>
+                        <Link href={`/parent/quizzes/live/${liveQuiz.id}?child=${selectedChild.id}`} className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
+                          Answer quiz for {selectedChild.name}
+                        </Link>
                       </div>
                       <img src="/gen-mumin-chars/rania-superhero.png" alt="Gen-Mumin live quiz character" className="mx-auto h-44 w-32 rounded-[26px] object-cover object-[50%_12%]" />
                     </div>

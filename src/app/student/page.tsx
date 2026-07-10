@@ -7,7 +7,9 @@ import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentQuestData } from "@/lib/community/quest";
 import { db } from "@/lib/db";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
+import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
   FamilyDashboardFrame,
@@ -107,7 +109,10 @@ export default async function StudentDashboardPage() {
   if (!dashboard) redirect("/auth/login");
 
   await ensureStudentLiveClassReminders(session.user.id);
-  const notifications = await getUnreadNotifications(session.user.id, 3);
+  const [notifications, activeLiveQuizzes] = await Promise.all([
+    getUnreadNotifications(session.user.id, 3),
+    listStudentActiveLiveQuizzes(session.user.id),
+  ]);
   const child = dashboard.child;
   const nextClassRoom = child.nextClass
     ? child.courses.find((course) => course.title === child.nextClass?.title)?.roomAssignment ?? null
@@ -170,6 +175,25 @@ export default async function StudentDashboardPage() {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
+      <LiveQuizAutoRefresh intervalMs={10000} enabled />
+      {activeLiveQuizzes.length ? (
+        <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Live quiz started</p>
+              <h2 className="mt-2 text-2xl font-semibold">Your teacher has opened a quiz.</h2>
+              <p className="mt-2 text-sm leading-6 text-white/75">Tap the button now. Questions will appear one by one during class.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {activeLiveQuizzes.map((liveQuiz) => (
+                <Link key={liveQuiz.id} href={`/student/quizzes/live/${liveQuiz.id}`} className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
+                  Answer quiz
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
       <StudentQuestHub
         studentName={dashboard.studentName}
         roleLabel="Student Home"
@@ -535,5 +559,3 @@ export default async function StudentDashboardPage() {
     </FamilyDashboardFrame>
   );
 }
-
-

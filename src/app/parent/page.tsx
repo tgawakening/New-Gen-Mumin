@@ -2,11 +2,13 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
+import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import {
   ChildSelector,
@@ -114,6 +116,14 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   const showAddChildModal = params?.addChild === "1";
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && selectedChild && !hasFullGenM(selectedChild);
   const activity = selectedChild ? buildParentActivity(selectedChild) : null;
+  const liveQuizEntries = (
+    await Promise.all(
+      dashboard.children.map(async (child) => ({
+        child,
+        quizzes: await listStudentActiveLiveQuizzesByStudentId(child.id),
+      })),
+    )
+  ).flatMap((entry) => entry.quizzes.map((quiz) => ({ child: entry.child, quiz })));
 
   let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
   if (showAddChildModal || showProgramEnrollmentModal) {
@@ -134,6 +144,25 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
+      <LiveQuizAutoRefresh intervalMs={10000} enabled />
+      {liveQuizEntries.length ? (
+        <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Live quiz started</p>
+              <h2 className="mt-2 text-2xl font-semibold">A teacher has opened a live quiz.</h2>
+              <p className="mt-2 text-sm leading-6 text-white/75">Choose the correct child below and go straight to the answer screen.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {liveQuizEntries.map(({ child, quiz }) => (
+                <Link key={`${child.id}-${quiz.id}`} href={`/parent/quizzes/live/${quiz.id}?child=${child.id}`} className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
+                  Answer for {child.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
       <SectionCard
         eyebrow="Child selector"
         title="Choose a learner"

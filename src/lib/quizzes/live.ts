@@ -169,9 +169,9 @@ export async function endLiveQuizSession(input: { sessionId: string; teacherUser
   });
 }
 
-export async function getStudentLiveQuizSession(sessionId: string, studentUserId: string) {
+export async function getStudentLiveQuizSessionByStudentId(sessionId: string, studentId: string) {
   const student = await db.studentProfile.findUnique({
-    where: { userId: studentUserId },
+    where: { id: studentId },
     include: { user: true },
   });
   if (!student) return null;
@@ -209,6 +209,16 @@ export async function getStudentLiveQuizSession(sessionId: string, studentUserId
     currentQuestion: quiz.questions.find((question) => question.id === session.currentQuestionId) ?? null,
     currentResponse: session.responses.find((response) => response.questionId === session.currentQuestionId) ?? null,
   };
+}
+
+export async function getStudentLiveQuizSession(sessionId: string, studentUserId: string) {
+  const student = await db.studentProfile.findUnique({
+    where: { userId: studentUserId },
+    select: { id: true },
+  });
+  if (!student) return null;
+
+  return getStudentLiveQuizSessionByStudentId(sessionId, student.id);
 }
 
 export async function listStudentActiveLiveQuizzesByStudentId(studentId: string) {
@@ -259,8 +269,8 @@ export async function listStudentActiveLiveQuizzes(studentUserId: string) {
   return listStudentActiveLiveQuizzesByStudentId(student.id);
 }
 
-export async function submitLiveQuizAnswer(input: { sessionId: string; studentUserId: string; answer: string }) {
-  const live = await getStudentLiveQuizSession(input.sessionId, input.studentUserId);
+export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string; studentId: string; answer: string }) {
+  const live = await getStudentLiveQuizSessionByStudentId(input.sessionId, input.studentId);
   if (!live) throw new Error("Live quiz is not available.");
   if (live.session.status !== "LIVE" || !live.currentQuestion || !live.session.currentQuestionStartedAt) {
     throw new Error("No live question is open right now.");
@@ -313,6 +323,16 @@ export async function submitLiveQuizAnswer(input: { sessionId: string; studentUs
   }
 
   return response;
+}
+
+export async function submitLiveQuizAnswer(input: { sessionId: string; studentUserId: string; answer: string }) {
+  const student = await db.studentProfile.findUnique({
+    where: { userId: input.studentUserId },
+    select: { id: true },
+  });
+  if (!student) throw new Error("Live quiz is not available.");
+
+  return submitLiveQuizAnswerByStudentId({ sessionId: input.sessionId, studentId: student.id, answer: input.answer });
 }
 
 export function liveQuizMessage(response: { isCorrect: boolean | null }) {
