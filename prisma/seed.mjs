@@ -201,9 +201,9 @@ const teacherProfiles = [
     firstName: "Javeria",
     lastName: "Khuram",
     password: "GenM-Javeria2026!",
-    bio: "Supports Seerah with child-friendly storytelling, reflection, and weekly lesson guidance.",
-    specialties: ["Seerah", "Story-led learning", "Reflection activities"],
-    programSlugs: ["seerah"],
+    bio: "Coordinates Life Lessons and Leadership sessions with child-friendly reflection, practical character-building, and weekly guidance.",
+    specialties: ["Life Lessons", "Leadership", "Reflection activities"],
+    programSlugs: ["life-lessons"],
   },
   {
     email: "umm.abdissamee@gmail.com",
