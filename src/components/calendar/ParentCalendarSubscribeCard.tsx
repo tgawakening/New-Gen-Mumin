@@ -11,6 +11,7 @@ export function ParentCalendarSubscribeCard({
   httpsUrl: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const googleCalendarUrl = `https://calendar.google.com/calendar/render?cid=${encodeURIComponent(httpsUrl)}`;
 
   async function copyLink() {
     await navigator.clipboard.writeText(httpsUrl);
@@ -30,20 +31,29 @@ export function ParentCalendarSubscribeCard({
               Family calendar
             </p>
             <h2 className="mt-1.5 text-lg font-semibold text-[#22304a] sm:text-xl">
-              Add Gen-Mumin to your phone calendar
+              Connect Gen-Mumin calendar
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-[#5f6b7a]">
-              Subscribe once to see live sessions, deadlines, missions, parent reminders, and future announcements in your calendar app.
+              Subscribe once to show live sessions, deadlines, missions, parent reminders, and announcements in your phone calendar.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
           <a
-            href={webcalUrl}
+            href={googleCalendarUrl}
+            target="_blank"
+            rel="noreferrer"
             className="inline-flex items-center gap-2 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#17243a]"
           >
             <ExternalLink className="h-4 w-4" />
-            Add calendar
+            Connect Google Calendar
+          </a>
+          <a
+            href={webcalUrl}
+            className="inline-flex items-center gap-2 rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f7fbff]"
+          >
+            <CalendarDays className="h-4 w-4" />
+            Add to iPhone/Apple
           </a>
           <button
             type="button"
@@ -51,7 +61,7 @@ export function ParentCalendarSubscribeCard({
             className="inline-flex items-center gap-2 rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f7fbff]"
           >
             {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied" : "Copy link"}
+            {copied ? "Copied" : "Copy calendar link"}
           </button>
         </div>
       </div>
