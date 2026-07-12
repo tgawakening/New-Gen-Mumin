@@ -1,0 +1,51 @@
+{
+  "name": "Gen-Mumin Dashboard",
+  "short_name": "Gen-Mumin",
+  "description": "Install Gen-Mumin to open parent, student, and teacher dashboards directly from your phone home screen.",
+  "id": "/",
+  "start_url": "/auth/login?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
+  "background_color": "#f7f2ea",
+  "theme_color": "#17243a",
+  "orientation": "portrait-primary",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Parent Dashboard",
+      "short_name": "Parent",
+      "description": "Open the parent dashboard",
+      "url": "/parent",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Teacher Dashboard",
+      "short_name": "Teacher",
+      "description": "Open the teacher dashboard",
+      "url": "/teacher",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Student Dashboard",
+      "short_name": "Student",
+      "description": "Open the student dashboard",
+      "url": "/student",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ import {
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { MobileFamilyNavRailClient } from "@/components/dashboard/family/MobileFamilyNavRailClient";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
 
 type NavItem = {
@@ -150,6 +151,7 @@ export function FamilyDashboardFrame({
               <FamilyLogoutButton />
             </div>
           </div>
+          <PwaInstallPrompt audience={roleLabel.toLowerCase().includes("student") ? "student" : "parent"} />
           <MobileFamilyNavRailClient navItems={navItems} />
         </div>
       </div>

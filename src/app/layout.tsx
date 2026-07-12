@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Playfair_Display, Source_Sans_3, Quicksand } from "next/font/google";
+import { PwaRegister } from "@/components/pwa/PwaRegister";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -40,6 +41,7 @@ export const metadata: Metadata = {
   description:
     "A long-term immersive program teaching Arabic, Seerah, Qur'anic Tajweed, and Life Skills for young Muslims.",
   applicationName: "Gen-Mumins",
+  manifest: "/manifest.webmanifest",
   authors: [{ name: "Global Awakening" }],
   keywords: [
     "Islamic education",
@@ -71,14 +73,22 @@ export const metadata: Metadata = {
     title: "Gen-Mumins - Raising Confident Muslim Leaders",
     description:
       "A long-term immersive program teaching Arabic, Seerah, Qur'anic Tajweed, and Life Skills for young Muslims.",
-    images: ["/images/logo.png"],
+    images: ["/icons/icon-512.png"],
   },
   icons: {
     icon: [
-      { url: "/images/logo.png", type: "image/png" },
+      { url: "/icons/icon-192.png", type: "image/png", sizes: "192x192" },
     ],
-    shortcut: ["/images/logo.png"],
-    apple: [{ url: "/images/logo.png", type: "image/png" }],
+    shortcut: ["/icons/icon-192.png"],
+    apple: [{ url: "/icons/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "Gen-Mumin",
+    statusBarStyle: "black-translucent",
+  },
+  formatDetection: {
+    telephone: false,
   },
 };
 
@@ -92,6 +102,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${playfair.variable} ${sourceSans3.variable} ${quicksand.variable} antialiased`}
       >
+        <PwaRegister />
         {children}
       </body>
     </html>

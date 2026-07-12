@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ReactNode } from "react";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
 import { MobileTeacherNavRailClient } from "@/components/dashboard/teacher/MobileTeacherNavRailClient";
 
 type NavItem = {
@@ -44,6 +45,7 @@ export function TeacherDashboardFrame({
               <FamilyLogoutButton />
             </div>
           </div>
+          <PwaInstallPrompt audience="teacher" />
           <MobileTeacherNavRailClient navItems={navItems} />
         </div>
       </div>
