@@ -278,6 +278,7 @@ type ChildSummary = {
 export type ParentDashboardData = {
   parentName: string;
   parentProfile: {
+    id: string;
     email: string;
     phone: string | null;
     phoneCountryCode: string | null;
@@ -1287,6 +1288,7 @@ export async function getParentDashboardData(userId: string) {
   return {
     parentName: `${parentProfile.user.firstName} ${parentProfile.user.lastName}`.trim(),
     parentProfile: {
+      id: parentProfile.id,
       email: parentProfile.user.email,
       phone:
         parentProfile.user.phoneCountryCode && parentProfile.user.phoneNumber

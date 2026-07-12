@@ -4,12 +4,14 @@ import { redirect } from "next/navigation";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
+import { ParentCalendarSubscribeCard } from "@/components/calendar/ParentCalendarSubscribeCard";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
 import { getRegistrationOptions } from "@/lib/registration/service";
+import { buildParentCalendarUrls } from "@/lib/calendar/tokens";
 import {
   ChildSelector,
   CompactList,
@@ -136,6 +138,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   }
   const programEnrollmentOffers =
     showProgramEnrollmentModal && selectedChild ? eligibleProgramOffers(options.offers, selectedChild) : [];
+  const calendarUrls = buildParentCalendarUrls(dashboard.parentProfile.id);
 
   return (
     <FamilyDashboardFrame
@@ -146,6 +149,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
       <LiveQuizAutoRefresh intervalMs={3000} enabled />
+      <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
