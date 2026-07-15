@@ -3,6 +3,7 @@ import "server-only";
 import { MonthlyPaymentMethod, MonthlyPaymentStatus, PaymentGateway, Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { getStripeClient } from "@/lib/payments/stripe";
 import {
   sendAdminMonthlyPaymentActivatedEmail,
   sendMonthlyPaymentActivatedEmail,
@@ -44,6 +45,14 @@ function billingPeriod(anchor: Date, now: Date) {
   }
   const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, day));
   return { start, end, key: monthKey(start) };
+}
+function addUtcMonths(date: Date, months: number) {
+  const day = Math.min(date.getUTCDate(), 28);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + months, day, date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds()));
+}
+
+function jsonObject(value: unknown) {
+  return typeof value === "object" && value && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 function asJson(value: unknown): Prisma.InputJsonValue | undefined {
@@ -409,6 +418,156 @@ export async function recordAutoSubscriptionFailure(input: {
   await sendGroupedPendingEmails(recordIds, false);
   return { updated: recordIds.length };
 }
+export async function extendStripeSubscriptionBillingDate(input: {
+  recordId: string;
+  months: number;
+  adminUserId: string;
+  note?: string | null;
+}) {
+  const months = Math.min(12, Math.max(1, Math.round(input.months || 1)));
+  const baseRecord = await db.monthlyPaymentRecord.findUnique({
+    where: { id: input.recordId },
+    include: {
+      subscription: {
+        include: {
+          orderItem: {
+            include: {
+              order: true,
+            },
+          },
+        },
+      },
+      orderItem: {
+        include: {
+          order: true,
+          subscription: true,
+        },
+      },
+    },
+  });
+  if (!baseRecord) throw new Error("Monthly payment row not found.");
+
+  const subscriptionId = baseRecord.subscriptionId ?? baseRecord.orderItem?.subscription?.id ?? null;
+  const subscription = subscriptionId
+    ? await db.subscription.findUnique({
+        where: { id: subscriptionId },
+        include: { orderItem: { include: { order: true } } },
+      })
+    : null;
+  const order = subscription?.orderItem.order ?? baseRecord.orderItem?.order ?? null;
+  const providerSubscriptionId = subscription?.providerSubscriptionId ?? baseRecord.providerSubscriptionId ?? null;
+  if (!subscription || !providerSubscriptionId || order?.gateway !== PaymentGateway.STRIPE) {
+    throw new Error("Only Stripe subscription rows can be extended automatically.");
+  }
+
+  const stripe = getStripeClient();
+  const stripeSubscription = await stripe.subscriptions.retrieve(providerSubscriptionId);
+  const stripePeriodEndSeconds =
+    typeof (stripeSubscription as unknown as { current_period_end?: unknown }).current_period_end === "number"
+      ? Number((stripeSubscription as unknown as { current_period_end: number }).current_period_end)
+      : null;
+  const currentPeriodEnd = stripePeriodEndSeconds
+    ? new Date(stripePeriodEndSeconds * 1000)
+    : subscription.currentPeriodEnd ?? baseRecord.billingPeriodEnd;
+  const newBillingDate = addUtcMonths(currentPeriodEnd, months);
+  const trialEnd = Math.floor(newBillingDate.getTime() / 1000);
+
+  await stripe.subscriptions.update(providerSubscriptionId, {
+    trial_end: trialEnd,
+    proration_behavior: "none",
+    metadata: {
+      ...jsonObject(stripeSubscription.metadata),
+      genMuminExtendedByAdmin: "true",
+      genMuminExtensionMonths: String(months),
+      genMuminExtensionRecordId: baseRecord.id,
+    },
+  });
+
+  const now = new Date();
+  await db.subscription.update({
+    where: { id: subscription.id },
+    data: {
+      status: "ACTIVE",
+      currentPeriodEnd: newBillingDate,
+    },
+  });
+
+  const orderItems = await db.orderItem.findMany({
+    where: { orderId: subscription.orderItem.orderId },
+    include: {
+      order: true,
+      subscription: true,
+      enrollment: {
+        include: {
+          parent: { include: { user: true } },
+          student: { include: { user: true } },
+          program: true,
+        },
+      },
+    },
+  });
+  const billableItems = orderItems.filter((item) => item.enrollment);
+  const creditedRecordIds: string[] = [];
+
+  for (const item of billableItems) {
+    const enrollment = item.enrollment!;
+    let periodStart = baseRecord.billingPeriodEnd;
+    for (let index = 0; index < months; index += 1) {
+      const periodEnd = addUtcMonths(periodStart, 1);
+      const key = monthKey(periodStart);
+      const record = await db.monthlyPaymentRecord.upsert({
+        where: { enrollmentId_monthKey: { enrollmentId: enrollment.id, monthKey: key } },
+        update: {
+          status: MonthlyPaymentStatus.ADMIN_ACTIVATED,
+          method: MonthlyPaymentMethod.AUTO,
+          gateway: PaymentGateway.STRIPE,
+          providerSubscriptionId,
+          activatedAt: now,
+          activatedByUserId: input.adminUserId,
+          adminNote: input.note?.trim() || `Stripe billing extended by ${months} month${months === 1 ? "" : "s"}.`,
+          metadata: asJson({
+            source: "stripe-billing-extension",
+            extendedFromRecordId: baseRecord.id,
+            extensionMonths: months,
+            stripeNextBillingDate: newBillingDate.toISOString(),
+          }),
+        },
+        create: {
+          parentId: enrollment.parentId,
+          studentId: enrollment.studentId,
+          enrollmentId: enrollment.id,
+          orderItemId: item.id,
+          subscriptionId: item.subscription?.id ?? subscription.id,
+          monthKey: key,
+          billingPeriodStart: periodStart,
+          billingPeriodEnd: periodEnd,
+          dueDate: periodStart,
+          status: MonthlyPaymentStatus.ADMIN_ACTIVATED,
+          method: MonthlyPaymentMethod.AUTO,
+          gateway: PaymentGateway.STRIPE,
+          amount: item.totalAmount,
+          currency: item.order.currency,
+          childName: childName(enrollment.student),
+          programmeTitle: displayProgramTitle(enrollment.program.title),
+          providerSubscriptionId,
+          activatedAt: now,
+          activatedByUserId: input.adminUserId,
+          adminNote: input.note?.trim() || `Stripe billing extended by ${months} month${months === 1 ? "" : "s"}.`,
+          metadata: asJson({
+            source: "stripe-billing-extension",
+            extendedFromRecordId: baseRecord.id,
+            extensionMonths: months,
+            stripeNextBillingDate: newBillingDate.toISOString(),
+          }),
+        },
+      });
+      creditedRecordIds.push(record.id);
+      periodStart = periodEnd;
+    }
+  }
+
+  return { months, nextBillingDate: newBillingDate, creditedRows: creditedRecordIds.length };
+}
 export async function getParentPaymentSummary(parentUserId: string) {
   const parent = await db.parentProfile.findUnique({ where: { userId: parentUserId }, select: { id: true } });
   if (!parent) return null;
@@ -431,7 +590,7 @@ export async function getAdminMonthlyPaymentRecords(status?: string | null, mont
       monthKey: key,
       ...(status && status !== "ALL" ? { status: status as MonthlyPaymentStatus } : {}),
     },
-    include: { parent: { include: { user: true } }, student: { include: { user: true } } },
+    include: { parent: { include: { user: true } }, student: { include: { user: true } }, subscription: true, orderItem: { include: { order: true, subscription: true } } },
     orderBy: [{ status: "asc" }, { dueDate: "asc" }],
   });
 }

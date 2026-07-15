@@ -7,6 +7,7 @@ import { MonthlyPaymentStatus } from "@prisma/client";
 
 import { getCurrentSession } from "@/lib/auth/session";
 import {
+  extendStripeSubscriptionBillingDate,
   getAdminMonthlyPaymentRecords,
   markMonthlyPaymentsActive,
   monthKey,
@@ -70,6 +71,31 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
     }
   }
 
+  async function extendStripeBilling(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    const recordId = String(formData.get("extendRecordId") || formData.get("recordId") || "");
+    const month = String(formData.get("month") || "");
+    const status = String(formData.get("status") || "");
+    const months = Number(formData.get(`months-${recordId}`) || formData.get("months") || "1");
+    const note = String(formData.get(`note-${recordId}`) || formData.get("note") || "");
+
+    try {
+      const result = await extendStripeSubscriptionBillingDate({
+        recordId,
+        months,
+        adminUserId: currentSession.user.id,
+        note,
+      });
+      revalidatePath("/admin/monthly-payments");
+      revalidatePath("/parent/profile");
+      redirect(noticeHref(`Stripe next billing moved by ${result.months} month${result.months === 1 ? "" : "s"} to ${formatDate(result.nextBillingDate)}. ${result.creditedRows} credit row${result.creditedRows === 1 ? "" : "s"} added.`, "success", month, status));
+    } catch (error) {
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to extend Stripe billing date.", "error", month, status));
+    }
+  }
+
   const totals = records.reduce((sum, record) => sum + record.amount, 0);
   const currency = records[0]?.currency ?? "GBP";
 
@@ -115,7 +141,7 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
           </div>
           <div className="overflow-x-auto rounded-2xl border border-[#e6edf4]">
             <table className="min-w-[1180px] w-full text-left text-sm">
-              <thead className="bg-[#fbfdff] text-xs uppercase tracking-[0.14em] text-[#6f7d8f]"><tr><th className="px-4 py-3">Select</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Parent</th><th className="px-4 py-3">Child</th><th className="px-4 py-3">Programme</th><th className="px-4 py-3">Method</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Due</th><th className="px-4 py-3">Paid/Activated</th></tr></thead>
+              <thead className="bg-[#fbfdff] text-xs uppercase tracking-[0.14em] text-[#6f7d8f]"><tr><th className="px-4 py-3">Select</th><th className="px-4 py-3">Status</th><th className="px-4 py-3">Parent</th><th className="px-4 py-3">Child</th><th className="px-4 py-3">Programme</th><th className="px-4 py-3">Method</th><th className="px-4 py-3">Amount</th><th className="px-4 py-3">Due</th><th className="px-4 py-3">Paid/Activated</th><th className="px-4 py-3">Stripe extension</th></tr></thead>
               <tbody>
                 {records.map((record) => (
                   <tr key={record.id} className="border-t border-[#e6edf4] align-top">
@@ -128,9 +154,21 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
                     <td className="px-4 py-3 font-semibold text-[#22304a]">{monthlyPaymentDisplay(record)}</td>
                     <td className="px-4 py-3">{formatDate(record.dueDate)}</td>
                     <td className="px-4 py-3">{formatDate(record.paidAt ?? record.activatedAt)}</td>
+                    <td className="px-4 py-3">
+                      {record.gateway === "STRIPE" && record.providerSubscriptionId ? (
+                        <div className="grid min-w-[260px] gap-2 rounded-2xl bg-[#fbf6ef] p-3">
+                          <label className="grid gap-1 text-xs font-semibold text-[#22304a]">Extend by months<input name={`months-${record.id}`} type="number" min="1" max="12" defaultValue="1" className="rounded-xl border border-[#dce4ed] px-3 py-2" /></label>
+                          <input name={`note-${record.id}`} placeholder="Reason, e.g. duplicate payment credit" className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs" />
+                          <button name="extendRecordId" value={record.id} formAction={extendStripeBilling} className="rounded-full bg-[#22304a] px-3 py-2 text-xs font-semibold text-white">Move Stripe next charge</button>
+                          <p className="text-[11px] leading-4 text-[#6d7785]">Applies to the full Stripe subscription/order linked to this row.</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-[#8a94a3]">Not Stripe auto billing</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
-                {!records.length ? <tr><td colSpan={9} className="px-4 py-8 text-center text-[#617184]">No monthly payment records match this filter yet.</td></tr> : null}
+                {!records.length ? <tr><td colSpan={10} className="px-4 py-8 text-center text-[#617184]">No monthly payment records match this filter yet.</td></tr> : null}
               </tbody>
             </table>
           </div>
