@@ -138,7 +138,7 @@ export default async function ParentRecordingsPage({ searchParams }: PageProps) 
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
                       <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
                       <p className="mt-2 text-sm text-[#5f6b7a]">
-                        {recording.teacherName} - {formatDate(recording.recordingStart ?? recording.availableAt)} - {formatDuration(recording.durationMinutes)}
+                        {recording.teacherName} - {(recording.sessionDateKnown ? formatDate(recording.recordingStart ?? recording.availableAt) : "Session date not set")} - {formatDuration(recording.durationMinutes)}
                       </p>
                       {recording.watchUrl ? (
                         <Link href={recordingsHref({ childId, program: activeProgram, page, recording: recording.id })} className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">

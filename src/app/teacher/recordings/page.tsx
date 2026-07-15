@@ -50,7 +50,7 @@ export default async function TeacherRecordingsPage({ searchParams }: PageProps)
             <div key={recording.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
               <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
-              <p className="mt-2 text-sm text-[#5f6b7a]">{formatDate(recording.recordingStart ?? recording.availableAt)}</p>
+              <p className="mt-2 text-sm text-[#5f6b7a]">{(recording.sessionDateKnown ? formatDate(recording.recordingStart ?? recording.availableAt) : "Session date not set")}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {recording.watchUrl ? (
                   <Link href={`/teacher/recordings?recording=${recording.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">

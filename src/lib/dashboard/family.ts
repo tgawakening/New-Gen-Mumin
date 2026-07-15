@@ -1,4 +1,4 @@
-import "server-only";
+﻿import "server-only";
 
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
@@ -84,6 +84,8 @@ type ChildCourseSummary = {
 type ChildScheduleSummary = {
   id: string;
   title: string;
+  scheduleTitle?: string;
+  category?: "CLASS" | "PARENTAL";
   weekday: number;
   startTime: string;
   endTime: string;
@@ -571,6 +573,58 @@ function buildTeacherName(
   return `${teacher.user.firstName} ${teacher.user.lastName}`.trim();
 }
 
+function isParentalSessionTitle(title?: string | null) {
+  const normalized = (title ?? "").toLowerCase();
+  return /\b(parenting|parental|parents?|parent)\b/.test(normalized);
+}
+
+function isParentalSessionTeacher(teacher?: { user?: { firstName?: string | null; lastName?: string | null } | null } | null) {
+  const name = [teacher?.user?.firstName, teacher?.user?.lastName].filter(Boolean).join(String.fromCharCode(32)).toLowerCase();
+  return name.includes(String.fromCharCode(109, 101, 104, 114, 97, 110)) || name.includes(String.fromCharCode(115, 97, 98, 97));
+}
+
+function mapScheduleSummary(schedule: any, title: string, category: "CLASS" | "PARENTAL" = "CLASS"): ChildScheduleSummary {
+  return {
+    id: schedule.id,
+    title,
+    scheduleTitle: schedule.title,
+    category,
+    weekday: schedule.weekday,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+    timezone: schedule.timezone,
+    nextStartsAt: nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
+    meetingUrl: schedule.meetingUrl,
+    teacherName: buildTeacherName(schedule.teacher),
+    provider: schedule.meetingProvider,
+  };
+}
+
+async function getParentalSessionSchedules() {
+  const schedules = await db.classSchedule.findMany({
+    where: {
+      OR: [
+        { title: { contains: "parent" } },
+        { title: { contains: "Parent" } },
+        { title: { contains: "parenting" } },
+        { title: { contains: "Parenting" } },
+        { title: { contains: "parental" } },
+        { title: { contains: "Parental" } },
+      ],
+    },
+    orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
+    include: {
+      teacher: { include: { user: true } },
+    },
+  });
+
+  return schedules.filter(
+    (schedule) =>
+      isLiveClassVisibleToStudents(schedule.title) &&
+      isParentalSessionTitle(schedule.title) &&
+      isParentalSessionTeacher(schedule.teacher),
+  );
+}
 function normalizeChildIdentity(input: {
   displayName?: string | null;
   firstName?: string | null;
@@ -645,6 +699,7 @@ function mapScheduleEntries(
   child: { id: string; countryCode?: string | null; countryName?: string | null; registrationStudents?: Array<{ countryCode?: string | null; countryName?: string | null }> | null },
   fallbackCountryCodes: Array<string | null | undefined> = [],
 ): ChildScheduleSummary[] {
+  const parentalSchedules = Array.isArray((child as any).parentalSchedules) ? (child as any).parentalSchedules : [];
   const entries = enrollments
     .flatMap((enrollment) =>
       enrollment.program.schedules
@@ -675,22 +730,14 @@ function mapScheduleEntries(
             );
           },
         )
-        .map((schedule: any) => ({
-          id: schedule.id,
-          title: enrollment.program.title,
-          weekday: schedule.weekday,
-          startTime: schedule.startTime,
-          endTime: schedule.endTime,
-          timezone: schedule.timezone,
-          nextStartsAt: nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
-          meetingUrl: schedule.meetingUrl,
-          teacherName: buildTeacherName(schedule.teacher),
-          provider: schedule.meetingProvider,
-        })),
+        .map((schedule: any) => mapScheduleSummary(schedule, enrollment.program.title)),
     );
 
+  const parentalEntries = parentalSchedules.map((schedule: any) => mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL"));
+  const allEntries = [...entries, ...parentalEntries];
+
   const deduped = new Map<string, ChildScheduleSummary>();
-  for (const entry of entries) {
+  for (const entry of allEntries) {
     const key = [
       entry.meetingUrl ?? "pending",
       entry.title,
@@ -1279,6 +1326,7 @@ export async function getParentDashboardData(userId: string) {
   const hasUnlockedAccess =
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
+  const parentalSchedules = await getParentalSessionSchedules();
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked
@@ -1324,6 +1372,7 @@ export async function getParentDashboardData(userId: string) {
                 parentProfile.billingCountryName,
                 parentProfile.user.phoneCountryCode,
               ],
+              parentalSchedules,
             },
             accessLocked,
           ),
@@ -1442,6 +1491,7 @@ export async function getStudentDashboardData(userId: string) {
   }
 
   const latestOrder = studentProfile.parents[0]?.parent.orders[0] ?? null;
+  const parentalSchedules = await getParentalSessionSchedules();
   const accessLocked = !studentProfile.enrollments.some((enrollment) =>
     ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),
   );
@@ -1464,6 +1514,7 @@ export async function getStudentDashboardData(userId: string) {
           studentProfile.parents[0]?.parent.billingCountryName,
           studentProfile.parents[0]?.parent.user.phoneCountryCode,
         ],
+        parentalSchedules,
       },
       accessLocked,
     ),
@@ -1484,3 +1535,13 @@ export function getDashboardHomeForRole(role: UserRole) {
       return "/auth/login";
   }
 }
+
+
+
+
+
+
+
+
+
+

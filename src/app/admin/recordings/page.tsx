@@ -6,9 +6,12 @@ import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { getCurrentSession } from "@/lib/auth/session";
+import { ManualRecordingForm } from "./ManualRecordingForm";
 import {
+  addManualLiveClassRecording,
   deleteRecordingForAdmin,
   listAdminRecordings,
+  listManualRecordingFormOptions,
   processPendingDriveRecordings,
   resetPendingRecordingImportsForAdmin,
   syncRecentZoomRecordingsForAdmin,
@@ -158,6 +161,37 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success"));
   }
 
+  async function addManualRecordingAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
+
+    try {
+      const fileValue = formData.get("recordingFile");
+      await addManualLiveClassRecording({
+        adminUserId: currentSession.user.id,
+        teacherId: String(formData.get("teacherId") || ""),
+        programId: String(formData.get("programId") || ""),
+        title: String(formData.get("title") || ""),
+        sessionDate: String(formData.get("sessionDate") || ""),
+        durationSeconds: Number(formData.get("durationSeconds") || "0") || null,
+        source: String(formData.get("source") || "drive") === "upload" ? "upload" : "drive",
+        file: fileValue instanceof File && fileValue.size > 0 ? fileValue : null,
+        driveUrl: String(formData.get("driveUrl") || ""),
+        notifyUsers: formData.get("notifyUsers") === "yes",
+      });
+      revalidatePath("/admin/recordings");
+      revalidatePath("/teacher/recordings");
+      revalidatePath("/student/recordings");
+      revalidatePath("/parent/recordings");
+    } catch (error) {
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to add recording.", "error"));
+    }
+
+    redirect(noticeHref("Manual recording added to Drive-backed recordings.", "success"));
+  }
+
+  const manualRecordingOptions = await listManualRecordingFormOptions();
   const recordings = await listAdminRecordings();
   const grouped = new Map<string, typeof recordings>();
   for (const recording of recordings) {
@@ -210,6 +244,19 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
 
         {notice ? <div className={`rounded-[22px] border px-5 py-4 text-sm font-semibold shadow-sm ${noticeClasses(tone)}`}>{notice}</div> : null}
 
+        <section className="rounded-[30px] border border-[#eadfce] bg-white p-6 shadow-sm">
+          <div className="mb-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Manual recordings</p>
+            <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Add outside-session recording</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-[#617184]">
+              Upload a local recording or attach an existing Google Drive video to the correct teacher and programme. It will appear in the same recordings tabs for admin, teacher, parent, and student dashboards.
+            </p>
+          </div>
+          <form action={addManualRecordingAction} encType="multipart/form-data">
+            <ManualRecordingForm teachers={manualRecordingOptions} />
+          </form>
+        </section>
+
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[24px] border border-[#eadfce] bg-white p-5 shadow-sm">
             <p className="text-sm text-[#617184]">Total recordings</p>
@@ -260,7 +307,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
                       <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
                       <p className="mt-1 text-sm text-[#617184]">
-                        {formatDate(recording.recordingStart ?? recording.availableAt)} - {formatDuration(recording.durationMinutes)}
+                        {(recording.sessionDateKnown ? formatDate(recording.recordingStart ?? recording.availableAt) : "Session date not set")} - {formatDuration(recording.durationMinutes)}
                       </p>
                       <div className="mt-3 flex flex-wrap items-center gap-2">
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadgeClasses(recording.processingStatus)}`}>

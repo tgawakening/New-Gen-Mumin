@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -14,8 +14,15 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string }>;
+  searchParams?: Promise<{ child?: string; tab?: string }>;
 };
+
+function scheduleHref(childId: string | undefined, tab: "classes" | "parental") {
+  const params = new URLSearchParams();
+  if (childId) params.set("child", childId);
+  params.set("tab", tab);
+  return `/parent/schedule?${params.toString()}`;
+}
 
 export default async function ParentSchedulePage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
@@ -33,12 +40,16 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
 
   const params = searchParams ? await searchParams : undefined;
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
+  const activeTab = params?.tab === "parental" ? "parental" : "classes";
+  const classSessions = selectedChild?.schedule.filter((entry) => entry.category !== "PARENTAL") ?? [];
+  const parentalSessions = selectedChild?.schedule.filter((entry) => entry.category === "PARENTAL") ?? [];
+  const visibleSessions = activeTab === "parental" ? parentalSessions : classSessions;
 
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
       title="Schedule"
-      subtitle="Follow each child’s weekly timetable, timezone, teacher assignment, and meeting details."
+      subtitle="Follow each child's weekly timetable, timezone, teacher assignment, and meeting details."
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
@@ -54,8 +65,8 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
         <>
           <MetricGrid
             metrics={[
-              { label: "Weekly slots", value: String(selectedChild.schedule.length), hint: "Recurring live classes." },
-              { label: "Timezone", value: selectedChild.profile.timezone ?? "Europe/London", hint: "Class timezone." },
+              { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
+              { label: "Parental sessions", value: String(parentalSessions.length), hint: "Shared parent sessions by Ustadh Mehran / Ustadha Saba." },
               { label: "Teacher linked", value: selectedChild.schedule.some((entry) => entry.teacherName) ? "Yes" : "Pending", hint: "Teacher assignment visibility." },
               { label: "Meeting links", value: selectedChild.schedule.some((entry) => entry.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom access." },
             ]}
@@ -78,16 +89,25 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
             </SectionCard>
           ) : null}
 
-          <SectionCard eyebrow="Timetable" title={`${selectedChild.name}'s weekly classes`}>
+          <SectionCard eyebrow="Timetable" title={activeTab === "parental" ? "Parental Sessions" : `${selectedChild.name}'s weekly classes`}>
+            <div className="mb-5 flex flex-wrap gap-3">
+              <Link href={scheduleHref(selectedChild.id, "classes")} className={`rounded-full px-4 py-2 text-sm font-semibold ${activeTab === "classes" ? "bg-[#22304a] text-white" : "border border-[#d8c3ac] bg-white text-[#22304a]"}`}>
+                Class Schedule
+              </Link>
+              <Link href={scheduleHref(selectedChild.id, "parental")} className={`rounded-full px-4 py-2 text-sm font-semibold ${activeTab === "parental" ? "bg-[#22304a] text-white" : "border border-[#d8c3ac] bg-white text-[#22304a]"}`}>
+                Parental Sessions
+              </Link>
+            </div>
+
             <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
-              {selectedChild.schedule.map((entry) => (
+              {visibleSessions.map((entry) => (
                 <div key={entry.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
-                  <h3 className="text-lg font-semibold text-[#22304a]">{entry.title}</h3>
+                  <h3 className="text-lg font-semibold text-[#22304a]">{entry.category === "PARENTAL" ? entry.scheduleTitle ?? "Parental Session" : entry.title}</h3>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    {formatWeekday(entry.weekday)} • {entry.startTime} - {entry.endTime} • {entry.timezone}
+                    {formatWeekday(entry.weekday)} - {entry.startTime} - {entry.endTime} - {entry.timezone}
                   </p>
                   <p className="mt-2 text-sm text-[#5f6b7a]">
-                    Teacher: {entry.teacherName ?? "Assigned soon"} • {entry.provider ?? "Live class"}
+                    Teacher: {entry.teacherName ?? "Assigned soon"} - {entry.provider ?? "Live class"}
                   </p>
                   {entry.meetingUrl && !selectedChild.accessLocked ? (
                     <Link
@@ -100,6 +120,11 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
                   ) : null}
                 </div>
               ))}
+              {!visibleSessions.length ? (
+                <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
+                  {activeTab === "parental" ? "Parental sessions by Ustadh Mehran / Ustadha Saba will appear here when scheduled." : "Weekly live classes will appear here after admin or teachers assign the schedule."}
+                </p>
+              ) : null}
             </div>
           </SectionCard>
         </>
@@ -107,3 +132,4 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
     </FamilyDashboardFrame>
   );
 }
+

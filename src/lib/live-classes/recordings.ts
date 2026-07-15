@@ -2,7 +2,8 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { getDriveRecordingPlaybackStatus, startLiveClassRecordingResumableUpload, uploadLiveClassRecordingResumableChunk } from "@/lib/google-drive/materials";
+import { driveRequest } from "@/lib/google-drive/client";
+import { getDriveRecordingPlaybackStatus, startLiveClassRecordingResumableUpload, uploadLiveClassRecordingResumableChunk, uploadLiveClassRecordingToDrive } from "@/lib/google-drive/materials";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -40,6 +41,7 @@ export type LiveClassRecordingSummary = {
   recordingEnd: Date | null;
   durationMinutes: number | null;
   availableAt: Date;
+  sessionDateKnown: boolean;
 };
 
 function teacherName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
@@ -124,6 +126,7 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     recordingEnd: recording.recordingEnd,
     durationMinutes,
     availableAt: recording.availableAt,
+    sessionDateKnown: recording.meetingId !== "manual-no-date",
   };
 }
 
@@ -1042,3 +1045,254 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
   };
 }
 
+export async function listManualRecordingFormOptions() {
+  const teachers = await db.teacherProfile.findMany({
+    where: { isActive: true },
+    include: {
+      user: true,
+      programAssignments: {
+        include: { program: true },
+        orderBy: { program: { sortOrder: "asc" } },
+      },
+    },
+    orderBy: { user: { firstName: "asc" } },
+  });
+
+  return teachers.map((teacher) => ({
+    id: teacher.id,
+    userId: teacher.userId,
+    name: teacherName(teacher),
+    programs: teacher.programAssignments
+      .map((assignment) => ({
+        id: assignment.program.id,
+        title: displayProgramTitle(assignment.program.title),
+      }))
+      .sort((left, right) => left.title.localeCompare(right.title)),
+  }));
+}
+
+function extractGoogleDriveFileId(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]{20,})/u,
+    /[?&]id=([a-zA-Z0-9_-]{20,})/u,
+    /^([a-zA-Z0-9_-]{20,})$/u,
+  ];
+
+  for (const pattern of patterns) {
+    const match = trimmed.match(pattern);
+    if (match?.[1]) return match[1];
+  }
+
+  return null;
+}
+
+function parseManualSessionDate(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  const parsed = new Date(`${trimmed}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function recordingEndFromDuration(start: Date, durationSeconds: number | null) {
+  if (!durationSeconds || durationSeconds <= 0) return null;
+  return new Date(start.getTime() + Math.max(1, Math.round(durationSeconds)) * 1000);
+}
+
+function fileTypeFromName(name: string, fallback?: string | null) {
+  const extension = name.split(".").pop()?.trim().toUpperCase();
+  if (extension && extension.length <= 6) return extension;
+  if (fallback?.includes("mp4")) return "MP4";
+  if (fallback?.includes("mpeg")) return "MP4";
+  if (fallback?.includes("webm")) return "WEBM";
+  if (fallback?.includes("quicktime")) return "MOV";
+  return "MP4";
+}
+
+async function createManualRecordingSchedule(input: {
+  adminUserId: string;
+  teacherId: string;
+  programId: string;
+  title: string;
+  recordedAt: Date;
+  durationSeconds: number | null;
+}) {
+  const end = recordingEndFromDuration(input.recordedAt, input.durationSeconds);
+  const endTime = end
+    ? `${String(end.getUTCHours()).padStart(2, "0")}:${String(end.getUTCMinutes()).padStart(2, "0")}`
+    : "00:30";
+
+  return db.classSchedule.create({
+    data: {
+      programId: input.programId,
+      teacherId: input.teacherId,
+      createdByUserId: input.adminUserId,
+      title: `${input.title} [Audience:ALL] [Students:visible]`,
+      timezone: "Europe/London",
+      weekday: input.recordedAt.getUTCDay(),
+      startTime: "00:00",
+      endTime,
+      meetingProvider: "Manual recording",
+      startsOn: input.recordedAt,
+      endsOn: input.recordedAt,
+    },
+  });
+}
+
+export async function addManualLiveClassRecording(input: {
+  adminUserId: string;
+  teacherId: string;
+  programId: string;
+  title: string;
+  sessionDate?: string | null;
+  durationSeconds?: number | null;
+  source: "upload" | "drive";
+  file?: File | null;
+  driveUrl?: string | null;
+  notifyUsers?: boolean;
+}) {
+  const title = input.title.trim();
+  if (!title) throw new Error("Recording title is required.");
+
+  const teacher = await db.teacherProfile.findUnique({
+    where: { id: input.teacherId },
+    include: { user: true, programAssignments: true },
+  });
+  if (!teacher) throw new Error("Teacher not found.");
+  if (!teacher.programAssignments.some((assignment) => assignment.programId === input.programId)) {
+    throw new Error("This teacher is not assigned to the selected program.");
+  }
+
+  const program = await db.program.findUnique({ where: { id: input.programId } });
+  if (!program) throw new Error("Program not found.");
+
+  const sessionDate = parseManualSessionDate(input.sessionDate);
+  const recordedAt = sessionDate ?? new Date();
+  let durationSeconds = input.durationSeconds && input.durationSeconds > 0 ? Math.round(input.durationSeconds) : null;
+  const schedule = await createManualRecordingSchedule({
+    adminUserId: input.adminUserId,
+    teacherId: input.teacherId,
+    programId: input.programId,
+    title,
+    recordedAt,
+    durationSeconds,
+  });
+
+  let driveFileId: string;
+  let driveViewUrl: string | null;
+  let driveFolderId: string | null = null;
+  let fileType = "MP4";
+  let fileSize: bigint | null = null;
+  let recordingFileId = `manual-${crypto.randomUUID()}`;
+
+  if (input.source === "upload") {
+    const file = input.file;
+    if (!file || file.size <= 0) throw new Error("Please choose a recording file to upload.");
+    const buffer = Buffer.from(await file.arrayBuffer());
+    fileType = fileTypeFromName(file.name, file.type);
+    fileSize = BigInt(file.size);
+    const uploaded = await uploadLiveClassRecordingToDrive({
+      programId: input.programId,
+      teacherUserId: teacher.userId,
+      scheduleId: schedule.id,
+      recordingFileId,
+      title,
+      buffer,
+      mimeType: file.type || "video/mp4",
+      fileType,
+      recordingStart: recordedAt,
+    });
+    driveFileId = uploaded.id;
+    driveViewUrl = uploaded.webViewLink;
+    driveFolderId = uploaded.folderId;
+    recordingFileId = `manual-${uploaded.id}`;
+  } else {
+    const fileId = extractGoogleDriveFileId(input.driveUrl ?? "");
+    if (!fileId) throw new Error("Please paste a valid Google Drive video link or file ID.");
+    const file = await driveRequest<{
+      id: string;
+      name?: string;
+      mimeType?: string;
+      webViewLink?: string;
+      size?: string;
+      videoMediaMetadata?: { durationMillis?: string };
+    }>(`/files/${fileId}?fields=id,name,mimeType,webViewLink,size,videoMediaMetadata`);
+
+    driveFileId = file.id;
+    driveViewUrl = file.webViewLink ?? input.driveUrl ?? null;
+    fileType = fileTypeFromName(file.name ?? title, file.mimeType);
+    fileSize = file.size ? BigInt(file.size) : null;
+    if (!durationSeconds && file.videoMediaMetadata?.durationMillis) {
+      durationSeconds = Math.round(Number(file.videoMediaMetadata.durationMillis) / 1000);
+    }
+    recordingFileId = `manual-${file.id}`;
+
+    await driveRequest(`/files/${file.id}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "reader", type: "anyone" }),
+    }).catch(() => undefined);
+    await driveRequest(`/files/${file.id}?fields=id,webViewLink,copyRequiresWriterPermission`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ copyRequiresWriterPermission: true }),
+    }).catch(() => undefined);
+  }
+
+  const recordingEnd = recordingEndFromDuration(recordedAt, durationSeconds);
+
+  const recording = await db.liveClassRecording.upsert({
+    where: { recordingFileId },
+    create: {
+      scheduleId: schedule.id,
+      recordingFileId,
+      meetingId: sessionDate ? "manual" : "manual-no-date",
+      topic: title,
+      fileType,
+      playUrl: driveViewUrl ?? `https://drive.google.com/file/d/${driveFileId}/view`,
+      downloadUrl: null,
+      driveFileId,
+      driveViewUrl,
+      driveFolderId,
+      storageProvider: "google-drive",
+      recordingStart: recordedAt,
+      recordingEnd,
+      fileSize,
+      availableAt: sessionDate ?? new Date(),
+    },
+    update: {
+      scheduleId: schedule.id,
+      meetingId: sessionDate ? "manual" : "manual-no-date",
+      topic: title,
+      fileType,
+      playUrl: driveViewUrl ?? `https://drive.google.com/file/d/${driveFileId}/view`,
+      downloadUrl: null,
+      driveFileId,
+      driveViewUrl,
+      driveFolderId,
+      storageProvider: "google-drive",
+      recordingStart: recordedAt,
+      recordingEnd,
+      fileSize,
+      availableAt: sessionDate ?? new Date(),
+      deletedAt: null,
+    },
+  });
+
+  await db.notification.create({
+    data: {
+      userId: teacher.userId,
+      title: "Recording added",
+      body: `${title} has been added to ${displayProgramTitle(program.title)} recordings.`,
+      href: "/teacher/recordings",
+    },
+  });
+
+  if (input.notifyUsers) {
+    await notifyRecordingReady(recording.id);
+  }
+
+  return recording.id;
+}
