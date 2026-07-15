@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic";
+﻿export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -8,7 +8,6 @@ import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { getCurrentSession } from "@/lib/auth/session";
 import { ManualRecordingForm } from "./ManualRecordingForm";
 import {
-  addManualLiveClassRecording,
   deleteRecordingForAdmin,
   listAdminRecordings,
   listManualRecordingFormOptions,
@@ -161,36 +160,6 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success"));
   }
 
-  async function addManualRecordingAction(formData: FormData) {
-    "use server";
-    const currentSession = await getCurrentSession();
-    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
-
-    try {
-      const fileValue = formData.get("recordingFile");
-      await addManualLiveClassRecording({
-        adminUserId: currentSession.user.id,
-        teacherId: String(formData.get("teacherId") || ""),
-        programId: String(formData.get("programId") || ""),
-        title: String(formData.get("title") || ""),
-        sessionDate: String(formData.get("sessionDate") || ""),
-        durationSeconds: Number(formData.get("durationSeconds") || "0") || null,
-        source: String(formData.get("source") || "drive") === "upload" ? "upload" : "drive",
-        file: fileValue instanceof File && fileValue.size > 0 ? fileValue : null,
-        driveUrl: String(formData.get("driveUrl") || ""),
-        notifyUsers: formData.get("notifyUsers") === "yes",
-      });
-      revalidatePath("/admin/recordings");
-      revalidatePath("/teacher/recordings");
-      revalidatePath("/student/recordings");
-      revalidatePath("/parent/recordings");
-    } catch (error) {
-      redirect(noticeHref(error instanceof Error ? error.message : "Unable to add recording.", "error"));
-    }
-
-    redirect(noticeHref("Manual recording added to Drive-backed recordings.", "success"));
-  }
-
   const manualRecordingOptions = await listManualRecordingFormOptions();
   const recordings = await listAdminRecordings();
   const grouped = new Map<string, typeof recordings>();
@@ -252,9 +221,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
               Upload a local recording or attach an existing Google Drive video to the correct teacher and programme. It will appear in the same recordings tabs for admin, teacher, parent, and student dashboards.
             </p>
           </div>
-          <form action={addManualRecordingAction} encType="multipart/form-data">
-            <ManualRecordingForm teachers={manualRecordingOptions} />
-          </form>
+          <ManualRecordingForm teachers={manualRecordingOptions} />
         </section>
 
         <div className="grid gap-4 md:grid-cols-3">
@@ -375,3 +342,4 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     </div>
   );
 }
+

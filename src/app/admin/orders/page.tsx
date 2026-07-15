@@ -1,11 +1,13 @@
-export const dynamic = "force-dynamic";
+﻿export const dynamic = "force-dynamic";
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { db } from "@/lib/db";
+import { getCurrentSession } from "@/lib/auth/session";
 import { markOrderPaid, recordManualPaidAmount, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
+import { extendStripeSubscriptionBillingDateForOrderItem } from "@/lib/payments/monthly-ledger";
 
 function statusClass(status: string) {
   if (status === "SUCCEEDED") return "bg-[#effaf3] text-[#2f6b4b]";
@@ -45,6 +47,10 @@ function extractManualPaidAmountAdjustment(metadata: unknown) {
     currency: typeof record.currency === "string" ? record.currency : null,
     note: typeof record.note === "string" ? record.note : null,
   };
+}
+
+function formatAdminDate(value: Date | null | undefined) {
+  return value ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "Not set";
 }
 
 function registrationSourceLabel(notes: string | null | undefined) {
@@ -112,6 +118,32 @@ export default async function AdminOrdersPage({
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Confirmation email sent successfully&tone=success`);
   }
 
+  async function extendStripeOrderBilling(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "ADMIN") redirect("/admin");
+
+    const orderItemId = String(formData.get("orderItemId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin/orders");
+    const months = Number(formData.get("months") || "1");
+    const note = String(formData.get("extensionNote") || "");
+
+    try {
+      const result = await extendStripeSubscriptionBillingDateForOrderItem({
+        orderItemId,
+        months,
+        adminUserId: session.user.id,
+        note,
+      });
+      revalidatePath("/admin/orders");
+      revalidatePath("/admin/monthly-payments");
+      revalidatePath("/parent/profile");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Stripe next charge moved by ${result.months} month${result.months === 1 ? "" : "s"} to ${formatAdminDate(result.nextBillingDate)}. ${result.creditedRows} credit row${result.creditedRows === 1 ? "" : "s"} added.&tone=success`);
+    } catch (error) {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(error instanceof Error ? error.message : "Unable to extend Stripe subscription.")}&tone=error`);
+    }
+  }
   async function adjustManualPaidAmount(formData: FormData) {
     "use server";
 
@@ -151,6 +183,17 @@ export default async function AdminOrdersPage({
         },
       },
       registration: true,
+      items: {
+        include: {
+          subscription: true,
+          enrollment: {
+            include: {
+              student: { include: { user: true } },
+              program: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -195,7 +238,7 @@ export default async function AdminOrdersPage({
                       {order.orderNumber}
                     </h2>
                     <p className="mt-1 text-sm text-[#6d7785]">
-                      {order.parent.user.firstName} {order.parent.user.lastName} •{" "}
+                      {order.parent.user.firstName} {order.parent.user.lastName} â€¢{" "}
                       {order.parent.user.email}
                     </p>
                     <p className="mt-2 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{sourceLabel}</p>
@@ -321,7 +364,34 @@ export default async function AdminOrdersPage({
                     </button>
                   </form>
                 ) : null}
-              </div>
+                {order.gateway === "STRIPE" && order.items.some((item) => item.subscription?.providerSubscriptionId) ? (
+                  <div className="mt-4 rounded-[22px] border border-[#d7e6f3] bg-[#f8fbff] p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f4d81]">Extend Stripe subscription date</p>
+                    <p className="mt-1 text-xs leading-5 text-[#617184]">Use this when a parent paid twice and next month should be credited before Stripe charges again.</p>
+                    <div className="mt-3 grid gap-3">
+                      {order.items.filter((item) => item.subscription?.providerSubscriptionId).map((item) => (
+                        <form key={item.id} action={extendStripeOrderBilling} className="grid gap-3 rounded-2xl bg-white p-3 text-sm md:grid-cols-[1.2fr_130px_1fr_auto]">
+                          <input type="hidden" name="orderItemId" value={item.id} />
+                          <input type="hidden" name="returnUrl" value="/admin/orders" />
+                          <div>
+                            <p className="font-semibold text-[#22304a]">{item.enrollment?.student.displayName || `${item.enrollment?.student.user.firstName ?? "Student"} ${item.enrollment?.student.user.lastName ?? ""}`.trim()}</p>
+                            <p className="text-xs text-[#617184]">{item.description}</p>
+                            <p className="text-[11px] text-[#6d7785]">Current next date: {formatAdminDate(item.subscription?.currentPeriodEnd)}</p>
+                          </div>
+                          <label className="grid gap-1 text-xs font-semibold text-[#22304a]">
+                            Months
+                            <input name="months" type="number" min="1" max="12" defaultValue="1" className="rounded-xl border border-[#dce4ed] px-3 py-2" />
+                          </label>
+                          <label className="grid gap-1 text-xs font-semibold text-[#22304a]">
+                            Reason
+                            <input name="extensionNote" placeholder="Duplicate payment credit" className="rounded-xl border border-[#dce4ed] px-3 py-2" />
+                          </label>
+                          <button className="self-end rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Move next Stripe charge</button>
+                        </form>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}              </div>
             );
           })}
         </div>
@@ -329,3 +399,5 @@ export default async function AdminOrdersPage({
     </div>
   );
 }
+
+
