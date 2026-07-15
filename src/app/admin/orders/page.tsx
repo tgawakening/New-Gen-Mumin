@@ -170,7 +170,7 @@ export default async function AdminOrdersPage({
 
   const orders = await db.order.findMany({
     orderBy: { createdAt: "desc" },
-    take: 24,
+    take: 100,
     include: {
       parent: {
         include: {
@@ -364,12 +364,12 @@ export default async function AdminOrdersPage({
                     </button>
                   </form>
                 ) : null}
-                {order.gateway === "STRIPE" && order.items.some((item) => item.subscription?.providerSubscriptionId) ? (
+                {order.gateway === "STRIPE" ? (
                   <div className="mt-4 rounded-[22px] border border-[#d7e6f3] bg-[#f8fbff] p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f4d81]">Extend Stripe subscription date</p>
                     <p className="mt-1 text-xs leading-5 text-[#617184]">Use this when a parent paid twice and next month should be credited before Stripe charges again.</p>
                     <div className="mt-3 grid gap-3">
-                      {order.items.filter((item) => item.subscription?.providerSubscriptionId).map((item) => (
+                      {order.items.some((item) => item.subscription?.providerSubscriptionId) ? order.items.filter((item) => item.subscription?.providerSubscriptionId).map((item) => (
                         <form key={item.id} action={extendStripeOrderBilling} className="grid gap-3 rounded-2xl bg-white p-3 text-sm md:grid-cols-[1.2fr_130px_1fr_auto]">
                           <input type="hidden" name="orderItemId" value={item.id} />
                           <input type="hidden" name="returnUrl" value="/admin/orders" />
@@ -388,10 +388,13 @@ export default async function AdminOrdersPage({
                           </label>
                           <button className="self-end rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Move next Stripe charge</button>
                         </form>
-                      ))}
+                      )) : (
+                        <div className="rounded-2xl bg-white p-3 text-sm text-[#617184]">No Stripe subscription ID is attached to this order yet. This button appears only after Stripe subscription data is saved for the order item.</div>
+                      )}
                     </div>
                   </div>
-                ) : null}              </div>
+                ) : null}
+              </div>
             );
           })}
         </div>
@@ -399,5 +402,7 @@ export default async function AdminOrdersPage({
     </div>
   );
 }
+
+
 
 
