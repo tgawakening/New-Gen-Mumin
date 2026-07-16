@@ -223,7 +223,7 @@ export default async function AdminOrdersPage({
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
               const stripeSubscriptionItems = order.items.filter((item) => item.subscription?.providerSubscriptionId);
               const showStripeExtension = order.gateway === 'STRIPE' || stripeSubscriptionItems.length > 0;
- const canApproveManual = canMarkOrderPaid({
+              const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
                 paymentStatus: latestPayment?.status ?? order.status,
@@ -342,30 +342,6 @@ export default async function AdminOrdersPage({
                     </form>
                   </div>
                 ) : null}
-                {["BANK_TRANSFER", "STRIPE", "PAYPAL"].includes(order.gateway) ? (
-                  <form action={adjustManualPaidAmount} className="mt-4 grid gap-3 rounded-[22px] border border-[#eadfce] bg-[#fbfdff] p-4 text-sm md:grid-cols-[180px_1fr_auto]">
-                    <input type="hidden" name="orderId" value={order.id} />
-                    <input type="hidden" name="returnUrl" value="/admin/orders" />
-                    <input
-                      name="manualPaidAmount"
-                      type="number"
-                      min="0"
-                      step="1"
-                      defaultValue={order.totalAmount}
-                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
-                      aria-label="Recorded paid amount"
-                    />
-                    <input
-                      name="manualPaidNote"
-                      defaultValue={manualPaidAmountAdjustment?.note ?? ""}
-                      placeholder="Note, e.g. manual refund or corrected gateway amount"
-                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
-                    />
-                    <button className="rounded-full bg-[#22304a] px-5 py-2 font-semibold text-white">
-                      Save record
-                    </button>
-                  </form>
-                ) : null}
                 {showStripeExtension ? (
                   <div className="mt-4 rounded-[22px] border border-[#d7e6f3] bg-[#f8fbff] p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f4d81]">Extend Stripe subscription date</p>
@@ -396,6 +372,31 @@ export default async function AdminOrdersPage({
                     </div>
                   </div>
                 ) : null}
+                {["BANK_TRANSFER", "STRIPE", "PAYPAL"].includes(order.gateway) ? (
+                  <form action={adjustManualPaidAmount} className="mt-4 grid gap-3 rounded-[22px] border border-[#eadfce] bg-[#fbfdff] p-4 text-sm md:grid-cols-[180px_1fr_auto]">
+                    <input type="hidden" name="orderId" value={order.id} />
+                    <input type="hidden" name="returnUrl" value="/admin/orders" />
+                    <input
+                      name="manualPaidAmount"
+                      type="number"
+                      min="0"
+                      step="1"
+                      defaultValue={order.totalAmount}
+                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
+                      aria-label="Recorded paid amount"
+                    />
+                    <input
+                      name="manualPaidNote"
+                      defaultValue={manualPaidAmountAdjustment?.note ?? ""}
+                      placeholder="Note, e.g. manual refund or corrected gateway amount"
+                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
+                    />
+                    <button className="rounded-full bg-[#22304a] px-5 py-2 font-semibold text-white">
+                      Save record
+                    </button>
+                  </form>
+                ) : null}
+
               </div>
             );
           })}
