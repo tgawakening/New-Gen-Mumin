@@ -63,6 +63,7 @@ export function cleanLiveClassTitle(title: string) {
     .replace(/\s*\[Students:hidden\]\s*/gu, " ")
     .replace(/\s*\[Students:visible\]\s*/gu, " ")
     .replace(/\s*\[Audience:(PK_UK|US_CA|AU)\]\s*/gu, " ")
+    .replace(/\s*\[Teachers:[^\]]+\]\s*/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
 }

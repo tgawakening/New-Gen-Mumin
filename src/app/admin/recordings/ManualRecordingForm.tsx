@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -28,6 +28,7 @@ export function ManualRecordingForm({ teachers }: ManualRecordingFormProps) {
     () => teachers.find((teacher) => teacher.id === teacherId) ?? teachers[0],
     [teacherId, teachers],
   );
+  const selectedProgramIds = new Set((selectedTeacher?.programs ?? []).map((program) => program.id));
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.currentTarget.files?.[0];
@@ -132,6 +133,19 @@ export function ManualRecordingForm({ teachers }: ManualRecordingFormProps) {
               ))}
             </select>
           </label>
+        </div>
+
+        <div className="rounded-2xl border border-[#d8e3ed] bg-white p-3">
+          <p className="text-sm font-semibold text-[#22304a]">Additional teachers for this recording</p>
+          <p className="mt-1 text-xs leading-5 text-[#617184]">Use this for Arabic breakout-room recordings or any session led by more than one teacher.</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {teachers.filter((teacher) => teacher.id !== teacherId && teacher.programs.some((program) => selectedProgramIds.has(program.id))).map((teacher) => (
+              <label key={teacher.id} className="flex items-center gap-2 rounded-xl bg-[#fbf6ef] px-3 py-2 text-sm text-[#22304a]">
+                <input name="collaboratorTeacherIds" type="checkbox" value={teacher.id} disabled={busy} />
+                <span>{teacher.name}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">

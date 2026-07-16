@@ -1,4 +1,4 @@
-﻿export const dynamic = "force-dynamic";
+export const dynamic = "force-dynamic";
 
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -164,14 +164,19 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
   const recordings = await listAdminRecordings();
   const grouped = new Map<string, typeof recordings>();
   for (const recording of recordings) {
-    const entries = grouped.get(recording.teacherId) ?? [];
+    const groupKey = recording.isCollaborative
+      ? `program:${recording.programSlug}:${recording.teacherNames.join("|")}`
+      : recording.teacherId;
+    const entries = grouped.get(groupKey) ?? [];
     entries.push(recording);
-    grouped.set(recording.teacherId, entries);
+    grouped.set(groupKey, entries);
   }
 
   const teacherTabs = [...grouped.entries()].map(([teacherId, entries]) => ({
     teacherId,
-    teacherName: entries[0]?.teacherName ?? "Teacher",
+    teacherName: entries[0]?.isCollaborative
+      ? `${entries[0].programTitle} by ${entries[0].teacherName}`
+      : entries[0]?.teacherName ?? "Teacher",
     count: entries.length,
   })).sort((left, right) => left.teacherName.localeCompare(right.teacherName));
   const requestedTeacher = firstParam(params.teacher);

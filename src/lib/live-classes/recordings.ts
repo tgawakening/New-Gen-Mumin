@@ -20,6 +20,7 @@ const RECORDING_PROCESSING_STALE_MS = 45 * 60 * 1000;
 const RECORDING_CHUNK_BYTES = 32 * 1024 * 1024;
 const RECORDING_DRIVE_PROCESSING_CHECK_LIMIT = 8;
 const RECORDING_CHUNK_ACTIVE_GRACE_MS = 90 * 1000;
+const COLLABORATOR_MARKER_REGEX = /\s*\[Teachers:([^\]]+)\]\s*/u;
 
 export type LiveClassRecordingSummary = {
   id: string;
@@ -28,6 +29,8 @@ export type LiveClassRecordingSummary = {
   programSlug: string;
   teacherId: string;
   teacherName: string;
+  teacherNames: string[];
+  isCollaborative: boolean;
   watchUrl: string | null;
   playbackUrl: string | null;
   isReadyForPlayback: boolean;
@@ -46,6 +49,28 @@ export type LiveClassRecordingSummary = {
 
 function teacherName(teacher: { user: { firstName: string; lastName: string | null; email: string } }) {
   return `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email;
+}
+
+function collaboratorMarker(names: string[]) {
+  const value = names
+    .map((name) => name.replace(/[\[\]]/gu, "").trim())
+    .filter(Boolean)
+    .join(", ");
+  return value ? ` [Teachers:${value}]` : "";
+}
+
+function cleanRecordingTitle(value: string) {
+  return cleanLiveClassTitle(value).replace(COLLABORATOR_MARKER_REGEX, " ").replace(/\s+/gu, " ").trim();
+}
+
+function recordingCollaboratorNames(recording: any) {
+  const source = `${recording.topic ?? ""} ${recording.schedule?.title ?? ""}`;
+  const match = source.match(COLLABORATOR_MARKER_REGEX);
+  if (match?.[1]) {
+    const names = match[1].split(",").map((name) => name.trim()).filter(Boolean);
+    if (names.length) return [...new Set(names)];
+  }
+  return [teacherName(recording.schedule.teacher)];
 }
 
 function shortErrorMessage(error: unknown) {
@@ -101,6 +126,7 @@ function recordingProcessingState(recording: { driveFileId?: string | null; stor
 
 function mapRecording(recording: any): LiveClassRecordingSummary {
   const processingState = recordingProcessingState(recording);
+  const collaborators = recordingCollaboratorNames(recording);
   const durationMinutes =
     recording.recordingStart && recording.recordingEnd
       ? Math.max(0, Math.round((recording.recordingEnd.getTime() - recording.recordingStart.getTime()) / 60000))
@@ -108,11 +134,13 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
 
   return {
     id: recording.id,
-    title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+    title: cleanRecordingTitle(recording.topic || recording.schedule.title),
     programTitle: displayProgramTitle(recording.schedule.program.title),
     programSlug: recording.schedule.program.slug,
     teacherId: recording.schedule.teacherId,
-    teacherName: teacherName(recording.schedule.teacher),
+    teacherName: collaborators.join(", "),
+    teacherNames: collaborators,
+    isCollaborative: collaborators.length > 1,
     watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
     playbackUrl: recording.driveFileId && recording.storageProvider === "google-drive" ? `/api/recordings/${recording.id}/media` : null,
     isReadyForPlayback: Boolean(recording.driveFileId && recording.storageProvider === "google-drive"),
@@ -1152,18 +1180,28 @@ export async function addManualLiveClassRecording(input: {
   file?: File | null;
   driveUrl?: string | null;
   notifyUsers?: boolean;
+  collaboratorTeacherIds?: string[];
 }) {
   const title = input.title.trim();
   if (!title) throw new Error("Recording title is required.");
 
-  const teacher = await db.teacherProfile.findUnique({
-    where: { id: input.teacherId },
+  const collaboratorTeacherIds = [...new Set([input.teacherId, ...(input.collaboratorTeacherIds ?? [])].filter(Boolean))];
+  const collaborators = await db.teacherProfile.findMany({
+    where: { id: { in: collaboratorTeacherIds } },
     include: { user: true, programAssignments: true },
   });
-  if (!teacher) throw new Error("Teacher not found.");
-  if (!teacher.programAssignments.some((assignment) => assignment.programId === input.programId)) {
-    throw new Error("This teacher is not assigned to the selected program.");
+  if (!collaborators.length) throw new Error("Teacher not found.");
+  if (collaborators.length !== collaboratorTeacherIds.length) {
+    throw new Error("One or more selected teachers could not be found.");
   }
+  for (const collaborator of collaborators) {
+    if (!collaborator.programAssignments.some((assignment) => assignment.programId === input.programId)) {
+      throw new Error(`${teacherName(collaborator)} is not assigned to the selected program.`);
+    }
+  }
+  const teacher = collaborators.find((item) => item.id === input.teacherId) ?? collaborators[0];
+  const collaboratorNames = collaborators.map(teacherName);
+  const recordingTitle = collaboratorNames.length > 1 ? `${title}${collaboratorMarker(collaboratorNames)}` : title;
 
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
@@ -1175,7 +1213,7 @@ export async function addManualLiveClassRecording(input: {
     adminUserId: input.adminUserId,
     teacherId: input.teacherId,
     programId: input.programId,
-    title,
+    title: recordingTitle,
     recordedAt,
     durationSeconds,
   });
@@ -1198,7 +1236,7 @@ export async function addManualLiveClassRecording(input: {
       teacherUserId: teacher.userId,
       scheduleId: schedule.id,
       recordingFileId,
-      title,
+      title: cleanRecordingTitle(recordingTitle),
       buffer,
       mimeType: file.type || "video/mp4",
       fileType,
@@ -1249,7 +1287,7 @@ export async function addManualLiveClassRecording(input: {
       scheduleId: schedule.id,
       recordingFileId,
       meetingId: sessionDate ? "manual" : "manual-no-date",
-      topic: title,
+      topic: recordingTitle,
       fileType,
       playUrl: driveViewUrl ?? `https://drive.google.com/file/d/${driveFileId}/view`,
       downloadUrl: null,
@@ -1265,7 +1303,7 @@ export async function addManualLiveClassRecording(input: {
     update: {
       scheduleId: schedule.id,
       meetingId: sessionDate ? "manual" : "manual-no-date",
-      topic: title,
+      topic: recordingTitle,
       fileType,
       playUrl: driveViewUrl ?? `https://drive.google.com/file/d/${driveFileId}/view`,
       downloadUrl: null,

@@ -23,6 +23,7 @@ export async function POST(request: Request) {
       file: fileValue instanceof File && fileValue.size > 0 ? fileValue : null,
       driveUrl: String(formData.get("driveUrl") || ""),
       notifyUsers: formData.get("notifyUsers") === "yes",
+      collaboratorTeacherIds: formData.getAll("collaboratorTeacherIds").map(String).filter(Boolean),
     });
 
     return NextResponse.json({
