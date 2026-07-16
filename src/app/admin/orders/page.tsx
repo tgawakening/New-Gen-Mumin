@@ -221,7 +221,9 @@ export default async function AdminOrdersPage({
               const city = extractNoteValue(order.registration?.notes, "City");
               const sourceLabel = registrationSourceLabel(order.registration?.notes);
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
-              const canApproveManual = canMarkOrderPaid({
+              const stripeSubscriptionItems = order.items.filter((item) => item.subscription?.providerSubscriptionId);
+              const showStripeExtension = order.gateway === 'STRIPE' || stripeSubscriptionItems.length > 0;
+ const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
                 paymentStatus: latestPayment?.status ?? order.status,
@@ -238,7 +240,7 @@ export default async function AdminOrdersPage({
                       {order.orderNumber}
                     </h2>
                     <p className="mt-1 text-sm text-[#6d7785]">
-                      {order.parent.user.firstName} {order.parent.user.lastName} â€¢{" "}
+                      {order.parent.user.firstName} {order.parent.user.lastName} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢{" "}
                       {order.parent.user.email}
                     </p>
                     <p className="mt-2 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{sourceLabel}</p>
@@ -364,12 +366,12 @@ export default async function AdminOrdersPage({
                     </button>
                   </form>
                 ) : null}
-                {order.gateway === "STRIPE" ? (
+                {showStripeExtension ? (
                   <div className="mt-4 rounded-[22px] border border-[#d7e6f3] bg-[#f8fbff] p-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f4d81]">Extend Stripe subscription date</p>
                     <p className="mt-1 text-xs leading-5 text-[#617184]">Use this when a parent paid twice and next month should be credited before Stripe charges again.</p>
                     <div className="mt-3 grid gap-3">
-                      {order.items.some((item) => item.subscription?.providerSubscriptionId) ? order.items.filter((item) => item.subscription?.providerSubscriptionId).map((item) => (
+                      {stripeSubscriptionItems.length ? stripeSubscriptionItems.map((item) => (
                         <form key={item.id} action={extendStripeOrderBilling} className="grid gap-3 rounded-2xl bg-white p-3 text-sm md:grid-cols-[1.2fr_130px_1fr_auto]">
                           <input type="hidden" name="orderItemId" value={item.id} />
                           <input type="hidden" name="returnUrl" value="/admin/orders" />
