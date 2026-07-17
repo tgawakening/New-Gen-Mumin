@@ -253,7 +253,16 @@ export default async function AdminOrdersPage({
           </p>
         </div>
 
-        <div className="grid gap-4">
+        <div className="overflow-hidden rounded-[1.35rem] border border-[#d9e2ec] bg-white shadow-sm">
+          <div className="hidden grid-cols-[1.25fr_1.35fr_0.8fr_0.75fr_0.75fr_1.2fr] gap-4 border-b border-[#e4ecf4] bg-[#f8fbff] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6b7888] lg:grid">
+            <span>Parent</span>
+            <span>Children / programme</span>
+            <span>Amount</span>
+            <span>Payment</span>
+            <span>Status</span>
+            <span>Actions</span>
+          </div>
+          <div className="divide-y divide-[#e5edf5]">
             {orders.map((order) => {
               const latestPayment = order.payments[0] ?? null;
               const manualSubmission = latestPayment?.manualSubmission ?? null;
@@ -261,239 +270,157 @@ export default async function AdminOrdersPage({
               const sourceLabel = registrationSourceLabel(order.registration?.notes);
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
               const stripeSubscriptionItems = order.items.filter((item) => item.subscription?.providerSubscriptionId);
-              const isStripeOrder = order.gateway === 'STRIPE' || latestPayment?.gateway === 'STRIPE';
-              const showStripeExtension = stripeSubscriptionItems.length > 0;
+              const isStripeOrder = order.gateway === "STRIPE" || latestPayment?.gateway === "STRIPE";
               const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
                 paymentStatus: latestPayment?.status ?? order.status,
               });
+              const pricingSnapshot = order.registration?.pricingSnapshot;
+              const couponCode =
+                typeof pricingSnapshot === "object" &&
+                pricingSnapshot &&
+                "couponCode" in pricingSnapshot &&
+                typeof (pricingSnapshot as Record<string, unknown>).couponCode === "string"
+                  ? ((pricingSnapshot as Record<string, unknown>).couponCode as string)
+                  : null;
+              const couponDiscount =
+                typeof pricingSnapshot === "object" && pricingSnapshot
+                  ? (pricingSnapshot as Record<string, unknown>).couponDiscountPercent
+                  : null;
+              const children = order.items
+                .map((item) => {
+                  const student = item.enrollment?.student;
+                  const name = student?.displayName || `${student?.user.firstName ?? "Student"} ${student?.user.lastName ?? ""}`.trim();
+                  return {
+                    id: item.id,
+                    name,
+                    program: item.enrollment?.program.title ?? item.description,
+                    subscriptionEnd: item.subscription?.currentPeriodEnd,
+                  };
+                })
+                .filter((item, index, list) => item.name || index < list.length);
 
-            return (
-              <div
-                key={order.id}
-                className="rounded-[1.6rem] border border-[#eadfce] bg-white p-5 shadow-sm"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-semibold text-[#22304a]">
-                      {order.orderNumber}
-                    </h2>
-                    <p className="mt-1 text-sm text-[#6d7785]">
-                      {order.parent.user.firstName} {order.parent.user.lastName} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢{" "}
-                      {order.parent.user.email}
-                    </p>
-                    <p className="mt-2 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{sourceLabel}</p>
-                    <p className="mt-1 text-sm text-[#6d7785]">City: {city ?? "Pending"}</p>
+              return (
+                <div key={order.id} className="grid gap-4 px-4 py-4 text-sm text-[#22304a] lg:grid-cols-[1.25fr_1.35fr_0.8fr_0.75fr_0.75fr_1.2fr] lg:items-start">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9aa8b8] lg:hidden">Parent</p>
+                    <p className="font-semibold text-[#17233b]">{order.parent.user.firstName} {order.parent.user.lastName}</p>
+                    <p className="mt-1 truncate text-xs text-[#617184]">{order.parent.user.email}</p>
+                    <p className="mt-1 text-xs text-[#617184]">City: {city ?? "Pending"}</p>
+                    <p className="mt-2 inline-flex rounded-full bg-[#eef6ff] px-2.5 py-1 text-[11px] font-semibold text-[#0f4d81]">{sourceLabel}</p>
+                    <p className="mt-2 text-[11px] text-[#8a97a7]">{order.orderNumber}</p>
                   </div>
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold ${statusClass(order.status)}`}
-                  >
-                    {order.status.replace(/_/g, " ")}
-                  </span>
-                </div>
 
-                <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#556274]">
-                  <span>{order.gateway}</span>
-                  <span>
-                    {order.currency} {order.totalAmount}
-                  </span>
-                  {order.discountAmount > 0 ? (
-                    <span>Saved {order.currency} {order.discountAmount}</span>
-                  ) : null}
-                  {manualPaidAmountAdjustment ? (
-                    <span>
-                      Payment record: {manualPaidAmountAdjustment.currency ?? order.currency} {manualPaidAmountAdjustment.amount ?? order.totalAmount}
-                      {manualPaidAmountAdjustment.note ? ` - ${manualPaidAmountAdjustment.note}` : ""}
-                    </span>
-                  ) : null}
-                  <span>{order.payments.length} payment records</span>
-                  {typeof order.registration?.pricingSnapshot === "object" &&
-                  order.registration?.pricingSnapshot &&
-                  "couponCode" in (order.registration.pricingSnapshot as object) &&
-                  typeof (order.registration.pricingSnapshot as Record<string, unknown>).couponCode === "string" ? (
-                    <span className="rounded-full bg-[#edf8ef] px-3 py-1 text-xs font-semibold text-[#2f6b4b]">
-                      {(order.registration.pricingSnapshot as Record<string, unknown>).couponCode as string}
-                      {typeof (order.registration.pricingSnapshot as Record<string, unknown>).couponDiscountPercent === "number"
-                        ? ` (${(order.registration.pricingSnapshot as Record<string, unknown>).couponDiscountPercent}% off)`
-                        : ""}
-                    </span>
-                  ) : null}
-                </div>
-
-                {manualSubmission ? (
-                  <div className="mt-4 grid gap-3 rounded-[22px] bg-[#fbf6ef] p-4 text-sm text-[#4d5a6b] md:grid-cols-2">
-                    <div>
-                      <strong className="text-[#22304a]">Sender</strong>:{" "}
-                      {manualSubmission.senderName}
-                    </div>
-                    <div>
-                      <strong className="text-[#22304a]">Number</strong>:{" "}
-                      {manualSubmission.senderNumber}
-                    </div>
-                    <div>
-                      <strong className="text-[#22304a]">Reference</strong>:{" "}
-                      {manualSubmission.referenceKey}
-                    </div>
-                    <div>
-                      <strong className="text-[#22304a]">Notes</strong>:{" "}
-                      {manualSubmission.notes ?? "No notes"}
-                    </div>
-                  </div>
-                ) : null}
-
-                {canApproveManual ? (
-                  <form action={approveManualPayment} className="mt-4">
-                    <input type="hidden" name="orderId" value={order.id} />
-                    <input
-                      type="hidden"
-                      name="referenceKey"
-                      value={manualSubmission?.referenceKey ?? ""}
-                    />
-                    <input type="hidden" name="gateway" value={order.gateway} />
-                    <input type="hidden" name="returnUrl" value="/admin/orders" />
-                    <button
-                      type="submit"
-                      className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#182236]"
-                    >
-                      {order.status === "SUCCEEDED"
-                        ? "Sync payment completed"
-                        : order.gateway === "BANK_TRANSFER"
-                          ? sourceLabel === "Program enrollment"
-                            ? "Mark payment completed and unlock programme"
-                            : "Approve and unlock dashboard"
-                          : "Mark paid and unlock dashboard"}
-                    </button>
-                  </form>
-                ) : order.status === "SUCCEEDED" || latestPayment?.status === "SUCCEEDED" ? (
-                  <div className="mt-4 space-y-2">
-                    <div className="rounded-full bg-[#effaf3] px-5 py-3 text-center text-sm font-semibold text-[#2f6b4b]">
-                      Completed
-                    </div>
-                    {isStripeOrder ? (
-                      <form action={extendStripeOrderBillingFromOrder} className="rounded-[18px] border border-[#b9d4ef] bg-[#f4f9ff] p-3 text-left">
-                        <input type="hidden" name="orderId" value={order.id} />
-                        <input type="hidden" name="returnUrl" value="/admin/orders" />
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0f4d81]">Stripe billing extension</p>
-                        <p className="mt-1 text-[11px] leading-4 text-[#617184]">Use this when a parent paid twice and the next Stripe charge should move forward.</p>
-                        <div className="mt-2 grid gap-2">
-                          <input
-                            name="months"
-                            type="number"
-                            min="1"
-                            max="12"
-                            defaultValue="1"
-                            className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
-                            aria-label="Months to extend"
-                          />
-                          <input
-                            name="extensionNote"
-                            placeholder="Reason, e.g. duplicate payment credit"
-                            className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
-                          />
-                          <button className="rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Extend Stripe subscription</button>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9aa8b8] lg:hidden">Children / programme</p>
+                    <div className="space-y-2">
+                      {children.length ? children.map((child) => (
+                        <div key={child.id} className="rounded-2xl bg-[#f8fbff] px-3 py-2">
+                          <p className="font-semibold text-[#22304a]">{child.name}</p>
+                          <p className="mt-1 text-xs text-[#617184]">{child.program}</p>
+                          {child.subscriptionEnd ? <p className="mt-1 text-[11px] text-[#7a8797]">Next Stripe date: {formatAdminDate(child.subscriptionEnd)}</p> : null}
                         </div>
-                      </form>
-                    ) : null}
-                    {showStripeExtension ? (
-                      <div className="rounded-[18px] border border-[#d7e6f3] bg-[#f8fbff] p-3 text-left">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0f4d81]">Extend Stripe date</p>
-                        {stripeSubscriptionItems.length ? stripeSubscriptionItems.map((item) => (
-                          <form key={item.id} action={extendStripeOrderBilling} className="mt-2 grid gap-2">
-                            <input type="hidden" name="orderItemId" value={item.id} />
-                            <input type="hidden" name="returnUrl" value="/admin/orders" />
-                            <p className="text-[11px] leading-4 text-[#617184]">Current next date: {formatAdminDate(item.subscription?.currentPeriodEnd)}</p>
-                            <input
-                              name="months"
-                              type="number"
-                              min="1"
-                              max="12"
-                              defaultValue="1"
-                              className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
-                              aria-label="Months to extend"
-                            />
-                            <input
-                              name="extensionNote"
-                              placeholder="Reason, e.g. duplicate payment credit"
-                              className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
-                            />
-                            <button className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Move next Stripe charge</button>
-                          </form>
-                        )) : (
-                          <p className="mt-2 text-xs leading-5 text-[#617184]">No Stripe subscription ID is attached to this order item yet.</p>
-                        )}
-                      </div>
-                    ) : null}
-                    <form action={resendCompletionEmail}>
-                      <input type="hidden" name="orderId" value={order.id} />
-                      <input type="hidden" name="returnUrl" value="/admin/orders" />
-                      <button
-                        type="submit"
-                        className="w-full rounded-full border border-[#c9d7e6] bg-white px-5 py-3 text-sm font-semibold text-[#22304a] transition hover:bg-[#f6f8fb]"
-                      >
-                        Resend confirmation
-                      </button>
-                    </form>
-                  </div>
-                ) : null}
-                {showStripeExtension ? (
-                  <div className="mt-4 rounded-[22px] border border-[#d7e6f3] bg-[#f8fbff] p-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#0f4d81]">Extend Stripe subscription date</p>
-                    <p className="mt-1 text-xs leading-5 text-[#617184]">Use this when a parent paid twice and next month should be credited before Stripe charges again.</p>
-                    <div className="mt-3 grid gap-3">
-                      {stripeSubscriptionItems.length ? stripeSubscriptionItems.map((item) => (
-                        <form key={item.id} action={extendStripeOrderBilling} className="grid gap-3 rounded-2xl bg-white p-3 text-sm md:grid-cols-[1.2fr_130px_1fr_auto]">
-                          <input type="hidden" name="orderItemId" value={item.id} />
-                          <input type="hidden" name="returnUrl" value="/admin/orders" />
-                          <div>
-                            <p className="font-semibold text-[#22304a]">{item.enrollment?.student.displayName || `${item.enrollment?.student.user.firstName ?? "Student"} ${item.enrollment?.student.user.lastName ?? ""}`.trim()}</p>
-                            <p className="text-xs text-[#617184]">{item.description}</p>
-                            <p className="text-[11px] text-[#6d7785]">Current next date: {formatAdminDate(item.subscription?.currentPeriodEnd)}</p>
-                          </div>
-                          <label className="grid gap-1 text-xs font-semibold text-[#22304a]">
-                            Months
-                            <input name="months" type="number" min="1" max="12" defaultValue="1" className="rounded-xl border border-[#dce4ed] px-3 py-2" />
-                          </label>
-                          <label className="grid gap-1 text-xs font-semibold text-[#22304a]">
-                            Reason
-                            <input name="extensionNote" placeholder="Duplicate payment credit" className="rounded-xl border border-[#dce4ed] px-3 py-2" />
-                          </label>
-                          <button className="self-end rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Move next Stripe charge</button>
-                        </form>
                       )) : (
-                        <div className="rounded-2xl bg-white p-3 text-sm text-[#617184]">No Stripe subscription ID is attached to this order yet. This button appears only after Stripe subscription data is saved for the order item.</div>
+                        <p className="rounded-2xl bg-[#f8fbff] px-3 py-2 text-xs text-[#617184]">No child details attached.</p>
                       )}
                     </div>
                   </div>
-                ) : null}
-                {["BANK_TRANSFER", "STRIPE", "PAYPAL"].includes(order.gateway) ? (
-                  <form action={adjustManualPaidAmount} className="mt-4 grid gap-3 rounded-[22px] border border-[#eadfce] bg-[#fbfdff] p-4 text-sm md:grid-cols-[180px_1fr_auto]">
-                    <input type="hidden" name="orderId" value={order.id} />
-                    <input type="hidden" name="returnUrl" value="/admin/orders" />
-                    <input
-                      name="manualPaidAmount"
-                      type="number"
-                      min="0"
-                      step="1"
-                      defaultValue={order.totalAmount}
-                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
-                      aria-label="Recorded paid amount"
-                    />
-                    <input
-                      name="manualPaidNote"
-                      defaultValue={manualPaidAmountAdjustment?.note ?? ""}
-                      placeholder="Note, e.g. manual refund or corrected gateway amount"
-                      className="rounded-xl border border-[#d8c8b5] px-3 py-2"
-                    />
-                    <button className="rounded-full bg-[#22304a] px-5 py-2 font-semibold text-white">
-                      Save record
-                    </button>
-                  </form>
-                ) : null}
 
-              </div>
-            );
-          })}
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9aa8b8] lg:hidden">Amount</p>
+                    <p className="font-semibold">{order.currency} {order.totalAmount}</p>
+                    {order.discountAmount > 0 ? <p className="mt-1 text-xs text-[#2f6b4b]">Saved {order.currency} {order.discountAmount}</p> : null}
+                    {couponCode ? (
+                      <p className="mt-2 inline-flex rounded-full bg-[#edf8ef] px-2.5 py-1 text-[11px] font-semibold text-[#2f6b4b]">
+                        {couponCode}{typeof couponDiscount === "number" ? ` - ${couponDiscount}% off` : ""}
+                      </p>
+                    ) : null}
+                    {manualPaidAmountAdjustment ? (
+                      <p className="mt-2 text-[11px] leading-4 text-[#617184]">
+                        Recorded: {manualPaidAmountAdjustment.currency ?? order.currency} {manualPaidAmountAdjustment.amount ?? order.totalAmount}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9aa8b8] lg:hidden">Payment</p>
+                    <p className="font-semibold">{order.gateway}</p>
+                    <p className="mt-1 text-xs text-[#617184]">{latestPayment?.status ?? order.status}</p>
+                    <p className="mt-1 text-[11px] text-[#8a97a7]">{order.payments.length} record{order.payments.length === 1 ? "" : "s"}</p>
+                  </div>
+
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9aa8b8] lg:hidden">Status</p>
+                    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${statusClass(order.status)}`}>
+                      {order.status.replace(/_/g, " ")}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#9aa8b8] lg:hidden">Actions</p>
+                    {canApproveManual ? (
+                      <form action={approveManualPayment}>
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input type="hidden" name="referenceKey" value={manualSubmission?.referenceKey ?? ""} />
+                        <input type="hidden" name="gateway" value={order.gateway} />
+                        <input type="hidden" name="returnUrl" value="/admin/orders" />
+                        <button type="submit" className="w-full rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#182236]">
+                          {order.gateway === "BANK_TRANSFER" ? "Mark completed" : "Sync paid"}
+                        </button>
+                      </form>
+                    ) : order.status === "SUCCEEDED" || latestPayment?.status === "SUCCEEDED" ? (
+                      <div className="rounded-full bg-[#effaf3] px-4 py-2 text-center text-xs font-semibold text-[#2f6b4b]">Completed</div>
+                    ) : null}
+
+                    {isStripeOrder ? (
+                      <details className="rounded-2xl border border-[#b9d4ef] bg-[#f4f9ff] p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Extend Stripe date</summary>
+                        <form action={extendStripeOrderBillingFromOrder} className="mt-3 grid gap-2">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnUrl" value="/admin/orders" />
+                          <input name="months" type="number" min="1" max="12" defaultValue="1" className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs" aria-label="Months to extend" />
+                          <input name="extensionNote" placeholder="Reason" className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs" />
+                          <button className="rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Apply extension</button>
+                        </form>
+                      </details>
+                    ) : null}
+
+                    <form action={resendCompletionEmail}>
+                      <input type="hidden" name="orderId" value={order.id} />
+                      <input type="hidden" name="returnUrl" value="/admin/orders" />
+                      <button type="submit" className="w-full rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-xs font-semibold text-[#22304a] transition hover:bg-[#f6f8fb]">Resend email</button>
+                    </form>
+
+                    {["BANK_TRANSFER", "STRIPE", "PAYPAL"].includes(order.gateway) ? (
+                      <details className="rounded-2xl border border-[#eadfce] bg-[#fffaf4] p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-[#7a4d1a]">Adjust paid amount</summary>
+                        <form action={adjustManualPaidAmount} className="mt-3 grid gap-2">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnUrl" value="/admin/orders" />
+                          <input name="manualPaidAmount" type="number" min="0" step="1" defaultValue={order.totalAmount} className="rounded-xl border border-[#d8c8b5] px-3 py-2 text-xs" aria-label="Recorded paid amount" />
+                          <input name="manualPaidNote" defaultValue={manualPaidAmountAdjustment?.note ?? ""} placeholder="Note" className="rounded-xl border border-[#d8c8b5] px-3 py-2 text-xs" />
+                          <button className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save record</button>
+                        </form>
+                      </details>
+                    ) : null}
+
+                    {manualSubmission ? (
+                      <details className="rounded-2xl border border-[#e4ecf4] bg-white p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-[#556274]">Manual proof</summary>
+                        <div className="mt-3 space-y-1 text-[11px] leading-4 text-[#617184]">
+                          <p><strong>Sender:</strong> {manualSubmission.senderName}</p>
+                          <p><strong>Number:</strong> {manualSubmission.senderNumber}</p>
+                          <p><strong>Reference:</strong> {manualSubmission.referenceKey}</p>
+                          <p><strong>Notes:</strong> {manualSubmission.notes ?? "No notes"}</p>
+                        </div>
+                      </details>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
