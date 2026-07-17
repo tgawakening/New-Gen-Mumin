@@ -330,6 +330,35 @@ export default async function AdminOrdersPage({
                     <div className="rounded-full bg-[#effaf3] px-5 py-3 text-center text-sm font-semibold text-[#2f6b4b]">
                       Completed
                     </div>
+                    {showStripeExtension ? (
+                      <div className="rounded-[18px] border border-[#d7e6f3] bg-[#f8fbff] p-3 text-left">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0f4d81]">Extend Stripe date</p>
+                        {stripeSubscriptionItems.length ? stripeSubscriptionItems.map((item) => (
+                          <form key={item.id} action={extendStripeOrderBilling} className="mt-2 grid gap-2">
+                            <input type="hidden" name="orderItemId" value={item.id} />
+                            <input type="hidden" name="returnUrl" value="/admin/orders" />
+                            <p className="text-[11px] leading-4 text-[#617184]">Current next date: {formatAdminDate(item.subscription?.currentPeriodEnd)}</p>
+                            <input
+                              name="months"
+                              type="number"
+                              min="1"
+                              max="12"
+                              defaultValue="1"
+                              className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
+                              aria-label="Months to extend"
+                            />
+                            <input
+                              name="extensionNote"
+                              placeholder="Reason, e.g. duplicate payment credit"
+                              className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
+                            />
+                            <button className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Move next Stripe charge</button>
+                          </form>
+                        )) : (
+                          <p className="mt-2 text-xs leading-5 text-[#617184]">No Stripe subscription ID is attached to this order item yet.</p>
+                        )}
+                      </div>
+                    ) : null}
                     <form action={resendCompletionEmail}>
                       <input type="hidden" name="orderId" value={order.id} />
                       <input type="hidden" name="returnUrl" value="/admin/orders" />
