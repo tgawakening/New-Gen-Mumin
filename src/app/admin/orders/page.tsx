@@ -222,7 +222,7 @@ export default async function AdminOrdersPage({
               const sourceLabel = registrationSourceLabel(order.registration?.notes);
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
               const stripeSubscriptionItems = order.items.filter((item) => item.subscription?.providerSubscriptionId);
-              const showStripeExtension = order.gateway === 'STRIPE' || stripeSubscriptionItems.length > 0;
+              const showStripeExtension = order.gateway === 'STRIPE' || latestPayment?.gateway === 'STRIPE' || stripeSubscriptionItems.length > 0;
               const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
@@ -240,7 +240,7 @@ export default async function AdminOrdersPage({
                       {order.orderNumber}
                     </h2>
                     <p className="mt-1 text-sm text-[#6d7785]">
-                      {order.parent.user.firstName} {order.parent.user.lastName} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢{" "}
+                      {order.parent.user.firstName} {order.parent.user.lastName} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢{" "}
                       {order.parent.user.email}
                     </p>
                     <p className="mt-2 w-fit rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">{sourceLabel}</p>
