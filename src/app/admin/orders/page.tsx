@@ -144,6 +144,45 @@ export default async function AdminOrdersPage({
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(error instanceof Error ? error.message : "Unable to extend Stripe subscription.")}&tone=error`);
     }
   }
+  async function extendStripeOrderBillingFromOrder(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "ADMIN") redirect("/admin");
+
+    const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin/orders");
+    const months = Number(formData.get("months") || "1");
+    const note = String(formData.get("extensionNote") || "");
+
+    try {
+      const orderItem = await db.orderItem.findFirst({
+        where: {
+          orderId,
+          order: { gateway: "STRIPE" },
+          subscription: { is: { providerSubscriptionId: { not: null } } },
+        },
+        orderBy: { createdAt: "asc" },
+        select: { id: true },
+      });
+      if (!orderItem) {
+        throw new Error("No active Stripe subscription is linked with this order yet.");
+      }
+      const result = await extendStripeSubscriptionBillingDateForOrderItem({
+        orderItemId: orderItem.id,
+        months,
+        adminUserId: session.user.id,
+        note,
+      });
+      revalidatePath("/admin/orders");
+      revalidatePath("/admin/monthly-payments");
+      revalidatePath("/parent/profile");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Stripe next charge moved by ${result.months} month${result.months === 1 ? "" : "s"} to ${formatAdminDate(result.nextBillingDate)}. ${result.creditedRows} credit row${result.creditedRows === 1 ? "" : "s"} added.&tone=success`);
+    } catch (error) {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(error instanceof Error ? error.message : "Unable to extend Stripe subscription.")}&tone=error`);
+    }
+  }
+
   async function adjustManualPaidAmount(formData: FormData) {
     "use server";
 
@@ -222,7 +261,8 @@ export default async function AdminOrdersPage({
               const sourceLabel = registrationSourceLabel(order.registration?.notes);
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
               const stripeSubscriptionItems = order.items.filter((item) => item.subscription?.providerSubscriptionId);
-              const showStripeExtension = order.gateway === 'STRIPE' || latestPayment?.gateway === 'STRIPE' || stripeSubscriptionItems.length > 0;
+              const isStripeOrder = order.gateway === 'STRIPE' || latestPayment?.gateway === 'STRIPE';
+              const showStripeExtension = stripeSubscriptionItems.length > 0;
               const canApproveManual = canMarkOrderPaid({
                 gateway: order.gateway,
                 status: order.status,
@@ -330,6 +370,31 @@ export default async function AdminOrdersPage({
                     <div className="rounded-full bg-[#effaf3] px-5 py-3 text-center text-sm font-semibold text-[#2f6b4b]">
                       Completed
                     </div>
+                    {isStripeOrder ? (
+                      <form action={extendStripeOrderBillingFromOrder} className="rounded-[18px] border border-[#b9d4ef] bg-[#f4f9ff] p-3 text-left">
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <input type="hidden" name="returnUrl" value="/admin/orders" />
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0f4d81]">Stripe billing extension</p>
+                        <p className="mt-1 text-[11px] leading-4 text-[#617184]">Use this when a parent paid twice and the next Stripe charge should move forward.</p>
+                        <div className="mt-2 grid gap-2">
+                          <input
+                            name="months"
+                            type="number"
+                            min="1"
+                            max="12"
+                            defaultValue="1"
+                            className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
+                            aria-label="Months to extend"
+                          />
+                          <input
+                            name="extensionNote"
+                            placeholder="Reason, e.g. duplicate payment credit"
+                            className="rounded-xl border border-[#dce4ed] px-3 py-2 text-xs"
+                          />
+                          <button className="rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Extend Stripe subscription</button>
+                        </div>
+                      </form>
+                    ) : null}
                     {showStripeExtension ? (
                       <div className="rounded-[18px] border border-[#d7e6f3] bg-[#f8fbff] p-3 text-left">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#0f4d81]">Extend Stripe date</p>
