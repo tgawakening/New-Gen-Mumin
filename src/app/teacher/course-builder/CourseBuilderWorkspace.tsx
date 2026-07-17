@@ -14,7 +14,7 @@ import { sendStudentTaskAssignedEmail } from "@/lib/email/notifications";
 import { displayProgramTitle, genMTerms, getGenMProgrammeByTitle, getGenMTeachersForProgramme, isArabicTajweedSlug, type GenMProgramSlug } from "@/lib/genm/curriculum";
 import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
 import { uploadTeacherMaterial } from "@/lib/google-drive/materials";
-import { requestTeacherLiveClass } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, requestTeacherLiveClass } from "@/lib/live-classes/service";
 import type { TeacherDashboardData } from "@/lib/teacher/dashboard";
 
 type BuilderTab = "overview" | "plan" | "lesson" | "task" | "materials";
@@ -113,6 +113,17 @@ function curriculumOverrideKey(programId: string, termId: string, weekLabel: str
   return [programId, type, termId, weekLabel ?? ""].join("::");
 }
 
+function recordingAttachmentId(recordingId: string) {
+  return `recording:${recordingId}`;
+}
+
+function isRecordingAttachment(attachment: PublishedAttachment) {
+  return attachment.id.startsWith("recording:") || attachment.mimeType === "video/recording";
+}
+
+function formatRecordingLabelDate(value: Date | null) {
+  return value ? value.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "Date not set";
+}
 function DisabledLessonActions() {
   return (
     <div className="flex flex-wrap gap-2">
@@ -472,6 +483,8 @@ export function CourseBuilderWorkspace({
   const tabBaseHref = selectedProgrammeSlug ? `/teacher/course-builder/${isArabicTajweedSlug(selectedProgrammeSlug) ? "arabic" : selectedProgrammeSlug}` : "/teacher/course-builder";
   const selectedProgramId = selectedRoster?.programId ?? visibleRosters[0]?.programId ?? "";
 
+  const availableRecordings = dashboard.recordings.filter((recording) => recording.programId === selectedProgramId);
+
   const normalizedActiveTab = activeTab === "lesson" ? "plan" : activeTab;
 
   function textMatchesLesson(value: string | null | undefined, weekLabel: string | null | undefined, lessonTopic: string) {
@@ -504,14 +517,19 @@ export function CourseBuilderWorkspace({
     lessonTopic,
     weekLabel,
     termId,
+    lessonLogId,
+    attachments,
   }: {
     lessonTopic: string;
     weekLabel: string | null | undefined;
     termId: string;
+    lessonLogId: string;
+    attachments: PublishedAttachment[];
   }) {
     const pack = getLessonPackage(lessonTopic, weekLabel);
+    const attachedRecordings = attachments.filter(isRecordingAttachment);
     return (
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-[#dbe8f3] bg-[#f5fbff] p-3">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2a76aa]">Quiz</p>
           {pack.quiz ? (
@@ -560,10 +578,66 @@ export function CourseBuilderWorkspace({
             <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, taskComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Create task</Link>
           )}
         </div>
+        <div className="rounded-2xl border border-[#dbe8f3] bg-[#f5fbff] p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#2a76aa]">Recording</p>
+          {attachedRecordings.length ? (
+            <div className="mt-2 space-y-2">
+              {attachedRecordings.map((attachment) => (
+                <Link
+                  key={attachment.id}
+                  href={attachment.url ?? "#"}
+                  target={attachment.url ? "_blank" : undefined}
+                  className="block rounded-xl bg-white px-3 py-2 text-xs font-semibold text-[#22304a]"
+                >
+                  {attachment.name}
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-[#617184]">No recording attached yet.</p>
+          )}
+          <details className="mt-2">
+            <summary className="cursor-pointer list-none rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa] [&::-webkit-details-marker]:hidden">
+              Attach recording
+            </summary>
+            <div className="mt-2 max-h-72 space-y-2 overflow-y-auto pr-1">
+              {availableRecordings.length ? (
+                availableRecordings.map((recording) => (
+                  <form key={recording.id} action={attachRecordingToLessonAction} className="space-y-2 rounded-xl border border-[#d8e3ed] bg-white p-2">
+                    <input type="hidden" name="lessonLogId" value={lessonLogId} />
+                    <input type="hidden" name="recordingId" value={recording.id} />
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="line-clamp-1 text-xs font-semibold text-[#22304a]">{recording.title}</p>
+                        <p className="mt-0.5 text-[11px] text-[#617184]">
+                          {formatRecordingLabelDate(recording.recordingStart ?? recording.availableAt)}
+                          {recording.durationMinutes ? ` - ${recording.durationMinutes} min` : ""}
+                        </p>
+                      </div>
+                      <Link href={`/recordings/${recording.id}/watch`} target="_blank" className="shrink-0 rounded-full bg-[#eef6ff] px-2 py-1 text-[11px] font-semibold text-[#2a76aa]">
+                        View
+                      </Link>
+                    </div>
+                    <input
+                      name="recordingTitle"
+                      defaultValue={recording.title}
+                      className="w-full rounded-lg border border-[#d8e3ed] px-2 py-1.5 text-xs"
+                      aria-label="Recording title"
+                    />
+                    <FormSubmitButton pendingLabel="Attaching..." className="w-full rounded-full bg-[#22304a] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-70">
+                      Attach to lesson
+                    </FormSubmitButton>
+                  </form>
+                ))
+              ) : (
+                <p className="rounded-xl bg-white px-3 py-2 text-xs text-[#617184]">No ready recordings are available yet.</p>
+              )}
+            </div>
+          </details>
+        </div>
       </div>
     );
   }
-
   function buildBuilderHref(tab: BuilderTab, options?: { weekLabel?: string; topic?: string; termId?: string; lessonId?: string; moduleId?: string; weekId?: string; moduleComposer?: boolean; weekComposer?: boolean; lessonComposer?: boolean; quizComposer?: boolean; taskComposer?: boolean; liveComposer?: boolean; materialComposer?: boolean }) {
     const query = new URLSearchParams({ tab });
     if (options?.weekLabel) query.set("weekLabel", options.weekLabel);
@@ -783,6 +857,86 @@ export function CourseBuilderWorkspace({
     redirect(`${successRedirectPath}?tab=plan&success=lesson_deleted`);
   }
 
+  async function attachRecordingToLessonAction(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
+
+    const lessonLogId = String(formData.get("lessonLogId") || "");
+    const recordingId = String(formData.get("recordingId") || "");
+    const requestedTitle = String(formData.get("recordingTitle") || "").trim();
+
+    const existing = await db.lessonLog.findUnique({
+      where: { id: lessonLogId },
+      include: { schedule: { include: { teacher: { include: { user: true } } } } },
+    });
+
+    if (
+      !existing ||
+      !(await canManageBuilderProgram({
+        teacherUserId: session.user.id,
+        programId: existing.schedule.programId,
+        ownerTeacherUserId: existing.schedule.teacher.userId,
+      }))
+    ) {
+      throw new Error("Lesson is not available for this teacher.");
+    }
+
+    const recording = await db.liveClassRecording.findFirst({
+      where: {
+        id: recordingId,
+        deletedAt: null,
+        driveFileId: { not: null },
+        storageProvider: "google-drive",
+        schedule: { programId: existing.schedule.programId },
+      },
+      include: { schedule: { include: { teacher: { include: { user: true } } } } },
+    });
+
+    if (
+      !recording ||
+      !(await canManageBuilderProgram({
+        teacherUserId: session.user.id,
+        programId: recording.schedule.programId,
+        ownerTeacherUserId: recording.schedule.teacher.userId,
+      }))
+    ) {
+      throw new Error("Recording is not available for this teacher.");
+    }
+
+    const title = requestedTitle || cleanLiveClassTitle(recording.topic || recording.schedule.title);
+    if (title && title !== recording.topic) {
+      await db.liveClassRecording.update({ where: { id: recording.id }, data: { topic: title } });
+    }
+
+    const parsed = parseLessonPayload(existing.summary, existing.homework);
+    const recordingAttachment: PublishedAttachment = {
+      id: recordingAttachmentId(recording.id),
+      name: title,
+      url: `/recordings/${recording.id}/watch`,
+      mimeType: "video/recording",
+      thumbnailUrl: null,
+    };
+    const attachments = [
+      ...parsed.attachments.filter((attachment) => attachment.id !== recordingAttachment.id),
+      recordingAttachment,
+    ];
+
+    await db.lessonLog.update({
+      where: { id: existing.id },
+      data: {
+        summary: buildLessonPayload({ ...parsed, attachments }),
+      },
+    });
+
+    revalidatePath("/teacher/course-builder");
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    revalidatePath("/teacher/recordings");
+    revalidatePath("/parent/courses");
+    revalidatePath("/student/courses");
+    redirect(`${successRedirectPath}?tab=plan&success=recording_attached`);
+  }
   async function saveCurriculumStructureAction(formData: FormData) {
     "use server";
 
@@ -1244,7 +1398,9 @@ export function CourseBuilderWorkspace({
               ? "Lesson updated successfully."
               : success === "lesson_deleted"
                 ? "Lesson deleted successfully."
-                : success === "module_saved"
+                : success === "recording_attached"
+                  ? "Recording attached to this lesson."
+                  : success === "module_saved"
                   ? "Module title updated successfully."
                   : success === "week_saved"
                     ? "Week/topic saved successfully."
@@ -1561,7 +1717,7 @@ export function CourseBuilderWorkspace({
                                             </form>
                                           </div>
                                         </div>
-                                        <LessonPackageControls lessonTopic={lessonTopic} weekLabel={weekLabel} termId={term.id} />
+                                        <LessonPackageControls lessonTopic={lessonTopic} weekLabel={weekLabel} termId={term.id} lessonLogId={entry.id} attachments={parsed.attachments} />
                                       </div>
                                     );
                                   })}
@@ -1625,7 +1781,7 @@ export function CourseBuilderWorkspace({
                                             </form>
                                           </div>
                                         </div>
-                                        <LessonPackageControls lessonTopic={lessonTopicTitle} weekLabel={lessonParsed.weekLabel ?? parsed.weekLabel} termId={term.id} />
+                                        <LessonPackageControls lessonTopic={lessonTopicTitle} weekLabel={lessonParsed.weekLabel ?? parsed.weekLabel} termId={term.id} lessonLogId={lessonEntry.id} attachments={lessonParsed.attachments} />
                                       </div>
                                     );
                                   })}
@@ -1727,7 +1883,7 @@ export function CourseBuilderWorkspace({
                                             <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
                                           </form>
                                         </div>
-                                        <LessonPackageControls lessonTopic={lessonParsed.topic || lessonEntry.topic} weekLabel={weekParsed.weekLabel} termId={weekParsed.termId ?? ""} />
+                                        <LessonPackageControls lessonTopic={lessonParsed.topic || lessonEntry.topic} weekLabel={weekParsed.weekLabel} termId={weekParsed.termId ?? ""} lessonLogId={lessonEntry.id} attachments={lessonParsed.attachments} />
                                       </div>
                                     ))}
                                     {!weekLessons.length ? (

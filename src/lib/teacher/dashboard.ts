@@ -96,6 +96,14 @@ export type TeacherDashboardData = {
     summary: string;
     homework: string | null;
   }>;
+  recordings: Array<{
+    id: string;
+    programId: string;
+    title: string;
+    recordingStart: Date | null;
+    availableAt: Date;
+    durationMinutes: number | null;
+  }>;
   assignments: Array<{
     id: string;
     programId: string;
@@ -181,6 +189,11 @@ export async function getTeacherDashboardData(userId: string) {
             orderBy: { lessonDate: "desc" },
             take: 12,
           },
+          recordings: {
+            where: { deletedAt: null, driveFileId: { not: null }, storageProvider: "google-drive" },
+            orderBy: { availableAt: "desc" },
+            take: 40,
+          },
         },
       },
       programAssignments: {
@@ -198,6 +211,11 @@ export async function getTeacherDashboardData(userId: string) {
                   lessonLogs: {
                     orderBy: { lessonDate: "desc" },
                     take: 18,
+                  },
+                  recordings: {
+                    where: { deletedAt: null, driveFileId: { not: null }, storageProvider: "google-drive" },
+                    orderBy: { availableAt: "desc" },
+                    take: 40,
                   },
                 },
               },
@@ -451,6 +469,22 @@ export async function getTeacherDashboardData(userId: string) {
     .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
     .slice(0, 12);
 
+  const recordings = uniqueSchedules
+    .flatMap((schedule) =>
+      (schedule.recordings ?? []).map((recording) => ({
+        id: recording.id,
+        programId: schedule.program.id,
+        title: cleanLiveClassTitle(recording.topic || schedule.title),
+        recordingStart: recording.recordingStart,
+        availableAt: recording.availableAt,
+        durationMinutes:
+          recording.recordingStart && recording.recordingEnd
+            ? Math.max(0, Math.round((recording.recordingEnd.getTime() - recording.recordingStart.getTime()) / 60000))
+            : null,
+      })),
+    )
+    .sort((left, right) => (right.recordingStart ?? right.availableAt).getTime() - (left.recordingStart ?? left.availableAt).getTime())
+    .slice(0, 80);
   const assignments = teacherProfile.programAssignments
     .flatMap((assignment) =>
       assignment.program.assignments.map((task) => ({
@@ -545,6 +579,7 @@ export async function getTeacherDashboardData(userId: string) {
       teacherFeedback: entry.teacherFeedback,
     })),
     lessonLogs,
+    recordings,
     assignments,
     reports: reports.map((report) => ({
       id: report.id,
