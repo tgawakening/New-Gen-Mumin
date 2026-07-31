@@ -5,16 +5,21 @@ import Link from "next/link";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { formatHoursMinutes, getAdminTeacherHoursLogData, parseHoursMonth } from "@/lib/teacher/hours-log";
+import { formatHoursMinutes, getAdminTeacherHoursLogData, MIN_PAYABLE_TRACKED_SESSION_MINUTES, parseHoursMonth } from "@/lib/teacher/hours-log";
 
 const STATUS_BADGE: Record<string, string> = {
   DRAFT: "bg-[#fff7eb] text-[#8a6326]",
   SUBMITTED: "bg-[#effaf3] text-[#2f6b4b]",
+  PUBLISHED: "bg-[#eef7ff] text-[#0f4d81]",
 };
 
 type PageProps = {
-  searchParams?: Promise<{ month?: string; start?: string; end?: string; notice?: string; tone?: string }>;
+  searchParams?: Promise<{ month?: string; start?: string; end?: string; teacherId?: string; notice?: string; tone?: string }>;
 };
+
+type AdminHoursData = Awaited<ReturnType<typeof getAdminTeacherHoursLogData>>;
+type AdminHoursReport = AdminHoursData["reports"][number];
+type AdminHoursEntry = AdminHoursReport["entries"][number];
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(value);
@@ -29,8 +34,32 @@ function monthOptions() {
   });
 }
 
-function totalSubmittedCount(reports: Awaited<ReturnType<typeof getAdminTeacherHoursLogData>>["reports"]) {
+function totalSubmittedCount(reports: AdminHoursReport[]) {
   return reports.reduce((sum, report) => sum + report.submissions.length, 0);
+}
+
+function queryString(params: Record<string, string | undefined | null>, overrides: Record<string, string | undefined | null> = {}) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries({ ...params, ...overrides })) {
+    if (value) query.set(key, value);
+  }
+  const built = query.toString();
+  return built ? `?${built}` : "";
+}
+
+function statusLabel(entry: AdminHoursEntry) {
+  if (entry.source === "TRACKED" && entry.status === "DRAFT") return "PUBLISHED";
+  return entry.status;
+}
+
+function isEditedTrackedEntry(entry: AdminHoursEntry) {
+  return Boolean(entry.notes?.includes("Teacher edited from original:"));
+}
+
+function sourceLabel(entry: AdminHoursEntry) {
+  if (entry.source === "MANUAL") return "Manual / outside website";
+  if (isEditedTrackedEntry(entry)) return "Website tracked - edited by teacher";
+  return "Website tracked";
 }
 
 export default async function AdminHoursLogPage({ searchParams }: PageProps) {
@@ -53,9 +82,13 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
   }
 
   const data = await getAdminTeacherHoursLogData(params);
-  const totalMinutes = data.reports.reduce((sum, report) => sum + report.totalMinutes, 0);
-  const submittedMinutes = data.reports.reduce((sum, report) => sum + report.submittedMinutes, 0);
-  const rowCount = data.reports.reduce((sum, report) => sum + report.entries.length, 0);
+  const selectedTeacherId = params.teacherId || "all";
+  const visibleReports = selectedTeacherId === "all" ? data.reports : data.reports.filter((report) => report.teacherId === selectedTeacherId);
+  const totalMinutes = visibleReports.reduce((sum, report) => sum + report.totalMinutes, 0);
+  const submittedMinutes = visibleReports.reduce((sum, report) => sum + report.submittedMinutes, 0);
+  const rowCount = visibleReports.reduce((sum, report) => sum + report.entries.length, 0);
+  const filterParams = { month: params.month || data.period.key, start: params.start, end: params.end };
+  const selectedExportQuery = queryString(filterParams, selectedTeacherId === "all" ? {} : { teacherId: selectedTeacherId });
 
   return (
     <div className="bg-[#edf2f6] py-8">
@@ -66,12 +99,14 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Admin / Payroll</p>
               <h1 className="mt-3 text-4xl font-semibold text-[#22304a]">Teacher Hours Log</h1>
               <p className="mt-3 max-w-4xl text-sm leading-7 text-[#617184]">
-                Website-tracked classes and teacher-added outside sessions are grouped here for monthly or weekly payroll review.
+                Website-tracked payable classes and teacher-added outside sessions are grouped by teacher for payroll. Website sessions under {MIN_PAYABLE_TRACKED_SESSION_MINUTES} minutes are excluded automatically.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href="/admin" className="rounded-full border border-[#cbd9e8] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Admin home</Link>
               <Link href="/admin?tab=teacher-reports" className="rounded-full border border-[#cbd9e8] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Monthly reports</Link>
+              <Link href={`/api/admin/hours-log/export${selectedExportQuery}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Export current view</Link>
+              <Link href={`/api/admin/hours-log/export${queryString(filterParams)}`} className="rounded-full border border-[#cbd9e8] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Export all teachers</Link>
             </div>
           </div>
         </div>
@@ -81,13 +116,14 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
         <section className="grid gap-4 md:grid-cols-4">
           <div className="rounded-[24px] border border-[#dce4ed] bg-white p-5 shadow-sm"><p className="text-sm text-[#617184]">Total hours</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{formatHoursMinutes(totalMinutes)}</p></div>
           <div className="rounded-[24px] border border-[#dce4ed] bg-white p-5 shadow-sm"><p className="text-sm text-[#617184]">Submitted</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{formatHoursMinutes(submittedMinutes)}</p></div>
-          <div className="rounded-[24px] border border-[#dce4ed] bg-white p-5 shadow-sm"><p className="text-sm text-[#617184]">Teacher submissions</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{totalSubmittedCount(data.reports)}</p></div>
-          <div className="rounded-[24px] border border-[#dce4ed] bg-white p-5 shadow-sm"><p className="text-sm text-[#617184]">Rows</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{rowCount}</p></div>
+          <div className="rounded-[24px] border border-[#dce4ed] bg-white p-5 shadow-sm"><p className="text-sm text-[#617184]">Teacher submissions</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{totalSubmittedCount(visibleReports)}</p></div>
+          <div className="rounded-[24px] border border-[#dce4ed] bg-white p-5 shadow-sm"><p className="text-sm text-[#617184]">Payable rows</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{rowCount}</p></div>
         </section>
 
         <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
           <div className="grid gap-4 xl:grid-cols-2">
             <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#fbfdff] p-4">
+              <input type="hidden" name="teacherId" value={selectedTeacherId} />
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Monthly view
                 <select name="month" defaultValue={params.month || data.period.key} className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a]">
@@ -97,6 +133,7 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
               <button className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">View month</button>
             </form>
             <form className="flex flex-wrap items-end gap-3 rounded-2xl bg-[#fbfdff] p-4">
+              <input type="hidden" name="teacherId" value={selectedTeacherId} />
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 From
                 <input name="start" type="date" defaultValue={data.period.startInput} className="rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm text-[#22304a]" />
@@ -111,12 +148,24 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
           <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#617184]">Showing: {data.period.label}</p>
         </section>
 
+        <section className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Teacher tabs</p>
+          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+            <Link href={`/admin/hours-log${queryString(filterParams, { teacherId: "all" })}`} className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${selectedTeacherId === "all" ? "bg-[#22304a] text-white" : "border border-[#cbd9e8] bg-white text-[#22304a]"}`}>All teachers</Link>
+            {data.reports.map((report) => (
+              <Link key={report.teacherId} href={`/admin/hours-log${queryString(filterParams, { teacherId: report.teacherId })}`} className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${selectedTeacherId === report.teacherId ? "bg-[#22304a] text-white" : "border border-[#cbd9e8] bg-white text-[#22304a]"}`}>
+                {report.teacherName} ({formatHoursMinutes(report.totalMinutes)})
+              </Link>
+            ))}
+          </div>
+        </section>
+
         <div className="space-y-5">
-          {data.reports.map((report) => (
+          {visibleReports.map((report) => (
             <section key={report.teacherId} className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Teacher</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Teacher hours</p>
                   <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{report.teacherName}</h2>
                   <p className="mt-1 text-sm text-[#617184]">{report.teacherEmail}</p>
                 </div>
@@ -124,6 +173,7 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
                   <span className="rounded-full bg-[#fbf6ef] px-4 py-2 font-semibold text-[#22304a]">Total {report.totalLabel}</span>
                   <span className="rounded-full bg-[#effaf3] px-4 py-2 font-semibold text-[#2f6b4b]">Submitted {report.submittedLabel}</span>
                   <span className="rounded-full bg-[#eef2f6] px-4 py-2 font-semibold text-[#556274]">{report.entries.length} rows</span>
+                  <Link href={`/api/admin/hours-log/export${queryString(filterParams, { teacherId: report.teacherId })}`} className="rounded-full bg-[#22304a] px-4 py-2 font-semibold text-white">Export teacher</Link>
                 </div>
               </div>
 
@@ -140,30 +190,35 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
               ) : null}
 
               <div className="mt-5 overflow-x-auto rounded-[22px] border border-[#e6edf4]">
-                <table className="min-w-[980px] w-full text-left text-sm">
+                <table className="min-w-[1120px] w-full text-left text-sm">
                   <thead className="bg-[#fbfdff] text-xs uppercase tracking-[0.14em] text-[#6f7d8f]">
                     <tr>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Session</th>
                       <th className="px-4 py-3">Mode</th>
                       <th className="px-4 py-3">Length</th>
+                      <th className="px-4 py-3">Rate</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Notes</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {report.entries.map((entry) => (
-                      <tr key={entry.id} className="border-t border-[#e6edf4] align-top">
-                        <td className="px-4 py-3 text-[#22304a]">{formatDate(entry.sessionDate)}<br /><span className="text-xs text-[#617184]">{entry.startTime ?? "Time not set"}</span></td>
-                        <td className="px-4 py-3"><span className="font-semibold text-[#22304a]">{entry.title}</span><br /><span className="text-xs text-[#617184]">{entry.programTitle ?? "Programme not set"}</span></td>
-                        <td className="px-4 py-3 text-[#617184]">{entry.mode}<br /><span className="text-xs">{entry.source}</span></td>
-                        <td className="px-4 py-3 font-semibold text-[#22304a]">{formatHoursMinutes(entry.durationMinutes)}</td>
-                        <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_BADGE[entry.status] ?? "bg-[#eef2f6] text-[#556274]"}`}>{entry.status}</span></td>
-                        <td className="px-4 py-3 text-[#617184]">{entry.notes ?? "-"}</td>
-                      </tr>
-                    ))}
+                    {report.entries.map((entry) => {
+                      const label = statusLabel(entry);
+                      return (
+                        <tr key={entry.id} className="border-t border-[#e6edf4] align-top">
+                          <td className="px-4 py-3 text-[#22304a]">{formatDate(entry.sessionDate)}<br /><span className="text-xs text-[#617184]">{entry.startTime ?? "Time not set"}</span></td>
+                          <td className="px-4 py-3"><span className="font-semibold text-[#22304a]">{entry.title}</span><br /><span className="text-xs text-[#617184]">{entry.programTitle ?? "Programme not set"}</span></td>
+                          <td className="px-4 py-3 text-[#617184]">{entry.mode}<br /><span className="text-xs">{sourceLabel(entry)}</span></td>
+                          <td className="px-4 py-3 font-semibold text-[#22304a]">{formatHoursMinutes(entry.durationMinutes)}</td>
+                          <td className="px-4 py-3 text-[#9aa6b5]">Client fill</td>
+                          <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_BADGE[label] ?? "bg-[#eef2f6] text-[#556274]"}`}>{label}</span></td>
+                          <td className="px-4 py-3 text-[#617184]">{entry.notes ?? (entry.source === "TRACKED" ? "Published auto-tracked website session." : "-")}</td>
+                        </tr>
+                      );
+                    })}
                     {!report.entries.length ? (
-                      <tr><td colSpan={6} className="px-4 py-6 text-center text-[#617184]">No rows for this teacher in {data.period.label}.</td></tr>
+                      <tr><td colSpan={7} className="px-4 py-6 text-center text-[#617184]">No payable rows for this teacher in {data.period.label}.</td></tr>
                     ) : null}
                   </tbody>
                 </table>

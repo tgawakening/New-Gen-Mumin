@@ -9,6 +9,7 @@ import {
   addTeacherHoursEntry,
   deleteTeacherHoursEntry,
   formatHoursMinutes,
+  MIN_PAYABLE_TRACKED_SESSION_MINUTES,
   getTeacherHoursLogData,
   parseHoursMonth,
   submitTeacherHours,
@@ -193,7 +194,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
   return (
     <TeacherDashboardFrame
       title="Hours Log"
-      subtitle="Review website-tracked teaching hours, add outside-link classes, and submit weekly/monthly totals for payroll review."
+      subtitle="Review payable website-tracked teaching hours, add outside-link classes, and submit weekly/monthly totals for payroll review."
       navItems={getTeacherNavItems()}
     >
       <ActionToast message={params.notice} tone={params.tone} />
@@ -203,7 +204,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
           { label: "Total", value: data.totals.totalLabel, hint: data.period.label },
           { label: "Submitted", value: data.totals.submittedLabel, hint: "Locked rows sent to admin." },
           { label: "Draft", value: data.totals.draftLabel, hint: "Rows still editable." },
-          { label: "Rows", value: String(data.entries.length), hint: "Tracked + manual sessions." },
+          { label: "Payable rows", value: String(data.entries.length), hint: `Website sessions under ${MIN_PAYABLE_TRACKED_SESSION_MINUTES} minutes are excluded.` },
         ]}
       />
 
@@ -230,7 +231,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
             <button className="rounded-full bg-[#2f6b4b] px-5 py-3 text-sm font-semibold text-white">View selected dates</button>
           </form>
         </div>
-        <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#617184]">Showing: {data.period.label}</p>
+        <p className="mt-4 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-[#617184]">Showing: {data.period.label}. Website-tracked sessions under {MIN_PAYABLE_TRACKED_SESSION_MINUTES} minutes are not counted for payroll.</p>
       </TeacherSection>
 
       <TeacherSection eyebrow="Spreadsheet" title="Teaching hours rows">

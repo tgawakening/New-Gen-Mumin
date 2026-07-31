@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { sendTeacherHoursSubmittedEmail } from "@/lib/email/notifications";
 import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 
+export const MIN_PAYABLE_TRACKED_SESSION_MINUTES = 30;
+
 export type HoursLogFilter = {
   month?: string | null;
   start?: string | null;
@@ -87,6 +89,10 @@ function occurrenceMode(source: string) {
   return "Website / TGA Zoom host";
 }
 
+function isTeacherEditedTrackedRow(notes?: string | null) {
+  return Boolean(notes?.includes("Teacher edited from original:"));
+}
+
 async function syncTrackedHours(teacher: { id: string; userId: string }, startsAt: Date, endsAt: Date) {
   const occurrences = await db.liveClassSessionOccurrence.findMany({
     where: {
@@ -105,39 +111,59 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
   });
 
   for (const occurrence of occurrences) {
-    if (!isLiveClassVisibleToStudents(occurrence.schedule.title)) continue;
-    const durationMinutes = occurrence.durationMinutes ?? 0;
-    const fallbackDuration = durationMinutes > 0 ? durationMinutes : 60;
-    const startTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(occurrence.startedAt);
+    const existing = await db.teacherHoursLogEntry.findUnique({ where: { occurrenceId: occurrence.id } });
+    if (!isLiveClassVisibleToStudents(occurrence.schedule.title)) {
+      if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
+        await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
+      }
+      continue;
+    }
 
-    await db.teacherHoursLogEntry.upsert({
-      where: { occurrenceId: occurrence.id },
-      create: {
-        teacherId: teacher.id,
-        scheduleId: occurrence.scheduleId,
-        occurrenceId: occurrence.id,
-        source: TeacherHoursLogSource.TRACKED,
-        title: cleanLiveClassTitle(occurrence.schedule.title),
-        programTitle: occurrence.schedule.program.title,
-        sessionDate: occurrence.startedAt,
-        startTime,
-        durationMinutes: fallbackDuration,
-        mode: occurrenceMode(occurrence.source),
-        notes: occurrence.completedAt ? "Auto-tracked from website/Zoom." : "Auto-tracked start; please confirm final duration.",
-      },
-      update: {
-        scheduleId: occurrence.scheduleId,
-        title: cleanLiveClassTitle(occurrence.schedule.title),
-        programTitle: occurrence.schedule.program.title,
-        sessionDate: occurrence.startedAt,
-        startTime,
-        durationMinutes: fallbackDuration,
-        mode: occurrenceMode(occurrence.source),
-      },
-    });
+    const trackedDuration = occurrence.durationMinutes ?? 0;
+    if (trackedDuration > 0 && trackedDuration < MIN_PAYABLE_TRACKED_SESSION_MINUTES) {
+      if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
+        await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
+      }
+      continue;
+    }
+
+    if (existing && isTeacherEditedTrackedRow(existing.notes)) continue;
+
+    const fallbackDuration = trackedDuration > 0 ? trackedDuration : 60;
+    const startTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(occurrence.startedAt);
+    const rowData = {
+      teacherId: teacher.id,
+      scheduleId: occurrence.scheduleId,
+      occurrenceId: occurrence.id,
+      source: TeacherHoursLogSource.TRACKED,
+      title: cleanLiveClassTitle(occurrence.schedule.title),
+      programTitle: occurrence.schedule.program.title,
+      sessionDate: occurrence.startedAt,
+      startTime,
+      durationMinutes: fallbackDuration,
+      mode: occurrenceMode(occurrence.source),
+      notes: occurrence.completedAt ? "Auto-tracked from website/Zoom." : "Auto-tracked start; please confirm final duration.",
+    };
+
+    if (existing) {
+      await db.teacherHoursLogEntry.update({
+        where: { id: existing.id },
+        data: {
+          scheduleId: rowData.scheduleId,
+          title: rowData.title,
+          programTitle: rowData.programTitle,
+          sessionDate: rowData.sessionDate,
+          startTime: rowData.startTime,
+          durationMinutes: rowData.durationMinutes,
+          mode: rowData.mode,
+          notes: existing.notes || rowData.notes,
+        },
+      });
+    } else {
+      await db.teacherHoursLogEntry.create({ data: rowData });
+    }
   }
 }
-
 export async function getTeacherHoursLogData(userId: string, filter?: HoursLogFilter | string | null) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId },
@@ -282,6 +308,15 @@ export async function updateTeacherHoursEntry(input: {
   if (!entry) throw new Error("Hours entry not found.");
   if (entry.status === TeacherHoursLogStatus.SUBMITTED) throw new Error("Submitted hours cannot be edited. Please ask admin if this needs correction.");
 
+  const teacherNote = input.notes || null;
+  const editedTrackedNote =
+    entry.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(entry.notes)
+      ? [
+          `Teacher edited from original: ${entry.title} | ${entry.sessionDate.toISOString().slice(0, 10)} | ${entry.startTime ?? "time not set"} | ${formatHoursMinutes(entry.durationMinutes)} | ${entry.mode}`,
+          teacherNote,
+        ].filter(Boolean).join("\n")
+      : teacherNote;
+
   return db.teacherHoursLogEntry.update({
     where: { id: entry.id },
     data: {
@@ -291,7 +326,7 @@ export async function updateTeacherHoursEntry(input: {
       startTime: input.startTime || null,
       durationMinutes: input.durationMinutes,
       mode: input.mode,
-      notes: input.notes || null,
+      notes: editedTrackedNote,
     },
   });
 }
@@ -302,7 +337,7 @@ export async function deleteTeacherHoursEntry(userId: string, entryId: string) {
 
   const entry = await db.teacherHoursLogEntry.findFirst({ where: { id: entryId, teacherId: teacher.id } });
   if (!entry) throw new Error("Hours entry not found.");
-  if (entry.source === TeacherHoursLogSource.TRACKED) throw new Error("Tracked website rows cannot be deleted; set the duration to 0 or add a note for admin.");
+  if (entry.source === TeacherHoursLogSource.TRACKED) throw new Error("Tracked website rows cannot be deleted; edit the row and add a note for admin.");
   if (entry.status === TeacherHoursLogStatus.SUBMITTED) throw new Error("Submitted hours cannot be deleted.");
 
   await db.teacherHoursLogEntry.delete({ where: { id: entry.id } });
