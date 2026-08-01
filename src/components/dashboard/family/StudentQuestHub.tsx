@@ -30,6 +30,7 @@ type StudentQuestHubProps = {
   };
   houseName: string;
   houseVirtue: string;
+  houseColor?: string | null;
   metrics: QuestMetric[];
   badges: QuestBadge[];
   actions: QuestAction[];
@@ -88,6 +89,7 @@ export function StudentQuestHub({
   mission,
   houseName,
   houseVirtue,
+  houseColor,
   metrics,
   badges,
   actions,
@@ -106,7 +108,8 @@ export function StudentQuestHub({
             <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#c27a2c] shadow-sm">
               {roleLabel}
             </span>
-            <span className="rounded-full bg-[#eef7ff] px-3 py-1 text-xs font-semibold text-[#245d85]">
+            <span className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a] shadow-sm">
+              <span className="h-3 w-3 rounded-full border border-black/10" style={{ backgroundColor: houseColor ?? "#245d85" }} />
               {houseName}
             </span>
           </div>

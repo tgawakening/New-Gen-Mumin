@@ -61,6 +61,8 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
 
   const choices = live.currentQuestion ? choicesFromMeta(live.currentQuestion.meta) : [];
   const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
+  const myHouseStanding = live.leaderboard.find((house) => house.name === live.houseMembership.house.name) ?? live.leaderboard[0];
+  const myHouseRank = Math.max(1, live.leaderboard.findIndex((house) => house.name === live.houseMembership.house.name) + 1);
 
   return (
     <FamilyDashboardFrame
@@ -82,7 +84,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               This is not a fastest-finger podium. Everyone who answers correctly in {live.settings.responseWindowSeconds} seconds earns full points.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <HouseBadge name={live.houseMembership.house.name} color={live.houseMembership.house.color} dark />
+              <HouseBadge name={live.houseMembership.house.name} color={live.houseMembership.house.color} virtue="Your fixed team" dark />
               <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">Trait: {live.houseMembership.house.virtue}</span>
             </div>
           </div>
@@ -169,10 +171,17 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
 
             <div className="rounded-[32px] bg-[#22304a] p-5 text-white">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#f3d7aa]">House leaderboard</p>
-              <div className="mt-4 flex items-center gap-3 rounded-[24px] bg-white/10 p-3">
-                <img src="/gen-mumin-chars/ali-superhero.png" alt="Ali avatar" className="h-14 w-14 rounded-2xl object-cover object-[50%_12%]" />
-                <img src="/gen-mumin-chars/rania-superhero.png" alt="Rania avatar" className="h-14 w-14 rounded-2xl object-cover object-[50%_12%]" />
-                <p className="text-sm text-white/75">Boys and girls earn together for their houses.</p>
+              <div className="mt-4 rounded-[24px] bg-white/10 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-black text-white" style={{ backgroundColor: live.houseMembership.house.color }}>
+                    {live.houseMembership.house.name.replace(" House", "").slice(0, 1)}
+                  </span>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f7c56f]">Your team</p>
+                    <p className="text-lg font-semibold">{live.houseMembership.house.name}</p>
+                    <p className="text-xs text-white/65">Rank #{myHouseRank} - {myHouseStanding?.points ?? 0} points</p>
+                  </div>
+                </div>
               </div>
               <div className="mt-4 space-y-3">
                 {live.leaderboard.map((house, index) => (

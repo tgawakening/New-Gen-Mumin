@@ -3,39 +3,7 @@ import "server-only";
 import { MissionKind, MissionQuestionType, MissionStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
-
-const STARTER_HOUSES = [
-  {
-    slug: "ilm",
-    name: "Blue House",
-    virtue: "Learning",
-    description: "Earn points through learning, effort, attendance, quizzes, and tasks.",
-    color: "#245d85",
-  },
-  {
-    slug: "amanah",
-    name: "Green House",
-    virtue: "Teamwork",
-    description: "Earn points through responsibility, participation, and steady teamwork.",
-    color: "#2f6b4b",
-  },
-  {
-    slug: "sabr",
-    name: "Yellow House",
-    virtue: "Consistency",
-    description: "Earn points through regular practice, reflections, and weekly progress.",
-    color: "#c27a2c",
-  },
-  {
-    slug: "shujaah",
-    name: "Red House",
-    virtue: "Confidence",
-    description: "Earn points through courage, leadership, and thoughtful participation.",
-    color: "#9a4545",
-  },
-] as const;
-
-const STARTER_HOUSE_SLUGS = STARTER_HOUSES.map((house) => house.slug);
+import { CANONICAL_HOUSES, ensureStudentHouseMembership, getCanonicalHouseIdsForHouseId, getHouseLeaderboard, getHouseTeamMembers } from "@/lib/community/house-points";
 
 const STARTER_MISSIONS = [
   {
@@ -93,14 +61,9 @@ export function parseSunnahTrackerDescription(description?: string | null) {
 export function isSunnahTrackerMission(mission: { description?: string | null }) {
   return Boolean(parseSunnahTrackerDescription(mission.description));
 }
-function deterministicIndex(seed: string, length: number) {
-  const score = seed.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return score % length;
-}
-
 export async function ensureQuestFoundation() {
   await db.$transaction(async (tx) => {
-    for (const [index, house] of STARTER_HOUSES.entries()) {
+    for (const house of CANONICAL_HOUSES) {
       await tx.house.upsert({
         where: { slug: house.slug },
         update: {
@@ -108,12 +71,9 @@ export async function ensureQuestFoundation() {
           virtue: house.virtue,
           description: house.description,
           color: house.color,
-          sortOrder: index,
+          sortOrder: house.sortOrder,
         },
-        create: {
-          ...house,
-          sortOrder: index,
-        },
+        create: house,
       });
     }
 
@@ -148,23 +108,7 @@ export async function ensureQuestFoundation() {
 
 export async function ensureStudentHouse(studentId: string) {
   await ensureQuestFoundation();
-
-  const existing = await db.houseMembership.findUnique({
-    where: { studentId },
-    include: { house: true },
-  });
-  if (existing) return existing;
-
-  const houses = await db.house.findMany({ where: { slug: { in: [...STARTER_HOUSE_SLUGS] } }, orderBy: { sortOrder: "asc" } });
-  const house = houses[deterministicIndex(studentId, houses.length)];
-
-  return db.houseMembership.create({
-    data: {
-      studentId,
-      houseId: house.id,
-    },
-    include: { house: true },
-  });
+  return ensureStudentHouseMembership(studentId);
 }
 
 export async function getStudentQuestData(studentId: string, programIds: string[]) {
@@ -194,40 +138,30 @@ export async function getStudentQuestData(studentId: string, programIds: string[
     orderBy: { awardedAt: "desc" },
     take: 12,
   });
+  const canonicalHouseIds = await getCanonicalHouseIdsForHouseId(membership.houseId);
   const houseTotal = await db.housePointLedger.aggregate({
-    where: { houseId: membership.houseId },
+    where: { houseId: { in: canonicalHouseIds } },
     _sum: { points: true },
   });
   const studentTotal = await db.housePointLedger.aggregate({
     where: { studentId },
     _sum: { points: true },
   });
-  const houses = await db.house.findMany({ where: { slug: { in: [...STARTER_HOUSE_SLUGS] } }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }] });
-  const houseRows = await db.housePointLedger.groupBy({
-    by: ["houseId"],
-    _sum: { points: true },
-    _count: { houseId: true },
-  });
-  const totals = new Map(houseRows.map((row) => [row.houseId, { points: row._sum.points ?? 0, entries: row._count.houseId }]));
-  const leaderboard = houses
-    .map((house) => ({
-      id: house.id,
-      slug: house.slug,
-      name: house.name,
-      virtue: house.virtue,
-      color: house.color,
-      description: house.description,
-      points: totals.get(house.id)?.points ?? 0,
-      entries: totals.get(house.id)?.entries ?? 0,
-      isMine: house.id === membership.houseId,
-    }))
-    .sort((left, right) => right.points - left.points || left.name.localeCompare(right.name));
+  const [leaderboard, teammates] = await Promise.all([
+    getHouseLeaderboard(),
+    getHouseTeamMembers(membership.houseId),
+  ]);
+  const leaderboardWithMine = leaderboard.map((entry) => ({
+    ...entry,
+    isMine: entry.houseIds.includes(membership.houseId) || canonicalHouseIds.some((id) => entry.houseIds.includes(id)),
+  }));
 
   return {
     membership,
     missions,
     pointLedger,
-    leaderboard,
+    leaderboard: leaderboardWithMine,
+    teammates,
     houseTotal: houseTotal._sum.points ?? 0,
     studentTotal: studentTotal._sum.points ?? 0,
   };

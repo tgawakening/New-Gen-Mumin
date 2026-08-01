@@ -15,6 +15,7 @@ import {
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
+import { getStudentQuestData } from "@/lib/community/quest";
 
 type ParentDashboard = NonNullable<Awaited<ReturnType<typeof getParentDashboardData>>>;
 type ParentChild = ParentDashboard["children"][number];
@@ -103,13 +104,15 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
   const params = searchParams ? await searchParams : {};
   const selectedChild = dashboard.children.find((child) => child.id === params.child) ?? dashboard.children[0];
   const stats = buildStudentStats(selectedChild);
+  const quest = await getStudentQuestData(selectedChild.id, []);
+  const house = quest.membership.house;
   const dailyMission = buildDailyMission(selectedChild);
   const classCircle = currentCircle(selectedChild);
   const projectTask = selectedChild.assignments[0] ?? null;
   const dashboardMetrics = [
     { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
     { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-    { label: "House points", value: String(stats.housePoints), hint: "Calculated from learning activity." },
+    { label: "House points", value: String(quest.studentTotal || stats.housePoints), hint: `${house.name} contribution.` },
     { label: "Attendance", value: `${selectedChild.attendanceRate}%`, hint: "Recent class presence." },
   ];
   const badgeItems = selectedChild.badges.length
@@ -156,8 +159,9 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
         studentName={selectedChild.name}
         roleLabel="Student Home"
         mission={dailyMission}
-        houseName="House path"
-        houseVirtue="Amanah"
+        houseName={house.name}
+        houseVirtue={house.virtue}
+        houseColor={house.color}
         metrics={dashboardMetrics}
         badges={badgeItems}
         actions={[

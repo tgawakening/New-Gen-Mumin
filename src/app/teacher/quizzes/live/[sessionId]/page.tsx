@@ -59,6 +59,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
   const totalLearners = Math.max(live.roster.length, currentResponses.length, 1);
   const answeredPercent = Math.min(100, Math.round((currentResponses.length / totalLearners) * 100));
   const choices = currentQuestion ? choicesFromMeta(currentQuestion.meta) : [];
+  const latestResponses = [...currentResponses].sort((left, right) => right.answeredAt.getTime() - left.answeredAt.getTime()).slice(0, 6);
 
   async function setQuestionAction(formData: FormData) {
     "use server";
@@ -152,6 +153,14 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
             <div className="mt-4 h-4 overflow-hidden rounded-full bg-[#ece3d5]">
               <div className="h-full rounded-full bg-[#2f6b4b]" style={{ width: `${answeredPercent}%` }} />
             </div>
+            <div className="mt-4 space-y-2">
+              {latestResponses.length ? latestResponses.map((response) => (
+                <div key={response.id} className="rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs font-semibold text-[#22304a]">
+                  <span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />
+                  {response.houseName} {response.housePointsAwarded > 0 ? `+${response.housePointsAwarded}` : "answered"} as {response.studentName} submitted
+                </div>
+              )) : <p className="text-xs text-[#617184]">Live team updates appear here as students answer.</p>}
+            </div>
             <div className="mt-5 grid grid-cols-4 gap-2">
               {live.roster.slice(0, 16).map((student) => (
                 <div key={student.id} className={`rounded-2xl border p-2 text-center ${answeredStudentIds.has(student.id) ? "border-[#2f6b4b] bg-[#effaf3]" : "border-[#eadfce] bg-[#fbf6ef]"}`}>
@@ -195,7 +204,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                 {correctResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
                     <img src={avatarForGender(response.studentGender)} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
-                    <span>{response.studentName} +{response.housePointsAwarded}</span>
+                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName} +{response.housePointsAwarded}</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
                 ))}

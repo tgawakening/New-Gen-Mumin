@@ -7,6 +7,7 @@ import {
   QUIZ_PARTICIPATION_MESSAGE,
   ensureStudentHouseMembership,
   getHouseLeaderboard,
+  normalizeHouseDisplay,
 } from "@/lib/community/house-points";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
@@ -124,6 +125,10 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
   const students = [...rosterStudents, ...extraStudents];
   const studentById = new Map(students.map((student) => [student.id, student]));
 
+  function displayHouse(student: (typeof students)[number] | undefined) {
+    return student?.houseMembership?.house ? normalizeHouseDisplay(student.houseMembership.house) : null;
+  }
+
   return {
     session,
     quiz,
@@ -133,7 +138,8 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
       id: student.id,
       name: student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
       gender: student.registrationStudents[0]?.gender ?? null,
-      houseName: student.houseMembership?.house.name ?? "No house",
+      houseName: displayHouse(student)?.name ?? "No house",
+      houseColor: displayHouse(student)?.color ?? null,
     })),
     responses: session.responses.map((response) => {
       const student = studentById.get(response.studentId);
@@ -141,7 +147,8 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
         ...response,
         studentName: student?.displayName || `${student?.user.firstName ?? "Student"} ${student?.user.lastName ?? ""}`.trim(),
         studentGender: student?.registrationStudents[0]?.gender ?? null,
-        houseName: student?.houseMembership?.house.name ?? "No house",
+        houseName: displayHouse(student)?.name ?? "No house",
+        houseColor: displayHouse(student)?.color ?? null,
       };
     }),
   };

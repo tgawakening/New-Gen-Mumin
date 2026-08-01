@@ -125,6 +125,7 @@ export default async function StudentDashboardPage() {
   });
   const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? []);
   const house = quest.membership.house;
+  const teammates = quest.teammates.filter((member) => member.id !== child.id);
   const dailyMission = buildDailyMission(child, quest.missions[0]);
   const projectTask = child.assignments[0] ?? null;
   const classCircle = nextClassRoom ?? child.courses[0]?.roomAssignment ?? null;
@@ -201,6 +202,7 @@ export default async function StudentDashboardPage() {
         mission={dailyMission}
         houseName={house.name}
         houseVirtue={house.virtue}
+        houseColor={house.color}
         metrics={dashboardMetrics}
         badges={badgeItems}
         actions={[
@@ -215,6 +217,42 @@ export default async function StudentDashboardPage() {
         circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
         avatarVariant={avatarVariantForGender(child.profile.gender)}
       />
+      <section className="grid gap-4 rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
+        <div className="overflow-hidden rounded-[26px] border bg-[#fffaf3] p-5" style={{ borderColor: house.color }}>
+          <div className="flex items-center gap-4">
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] text-lg font-black text-white shadow-sm" style={{ backgroundColor: house.color }}>
+              {house.name.replace(" House", "").slice(0, 1)}
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Your fixed team</p>
+              <h2 className="mt-1 text-2xl font-semibold text-[#22304a]">You are in {house.name}</h2>
+              <p className="mt-1 text-sm text-[#617184]">All quiz, Sunnah tracker, homework, attendance, and behaviour points add to this team.</p>
+            </div>
+          </div>
+          <div className="mt-5 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#617184]">Team points</p>
+              <p className="mt-2 text-3xl font-semibold text-[#22304a]">{quest.houseTotal}</p>
+            </div>
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#617184]">Your contribution</p>
+              <p className="mt-2 text-3xl font-semibold text-[#22304a]">{quest.studentTotal || stats.housePoints}</p>
+            </div>
+          </div>
+        </div>
+        <details className="rounded-[26px] border border-[#eadfce] bg-[#fffaf3] p-5" open>
+          <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">View teammates in {house.name}</summary>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="rounded-full px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: house.color }}>{dashboard.studentName}</span>
+            {teammates.slice(0, 18).map((member) => (
+              <span key={member.id} className="rounded-full border border-[#eadfce] bg-white px-3 py-2 text-xs font-semibold text-[#22304a]">
+                {member.name}
+              </span>
+            ))}
+            {!teammates.length ? <span className="text-sm text-[#617184]">Team companions will appear as students are assigned.</span> : null}
+          </div>
+        </details>
+      </section>
       <section className="overflow-hidden rounded-[34px] border border-[#eadfce] bg-white shadow-sm">
         <div className="grid gap-0 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
           <div className="relative overflow-hidden bg-[#10223d] p-5 text-white sm:p-7">

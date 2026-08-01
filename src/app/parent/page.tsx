@@ -10,6 +10,7 @@ import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
+import { getStudentQuestData } from "@/lib/community/quest";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import { buildParentCalendarUrls } from "@/lib/calendar/tokens";
 import {
@@ -139,6 +140,9 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   const programEnrollmentOffers =
     showProgramEnrollmentModal && selectedChild ? eligibleProgramOffers(options.offers, selectedChild) : [];
   const calendarUrls = buildParentCalendarUrls(dashboard.parentProfile.id);
+  const selectedQuest = selectedChild ? await getStudentQuestData(selectedChild.id, []) : null;
+  const selectedHouse = selectedQuest?.membership.house ?? null;
+  const selectedTeammates = selectedQuest && selectedChild ? selectedQuest.teammates.filter((member) => member.id !== selectedChild.id).slice(0, 8) : [];
 
   return (
     <FamilyDashboardFrame
@@ -204,6 +208,32 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           selectedChildId={selectedChild?.id}
           basePath="/parent"
         />
+        {selectedChild && selectedHouse ? (
+          <div className="mt-4 rounded-[24px] border bg-[#fffaf3] p-4" style={{ borderColor: selectedHouse.color }}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-black text-white shadow-sm" style={{ backgroundColor: selectedHouse.color }}>
+                  {selectedHouse.name.replace(" House", "").slice(0, 1)}
+                </span>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Fixed team</p>
+                  <p className="text-lg font-semibold text-[#22304a]">{selectedChild.name} is in {selectedHouse.name}</p>
+                  <p className="text-xs text-[#617184]">Team points: {selectedQuest?.houseTotal ?? 0} - Student contribution: {selectedQuest?.studentTotal ?? 0}</p>
+                </div>
+              </div>
+              <Link href={`/parent/student-view?child=${selectedChild.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
+                View team details
+              </Link>
+            </div>
+            {selectedTeammates.length ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedTeammates.map((member) => (
+                  <span key={member.id} className="rounded-full border border-[#eadfce] bg-white px-3 py-1.5 text-xs font-semibold text-[#22304a]">{member.name}</span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </SectionCard>
 
       {selectedChild && activity ? (
