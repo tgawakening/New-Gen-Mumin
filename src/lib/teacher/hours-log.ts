@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { sendTeacherHoursSubmittedEmail } from "@/lib/email/notifications";
 import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 
-export const MIN_PAYABLE_TRACKED_SESSION_MINUTES = 30;
+export const MIN_PAYABLE_TRACKED_SESSION_MINUTES = 15;
 
 export type HoursLogFilter = {
   month?: string | null;
