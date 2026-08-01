@@ -850,8 +850,21 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     if (!userId) return;
 
     try {
+      const student = await db.studentProfile.findUnique({ where: { userId }, select: { id: true } });
+      if (student) {
+        await db.$transaction([
+          db.classScheduleRoster.deleteMany({ where: { studentId: student.id } }),
+          db.teacherStudentRoster.deleteMany({ where: { studentId: student.id } }),
+          db.housePointLedger.deleteMany({ where: { studentId: student.id } }),
+          db.houseMembership.deleteMany({ where: { studentId: student.id } }),
+        ]);
+      }
       await db.user.delete({ where: { id: userId } });
       revalidatePath("/admin");
+      revalidatePath("/teacher/roster");
+      revalidatePath("/teacher");
+      revalidatePath("/parent");
+      revalidatePath("/student");
     } catch {
       redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Unable to delete this student right now&tone=error`);
     }
@@ -1734,4 +1747,3 @@ function FilterSelect({
     </select>
   );
 }
-

@@ -45,6 +45,9 @@ export const CANONICAL_HOUSES = [
   },
 ] as const;
 
+const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
+const PAID_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
+
 const LEGACY_HOUSE_SLUGS: Record<string, (typeof CANONICAL_HOUSES)[number]["slug"]> = {
   ilm: "blue-house",
   amanah: "green-house",
@@ -194,7 +197,13 @@ export async function getHouseLeaderboard() {
 export async function getHouseTeamMembers(houseId: string) {
   const houseIds = await getCanonicalHouseIdsForHouseId(houseId);
   const students = await db.studentProfile.findMany({
-    where: { houseMembership: { houseId: { in: houseIds } } },
+    where: {
+      houseMembership: { houseId: { in: houseIds } },
+      OR: [
+        { enrollments: { some: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } } } },
+        { registrationStudents: { some: { registration: { status: { in: [...PAID_REGISTRATION_STATUSES] } } } } },
+      ],
+    },
     include: {
       user: true,
       registrationStudents: { select: { age: true, gender: true }, orderBy: { createdAt: "desc" }, take: 1 },

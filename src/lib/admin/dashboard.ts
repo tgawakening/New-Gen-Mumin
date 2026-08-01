@@ -536,12 +536,10 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       studentsViewRaw
         .filter((student) => studentSearch || student.enrollments.some((enrollment) => COMPLETED_ENROLLMENT_STATUSES.has(enrollment.status)))
         .map((student) => {
-          const primaryEnrollment = student.enrollments[0];
           const dedupeKey = [
             student.name.trim().toLowerCase(),
             student.age ?? "",
             student.parentName.trim().toLowerCase(),
-            primaryEnrollment?.programTitle.trim().toLowerCase() ?? "",
           ].join("|");
           return [dedupeKey, student] as const;
         }),
