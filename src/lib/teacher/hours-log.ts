@@ -93,6 +93,18 @@ function isTeacherEditedTrackedRow(notes?: string | null) {
   return Boolean(notes?.includes("Teacher edited from original:"));
 }
 
+function hasMatchingTeacherStart(
+  occurrence: { scheduleId: string; startedAt: Date },
+  teacherStarts: Array<{ scheduleId: string; startedAt: Date }>,
+) {
+  const toleranceMs = 20 * 60 * 1000;
+  return teacherStarts.some(
+    (start) =>
+      start.scheduleId === occurrence.scheduleId &&
+      Math.abs(start.startedAt.getTime() - occurrence.startedAt.getTime()) <= toleranceMs,
+  );
+}
+
 async function syncTrackedHours(teacher: { id: string; userId: string }, startsAt: Date, endsAt: Date) {
   const occurrences = await db.liveClassSessionOccurrence.findMany({
     where: {
@@ -109,10 +121,18 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
     },
     orderBy: { startedAt: "asc" },
   });
+  const teacherStartedOccurrences = occurrences.filter((occurrence) => occurrence.source === "teacher-start" || occurrence.source === "teacher-member-start");
 
   for (const occurrence of occurrences) {
     const existing = await db.teacherHoursLogEntry.findUnique({ where: { occurrenceId: occurrence.id } });
     if (!isLiveClassVisibleToStudents(occurrence.schedule.title)) {
+      if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
+        await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
+      }
+      continue;
+    }
+
+    if (occurrence.source === "zoom-recording" && !hasMatchingTeacherStart(occurrence, teacherStartedOccurrences)) {
       if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
         await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
       }
