@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { QUIZ_AVATARS, normalizedQuizGender } from "@/lib/quizzes/avatars";
 import {
   QUIZ_CORRECT_MESSAGE,
   QUIZ_INCORRECT_MESSAGE,
@@ -140,6 +141,7 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
       gender: student.registrationStudents[0]?.gender ?? null,
       houseName: displayHouse(student)?.name ?? "No house",
       houseColor: displayHouse(student)?.color ?? null,
+      avatarId: student.user.avatarUrl,
     })),
     responses: session.responses.map((response) => {
       const student = studentById.get(response.studentId);
@@ -149,6 +151,7 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
         studentGender: student?.registrationStudents[0]?.gender ?? null,
         houseName: displayHouse(student)?.name ?? "No house",
         houseColor: displayHouse(student)?.color ?? null,
+        avatarId: student?.user.avatarUrl ?? null,
       };
     }),
   };
@@ -175,6 +178,37 @@ export async function setLiveQuizQuestion(input: { sessionId: string; teacherUse
 export async function endLiveQuizSession(input: { sessionId: string; teacherUserId: string }) {
   const live = await getTeacherLiveQuizSession(input.sessionId, input.teacherUserId);
   if (!live) throw new Error("Live quiz session not found.");
+
+  const questionIds = new Set(live.quiz.questions.map((question) => question.id));
+  const correctByStudent = new Map<string, Set<string>>();
+  for (const response of live.session.responses) {
+    if (!response.isCorrect || !questionIds.has(response.questionId)) continue;
+    const correct = correctByStudent.get(response.studentId) ?? new Set<string>();
+    correct.add(response.questionId);
+    correctByStudent.set(response.studentId, correct);
+  }
+
+  for (const [studentId, correctQuestions] of correctByStudent) {
+    if (!questionIds.size || correctQuestions.size !== questionIds.size) continue;
+    const membership = await ensureStudentHouseMembership(studentId);
+    const alreadyAwarded = await db.housePointLedger.findFirst({
+      where: { studentId, sourceType: "QUIZ_LIVE_COMPLETE", sourceId: live.session.id },
+      select: { id: true },
+    });
+    if (!alreadyAwarded) {
+      await db.housePointLedger.create({
+        data: {
+          houseId: membership.houseId,
+          studentId,
+          points: 10,
+          reason: live.quiz.title + ": perfect live quiz",
+          sourceType: "QUIZ_LIVE_COMPLETE",
+          sourceId: live.session.id,
+        },
+      });
+    }
+  }
+
   return db.quizLiveSession.update({
     where: { id: input.sessionId },
     data: {
@@ -189,7 +223,7 @@ export async function endLiveQuizSession(input: { sessionId: string; teacherUser
 export async function getStudentLiveQuizSessionByStudentId(sessionId: string, studentId: string) {
   const student = await db.studentProfile.findUnique({
     where: { id: studentId },
-    include: { user: true },
+    include: { user: true, registrationStudents: { select: { gender: true }, orderBy: { createdAt: "desc" }, take: 1 } },
   });
   if (!student) return null;
 
@@ -217,7 +251,7 @@ export async function getStudentLiveQuizSessionByStudentId(sessionId: string, st
 
   const houseMembership = await ensureStudentHouseMembership(student.id);
   return {
-    student,
+    student: { ...student, gender: student.registrationStudents[0]?.gender ?? null },
     houseMembership,
     session,
     quiz,
@@ -309,7 +343,8 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   const answeredAt = new Date();
   const secondsTaken = Math.max(0, Math.round((answeredAt.getTime() - live.session.currentQuestionStartedAt.getTime()) / 1000));
   const withinWindow = secondsTaken <= live.settings.responseWindowSeconds;
-  const earnedPoints = isCorrect && withinWindow ? live.currentQuestion.points : 0;
+  if (!withinWindow) throw new Error("This question has closed. Wait for the next round.");
+  const earnedPoints = isCorrect ? live.currentQuestion.points : 0;
   const currentQuestionIndex = live.quiz.questions.findIndex((question) => question.id === live.currentQuestion?.id);
   const responseByQuestionId = new Map(live.session.responses.map((response) => [response.questionId, response]));
   let consecutiveCorrectBefore = 0;
@@ -320,7 +355,7 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   }
   const streakBonusPoints = isCorrect && withinWindow && consecutiveCorrectBefore > 0 ? live.settings.streakBonusPoints : 0;
   const participationPoints = live.settings.participationPoints;
-  const housePointsAwarded = earnedPoints + participationPoints + streakBonusPoints;
+  const housePointsAwarded = 0;
 
   const response = await db.quizLiveResponse.create({
     data: {
@@ -335,19 +370,6 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
     },
   });
 
-  if (housePointsAwarded > 0) {
-    await db.housePointLedger.create({
-      data: {
-        houseId: live.houseMembership.houseId,
-        studentId: live.student.id,
-        points: housePointsAwarded,
-        reason: `${live.quiz.title}: live answer`,
-        sourceType: "QUIZ_LIVE",
-        sourceId: response.id,
-      },
-    });
-  }
-
   return response;
 }
 
@@ -361,6 +383,31 @@ export async function submitLiveQuizAnswer(input: { sessionId: string; studentUs
   return submitLiveQuizAnswerByStudentId({ sessionId: input.sessionId, studentId: student.id, answer: input.answer });
 }
 
+export async function selectStudentQuizAvatar(input: { studentId: string; avatarId: string }) {
+  const avatar = QUIZ_AVATARS.find((item) => item.id === input.avatarId);
+  if (!avatar) throw new Error("Choose a valid Gen-Mumin character.");
+  const student = await db.studentProfile.findUnique({
+    where: { id: input.studentId },
+    include: { registrationStudents: { select: { gender: true }, orderBy: { createdAt: "desc" }, take: 1 } },
+  });
+  if (!student) throw new Error("Student profile not found.");
+  if (avatar.gender !== normalizedQuizGender(student.registrationStudents[0]?.gender)) {
+    throw new Error("Choose a character from your child avatar collection.");
+  }
+  const claimed = await db.user.findFirst({
+    where: { avatarUrl: avatar.id, studentProfile: { isNot: { id: student.id } } },
+    select: { id: true },
+  });
+  if (claimed) throw new Error("That character is already chosen. Pick another exclusive avatar.");
+  await db.user.update({ where: { id: student.userId }, data: { avatarUrl: avatar.id } });
+  return avatar;
+}
+
+export async function selectStudentQuizAvatarByUserId(input: { studentUserId: string; avatarId: string }) {
+  const student = await db.studentProfile.findUnique({ where: { userId: input.studentUserId }, select: { id: true } });
+  if (!student) throw new Error("Student profile not found.");
+  return selectStudentQuizAvatar({ studentId: student.id, avatarId: input.avatarId });
+}
 export function liveQuizMessage(response: { isCorrect: boolean | null }) {
   if (response.isCorrect) return QUIZ_CORRECT_MESSAGE;
   if (response.isCorrect === false) return QUIZ_INCORRECT_MESSAGE;

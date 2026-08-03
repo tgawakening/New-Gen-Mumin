@@ -11,7 +11,8 @@ import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { getStudentLiveQuizSession, liveQuizMessage, submitLiveQuizAnswer } from "@/lib/quizzes/live";
+import { getStudentLiveQuizSession, liveQuizMessage, selectStudentQuizAvatarByUserId, submitLiveQuizAnswer } from "@/lib/quizzes/live";
+import { quizAvatarsForGender } from "@/lib/quizzes/avatars";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,21 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     redirect(`/student/quizzes/live/${sessionId}?notice=Answer submitted`);
   }
 
+  async function selectAvatarAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "STUDENT") redirect("/auth/login");
+    const avatarId = String(formData.get("avatarId") || "");
+    try {
+      await selectStudentQuizAvatarByUserId({ studentUserId: currentSession.user.id, avatarId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not choose character.";
+      redirect("/student/quizzes/live/" + sessionId + "?error=" + encodeURIComponent(message));
+    }
+    revalidatePath("/student/quizzes/live/" + sessionId);
+    revalidatePath("/teacher/quizzes/live/" + sessionId);
+    redirect("/student/quizzes/live/" + sessionId + "?notice=Your exclusive character is ready");
+  }
   const choices = live.currentQuestion ? choicesFromMeta(live.currentQuestion.meta) : [];
   const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
   const myHouseStanding = live.leaderboard.find((house) => house.name === live.houseMembership.house.name) ?? live.leaderboard[0];
@@ -69,12 +85,38 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
       title="Live Quiz"
-      subtitle="Team quiz time. Correct answers inside the window earn full points for your house."
+      subtitle="Team quiz time. Correct answers build toward a 10-point perfect-quiz bonus for your house."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
       <LiveQuizAutoRefresh intervalMs={1200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
+
+      <section className="rounded-[30px] border border-[#eadfce] bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">My exclusive character</p>
+            <h2 className="mt-1 text-xl font-semibold text-[#22304a]">Choose the avatar that represents you</h2>
+          </div>
+          <p className="text-sm text-[#617184]">One character per child. Your choice appears on the teacher screen.</p>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
+          {quizAvatarsForGender(live.student.gender).map((avatar) => {
+            const selected = live.student.user.avatarUrl === avatar.id;
+            return (
+              <form action={selectAvatarAction} key={avatar.id}>
+                <input type="hidden" name="avatarId" value={avatar.id} />
+                <button className={"relative w-full rounded-[22px] border-2 p-2 text-center transition hover:-translate-y-1 " + (selected ? "border-[#f5a33b] bg-[#fff5e7] shadow-md" : "border-[#e6e9ef] bg-[#f8fafc]")}>
+                  <span className="absolute right-1 top-1 z-10 rounded-full bg-white px-1.5 py-0.5 text-lg shadow">{avatar.badge}</span>
+                  <img src={avatar.image} alt={avatar.name} className="mx-auto h-20 w-full rounded-[16px] object-cover object-[50%_12%]" style={{ backgroundColor: avatar.accent }} />
+                  <span className="mt-1 block truncate text-xs font-bold text-[#22304a]">{avatar.name}</span>
+                  {selected ? <span className="text-[10px] font-semibold text-[#c27a2c]">Chosen</span> : null}
+                </button>
+              </form>
+            );
+          })}
+        </div>
+      </section>
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
         <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -82,7 +124,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#f7c56f]">Gen-Mumin House Challenge</p>
             <h2 className="mt-3 text-3xl font-semibold leading-tight sm:text-4xl">Answer together. Win as a house.</h2>
             <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
-              This is not a fastest-finger podium. Everyone who answers correctly in {live.settings.responseWindowSeconds} seconds earns full points.
+              Answer within {live.settings.responseWindowSeconds} seconds. Complete every question correctly to earn 10 points for your house.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
               <HouseBadge name={live.houseMembership.house.name} color={live.houseMembership.house.color} virtue="Your fixed team" dark />
@@ -103,7 +145,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Game complete</p>
               <h3 className="mt-3 text-3xl font-semibold">Amazing effort from every learner.</h3>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-white/75">
-                Well done to everyone for taking part. Every effort counts, and the house points have been saved.
+                Well done to everyone for taking part. Every effort counts. Learners who answered every question correctly have earned 10 points for their house.
               </p>
               <Link href="/student/quizzes" className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a]">Back to quizzes</Link>
             </div>
@@ -115,7 +157,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question on screen</p>
               <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
               <QuizQuestionImage meta={live.currentQuestion.meta} />
-              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
+              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points. A perfect quiz earns 10 house points at the end.</p>
 
               {live.currentResponse ? (
                 <div className={`relative mt-6 overflow-hidden rounded-[32px] text-center shadow-sm ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
@@ -129,11 +171,11 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                         {live.currentResponse.isCorrect ? "Correct answer" : "Good effort"}
                       </p>
                       <h3 className="mt-2 text-3xl font-semibold text-[#22304a]">
-                        {live.currentResponse.isCorrect ? "Brilliant. Your house earned points." : "Submitted. Keep going."}
+                        {live.currentResponse.isCorrect ? "Brilliant. Your correct answer is recorded." : "Submitted. Keep going."}
                       </h3>
                       <p className="mt-3 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
                       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">+{live.currentResponse.housePointsAwarded} house points</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">+{live.currentResponse.earnedPoints} quiz points</span>
                         <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">Waiting for teacher</span>
                         <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
                       </div>

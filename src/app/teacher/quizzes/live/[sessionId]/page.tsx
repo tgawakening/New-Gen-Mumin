@@ -12,6 +12,7 @@ import { QUIZ_CORRECT_MESSAGE, QUIZ_INCORRECT_MESSAGE } from "@/lib/community/ho
 import { endLiveQuizSession, getTeacherLiveQuizSession, setLiveQuizQuestion } from "@/lib/quizzes/live";
 import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { quizAvatar } from "@/lib/quizzes/avatars";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +35,10 @@ function choicesFromMeta(meta: unknown) {
   return Array.isArray(choices) ? choices.filter((choice): choice is string => typeof choice === "string") : [];
 }
 
-function avatarForGender(gender?: string | null) {
-  const normalized = gender?.toLowerCase() ?? "";
-  return normalized.includes("female") || normalized.includes("girl") || normalized === "f"
-    ? "/gen-mumin-chars/rania-superhero.png"
-    : "/gen-mumin-chars/ali-superhero.png";
+function responseSeconds(answer: unknown) {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return Number.MAX_SAFE_INTEGER;
+  const seconds = Number((answer as { secondsTaken?: unknown }).secondsTaken);
+  return Number.isFinite(seconds) ? seconds : Number.MAX_SAFE_INTEGER;
 }
 
 export default async function TeacherLiveQuizPage({ params, searchParams }: PageProps) {
@@ -61,6 +61,16 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
   const answeredPercent = Math.min(100, Math.round((currentResponses.length / totalLearners) * 100));
   const choices = currentQuestion ? choicesFromMeta(currentQuestion.meta) : [];
   const latestResponses = [...currentResponses].sort((left, right) => right.answeredAt.getTime() - left.answeredAt.getTime()).slice(0, 6);
+  const roundElapsedSeconds = currentQuestion && live.session.currentQuestionStartedAt
+    ? Math.floor((Date.now() - live.session.currentQuestionStartedAt.getTime()) / 1000)
+    : 0;
+  const roundClosed = Boolean(currentQuestion) && (
+    roundElapsedSeconds >= live.settings.responseWindowSeconds
+    || (live.roster.length > 0 && currentResponses.length >= live.roster.length)
+  );
+  const roundWinners = [...correctResponses]
+    .sort((left, right) => responseSeconds(left.answer) - responseSeconds(right.answer))
+    .slice(0, 5);
 
   async function setQuestionAction(formData: FormData) {
     "use server";
@@ -166,8 +176,8 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
             <div className="mt-5 grid grid-cols-4 gap-2">
               {live.roster.slice(0, 16).map((student) => (
                 <div key={student.id} className={`rounded-2xl border p-2 text-center ${answeredStudentIds.has(student.id) ? "border-[#2f6b4b] bg-[#effaf3]" : "border-[#eadfce] bg-[#fbf6ef]"}`}>
-                  <img src={avatarForGender(student.gender)} alt="Student avatar" className="mx-auto h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
-                  <p className="mt-1 truncate text-[10px] font-semibold">{student.name}</p>
+                  <img src={quizAvatar(student.avatarId, student.gender).image} alt="Student avatar" className="mx-auto h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
+                  <p className="mt-1 truncate text-[10px] font-semibold">{quizAvatar(student.avatarId, student.gender).badge} {student.name}</p>
                 </div>
               ))}
             </div>
@@ -175,6 +185,30 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
         </div>
       </section>
 
+      {roundClosed ? (
+        <section className="overflow-hidden rounded-[32px] border border-[#f2d39b] bg-gradient-to-r from-[#fff7df] via-white to-[#edf7ff] p-5 shadow-lg sm:p-7">
+          <div className="text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#c27a2c]">Round complete</p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#22304a]">Question champions</h2>
+            <p className="mt-2 text-sm text-[#617184]">{correctResponses.length} learners answered correctly. The first five correct responses are highlighted.</p>
+          </div>
+          <div className="mx-auto mt-5 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-5">
+            {roundWinners.map((winner, index) => {
+              const avatar = quizAvatar(winner.avatarId, winner.studentGender);
+              return (
+                <article key={winner.id} className="relative rounded-[24px] bg-white p-3 text-center shadow-md">
+                  <span className="absolute left-2 top-2 rounded-full bg-[#f7c56f] px-2 py-1 text-xs font-black text-[#22304a]">#{index + 1}</span>
+                  <span className="absolute right-2 top-2 text-2xl">{avatar.badge}</span>
+                  <img src={avatar.image} alt={winner.studentName} className="mx-auto h-24 w-20 rounded-[18px] object-cover object-[50%_12%]" style={{ backgroundColor: avatar.accent }} />
+                  <h3 className="mt-2 truncate text-sm font-bold text-[#22304a]">{winner.studentName}</h3>
+                  <p className="text-xs text-[#2f6b4b]">Correct in {responseSeconds(winner.answer)}s</p>
+                </article>
+              );
+            })}
+          </div>
+          {!roundWinners.length ? <p className="mt-4 text-center text-sm font-semibold text-[#617184]">No correct answers this round. Encourage everyone and make the next question live.</p> : null}
+        </section>
+      ) : null}
       <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]">
         <TeacherSection eyebrow="Teacher controls" title="Choose the next question">
           <div className="space-y-3">
@@ -205,8 +239,8 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {correctResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
-                    <img src={avatarForGender(response.studentGender)} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
-                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName} +{response.housePointsAwarded}</span>
+                    <img src={quizAvatar(response.avatarId, response.studentGender).image} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
+                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName} {response.earnedPoints} quiz pts</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
                 ))}
@@ -218,7 +252,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {effortResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
-                    <img src={avatarForGender(response.studentGender)} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
+                    <img src={quizAvatar(response.avatarId, response.studentGender).image} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
                     <span>{response.studentName}</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_INCORRECT_MESSAGE}</span>
                   </div>
