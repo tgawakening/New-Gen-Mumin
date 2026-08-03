@@ -10,6 +10,7 @@ import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrat
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { QUIZ_CORRECT_MESSAGE, QUIZ_INCORRECT_MESSAGE } from "@/lib/community/house-points";
 import { endLiveQuizSession, getTeacherLiveQuizSession, setLiveQuizQuestion } from "@/lib/quizzes/live";
+import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
 export const dynamic = "force-dynamic";
@@ -125,6 +126,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                   <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold">Full points within {live.settings.responseWindowSeconds}s</span>
                 </div>
                 <h2 className="mt-5 text-4xl font-semibold leading-tight sm:text-5xl">{currentQuestion.prompt}</h2>
+                <QuizQuestionImage meta={currentQuestion.meta} className="mt-5 max-h-[420px] w-full rounded-[24px] bg-white/10 object-contain" />
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2">
                   {(choices.length ? choices : ["True", "False"]).map((choice, index) => (

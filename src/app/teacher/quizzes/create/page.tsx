@@ -83,7 +83,8 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
       await db.quizQuestion.deleteMany({ where: { quizId: quiz.id } });
     }
 
-    for (let index = 1; index <= 10; index += 1) {
+    const questionIndexes = Array.from(formData.keys()).map((key) => /^question-(\d+)$/.exec(key)?.[1]).filter((value): value is string => Boolean(value)).map(Number).filter((value) => Number.isSafeInteger(value) && value > 0).sort((a, b) => a - b);
+    for (const [sortOrder, index] of questionIndexes.entries()) {
       const prompt = String(formData.get(`question-${index}`) || "").trim();
       if (!prompt) continue;
       const type = String(formData.get(`type-${index}`) || "MCQ");
@@ -98,6 +99,8 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
       const choices = optionChoices.length ? optionChoices : legacyChoices;
       const correctChoiceIndex = Number(formData.get(`correct-${index}`) || 0);
       const answer = choices[correctChoiceIndex - 1] || String(formData.get(`answer-${index}`) || "").trim();
+      const imageDataUrl = String(formData.get(`image-${index}`) || "");
+      const validImage = /^data:image\/(?:png|jpe?g|webp|gif);base64,[a-z0-9+/=]+$/i.test(imageDataUrl) && imageDataUrl.length <= 3_000_000 ? imageDataUrl : undefined;
 
       await db.quizQuestion.create({
         data: {
@@ -105,9 +108,9 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
           prompt,
           type: type as "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "FILL_IN_BLANK",
           points,
-          sortOrder: index,
+          sortOrder,
           answerKey: answer ? { answer } : undefined,
-          meta: choices.length ? { choices } : undefined,
+          meta: choices.length || validImage ? { choices, imageDataUrl: validImage } : undefined,
         },
       });
     }
@@ -185,13 +188,14 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
           <QuizQuestionBuilderClient
             initialQuestions={editingQuiz?.questions.map((question) => {
               const answerKey = question.answerKey as { answer?: string } | null;
-              const meta = question.meta as { choices?: string[] } | null;
+              const meta = question.meta as { choices?: string[]; imageDataUrl?: string } | null;
               return {
                 prompt: question.prompt,
                 type: question.type,
                 answer: answerKey?.answer ?? "",
                 choices: Array.isArray(meta?.choices) ? meta.choices.join(", ") : "",
                 points: question.points || 10,
+                imageDataUrl: meta?.imageDataUrl ?? "",
               };
             })}
           />

@@ -1,9 +1,8 @@
 "use client";
 
-import { PlusCircle, Trash2 } from "lucide-react";
+import { ImagePlus, PlusCircle, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
-const MAX_QUESTIONS = 10;
 const OPTION_LABELS = ["A", "B", "C", "D"];
 
 type InitialQuestion = {
@@ -12,7 +11,43 @@ type InitialQuestion = {
   answer?: string;
   choices?: string;
   points?: number;
+  imageDataUrl?: string;
 };
+
+function QuestionImageField({ index, initialImage }: { index: number; initialImage?: string }) {
+  const [image, setImage] = useState(initialImage ?? "");
+  const [error, setError] = useState("");
+  function chooseImage(file?: File) {
+    setError("");
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return setError("Please choose an image file.");
+    if (file.size > 8 * 1024 * 1024) return setError("Please choose an image smaller than 8 MB.");
+    const reader = new FileReader();
+    reader.onload = () => {
+      const source = new Image();
+      source.onload = () => {
+        const scale = Math.min(1, 1600 / Math.max(source.width, source.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(source.width * scale));
+        canvas.height = Math.max(1, Math.round(source.height * scale));
+        canvas.getContext("2d")?.drawImage(source, 0, 0, canvas.width, canvas.height);
+        setImage(canvas.toDataURL("image/webp", 0.82));
+      };
+      source.onerror = () => setError("This image could not be read. Please try another file.");
+      source.src = String(reader.result);
+    };
+    reader.onerror = () => setError("This image could not be read. Please try another file.");
+    reader.readAsDataURL(file);
+  }
+  return <div className="grid gap-2 rounded-[22px] border border-dashed border-[#b8c9d8] bg-white/70 p-4">
+    <input type="hidden" name={`image-${index}`} value={image} />
+    <span className="text-sm font-semibold text-[#22304a]">Question picture (optional)</span>
+    {image ? <div className="relative w-fit"><img src={image} alt="Question preview" className="max-h-64 max-w-full rounded-2xl border border-[#d8e3ed] object-contain" /><button type="button" onClick={() => setImage("")} title="Remove picture" className="absolute right-2 top-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-white text-[#b24646] shadow"><X className="h-4 w-4" /></button></div> : null}
+    <label className="inline-flex w-fit cursor-pointer items-center gap-2 rounded-full bg-[#edf4ff] px-4 py-2 text-xs font-semibold text-[#24598a]"><ImagePlus className="h-4 w-4" />{image ? "Replace picture" : "Add picture"}<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="sr-only" onChange={(event) => chooseImage(event.target.files?.[0])} /></label>
+    <span className="text-xs font-normal text-[#617184]">PNG, JPG, WebP or GIF. Large pictures are resized automatically.</span>
+    {error ? <span className="text-xs font-semibold text-[#b24646]">{error}</span> : null}
+  </div>;
+}
 
 function splitChoices(value?: string) {
   return (value ?? "").split(/\n|,/).map((choice) => choice.trim()).filter(Boolean).slice(0, 4);
@@ -24,7 +59,6 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
 
   function addQuestion() {
     setQuestions((current) => {
-      if (current.length >= MAX_QUESTIONS) return current;
       const next = Math.max(0, ...current) + 1;
       return [...current, next];
     });
@@ -45,8 +79,7 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
           type="button"
           title="Add more questions"
           onClick={addQuestion}
-          disabled={questions.length >= MAX_QUESTIONS}
-          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#22304a] transition hover:bg-[#f7c56f] disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#22304a] transition hover:bg-[#f7c56f]"
         >
           <PlusCircle className="h-4 w-4" />
           Add question
@@ -82,6 +115,8 @@ export function QuizQuestionBuilderClient({ initialQuestions = [] }: { initialQu
                   Question shown on screen
                   <input name={`question-${index}`} defaultValue={initial?.prompt ?? ""} className="min-h-12 rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 text-base" placeholder="Example: What should we say before eating?" />
                 </label>
+
+                <QuestionImageField index={index} initialImage={initial?.imageDataUrl} />
 
                 <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
                   <label className="grid gap-2 text-sm font-semibold text-[#22304a]">

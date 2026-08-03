@@ -7,6 +7,7 @@ import { HouseBadge, HouseLeaderboardRow } from "@/components/community/HouseDis
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
+import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
@@ -113,6 +114,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
             <div className="rounded-[32px] bg-[#fffaf3] p-5 shadow-sm sm:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question on screen</p>
               <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
+              <QuizQuestionImage meta={live.currentQuestion.meta} />
               <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 
               {live.currentResponse ? (
