@@ -37,6 +37,7 @@ type RegistrationOffer = Awaited<ReturnType<typeof getRegistrationOptions>>["off
 type PageProps = {
   searchParams?: Promise<{
     tab?: string;
+    orderSearch?: string;
     orderStatus?: string;
     orderPayment?: string;
     orderProgram?: string;
@@ -935,6 +936,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   const activeTab = TABS.some((tab) => tab.key === params?.tab) && params.tab ? params.tab : "home";
 
   const filters: AdminDashboardFilters = {
+    orderSearch: params?.orderSearch,
     orderStatus: params?.orderStatus,
     orderPayment: params?.orderPayment,
     orderProgram: params?.orderProgram,
@@ -968,6 +970,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },
   ];
   const currentOrderHref = buildReturnHref("orders", {
+    orderSearch: params?.orderSearch,
     orderStatus: params?.orderStatus,
     orderPayment: params?.orderPayment,
     orderProgram: params?.orderProgram,
@@ -1188,6 +1191,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
           <section className="space-y-5 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
             <form className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <input type="hidden" name="tab" value="orders" />
+              <label className="grid gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#617184] md:col-span-2 xl:col-span-4">
+                Search orders
+                <input name="orderSearch" type="search" defaultValue={params?.orderSearch ?? ""} placeholder="Parent name, email, phone, child name, or order number" className="rounded-2xl border border-[#c9d7e6] bg-white px-4 py-3 text-sm font-normal normal-case tracking-normal text-[#22304a]" />
+              </label>
               <FilterSelect name="orderStatus" defaultValue={params?.orderStatus ?? "ALL"} options={["ALL", "SUCCEEDED", "PENDING", "UNDER_REVIEW", "FAILED"]} />
               <FilterSelect name="orderPayment" defaultValue={params?.orderPayment ?? "ALL"} options={["ALL", "STRIPE", "PAYPAL", "BANK_TRANSFER"]} />
               <FilterSelect name="orderProgram" defaultValue={params?.orderProgram ?? "ALL"} options={["ALL", ...data.filterOptions.orderPrograms]} />
@@ -1219,7 +1226,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
             </div>
 
             <div className="space-y-4">
-              {data.orders.map((order) => (
+              {data.orders.length ? data.orders.map((order) => (
                 <div key={order.id} className="rounded-[20px] border border-[#dce4ed] bg-[#fbfdff] p-5">
                   <div className="grid gap-4 xl:grid-cols-[0.95fr_1.35fr_0.7fr_0.8fr_0.7fr_0.7fr]">
                     <div>
@@ -1380,7 +1387,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     </div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="rounded-[20px] border border-dashed border-[#c9d7e6] bg-[#fbfdff] p-8 text-center text-sm text-[#617184]">
+                  No orders match this search and filter combination.
+                </div>
+              )}
             </div>
           </section>
         ) : null}

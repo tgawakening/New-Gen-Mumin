@@ -92,6 +92,7 @@ function registrationSourceLabel(notes: string | null | undefined) {
 }
 
 export type AdminDashboardFilters = {
+  orderSearch?: string;
   orderStatus?: string;
   orderPayment?: string;
   orderProgram?: string;
@@ -157,6 +158,20 @@ function buildRegistrationChildren(
 }
 
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
+  const orderSearch = filters.orderSearch?.trim();
+  const orderSearchWhere = orderSearch ? { OR: [
+    { orderNumber: { contains: orderSearch } },
+    { parent: { user: { firstName: { contains: orderSearch } } } },
+    { parent: { user: { lastName: { contains: orderSearch } } } },
+    { parent: { user: { email: { contains: orderSearch } } } },
+    { parent: { user: { phoneNumber: { contains: orderSearch } } } },
+    { registration: { is: { parentFirstName: { contains: orderSearch } } } },
+    { registration: { is: { parentLastName: { contains: orderSearch } } } },
+    { registration: { is: { parentEmail: { contains: orderSearch } } } },
+    { registration: { is: { phoneNumber: { contains: orderSearch } } } },
+    { registration: { is: { students: { some: { firstName: { contains: orderSearch } } } } } },
+    { registration: { is: { students: { some: { lastName: { contains: orderSearch } } } } } },
+  ] } : undefined;
   const studentSearch = filters.studentSearch?.trim();
   const studentPageSize = 25;
   const parsedStudentPage = Number(filters.studentPage ?? 1);
@@ -216,6 +231,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       },
     }),
     db.order.findMany({
+      where: orderSearchWhere,
       orderBy: { createdAt: "desc" },
       take: 80,
       include: {
