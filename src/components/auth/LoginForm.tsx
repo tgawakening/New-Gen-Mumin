@@ -64,14 +64,25 @@ export function LoginForm() {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        cache: "no-store",
         body: JSON.stringify({ email: normalizedEmail, password: normalizedPassword }),
       });
 
-      const payload = await response.json();
+      const responseText = await response.text();
+      let payload: { error?: string; dashboardHome?: string } = {};
+      try {
+        payload = responseText ? JSON.parse(responseText) as typeof payload : {};
+      } catch {
+        throw new Error(
+          response.ok
+            ? "The login service returned an invalid response. Please try again."
+            : "The login service is temporarily unavailable. Please try again in a moment.",
+        );
+      }
 
       if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to log in.");
+        throw new Error(payload.error ?? "Unable to log in. Please try again.");
       }
 
       await storeBrowserCredential(normalizedEmail, normalizedPassword);
