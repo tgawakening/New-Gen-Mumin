@@ -213,12 +213,35 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
+async function getWholeProgramStudentIds() {
+  const requiredSlugs = ["seerah", "life-lessons", "arabic", "tajweed"];
+  const students = await db.studentProfile.findMany({
+    where: {
+      AND: requiredSlugs.map((slug) => ({
+        enrollments: {
+          some: { program: { slug }, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+        },
+      })),
+    },
+    select: { id: true },
+  });
+  return students.map((student) => student.id);
+}
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
-    return await db.teacherStudentRoster.findMany({
-      where: { teacherId },
-      select: { programId: true, studentId: true },
-    });
+    const [entries, assignments, wholeProgramStudentIds] = await Promise.all([
+      db.teacherStudentRoster.findMany({ where: { teacherId }, select: { programId: true, studentId: true } }),
+      db.teacherProgram.findMany({ where: { teacherId }, select: { programId: true } }),
+      getWholeProgramStudentIds(),
+    ]);
+    const merged = new Map(entries.map((entry) => [`${entry.programId}:${entry.studentId}`, entry]));
+    for (const assignment of assignments) {
+      for (const studentId of wholeProgramStudentIds) {
+        const entry = { programId: assignment.programId, studentId };
+        merged.set(`${entry.programId}:${entry.studentId}`, entry);
+      }
+    }
+    return [...merged.values()];
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
@@ -230,11 +253,14 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
 
 export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
   try {
-    const rosterEntries = await db.teacherStudentRoster.findMany({
-      where: { teacherId, programId },
-      select: { studentId: true },
-    });
-    return rosterEntries.map((entry) => entry.studentId);
+    const [rosterEntries, wholeProgramStudentIds] = await Promise.all([
+      db.teacherStudentRoster.findMany({
+        where: { teacherId, programId },
+        select: { studentId: true },
+      }),
+      getWholeProgramStudentIds(),
+    ]);
+    return [...new Set([...rosterEntries.map((entry) => entry.studentId), ...wholeProgramStudentIds])];
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
