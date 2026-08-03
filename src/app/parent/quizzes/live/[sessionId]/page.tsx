@@ -7,6 +7,7 @@ import { HouseBadge, HouseLeaderboardRow } from "@/components/community/HouseDis
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
+import { LiveQuizSubmitButton } from "@/components/quizzes/LiveQuizSubmitButton";
 import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
@@ -59,10 +60,13 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
     if (!child) redirect("/parent/quizzes?error=Choose a learner first");
     const answer = String(formData.get("answer") || "").trim();
     if (!answer) redirect(`/parent/quizzes/live/${sessionId}?child=${childId}&error=Choose or type an answer first`);
-    await submitLiveQuizAnswerByStudentId({ sessionId, studentId: childId, answer });
+    try {
+      await submitLiveQuizAnswerByStudentId({ sessionId, studentId: childId, answer });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not submit the answer. Please try once more.";
+      redirect(`/parent/quizzes/live/${sessionId}?child=${childId}&error=${encodeURIComponent(message)}`);
+    }
     revalidatePath(`/parent/quizzes/live/${sessionId}`);
-    revalidatePath(`/teacher/quizzes/live/${sessionId}`);
-    revalidatePath("/teacher/quizzes");
     redirect(`/parent/quizzes/live/${sessionId}?child=${childId}&notice=Answer submitted`);
   }
 
@@ -79,7 +83,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
       navItems={getParentNavItems(selectedChild.id)}
       pendingReason={dashboard.pendingReason}
     >
-      <LiveQuizAutoRefresh intervalMs={1200} enabled={live.session.status !== "ENDED"} />
+      <LiveQuizAutoRefresh intervalMs={3200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
@@ -171,9 +175,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
                   ) : (
                     <input name="answer" required className="w-full rounded-[28px] border-2 border-[#d8e3ed] bg-white px-5 py-5 text-lg font-semibold text-[#22304a]" placeholder="Type your answer" />
                   )}
-                  <button disabled={selectedChild.accessLocked} className="w-full rounded-[28px] bg-[#22304a] px-6 py-5 text-xl font-semibold text-white shadow-md transition hover:-translate-y-0.5 disabled:opacity-50">
-                    Lock in answer
-                  </button>
+                  <LiveQuizSubmitButton disabled={selectedChild.accessLocked} />
                 </form>
               )}
             </div>

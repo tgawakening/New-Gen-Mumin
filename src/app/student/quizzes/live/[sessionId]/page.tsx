@@ -7,6 +7,7 @@ import { HouseBadge, HouseLeaderboardRow } from "@/components/community/HouseDis
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
+import { LiveQuizSubmitButton } from "@/components/quizzes/LiveQuizSubmitButton";
 import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
@@ -54,10 +55,13 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     if (!currentSession || currentSession.user.role !== "STUDENT") redirect("/auth/login");
     const answer = String(formData.get("answer") || "").trim();
     if (!answer) redirect(`/student/quizzes/live/${sessionId}?error=Choose or type an answer first`);
-    await submitLiveQuizAnswer({ sessionId, studentUserId: currentSession.user.id, answer });
+    try {
+      await submitLiveQuizAnswer({ sessionId, studentUserId: currentSession.user.id, answer });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not submit the answer. Please try once more.";
+      redirect(`/student/quizzes/live/${sessionId}?error=${encodeURIComponent(message)}`);
+    }
     revalidatePath(`/student/quizzes/live/${sessionId}`);
-    revalidatePath(`/teacher/quizzes/live/${sessionId}`);
-    revalidatePath("/teacher/quizzes");
     redirect(`/student/quizzes/live/${sessionId}?notice=Answer submitted`);
   }
 
@@ -89,7 +93,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <LiveQuizAutoRefresh intervalMs={1200} enabled={live.session.status !== "ENDED"} />
+      <LiveQuizAutoRefresh intervalMs={3200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="rounded-[30px] border border-[#eadfce] bg-white p-4 shadow-sm sm:p-5">
@@ -206,9 +210,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                   ) : (
                     <input name="answer" required className="w-full rounded-[28px] border-2 border-[#d8e3ed] bg-white px-5 py-5 text-lg font-semibold text-[#22304a]" placeholder="Type your answer" />
                   )}
-                  <button disabled={dashboard.child.accessLocked} className="w-full rounded-[28px] bg-[#22304a] px-6 py-5 text-xl font-semibold text-white shadow-md transition hover:-translate-y-0.5 disabled:opacity-50">
-                    Lock in answer
-                  </button>
+                  <LiveQuizSubmitButton disabled={dashboard.child.accessLocked} />
                 </form>
               )}
             </div>

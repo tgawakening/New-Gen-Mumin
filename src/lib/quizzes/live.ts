@@ -3,6 +3,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { QUIZ_AVATARS, normalizedQuizGender } from "@/lib/quizzes/avatars";
 import {
+  CANONICAL_HOUSES,
   QUIZ_CORRECT_MESSAGE,
   QUIZ_INCORRECT_MESSAGE,
   QUIZ_PARTICIPATION_MESSAGE,
@@ -28,6 +29,30 @@ function quizSettings(meta: unknown) {
   };
 }
 
+async function getLiveSessionHouseLeaderboard(sessionId: string) {
+  const responses = await db.quizLiveResponse.findMany({
+    where: { sessionId, housePointsAwarded: { gt: 0 } },
+    select: { studentId: true, housePointsAwarded: true },
+  });
+  const memberships = responses.length
+    ? await db.houseMembership.findMany({
+        where: { studentId: { in: [...new Set(responses.map((response) => response.studentId))] } },
+        include: { house: true },
+      })
+    : [];
+  const houseByStudent = new Map(memberships.map((membership) => [membership.studentId, normalizeHouseDisplay(membership.house)]));
+  const leaderboard = CANONICAL_HOUSES.map((house) => ({ ...house, id: house.slug, points: 0, entries: 0, houseIds: [] as string[] }));
+  const bySlug = new Map(leaderboard.map((house) => [house.slug, house]));
+  for (const response of responses) {
+    const house = houseByStudent.get(response.studentId);
+    if (!house) continue;
+    const row = bySlug.get(house.slug);
+    if (!row) continue;
+    row.points += response.housePointsAwarded;
+    row.entries += 1;
+  }
+  return leaderboard.sort((left, right) => right.points - left.points || left.sortOrder - right.sortOrder);
+}
 function answerKeyValue(answerKey: unknown) {
   if (!answerKey || typeof answerKey !== "object" || Array.isArray(answerKey)) return "";
   const value = (answerKey as { answer?: unknown }).answer;
@@ -134,7 +159,7 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
     session,
     quiz,
     settings: quizSettings(quiz.meta),
-    leaderboard: await getHouseLeaderboard(),
+    leaderboard: await getLiveSessionHouseLeaderboard(session.id),
     roster: students.map((student) => ({
       id: student.id,
       name: student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
@@ -256,7 +281,7 @@ export async function getStudentLiveQuizSessionByStudentId(sessionId: string, st
     session,
     quiz,
     settings: quizSettings(quiz.meta),
-    leaderboard: await getHouseLeaderboard(),
+    leaderboard: await getLiveSessionHouseLeaderboard(session.id),
     currentQuestion: quiz.questions.find((question) => question.id === session.currentQuestionId) ?? null,
     currentResponse: session.responses.find((response) => response.questionId === session.currentQuestionId) ?? null,
   };
@@ -342,7 +367,7 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   const isCorrect = objective && correctAnswer ? normalizeAnswer(input.answer) === correctAnswer : null;
   const answeredAt = new Date();
   const secondsTaken = Math.max(0, Math.round((answeredAt.getTime() - live.session.currentQuestionStartedAt.getTime()) / 1000));
-  const withinWindow = secondsTaken <= live.settings.responseWindowSeconds;
+  const withinWindow = secondsTaken <= live.settings.responseWindowSeconds + 3;
   if (!withinWindow) throw new Error("This question has closed. Wait for the next round.");
   const earnedPoints = isCorrect ? live.currentQuestion.points : 0;
   const currentQuestionIndex = live.quiz.questions.findIndex((question) => question.id === live.currentQuestion?.id);
@@ -355,22 +380,52 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   }
   const streakBonusPoints = isCorrect && withinWindow && consecutiveCorrectBefore > 0 ? live.settings.streakBonusPoints : 0;
   const participationPoints = live.settings.participationPoints;
-  const housePointsAwarded = 0;
+  const housePointsAwarded = isCorrect ? earnedPoints : 0;
 
-  const response = await db.quizLiveResponse.create({
-    data: {
-      sessionId: live.session.id,
-      questionId: live.currentQuestion.id,
-      studentId: live.student.id,
-      answer: { value: input.answer, secondsTaken, withinWindow, streakBonusPoints, participationPoints },
-      isCorrect,
-      earnedPoints,
-      housePointsAwarded,
-      answeredAt,
-    },
-  });
+  try {
+    return await db.$transaction(async (tx) => {
+      const response = await tx.quizLiveResponse.create({
+        data: {
+          sessionId: live.session.id,
+          questionId: live.currentQuestion!.id,
+          studentId: live.student.id,
+          answer: { value: input.answer, secondsTaken, withinWindow, streakBonusPoints, participationPoints },
+          isCorrect,
+          earnedPoints,
+          housePointsAwarded,
+          answeredAt,
+        },
+      });
 
-  return response;
+      if (housePointsAwarded > 0) {
+        await tx.housePointLedger.create({
+          data: {
+            houseId: live.houseMembership.houseId,
+            studentId: live.student.id,
+            points: housePointsAwarded,
+            reason: `${live.quiz.title}: correct live answer`,
+            sourceType: "QUIZ_LIVE_ANSWER",
+            sourceId: response.id,
+          },
+        });
+      }
+      return response;
+    });
+  } catch (error) {
+    if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
+      const existing = await db.quizLiveResponse.findUnique({
+        where: {
+          sessionId_questionId_studentId: {
+            sessionId: live.session.id,
+            questionId: live.currentQuestion.id,
+            studentId: live.student.id,
+          },
+        },
+      });
+      if (existing) return existing;
+    }
+    throw error;
+  }
 }
 
 export async function submitLiveQuizAnswer(input: { sessionId: string; studentUserId: string; answer: string }) {
