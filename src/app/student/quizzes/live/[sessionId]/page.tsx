@@ -90,7 +90,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
       title="Live Quiz"
-      subtitle="Team quiz time. Correct answers build toward a 10-point perfect-quiz bonus for your house."
+      subtitle="Every correct answer earns 10 personal house points and adds 1 live point to your team."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
@@ -163,7 +163,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
               {live.session.currentQuestionStartedAt ? <LiveQuizCountdown key={live.currentQuestion.id} startedAt={live.session.currentQuestionStartedAt.toISOString()} durationSeconds={live.settings.responseWindowSeconds} /> : null}
               <QuizQuestionImage meta={live.currentQuestion.meta} />
-              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points. A perfect quiz earns 10 house points at the end.</p>
+              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points. Every correct answer earns 10 personal house points and +1 team point.</p>
 
               {live.currentResponse ? (
                 <div className={`relative mt-6 overflow-hidden rounded-[32px] text-center shadow-sm ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
@@ -181,7 +181,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                       </h3>
                       <p className="mt-3 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
                       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">+{live.currentResponse.earnedPoints} quiz points</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">{live.currentResponse.isCorrect ? "+10 personal house points" : "+0 house points"}</span>`r`n                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? `+1 for ${live.houseMembership.house.name}` : "Keep trying for your team"}</span>
                         <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">Waiting for teacher</span>
                         <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
                       </div>

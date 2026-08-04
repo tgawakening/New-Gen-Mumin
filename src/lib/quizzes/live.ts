@@ -204,36 +204,6 @@ export async function endLiveQuizSession(input: { sessionId: string; teacherUser
   const live = await getTeacherLiveQuizSession(input.sessionId, input.teacherUserId);
   if (!live) throw new Error("Live quiz session not found.");
 
-  const questionIds = new Set(live.quiz.questions.map((question) => question.id));
-  const correctByStudent = new Map<string, Set<string>>();
-  for (const response of live.session.responses) {
-    if (!response.isCorrect || !questionIds.has(response.questionId)) continue;
-    const correct = correctByStudent.get(response.studentId) ?? new Set<string>();
-    correct.add(response.questionId);
-    correctByStudent.set(response.studentId, correct);
-  }
-
-  for (const [studentId, correctQuestions] of correctByStudent) {
-    if (!questionIds.size || correctQuestions.size !== questionIds.size) continue;
-    const membership = await ensureStudentHouseMembership(studentId);
-    const alreadyAwarded = await db.housePointLedger.findFirst({
-      where: { studentId, sourceType: "QUIZ_LIVE_COMPLETE", sourceId: live.session.id },
-      select: { id: true },
-    });
-    if (!alreadyAwarded) {
-      await db.housePointLedger.create({
-        data: {
-          houseId: membership.houseId,
-          studentId,
-          points: 10,
-          reason: live.quiz.title + ": perfect live quiz",
-          sourceType: "QUIZ_LIVE_COMPLETE",
-          sourceId: live.session.id,
-        },
-      });
-    }
-  }
-
   return db.quizLiveSession.update({
     where: { id: input.sessionId },
     data: {
@@ -380,7 +350,8 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   }
   const streakBonusPoints = isCorrect && withinWindow && consecutiveCorrectBefore > 0 ? live.settings.streakBonusPoints : 0;
   const participationPoints = live.settings.participationPoints;
-  const housePointsAwarded = isCorrect ? earnedPoints : 0;
+  // Live team score is separate from the child's permanent house points.
+  const housePointsAwarded = isCorrect ? 1 : 0;
 
   try {
     return await db.$transaction(async (tx) => {
@@ -402,8 +373,8 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
           data: {
             houseId: live.houseMembership.houseId,
             studentId: live.student.id,
-            points: housePointsAwarded,
-            reason: `${live.quiz.title}: correct live answer`,
+            points: 10,
+            reason: `${live.quiz.title}: correct live answer (+1 team point)`,
             sourceType: "QUIZ_LIVE_ANSWER",
             sourceId: response.id,
           },

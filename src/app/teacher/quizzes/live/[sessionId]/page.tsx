@@ -171,7 +171,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               {latestResponses.length ? latestResponses.map((response) => (
                 <div key={response.id} className="rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs font-semibold text-[#22304a]">
                   <span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />
-                  {response.houseName} {response.housePointsAwarded > 0 ? `+${response.housePointsAwarded}` : "answered"} as {response.studentName} submitted
+                  {response.housePointsAwarded > 0 ? `${response.studentName} earned 10 house points and +1 for ${response.houseName}` : `${response.studentName} answered for ${response.houseName}`}
                 </div>
               )) : <p className="text-xs text-[#617184]">Live team updates appear here as students answer.</p>}
             </div>
@@ -192,7 +192,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
           <div className="text-center">
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#c27a2c]">Round complete</p>
             <h2 className="mt-2 text-3xl font-semibold text-[#22304a]">Question champions</h2>
-            <p className="mt-2 text-sm text-[#617184]">{correctResponses.length} learners answered correctly. The first five correct responses are highlighted.</p>
+            <p className="mt-2 text-sm text-[#617184]">{correctResponses.length} learners answered correctly. Each earned 10 personal house points and added 1 point to their team.</p>
           </div>
           <div className="mx-auto mt-5 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-5">
             {roundWinners.map((winner, index) => {
@@ -242,7 +242,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                 {correctResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
                     <img src={quizAvatar(response.avatarId, response.studentGender).image} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
-                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName} {response.earnedPoints} quiz pts</span>
+                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName}: +10 house, +1 {response.houseName}</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
                 ))}
