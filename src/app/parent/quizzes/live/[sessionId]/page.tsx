@@ -126,7 +126,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
             <div className="rounded-[32px] bg-[#fffaf3] p-5 shadow-sm sm:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question on screen</p>
               <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
-              {live.session.currentQuestionStartedAt ? <LiveQuizCountdown key={live.currentQuestion.id} startedAt={live.session.currentQuestionStartedAt.toISOString()} durationSeconds={live.settings.responseWindowSeconds} /> : null}
+              {live.session.currentQuestionStartedAt ? <LiveQuizCountdown key={live.currentQuestion.id} startedAt={live.session.currentQuestionStartedAt.toISOString()} durationSeconds={live.settings.responseWindowSeconds} serverNow={new Date().toISOString()} /> : null}
               <QuizQuestionImage meta={live.currentQuestion.meta} />
               <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 

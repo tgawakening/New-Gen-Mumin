@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 type Props = {
   startedAt: string;
   durationSeconds?: number;
+  serverNow?: string;
   dark?: boolean;
 };
 
@@ -13,18 +14,22 @@ function formatTime(seconds: number) {
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function LiveQuizCountdown({ startedAt, durationSeconds = 60, dark = false }: Props) {
+export function LiveQuizCountdown({ startedAt, durationSeconds = 60, serverNow, dark = false }: Props) {
   const [remaining, setRemaining] = useState(durationSeconds);
 
   useEffect(() => {
+    const startedMs = new Date(startedAt).getTime();
+    const serverNowMs = serverNow ? new Date(serverNow).getTime() : Date.now();
+    const elapsedAtRender = Math.max(0, Math.floor((serverNowMs - startedMs) / 1000));
+    const mountedAt = Date.now();
     const update = () => {
-      const elapsed = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
-      setRemaining(Math.max(0, durationSeconds - elapsed));
+      const elapsedSinceMount = Math.floor((Date.now() - mountedAt) / 1000);
+      setRemaining(Math.max(0, durationSeconds - elapsedAtRender - elapsedSinceMount));
     };
     update();
     const id = window.setInterval(update, 250);
     return () => window.clearInterval(id);
-  }, [durationSeconds, startedAt]);
+  }, [durationSeconds, serverNow, startedAt]);
 
   const percent = Math.max(0, Math.min(100, (remaining / durationSeconds) * 100));
   const urgent = remaining <= 10;
