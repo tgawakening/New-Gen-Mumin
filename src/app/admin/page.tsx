@@ -26,6 +26,7 @@ import {
   markOrderPaid,
   recordManualPaidAmount,
   resendOrderCompletionEmails,
+  updateStripeSubscriptionAmount,
 } from "@/lib/payments/fulfillment";
 import { getRegistrationOptions } from "@/lib/registration/service";
 
@@ -844,6 +845,33 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Paid amount record updated&tone=success`);
   }
 
+  async function adjustStripeSubscriptionAmount(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+
+    const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin?tab=orders");
+    const amount = Number(formData.get("subscriptionAmount"));
+    const currency = String(formData.get("subscriptionCurrency") || "").trim().toUpperCase();
+    const note = String(formData.get("subscriptionNote") || "").trim();
+    if (!orderId || !Number.isFinite(amount) || amount <= 0) {
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=Enter a valid upcoming subscription amount&tone=error`);
+    }
+
+    try {
+      const updated = await updateStripeSubscriptionAmount(orderId, { amount, currency, note });
+      revalidatePath("/admin");
+      revalidatePath("/admin/orders");
+      revalidatePath("/admin/monthly-payments");
+      revalidatePath("/parent");
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(`Next Stripe charge updated to ${updated.currency} ${updated.amount}. No immediate charge or proration was created.`)}&tone=success`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update the Stripe subscription amount.";
+      redirect(`${returnUrl}${returnUrl.includes("?") ? "&" : "?"}notice=${encodeURIComponent(message)}&tone=error`);
+    }
+  }
+
   async function deleteStudent(formData: FormData) {
     "use server";
     const userId = String(formData.get("userId") || "");
@@ -1358,6 +1386,27 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           Cancelled
                         </div>
                       )}
+
+                      {order.gateway === "STRIPE" && order.stripeSubscriptionId ? (
+                        <details className="rounded-2xl border border-[#b9d4ef] bg-[#f4f9ff] p-3">
+                          <summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Change next Stripe charge</summary>
+                          <form action={adjustStripeSubscriptionAmount} className="mt-3 grid gap-2">
+                            <input type="hidden" name="orderId" value={order.id} />
+                            <input type="hidden" name="returnUrl" value={currentOrderHref} />
+                            <label className="text-[11px] font-semibold text-[#52677d]">
+                              Upcoming monthly amount
+                              <input name="subscriptionAmount" type="number" min="1" step="1" required defaultValue={order.subscriptionAmountAdjustment?.amount ?? order.totalAmount} className="mt-1 w-full rounded-xl border border-[#b9d4ef] bg-white px-3 py-2 text-xs text-[#22304a]" />
+                            </label>
+                            <label className="text-[11px] font-semibold text-[#52677d]">
+                              Currency
+                              <input name="subscriptionCurrency" readOnly value={order.subscriptionAmountAdjustment?.currency ?? order.currency} className="mt-1 w-full rounded-xl border border-[#b9d4ef] bg-[#eef4fa] px-3 py-2 text-xs uppercase text-[#22304a]" />
+                            </label>
+                            <input name="subscriptionNote" defaultValue={order.subscriptionAmountAdjustment?.note ?? ""} placeholder="Reason for adjustment" className="rounded-xl border border-[#b9d4ef] bg-white px-3 py-2 text-xs text-[#22304a]" />
+                            <p className="text-[10px] leading-4 text-[#617184]">Updates this subscription's next recurring charge. It does not charge now and creates no proration.</p>
+                            <button className="rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Update next charge</button>
+                          </form>
+                        </details>
+                      ) : null}
                       {["BANK_TRANSFER", "STRIPE", "PAYPAL"].includes(order.gateway) ? (
                         <form action={adjustManualPaidAmount} className="rounded-2xl border border-[#e6edf4] bg-white p-3">
                           <input type="hidden" name="orderId" value={order.id} />
