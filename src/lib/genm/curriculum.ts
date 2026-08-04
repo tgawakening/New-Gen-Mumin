@@ -143,14 +143,14 @@ export const genMTeachers: GenMTeacherProfile[] = [
     programSlugs: ["life-lessons"],
   },
   {
-    slug: "mussab",
-    name: "Sir Mussab",
-    title: "Gardening Instructor",
-    credential: "Agriculture Officer (UAE)",
-    bio: "Leads the gardening and plant-growth side of the life-skills curriculum with practical home projects and nature-based learning.",
-    email: "mussab.gardening.genm@gmail.com",
-    specialties: ["Kitchen gardening", "Nature projects", "Plant growth tracking"],
-    programSlugs: ["life-lessons"],
+    slug: "abdul-badee",
+    name: "Abdul Badee",
+    title: "Advanced Arabic & Tajweed Teacher",
+    credential: "Gen-Mumins Arabic & Tajweed Faculty",
+    bio: "Leads advanced Arabic language development and Qur'anic Tajweed with structured recitation, pronunciation, and fluency guidance.",
+    email: "abdelbadeaghonamy@gmail.com",
+    specialties: ["Advanced Arabic", "Qur'anic Tajweed", "Recitation and pronunciation"],
+    programSlugs: ["arabic", "tajweed"],
   },
 ];
 

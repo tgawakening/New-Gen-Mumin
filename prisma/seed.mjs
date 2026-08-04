@@ -179,24 +179,6 @@ const teacherProfiles = [
     programSlugs: ["arabic"],
   },
   {
-    email: "abubakarsaeed.genm@gmail.com",
-    firstName: "Abubakar",
-    lastName: "Saeed",
-    password: "GenM-TajweedAbubakar2026!",
-    bio: "Leads tajweed practice, Qur'anic accent work, and guided recitation habits for the tajweed stream.",
-    specialties: ["Tajweed", "Qur'anic accent", "Arabic language support"],
-    programSlugs: ["tajweed"],
-  },
-  {
-    email: "zainab.tajweed.genm@gmail.com",
-    firstName: "Zainab",
-    lastName: "Tajweed",
-    password: "GenM-Zainab2026!",
-    bio: "Supports structured Qur'an recitation, tajweed fluency, and higher-level correction for the tajweed stream.",
-    specialties: ["Qur'an teaching", "Tajweed fluency", "Recitation correction"],
-    programSlugs: ["tajweed"],
-  },
-  {
     email: "javeriabasir0@gmail.com",
     firstName: "Javeria",
     lastName: "Khuram",
@@ -224,13 +206,13 @@ const teacherProfiles = [
     programSlugs: ["life-lessons"],
   },
   {
-    email: "mussab.gardening.genm@gmail.com",
-    firstName: "Sir",
-    lastName: "Mussab",
-    password: "GenM-Mussab2026!",
-    bio: "Leads the gardening and plant-growth side of the life-skills curriculum with practical home projects and nature-based learning.",
-    specialties: ["Kitchen gardening", "Nature projects", "Plant growth tracking"],
-    programSlugs: ["life-lessons"],
+    email: "abdelbadeaghonamy@gmail.com",
+    firstName: "Abdul",
+    lastName: "Badee",
+    passwordHash: "adfd1d13368b24449e1b91066218665c:633334817ea5f0790f2f8a669826d0fadeae4c13ac64971b2497d9c842c82fd212f3150341fef79c6d2aab95e5e3ffefe02f0db7460c0db57b28119d998cb741",
+    bio: "Advanced Arabic and Qur'anic Tajweed teacher.",
+    specialties: ["Advanced Arabic", "Qur'anic Tajweed", "Recitation and pronunciation"],
+    programSlugs: ["arabic", "tajweed"],
   },
 ];
 
@@ -360,7 +342,7 @@ async function main() {
         where: { id: existingTeacherUser.id },
         data: {
           email: teacher.email,
-          passwordHash: hashPassword(teacher.password),
+          passwordHash: teacher.passwordHash ?? hashPassword(teacher.password),
           firstName: teacher.firstName,
           lastName: teacher.lastName,
           role: "TEACHER",
@@ -370,7 +352,7 @@ async function main() {
       : await prisma.user.create({
         data: {
         email: teacher.email,
-        passwordHash: hashPassword(teacher.password),
+        passwordHash: teacher.passwordHash ?? hashPassword(teacher.password),
         role: "TEACHER",
         status: "ACTIVE",
         firstName: teacher.firstName,
