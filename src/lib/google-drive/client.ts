@@ -182,6 +182,15 @@ export async function driveRequest<T>(path: string, init: RequestInit = {}) {
   return parseDriveResponse<T>(response);
 }
 
+export async function driveDownloadResponse(fileId: string) {
+  const accessToken = await getAccessToken();
+  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Google Drive download failed: ${await response.text()}`);
+  return response;
+}
 export async function driveUpload<T>(path: string, init: RequestInit = {}) {
   const accessToken = await getAccessToken();
   const response = await fetch(`https://www.googleapis.com/upload/drive/v3${path}`, {

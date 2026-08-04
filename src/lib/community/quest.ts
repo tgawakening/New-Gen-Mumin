@@ -3,6 +3,7 @@ import "server-only";
 import { MissionKind, MissionQuestionType, MissionStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { uploadSunnahTrackerEvidence } from "@/lib/google-drive/materials";
 import { CANONICAL_HOUSES, ensureStudentHouseMembership, getCanonicalHouseIdsForHouseId, getHouseLeaderboard, getHouseTeamMembers } from "@/lib/community/house-points";
 
 const STARTER_MISSIONS = [
@@ -175,7 +176,7 @@ export async function submitMissionAttempt(input: {
 }) {
   const mission = await db.mission.findUnique({
     where: { id: input.missionId },
-    include: { questions: { orderBy: { sortOrder: "asc" } } },
+    include: { program: true, questions: { orderBy: { sortOrder: "asc" } } },
   });
   if (!mission || mission.status !== MissionStatus.PUBLISHED) {
     throw new Error("Mission is not available.");
@@ -189,6 +190,22 @@ export async function submitMissionAttempt(input: {
   });
   let score = 0;
   let reflection = "";
+  const evidenceFiles = sunnahTracker
+    ? input.formData.getAll("evidenceImages").filter((value): value is File => value instanceof File && value.size > 0)
+    : [];
+  if (evidenceFiles.length > 5) throw new Error("Upload up to 5 Sunnah evidence images per submission.");
+  const evidence = mission.programId && mission.program
+    ? await Promise.all(evidenceFiles.map((file) => uploadSunnahTrackerEvidence({
+        studentId: input.studentId,
+        studentName: input.studentName,
+        programId: mission.programId!,
+        programTitle: mission.program!.title,
+        missionId: mission.id,
+        missionTitle: mission.title,
+        attemptNumber: attemptCount + 1,
+        file,
+      })))
+    : [];
 
   const attempt = await db.missionAttempt.create({
     data: {
@@ -199,7 +216,7 @@ export async function submitMissionAttempt(input: {
     },
   });
 
-  for (const question of mission.questions) {
+  for (const [questionIndex, question] of mission.questions.entries()) {
     const rawAnswer = input.formData.get(`answer-${question.id}`);
     const answer = rawAnswer === null && sunnahTracker ? "false" : String(rawAnswer || "").trim();
     const answerKey = question.answerKey as { answer?: string } | null;
@@ -216,7 +233,7 @@ export async function submitMissionAttempt(input: {
       data: {
         attemptId: attempt.id,
         questionId: question.id,
-        answer: { value: answer },
+        answer: questionIndex === 0 && evidence.length ? { value: answer, evidence } : { value: answer },
         isCorrect: isObjective ? isCorrect : null,
         earnedPoints: isObjective ? (isCorrect ? question.points : 0) : question.type === MissionQuestionType.SHORT_REFLECTION && answer ? question.points : 0,
       },
@@ -259,12 +276,12 @@ export async function submitMissionAttempt(input: {
         data: teacherUserIds.map((userId) => ({
           userId,
           title: "Sunnah tracker submitted",
-          body: `${input.studentName} submitted ${mission.title}. Review the checklist and award feedback if needed.`,
+          body: `${input.studentName} submitted ${mission.title}${evidence.length ? ` with ${evidence.length} evidence image${evidence.length === 1 ? "" : "s"}` : ""}. Review the checklist and award feedback if needed.`,
           href: `/teacher/missions?submission=${attempt.id}`,
         })),
       });
     }
   }
 
-  return { score, pointsAwarded };
+  return { score, pointsAwarded, evidenceCount: evidence.length };
 }

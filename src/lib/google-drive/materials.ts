@@ -593,6 +593,50 @@ export async function getDriveRecordingPlaybackStatus(fileId: string) {
   };
 }
 
+export async function uploadSunnahTrackerEvidence(input: {
+  studentId: string;
+  studentName: string;
+  programId: string;
+  programTitle: string;
+  missionId: string;
+  missionTitle: string;
+  attemptNumber: number;
+  file: File;
+}) {
+  if (!input.file.type.startsWith("image/")) throw new Error("Sunnah evidence must be an image.");
+  if (input.file.size > 8 * 1024 * 1024) throw new Error("Each Sunnah evidence image must be 8 MB or smaller.");
+
+  const rootFolderId = getDriveRootFolderId();
+  const studentsFolderId = await ensureChildFolder(rootFolderId, "Gen-M students");
+  const studentFolderId = await ensureChildFolder(studentsFolderId, `${input.studentName.trim() || "Student"} (${input.studentId})`);
+  const programFolderId = await ensureChildFolder(studentFolderId, folderNameForProgram(input.programTitle));
+  const sunnahFolderId = await ensureChildFolder(programFolderId, "Sunnah Tasks");
+  const missionFolderId = await ensureChildFolder(sunnahFolderId, input.missionTitle);
+  const attemptFolderId = await ensureChildFolder(missionFolderId, `Attempt ${input.attemptNumber}`);
+  const safeName = `${Date.now()}-${input.file.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
+  const uploaded = await uploadFileToFolder({
+    folderId: attemptFolderId,
+    file: input.file,
+    name: safeName,
+    appProperties: {
+      genMumin: "sunnah-evidence",
+      studentId: input.studentId,
+      studentName: input.studentName,
+      programId: input.programId,
+      missionId: input.missionId,
+      attemptNumber: String(input.attemptNumber),
+    },
+  });
+
+  return {
+    id: uploaded.id,
+    name: uploaded.name,
+    mimeType: uploaded.mimeType,
+    webViewLink: uploaded.webViewLink ?? null,
+    webContentLink: uploaded.webContentLink ?? null,
+    thumbnailLink: uploaded.thumbnailLink ?? null,
+  } satisfies DriveUploadResult;
+}
 export async function uploadStudentSubmissionFile(input: {
   studentId: string;
   studentName: string;

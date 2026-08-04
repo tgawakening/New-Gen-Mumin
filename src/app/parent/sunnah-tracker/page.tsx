@@ -124,7 +124,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
                     </p>
                   ) : null}
 
-                  <form action={submitSunnahTracker} className="mt-4 space-y-3 rounded-[18px] bg-white p-4">
+                  <form action={submitSunnahTracker} encType="multipart/form-data" className="mt-4 space-y-3 rounded-[18px] bg-white p-4">
                     <input type="hidden" name="childId" value={selectedChild.id} />
                     <input type="hidden" name="missionId" value={mission.id} />
                     {mission.questions.map((question) => (
@@ -136,6 +136,11 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Optional note
                       <textarea name="reflection" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Any note for today's tracker?" />
+                    </label>
+                    <label className="grid gap-2 rounded-2xl border border-dashed border-[#c8d3df] bg-[#f7fafc] p-4 text-sm font-semibold text-[#22304a]">
+                      Sunnah task images (optional, up to 5)
+                      <input name="evidenceImages" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="text-sm font-normal file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:font-semibold file:text-white" />
+                      <span className="text-xs font-normal text-[#617184]">Upload clear photos requested by the teacher. Maximum 8 MB per image.</span>
                     </label>
                     <button disabled={selectedChild.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
                       Submit Sunnah tracker

@@ -127,7 +127,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                     <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
                       {sunnahTracker ? "Open checklist" : latestAttempt ? "Try again" : "Start mission"}
                     </summary>
-                    <form action={submitMission} className="mt-4 space-y-3">
+                    <form action={submitMission} encType="multipart/form-data" className="mt-4 space-y-3">
                       <input type="hidden" name="missionId" value={mission.id} />
                       {mission.questions.map((question) => {
                         const meta = question.meta as { choices?: string[] } | null;
@@ -167,6 +167,13 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                         <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                           Optional parent/student note
                           <textarea name="reflection" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Anything to mention for today?" />
+                        </label>
+                      ) : null}
+                      {sunnahTracker ? (
+                        <label className="grid gap-2 rounded-2xl border border-dashed border-[#c8d3df] bg-[#f7fafc] p-4 text-sm font-semibold text-[#22304a]">
+                          Sunnah task images (optional, up to 5)
+                          <input name="evidenceImages" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="text-sm font-normal file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:font-semibold file:text-white" />
+                          <span className="text-xs font-normal text-[#617184]">Upload clear photos requested by your teacher. Maximum 8 MB per image.</span>
                         </label>
                       ) : null}
                       <button disabled={child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">

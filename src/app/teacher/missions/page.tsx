@@ -23,6 +23,14 @@ function answerValue(answer: unknown) {
   const value = typeof answer === "object" && answer !== null && "value" in answer ? (answer as { value?: unknown }).value : answer;
   return String(value ?? "");
 }
+
+type SunnahEvidence = { id: string; name: string; webViewLink: string | null; webContentLink: string | null; thumbnailLink: string | null };
+function answerEvidence(answer: unknown): SunnahEvidence[] {
+  if (!answer || typeof answer !== "object" || !("evidence" in answer)) return [];
+  const evidence = (answer as { evidence?: unknown }).evidence;
+  if (!Array.isArray(evidence)) return [];
+  return evidence.filter((item): item is SunnahEvidence => Boolean(item && typeof item === "object" && "id" in item && "name" in item));
+}
 type PageProps = {
   searchParams?: Promise<{ created?: string; deleted?: string; reviewed?: string; submission?: string }>;
 };
@@ -280,6 +288,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
         <div className="space-y-4">
           {recentSunnahAttempts.map((attempt) => {
             const existingReview = reviewByAttempt.get(attempt.id);
+            const evidence = attempt.answers.flatMap((answer) => answerEvidence(answer.answer));
             return (
               <div key={attempt.id} id={attempt.id} className={`rounded-[22px] border p-4 text-sm ${params.submission === attempt.id ? "border-[#f0a85a] bg-[#fff7e8]" : "border-[#eadfce] bg-[#fbf6ef]"}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -311,6 +320,20 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
                   <div className="mt-3 rounded-2xl bg-white px-4 py-3">
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b46a2c]">Parent/student note</p>
                     <p className="mt-1 leading-6 text-[#4d5a6b]">{attempt.reflection}</p>
+                  </div>
+                ) : null}
+
+                {evidence.length ? (
+                  <div className="mt-3 rounded-2xl bg-white p-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#b46a2c]">Uploaded Sunnah evidence ({evidence.length})</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                      {evidence.map((image) => (
+                        <a key={image.id} href={`/api/sunnah-evidence/${attempt.id}/${image.id}`} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-2xl border border-[#e2e8ef] bg-[#f7fafc]">
+                          {image.thumbnailLink || image.webContentLink ? <img src={`/api/sunnah-evidence/${attempt.id}/${image.id}`} alt={image.name} className="h-28 w-full object-cover transition group-hover:scale-105" /> : <div className="flex h-28 items-center justify-center px-3 text-center text-xs text-[#617184]">Open image</div>}
+                          <p className="truncate px-3 py-2 text-xs font-semibold text-[#22304a]">{image.name}</p>
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
 
