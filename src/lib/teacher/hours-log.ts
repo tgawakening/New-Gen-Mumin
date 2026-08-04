@@ -105,6 +105,28 @@ function hasMatchingTeacherStart(
   );
 }
 
+function duplicateTrackedOccurrenceIds(occurrences: Array<{ id: string; scheduleId: string; startedAt: Date; durationMinutes: number | null; source: string }>) {
+  const duplicateIds = new Set<string>();
+  const sourcePriority = (source: string) => source === "teacher-start" ? 0 : source === "teacher-member-start" ? 1 : 2;
+  const ordered = [...occurrences].sort((left, right) =>
+    sourcePriority(left.source) - sourcePriority(right.source) || left.startedAt.getTime() - right.startedAt.getTime(),
+  );
+
+  for (let index = 0; index < ordered.length; index += 1) {
+    const canonical = ordered[index];
+    if (duplicateIds.has(canonical.id) || !canonical.durationMinutes || canonical.durationMinutes < MIN_PAYABLE_TRACKED_SESSION_MINUTES) continue;
+    for (let candidateIndex = index + 1; candidateIndex < ordered.length; candidateIndex += 1) {
+      const candidate = ordered[candidateIndex];
+      if (duplicateIds.has(candidate.id) || candidate.scheduleId !== canonical.scheduleId || !candidate.durationMinutes) continue;
+      const startDifferenceMinutes = Math.abs(candidate.startedAt.getTime() - canonical.startedAt.getTime()) / 60000;
+      const durationDifferenceMinutes = Math.abs(candidate.durationMinutes - canonical.durationMinutes);
+      if (startDifferenceMinutes <= 10 && durationDifferenceMinutes <= 10) duplicateIds.add(candidate.id);
+    }
+  }
+
+  return duplicateIds;
+}
+
 async function syncTrackedHours(teacher: { id: string; userId: string }, startsAt: Date, endsAt: Date) {
   const occurrences = await db.liveClassSessionOccurrence.findMany({
     where: {
@@ -122,9 +144,16 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
     orderBy: { startedAt: "asc" },
   });
   const teacherStartedOccurrences = occurrences.filter((occurrence) => occurrence.source === "teacher-start" || occurrence.source === "teacher-member-start");
+  const duplicateOccurrenceIds = duplicateTrackedOccurrenceIds(occurrences);
 
   for (const occurrence of occurrences) {
     const existing = await db.teacherHoursLogEntry.findUnique({ where: { occurrenceId: occurrence.id } });
+    if (duplicateOccurrenceIds.has(occurrence.id)) {
+      if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
+        await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
+      }
+      continue;
+    }
     if (!isLiveClassVisibleToStudents(occurrence.schedule.title)) {
       if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
         await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });

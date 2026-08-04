@@ -24,6 +24,23 @@ export async function recordLiveClassSessionOccurrence(input: {
   const source = input.source ?? "platform";
 
   try {
+    if (["teacher-start", "teacher-member-start"].includes(source) && input.teacherUserId) {
+      const recentStart = await db.liveClassSessionOccurrence.findFirst({
+        where: {
+          scheduleId: input.scheduleId,
+          teacherUserId: input.teacherUserId,
+          source,
+          startedAt: {
+            gte: new Date(startedAt.getTime() - 10 * 60 * 1000),
+            lte: new Date(startedAt.getTime() + 10 * 60 * 1000),
+          },
+        },
+        orderBy: { startedAt: "asc" },
+        select: { id: true },
+      });
+      if (recentStart) return;
+    }
+
     await db.liveClassSessionOccurrence.create({
       data: {
         scheduleId: input.scheduleId,
