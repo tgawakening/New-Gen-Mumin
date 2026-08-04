@@ -26,6 +26,10 @@ function normalizeDatabaseUrl(value?: string) {
 
   normalized = normalized.replace(/ssl-mode=REQUIRED/gi, "sslaccept=accept_invalid_certs");
 
+  if (/^mysql:/i.test(normalized) && !/[?&]connection_limit=/i.test(normalized)) {
+    normalized += `${normalized.includes("?") ? "&" : "?"}connection_limit=8&pool_timeout=20`;
+  }
+
   return normalized;
 }
 

@@ -6,41 +6,39 @@ import { useRouter } from "next/navigation";
 
 async function storeBrowserCredential(email: string, password: string) {
   if (typeof window === "undefined" || typeof navigator === "undefined") return;
-  const credentialsApi = navigator.credentials as
-    | (CredentialsContainer & {
-        store?: (credential: Credential) => Promise<Credential | null>;
-      })
-    | undefined;
-  const PasswordCredentialCtor = (window as Window & {
-    PasswordCredential?: new (
-      init: {
-        id: string;
-        password: string;
-        name?: string;
-      },
-    ) => Credential;
-  }).PasswordCredential as
-    | (new (
-        init: {
-          id: string;
-          password: string;
-          name?: string;
-        },
-      ) => Credential)
-    | undefined;
-
+  const credentialsApi = navigator.credentials as (CredentialsContainer & { store?: (credential: Credential) => Promise<Credential | null> }) | undefined;
+  const PasswordCredentialCtor = (window as Window & { PasswordCredential?: new (init: { id: string; password: string; name?: string }) => Credential }).PasswordCredential;
   if (!credentialsApi?.store || !PasswordCredentialCtor) return;
-
   try {
-    const credential = new PasswordCredentialCtor({
-      id: email,
-      password,
-      name: email,
-    });
-    await credentialsApi.store(credential);
+    await credentialsApi.store(new PasswordCredentialCtor({ id: email, password, name: email }));
   } catch {
-    // Keep login flow non-blocking if the browser declines credential storage.
+    // Browser credential storage must never block login.
   }
+}
+
+async function loginWithRetry(email: string, password: string) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        cache: "no-store",
+        signal: controller.signal,
+        body: JSON.stringify({ email, password }),
+      });
+      if (response.status !== 503 || attempt === 2) return response;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 2) throw error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 700 * (attempt + 1)));
+  }
+  throw lastError instanceof Error ? lastError : new Error("The login service is temporarily unavailable.");
 }
 
 export function LoginForm() {
@@ -57,40 +55,26 @@ export function LoginForm() {
     setError(null);
     setMessage(null);
     setIsSubmitting(true);
-
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password.trim();
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        cache: "no-store",
-        body: JSON.stringify({ email: normalizedEmail, password: normalizedPassword }),
-      });
-
+      const response = await loginWithRetry(normalizedEmail, normalizedPassword);
       const responseText = await response.text();
       let payload: { error?: string; dashboardHome?: string } = {};
       try {
         payload = responseText ? JSON.parse(responseText) as typeof payload : {};
       } catch {
-        throw new Error(
-          response.ok
-            ? "The login service returned an invalid response. Please try again."
-            : "The login service is temporarily unavailable. Please try again in a moment.",
-        );
+        throw new Error(response.ok ? "The login service returned an invalid response. Please try again." : "The login service is temporarily unavailable. Please try again in a moment.");
       }
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Unable to log in. Please try again.");
-      }
+      if (!response.ok) throw new Error(payload.error ?? "Unable to log in. Please try again.");
 
       await storeBrowserCredential(normalizedEmail, normalizedPassword);
       setMessage("Login successful. Opening your dashboard...");
       router.push(payload.dashboardHome ?? "/parent");
       router.refresh();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Unable to log in.");
+      setError(submitError instanceof Error && submitError.name !== "AbortError" ? submitError.message : "The login service is busy. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -100,38 +84,14 @@ export function LoginForm() {
     <form className="mx-auto w-full max-w-md space-y-5 rounded-[28px] border border-[#eadfce] bg-white p-6 shadow-sm sm:p-8" onSubmit={handleSubmit} autoComplete="on">
       <input name="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" type="email" placeholder="Email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
       <div className="relative">
-        <input
-          name="password"
-          autoComplete="current-password"
-          autoCapitalize="none"
-          autoCorrect="off"
-          type={showPassword ? "text" : "password"}
-          placeholder="Password"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-20"
-          required
-        />
-        <button
-          type="button"
-          onClick={() => setShowPassword((current) => !current)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-xs font-semibold text-[#334155]"
-        >
-          {showPassword ? "Hide" : "Show"}
-        </button>
+        <input name="password" autoComplete="current-password" autoCapitalize="none" autoCorrect="off" type={showPassword ? "text" : "password"} placeholder="Password" value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-20" required />
+        <button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full px-3 py-1 text-xs font-semibold text-[#334155]">{showPassword ? "Hide" : "Show"}</button>
       </div>
       {error ? <p className="rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-600">{error}</p> : null}
       {message ? <p className="rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</p> : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button type="submit" disabled={isSubmitting} className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">
-          {isSubmitting ? "Logging in..." : "Log in"}
-        </button>
-        <Link
-          href="/auth/forgot-password"
-          className="text-sm font-semibold text-[#334155] underline underline-offset-4"
-        >
-          Forgot password?
-        </Link>
+        <button type="submit" disabled={isSubmitting} className="rounded-full bg-slate-900 px-6 py-3 text-sm font-semibold text-white disabled:opacity-60">{isSubmitting ? "Connecting..." : "Log in"}</button>
+        <Link href="/auth/forgot-password" className="text-sm font-semibold text-[#334155] underline underline-offset-4">Forgot password?</Link>
       </div>
     </form>
   );

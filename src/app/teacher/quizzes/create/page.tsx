@@ -69,7 +69,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
       meta: {
         kahootStyle: true,
         fairScoring: true,
-        responseWindowSeconds: Math.max(1, Number(formData.get("responseWindowSeconds") || 10)),
+        responseWindowSeconds: Math.max(60, Number(formData.get("responseWindowSeconds") || 60)),
         participationPoints: Math.max(0, Number(formData.get("participationPoints") || 0)),
         streakBonusPoints: Math.max(0, Number(formData.get("streakBonusPoints") || 5)),
       },
@@ -171,7 +171,7 @@ export default async function TeacherQuizCreatePage({ searchParams }: PageProps)
           <div className="grid gap-4 rounded-[22px] border border-[#eadfce] bg-[#fbf6ef] p-4 md:grid-cols-3">
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
               Full-point answer window
-              <input name="responseWindowSeconds" type="number" min="1" defaultValue={10} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              <input name="responseWindowSeconds" type="number" min="60" defaultValue={60} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
               <span className="text-xs font-normal text-[#617184]">Anyone correct inside this window gets full points. No fastest-wins scoring.</span>
             </label>
             <label className="grid gap-2 text-sm font-semibold text-[#22304a]">

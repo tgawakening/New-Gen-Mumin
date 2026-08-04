@@ -23,7 +23,7 @@ type QuizMeta = {
 function quizSettings(meta: unknown) {
   const value = meta && typeof meta === "object" && !Array.isArray(meta) ? (meta as QuizMeta) : {};
   return {
-    responseWindowSeconds: Math.max(1, Number(value.responseWindowSeconds ?? 10)),
+    responseWindowSeconds: Math.max(60, Number(value.responseWindowSeconds ?? 60)),
     participationPoints: Math.max(0, Number(value.participationPoints ?? 0)),
     streakBonusPoints: Math.max(0, Number(value.streakBonusPoints ?? 5)),
   };

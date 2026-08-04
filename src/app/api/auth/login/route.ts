@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { resolvePostLoginDestination } from "@/lib/auth/session";
+import { getDashboardHome } from "@/lib/auth/session";
 import { loginPayloadSchema } from "@/lib/auth/schema";
 import { loginAccount } from "@/lib/auth/service";
 
@@ -13,16 +13,11 @@ export async function POST(request: Request) {
       userId: user.id,
       email: user.email,
       role: user.role,
-      dashboardHome: await resolvePostLoginDestination({
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-      }),
+      dashboardHome: getDashboardHome(user.role),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to log in.";
-    return NextResponse.json({ error: message }, { status: 400 });
+    const temporary = /database|connect|timeout|fetch|pool|unavailable/i.test(message);
+    return NextResponse.json({ error: temporary ? "The login service is busy. Please try again." : message }, { status: temporary ? 503 : 400 });
   }
 }

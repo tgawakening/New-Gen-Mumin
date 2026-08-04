@@ -7,6 +7,7 @@ import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
+import { LiveQuizCountdown } from "@/components/quizzes/LiveQuizCountdown";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { QUIZ_CORRECT_MESSAGE, QUIZ_INCORRECT_MESSAGE } from "@/lib/community/house-points";
 import { endLiveQuizSession, getTeacherLiveQuizSession, setLiveQuizQuestion } from "@/lib/quizzes/live";
@@ -109,7 +110,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
       subtitle="Project this screen in class. Students answer from their dashboards while houses earn points together."
       navItems={getTeacherNavItems()}
     >
-      <LiveQuizAutoRefresh intervalMs={1200} enabled={live.session.status !== "ENDED"} />
+      <LiveQuizAutoRefresh intervalMs={2200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
@@ -136,6 +137,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                   <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-semibold">Full points within {live.settings.responseWindowSeconds}s</span>
                 </div>
                 <h2 className="mt-5 text-4xl font-semibold leading-tight sm:text-5xl">{currentQuestion.prompt}</h2>
+                {live.session.currentQuestionStartedAt ? <LiveQuizCountdown key={currentQuestion.id} startedAt={live.session.currentQuestionStartedAt.toISOString()} durationSeconds={live.settings.responseWindowSeconds} dark /> : null}
                 <QuizQuestionImage meta={currentQuestion.meta} className="mt-5 max-h-[420px] w-full rounded-[24px] bg-white/10 object-contain" />
 
                 <div className="mt-6 grid gap-4 md:grid-cols-2">

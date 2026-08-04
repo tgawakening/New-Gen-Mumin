@@ -41,6 +41,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
 
   const params = searchParams ? await searchParams : undefined;
   const selectedChild = dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
+  const childName = selectedChild?.name.replace(/\s+parent$/iu, "").trim() || selectedChild?.name || "Learner";
   const totalAttempts = selectedChild?.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0) ?? 0;
   const bestScore = selectedChild?.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore;
   const [houseMembership, houseLeaderboard, activeLiveQuizzes] = selectedChild
@@ -226,7 +227,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
           />
 
           {activeLiveQuizzes.length ? (
-            <SectionCard eyebrow="Live now" title={`Live quiz started for ${selectedChild.name}`}>
+            <SectionCard eyebrow="Live now" title={`Live quiz started for ${childName}`}>
               <div className="grid gap-4 md:grid-cols-2">
                 {activeLiveQuizzes.map((liveQuiz) => (
                   <div key={liveQuiz.id} className="overflow-hidden rounded-[30px] bg-[#0b1630] text-white shadow-lg">
@@ -238,7 +239,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
                           Open the answer screen for this selected learner. Questions appear one by one during the live class.
                         </p>
                         <Link href={`/parent/quizzes/live/${liveQuiz.id}?child=${selectedChild.id}`} className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
-                          Answer quiz for {selectedChild.name}
+                          Answer quiz for {childName}
                         </Link>
                       </div>
                       <img src="/gen-mumin-chars/rania-superhero.png" alt="Gen-Mumin live quiz character" className="mx-auto h-44 w-32 rounded-[26px] object-cover object-[50%_12%]" />
@@ -249,7 +250,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
             </SectionCard>
           ) : null}
 
-          <SectionCard eyebrow="Assessment overview" title={`${selectedChild.name}'s quiz activity`}>
+          <SectionCard eyebrow="Assessment overview" title={`${childName}'s quiz activity`}>
             <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
               {quizForms.map((quiz) => {
                 const summary = selectedChild.quizzes.find((item) => item.id === quiz.id);

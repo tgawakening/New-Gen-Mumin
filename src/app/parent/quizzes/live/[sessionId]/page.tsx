@@ -7,6 +7,7 @@ import { HouseBadge, HouseLeaderboardRow } from "@/components/community/HouseDis
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
+import { LiveQuizCountdown } from "@/components/quizzes/LiveQuizCountdown";
 import { LiveQuizSubmitButton } from "@/components/quizzes/LiveQuizSubmitButton";
 import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -46,6 +47,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
   const { sessionId } = await params;
   const query = searchParams ? await searchParams : {};
   const selectedChild = dashboard.children.find((child) => child.id === query.child) ?? dashboard.children[0];
+  const childName = selectedChild?.name.replace(/\s+parent$/iu, "").trim() || selectedChild?.name || "Learner";
   if (!selectedChild) redirect("/parent/quizzes?error=Choose a learner first");
   const live = await getStudentLiveQuizSessionByStudentId(sessionId, selectedChild.id);
   if (!live) redirect(`/parent/quizzes?child=${selectedChild.id}&error=Live quiz not available`);
@@ -78,7 +80,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
-      title={`Live Quiz for ${selectedChild.name}`}
+      title={`Live Quiz for ${childName}`}
       subtitle="Team quiz time. Correct answers inside the window earn full points for your house."
       navItems={getParentNavItems(selectedChild.id)}
       pendingReason={dashboard.pendingReason}
@@ -124,6 +126,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
             <div className="rounded-[32px] bg-[#fffaf3] p-5 shadow-sm sm:p-7">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Question on screen</p>
               <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
+              {live.session.currentQuestionStartedAt ? <LiveQuizCountdown key={live.currentQuestion.id} startedAt={live.session.currentQuestionStartedAt.toISOString()} durationSeconds={live.settings.responseWindowSeconds} /> : null}
               <QuizQuestionImage meta={live.currentQuestion.meta} />
               <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points + participation points for your house.</p>
 
