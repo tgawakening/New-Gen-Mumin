@@ -36,6 +36,11 @@ function choicesFromMeta(meta: unknown) {
   return Array.isArray(choices) ? choices.filter((choice): choice is string => typeof choice === "string") : [];
 }
 
+function responseValue(answer: unknown) {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return "";
+  return String((answer as { value?: unknown }).value ?? "");
+}
+
 function responseSeconds(answer: unknown) {
   if (!answer || typeof answer !== "object" || Array.isArray(answer)) return Number.MAX_SAFE_INTEGER;
   const seconds = Number((answer as { secondsTaken?: unknown }).secondsTaken);
@@ -171,7 +176,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               {latestResponses.length ? latestResponses.map((response) => (
                 <div key={response.id} className="rounded-2xl border border-[#eadfce] bg-[#fffaf3] px-3 py-2 text-xs font-semibold text-[#22304a]">
                   <span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />
-                  {response.housePointsAwarded > 0 ? `${response.studentName} earned 10 house points and +1 for ${response.houseName}` : `${response.studentName} answered for ${response.houseName}`}
+                  {response.housePointsAwarded > 0 ? `${response.studentName} earned 1 house point and +1 for ${response.houseName}` : `${response.studentName} answered for ${response.houseName}`}
                 </div>
               )) : <p className="text-xs text-[#617184]">Live team updates appear here as students answer.</p>}
             </div>
@@ -192,7 +197,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
           <div className="text-center">
             <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#c27a2c]">Round complete</p>
             <h2 className="mt-2 text-3xl font-semibold text-[#22304a]">Question champions</h2>
-            <p className="mt-2 text-sm text-[#617184]">{correctResponses.length} learners answered correctly. Each earned 10 personal house points and added 1 point to their team.</p>
+            <p className="mt-2 text-sm text-[#617184]">{correctResponses.length} learners answered correctly. Each earned 1 personal house point and added 1 point to their team.</p>
           </div>
           <div className="mx-auto mt-5 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-5">
             {roundWinners.map((winner, index) => {
@@ -242,7 +247,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                 {correctResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
                     <img src={quizAvatar(response.avatarId, response.studentGender).image} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
-                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName}: +10 house, +1 {response.houseName}</span>
+                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName}: +1 house, +1 {response.houseName}</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
                 ))}
@@ -271,6 +276,33 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
           </div>
         </TeacherSection>
       </div>
-    </TeacherDashboardFrame>
+
+      {live.session.status === "ENDED" ? (
+        <TeacherSection eyebrow="Completed quiz" title="Student performance review">
+          <div className="space-y-3">
+            {live.roster.map((student) => {
+              const responses = live.responses.filter((response) => response.studentId === student.id);
+              const correct = responses.filter((response) => response.isCorrect).length;
+              const wrong = Math.max(0, live.quiz.questions.length - correct);
+              const perfect = live.quiz.questions.length > 0 && correct === live.quiz.questions.length;
+              return (
+                <details key={student.id} className="rounded-[24px] border border-[#dfe5ec] bg-white p-4 shadow-sm">
+                  <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3">
+                    <span className="flex items-center gap-3"><img src={quizAvatar(student.avatarId, student.gender).image} alt="Student avatar" className="h-12 w-12 rounded-xl object-cover object-[50%_12%]" /><strong className="text-[#22304a]">{student.name}</strong></span>
+                    <span className="flex gap-2 text-sm"><span className="rounded-full bg-[#ecfff3] px-3 py-2 font-semibold text-[#2f6b4b]">{correct} correct</span><span className="rounded-full bg-[#fff0f0] px-3 py-2 font-semibold text-[#b24646]">{wrong} wrong</span><span className="rounded-full bg-[#edf4ff] px-3 py-2 font-semibold text-[#245d85]">{correct + (perfect ? 10 : 0)} points</span></span>
+                  </summary>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    {live.quiz.questions.map((question, index) => {
+                      const response = responses.find((item) => item.questionId === question.id);
+                      return <div key={question.id} className="rounded-[18px] bg-[#f7f3ec] p-3"><p className="font-semibold text-[#22304a]">{index + 1}. {question.prompt}</p><p className="mt-2 text-sm text-[#617184]">Answer: <strong>{response ? responseValue(response.answer) : "No answer"}</strong></p><p className={`mt-1 text-sm font-semibold ${response?.isCorrect ? "text-[#2f6b4b]" : "text-[#b24646]"}`}>{response?.isCorrect ? "Correct: +1 personal, +1 team" : "Wrong or unanswered: 0 points"}</p></div>;
+                    })}
+                  </div>
+                  {perfect ? <p className="mt-3 rounded-2xl bg-[#fff7df] p-3 font-semibold text-[#9a5b11]">Perfect score: +10 bonus house points.</p> : null}
+                </details>
+              );
+            })}
+          </div>
+        </TeacherSection>
+      ) : null}    </TeacherDashboardFrame>
   );
 }

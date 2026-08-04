@@ -146,7 +146,8 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
                       </h3>
                       <p className="mt-3 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
                       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">{live.currentResponse.isCorrect ? "+10 personal house points" : "+0 house points"}</span>`r`n                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? `+1 for ${live.houseMembership.house.name}` : "Keep trying for your team"}</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">{live.currentResponse.isCorrect ? "+1 personal house point" : "+0 house points"}</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? `+1 for ${live.houseMembership.house.name}` : "Keep trying for your team"}</span>
                         <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">Waiting for teacher</span>
                         <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
                       </div>

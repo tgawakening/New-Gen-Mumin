@@ -31,6 +31,11 @@ const choiceStyles = [
 ];
 const choiceIcons = ["A", "B", "C", "D"];
 
+function responseValue(answer: unknown) {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return "";
+  return String((answer as { value?: unknown }).value ?? "");
+}
+
 function choicesFromMeta(meta: unknown) {
   if (!meta || typeof meta !== "object" || Array.isArray(meta)) return [];
   const choices = (meta as { choices?: unknown }).choices;
@@ -85,12 +90,15 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
   const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
   const myHouseStanding = live.leaderboard.find((house) => house.name === live.houseMembership.house.name) ?? live.leaderboard[0];
   const myHouseRank = Math.max(1, live.leaderboard.findIndex((house) => house.name === live.houseMembership.house.name) + 1);
+  const completedResponses = live.session.responses;
+  const correctCount = completedResponses.filter((response) => response.isCorrect).length;
+  const perfectQuiz = live.quiz.questions.length > 0 && correctCount === live.quiz.questions.length;
 
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
       title="Live Quiz"
-      subtitle="Every correct answer earns 10 personal house points and adds 1 live point to your team."
+      subtitle="Every correct answer earns 1 personal house point and adds 1 live point to your team. A perfect quiz earns a 10-point bonus."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
@@ -163,7 +171,7 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
               <h3 className="mt-3 text-4xl font-semibold leading-tight text-[#22304a]">{live.currentQuestion.prompt}</h3>
               {live.session.currentQuestionStartedAt ? <LiveQuizCountdown key={live.currentQuestion.id} startedAt={live.session.currentQuestionStartedAt.toISOString()} durationSeconds={live.settings.responseWindowSeconds} /> : null}
               <QuizQuestionImage meta={live.currentQuestion.meta} />
-              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points. Every correct answer earns 10 personal house points and +1 team point.</p>
+              <p className="mt-2 text-sm text-[#617184]">{live.currentQuestion.points} quiz points. Every correct answer earns +1 personal point and +1 team point. A perfect quiz adds +10 bonus points.</p>
 
               {live.currentResponse ? (
                 <div className={`relative mt-6 overflow-hidden rounded-[32px] text-center shadow-sm ${live.currentResponse.isCorrect ? "bg-[#ecfff3]" : "bg-[#fff4df]"}`}>
@@ -181,7 +189,8 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
                       </h3>
                       <p className="mt-3 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
                       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 md:justify-start">
-                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">{live.currentResponse.isCorrect ? "+10 personal house points" : "+0 house points"}</span>`r`n                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? `+1 for ${live.houseMembership.house.name}` : "Keep trying for your team"}</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">{live.currentResponse.isCorrect ? "+1 personal house point" : "+0 house points"}</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? `+1 for ${live.houseMembership.house.name}` : "Keep trying for your team"}</span>
                         <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">Waiting for teacher</span>
                         <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
                       </div>
@@ -250,6 +259,25 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
           </div>
         )}
       </SectionCard>
-    </FamilyDashboardFrame>
+
+      {live.session.status === "ENDED" ? (
+        <SectionCard eyebrow="My performance" title="Review your quiz">
+          <div className="grid gap-3 sm:grid-cols-4">
+            {[
+              ["Questions", live.quiz.questions.length],
+              ["Correct", correctCount],
+              ["Needs review", Math.max(0, live.quiz.questions.length - correctCount)],
+              ["House points", correctCount + (perfectQuiz ? 10 : 0)],
+            ].map(([label, value]) => <div key={String(label)} className="rounded-[22px] bg-[#f7f3ec] p-4"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9a6b2f]">{label}</p><p className="mt-2 text-3xl font-bold text-[#22304a]">{value}</p></div>)}
+          </div>
+          {perfectQuiz ? <p className="mt-4 rounded-2xl bg-[#ecfff3] p-4 font-semibold text-[#2f6b4b]">Perfect quiz: +10 bonus house points awarded.</p> : null}
+          <div className="mt-5 space-y-3">
+            {live.quiz.questions.map((question, index) => {
+              const response = completedResponses.find((item) => item.questionId === question.id);
+              return <details key={question.id} className="rounded-[22px] border border-[#eadfce] bg-white p-4"><summary className="cursor-pointer font-semibold text-[#22304a]">{index + 1}. {question.prompt} <span className={response?.isCorrect ? "text-[#2f6b4b]" : "text-[#b24646]"}>{response?.isCorrect ? "Correct (+1)" : "Needs review"}</span></summary><p className="mt-3 text-sm text-[#617184]">Your answer: <strong>{response ? responseValue(response.answer) : "No answer"}</strong></p></details>;
+            })}
+          </div>
+        </SectionCard>
+      ) : null}    </FamilyDashboardFrame>
   );
 }
