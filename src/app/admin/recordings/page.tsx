@@ -31,9 +31,19 @@ function firstParam(value?: string | string[]) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
-  const params = new URLSearchParams({ notice: message, tone });
-  return `/admin/recordings?${params.toString()}`;
+function noticeHref(message: string, tone: "success" | "error" | "danger" = "success", context?: { teacher?: string; page?: number }) {
+  const href = recordingsHref(context ?? {});
+  const [pathname, query = ""] = href.split("?");
+  const params = new URLSearchParams(query);
+  params.set("notice", message);
+  params.set("tone", tone);
+  return `${pathname}?${params.toString()}`;
+}
+
+function actionContext(formData: FormData) {
+  const teacher = String(formData.get("teacher") || "") || undefined;
+  const parsedPage = Number(formData.get("page") || "1");
+  return { teacher, page: Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1 };
 }
 
 function recordingsHref(params: { teacher?: string; page?: number }) {
@@ -103,6 +113,8 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
+    const context = actionContext(formData);
+
     try {
       await deleteRecordingForAdmin(String(formData.get("recordingId") || ""));
       revalidatePath("/admin/recordings");
@@ -110,16 +122,17 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
       revalidatePath("/student/recordings");
       revalidatePath("/parent/recordings");
     } catch (error) {
-      redirect(noticeHref(error instanceof Error ? error.message : "Unable to remove recording.", "error"));
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to remove recording.", "error", context));
     }
-    redirect(noticeHref("Recording removed from dashboards.", "danger"));
+    redirect(noticeHref("Recording removed from dashboards.", "danger", context));
   }
 
-  async function processPendingRecordingsAction() {
+  async function processPendingRecordingsAction(formData: FormData) {
     "use server";
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
+    const context = actionContext(formData);
     const results = await processPendingDriveRecordings(1);
     revalidatePath("/admin/recordings");
     revalidatePath("/teacher/recordings");
@@ -128,36 +141,38 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
 
     const failed = results.find((result) => !result.ok);
     if (failed) {
-      redirect(noticeHref(failed.error ?? "Recording chunk processing failed.", "error"));
+      redirect(noticeHref(failed.error ?? "Recording chunk processing failed.", "error", context));
     }
 
-    redirect(noticeHref(results.length ? "Recording processor ran. Keep cron enabled to continue uploads and Drive playback checks." : "No pending recording work was ready.", "success"));
+    redirect(noticeHref(results.length ? "Recording processor ran. Keep cron enabled to continue uploads and Drive playback checks." : "No pending recording work was ready.", "success", context));
   }
 
-  async function resetProcessingRecordingsAction() {
+  async function resetProcessingRecordingsAction(formData: FormData) {
     "use server";
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
+    const context = actionContext(formData);
     const count = await resetPendingRecordingImportsForAdmin();
     revalidatePath("/admin/recordings");
-    redirect(noticeHref(`Reset ${count} stuck processing recording${count === 1 ? "" : "s"}.`, "success"));
+    redirect(noticeHref(`Reset ${count} stuck processing recording${count === 1 ? "" : "s"}.`, "success", context));
   }
 
-  async function syncZoomRecordingsAction() {
+  async function syncZoomRecordingsAction(formData: FormData) {
     "use server";
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
 
+    const context = actionContext(formData);
     let result: Awaited<ReturnType<typeof syncRecentZoomRecordingsForAdmin>>;
     try {
       result = await syncRecentZoomRecordingsForAdmin();
       revalidatePath("/admin/recordings");
     } catch (error) {
-      redirect(noticeHref(error instanceof Error ? error.message : "Unable to sync Zoom recordings.", "error"));
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to sync Zoom recordings.", "error", context));
     }
 
-    redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success"));
+    redirect(noticeHref(`Synced ${result.imported} Zoom recording${result.imported === 1 ? "" : "s"}. Skipped ${result.skipped}.`, "success", context));
   }
 
   const manualRecordingOptions = await listManualRecordingFormOptions();
@@ -204,13 +219,13 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
             <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
               Admin home
             </Link>
-            <form action={processPendingRecordingsAction}>
+            <form action={processPendingRecordingsAction}><input type="hidden" name="teacher" value={activeTeacher ?? ""} /><input type="hidden" name="page" value={page} />
               <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Process pending recordings</button>
             </form>
-            <form action={syncZoomRecordingsAction}>
+            <form action={syncZoomRecordingsAction}><input type="hidden" name="teacher" value={activeTeacher ?? ""} /><input type="hidden" name="page" value={page} />
               <button className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Sync from Zoom</button>
             </form>
-            <form action={resetProcessingRecordingsAction}>
+            <form action={resetProcessingRecordingsAction}><input type="hidden" name="teacher" value={activeTeacher ?? ""} /><input type="hidden" name="page" value={page} />
               <button className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Reset stuck processing</button>
             </form>
           </div>
@@ -294,7 +309,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                         <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
                       ) : (
                         <form action={`/api/recordings/${recording.id}/prepare`} method="post">
-                          <input type="hidden" name="returnTo" value="/admin/recordings" />
+                          <input type="hidden" name="returnTo" value={recordingsHref({ teacher: activeTeacher, page })} />
                           <button className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
                             {recording.processingStatus === "processing" ? "Processing" : recording.processingStatus === "failed" ? "Retry" : "Prepare"}
                           </button>
@@ -302,6 +317,8 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                       )}
                       <form action={deleteRecordingAction}>
                         <input type="hidden" name="recordingId" value={recording.id} />
+                        <input type="hidden" name="teacher" value={activeTeacher ?? ""} />
+                        <input type="hidden" name="page" value={page} />
                         <button className="rounded-full border border-[#efc6c1] bg-white px-4 py-2 text-sm font-semibold text-[#a23c3c]">Delete</button>
                       </form>
                     </div>
