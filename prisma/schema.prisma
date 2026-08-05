@@ -1072,6 +1072,12 @@ model HousePointLedger {
   @@index([studentId, awardedAt])
 }
 
+model MaintenanceRun {
+  key         String   @id
+  completedAt DateTime @default(now())
+  details     Json?
+}
+
 model Mission {
   id               String            @id @default(cuid())
   programId        String?

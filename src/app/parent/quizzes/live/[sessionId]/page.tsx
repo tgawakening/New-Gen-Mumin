@@ -36,6 +36,12 @@ function choicesFromMeta(meta: unknown) {
   return Array.isArray(choices) ? choices.filter((choice): choice is string => typeof choice === "string") : [];
 }
 
+function responseValue(answer: unknown) {
+  if (!answer || typeof answer !== "object" || Array.isArray(answer)) return "No answer";
+  const value = (answer as { value?: unknown }).value;
+  return typeof value === "string" && value.trim() ? value : "No answer";
+}
+
 export default async function ParentLiveQuizPage({ params, searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -76,7 +82,9 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
   const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
   const myHouseStanding = live.leaderboard.find((house) => house.name === live.houseMembership.house.name) ?? live.leaderboard[0];
   const myHouseRank = Math.max(1, live.leaderboard.findIndex((house) => house.name === live.houseMembership.house.name) + 1);
-
+  const completedResponses = live.session.responses;
+  const correctCount = completedResponses.filter((response) => response.isCorrect).length;
+  const perfectQuiz = live.quiz.questions.length > 0 && correctCount === live.quiz.questions.length;
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
@@ -217,6 +225,24 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
           </div>
         )}
       </SectionCard>
+      {live.session.status === "ENDED" ? (
+        <SectionCard eyebrow="Quiz activity" title={childName + "'s performance review"}>
+          <div className="grid gap-3 sm:grid-cols-4">
+            {[
+              ["Questions", live.quiz.questions.length],
+              ["Correct", correctCount],
+              ["Wrong or unanswered", Math.max(0, live.quiz.questions.length - correctCount)],
+              ["House points", correctCount + (perfectQuiz ? 10 : 0)],
+            ].map(([label, value]) => <div key={String(label)} className="rounded-[22px] bg-[#f7f3ec] p-4"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9a6b2f]">{label}</p><p className="mt-2 text-3xl font-bold text-[#22304a]">{value}</p></div>)}
+          </div>
+          <div className="mt-5 space-y-3">
+            {live.quiz.questions.map((question, index) => {
+              const response = completedResponses.find((item) => item.questionId === question.id);
+              return <details key={question.id} className="rounded-[22px] border border-[#eadfce] bg-white p-4"><summary className="cursor-pointer font-semibold text-[#22304a]">{index + 1}. {question.prompt} <span className={response?.isCorrect ? "text-[#2f6b4b]" : "text-[#b24646]"}>{response?.isCorrect ? "Correct (+1)" : "Wrong or unanswered"}</span></summary><p className="mt-3 text-sm text-[#617184]">Answer: <strong>{responseValue(response?.answer)}</strong></p></details>;
+            })}
+          </div>
+        </SectionCard>
+      ) : null}
     </FamilyDashboardFrame>
   );
 }
