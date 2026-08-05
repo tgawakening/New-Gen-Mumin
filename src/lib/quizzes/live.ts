@@ -14,6 +14,16 @@ import {
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 
+type LiveParticipationRow = { quizId: string; sessionId: string; studentId: string };
+type LiveParticipationDelegate = {
+  findMany(args: unknown): Promise<LiveParticipationRow[]>;
+  findUnique(args: unknown): Promise<LiveParticipationRow | null>;
+  create(args: unknown): Promise<LiveParticipationRow>;
+};
+function participationDelegate(client: unknown) {
+  return (client as { quizLiveParticipation: LiveParticipationDelegate }).quizLiveParticipation;
+}
+
 type QuizMeta = {
   responseWindowSeconds?: number;
   participationPoints?: number;
@@ -122,10 +132,10 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
 
   const rosterStudents = await db.studentProfile.findMany({
     where: {
-      enrollments: {
+      programRosters: {
         some: {
           programId: quiz.programId,
-          status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+          teacher: { userId: teacherUserId },
         },
       },
     },
@@ -216,11 +226,11 @@ export async function endLiveQuizSession(input: { sessionId: string; teacherUser
     if (!questionIds.size || correctQuestions.size !== questionIds.size) continue;
     const membership = await ensureStudentHouseMembership(studentId);
     const existing = await db.housePointLedger.findFirst({
-      where: { studentId, sourceType: "QUIZ_LIVE_COMPLETE", sourceId: live.session.id },
+      where: { studentId, sourceType: "QUIZ_LIVE_COMPLETE", sourceId: live.quiz.id },
       select: { id: true },
     });
     if (!existing) await db.housePointLedger.create({
-      data: { houseId: membership.houseId, studentId, points: 10, reason: `${live.quiz.title}: perfect quiz bonus`, sourceType: "QUIZ_LIVE_COMPLETE", sourceId: live.session.id },
+      data: { houseId: membership.houseId, studentId, points: 10, reason: `${live.quiz.title}: perfect quiz bonus`, sourceType: "QUIZ_LIVE_COMPLETE", sourceId: live.quiz.id },
     });
   }
 
@@ -257,6 +267,16 @@ export async function getStudentLiveQuizSessionByStudentId(sessionId: string, st
   });
   if (!quiz || !quiz.isPublished) return null;
 
+  const teacherRoster = await db.teacherStudentRoster.findFirst({
+    where: {
+      studentId: student.id,
+      programId: quiz.programId,
+      teacher: { userId: session.teacherUserId },
+    },
+    select: { id: true },
+  });
+  if (!teacherRoster) return null;
+
   const enrollment = await db.enrollment.findUnique({
     where: { studentId_programId: { studentId: student.id, programId: quiz.programId } },
   });
@@ -288,52 +308,63 @@ export async function getStudentLiveQuizSession(sessionId: string, studentUserId
 }
 
 export async function listStudentActiveLiveQuizzesByStudentId(studentId: string) {
-  const enrollments = await db.enrollment.findMany({
-    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
-    select: { programId: true },
+  const rosterRows = await db.teacherStudentRoster.findMany({
+    where: { studentId },
+    select: { programId: true, teacher: { select: { userId: true } } },
   });
-  const programIds = enrollments.map((enrollment) => enrollment.programId);
-  if (!programIds.length) return [];
+  if (!rosterRows.length) return [];
 
-  const quizIds = (
-    await db.quiz.findMany({
-      where: { isPublished: true, programId: { in: programIds } },
-      select: { id: true },
-    })
-  ).map((quiz) => quiz.id);
-  if (!quizIds.length) return [];
+  const allowedPairs = new Set(rosterRows.map((row) => row.teacher.userId + ":" + row.programId));
+  const programIds = [...new Set(rosterRows.map((row) => row.programId))];
+  const quizzes = await db.quiz.findMany({
+    where: { isPublished: true, programId: { in: programIds } },
+    include: { program: true },
+  });
+  if (!quizzes.length) return [];
+  const quizById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
 
   const sessions = await db.quizLiveSession.findMany({
     where: {
       status: "LIVE",
       currentQuestionId: { not: null },
-      quizId: { in: quizIds },
+      quizId: { in: quizzes.map((quiz) => quiz.id) },
     },
     orderBy: { updatedAt: "desc" },
-    take: 10,
+    take: 30,
   });
-  if (!sessions.length) return [];
+  const eligibleSessions = sessions.filter((session) => {
+    const quiz = quizById.get(session.quizId);
+    return quiz && allowedPairs.has(session.teacherUserId + ":" + quiz.programId);
+  });
+  if (!eligibleSessions.length) return [];
+
+  const quizIds = [...new Set(eligibleSessions.map((session) => session.quizId))];
+  const [participations, previousResponses] = await Promise.all([
+    participationDelegate(db).findMany({
+      where: { studentId, quizId: { in: quizIds } },
+      select: { quizId: true, sessionId: true },
+    }),
+    db.quizLiveResponse.findMany({
+      where: { studentId, session: { quizId: { in: quizIds } } },
+      select: { sessionId: true, session: { select: { quizId: true } } },
+    }),
+  ]);
+  const claimedSessionByQuiz = new Map(participations.map((row) => [row.quizId, row.sessionId]));
+  for (const response of previousResponses) {
+    if (!claimedSessionByQuiz.has(response.session.quizId)) claimedSessionByQuiz.set(response.session.quizId, response.sessionId);
+  }
 
   const latestSessionByQuizId = new Map<string, (typeof sessions)[number]>();
-  for (const session of sessions) {
-    if (!latestSessionByQuizId.has(session.quizId)) {
-      latestSessionByQuizId.set(session.quizId, session);
-    }
+  for (const session of eligibleSessions) {
+    const claimedSessionId = claimedSessionByQuiz.get(session.quizId);
+    if (claimedSessionId && claimedSessionId !== session.id) continue;
+    if (!latestSessionByQuizId.has(session.quizId)) latestSessionByQuizId.set(session.quizId, session);
   }
-  const uniqueSessions = [...latestSessionByQuizId.values()];
 
-  const quizzes = await db.quiz.findMany({
-    where: { id: { in: uniqueSessions.map((session) => session.quizId) } },
-    include: { program: true },
-  });
-  const quizById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
-
-  return uniqueSessions.map((session) => ({
-    ...session,
-    quiz: quizById.get(session.quizId),
-  })).filter((session) => session.quiz);
+  return [...latestSessionByQuizId.values()]
+    .map((session) => ({ ...session, quiz: quizById.get(session.quizId) }))
+    .filter((session) => session.quiz);
 }
-
 export async function listStudentActiveLiveQuizzes(studentUserId: string) {
   const student = await db.studentProfile.findUnique({
     where: { userId: studentUserId },
@@ -350,7 +381,20 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   if (live.session.status !== "LIVE" || !live.currentQuestion || !live.session.currentQuestionStartedAt) {
     throw new Error("No live question is open right now.");
   }
-  if (live.currentResponse) return live.currentResponse;
+  const previousQuizResponse = await db.quizLiveResponse.findFirst({
+    where: {
+      studentId: live.student.id,
+      sessionId: { not: live.session.id },
+      session: { quizId: live.quiz.id },
+    },
+    select: { id: true },
+  });
+  if (previousQuizResponse) {
+    throw new Error("You have submitted this quiz already. You cannot submit it again.");
+  }
+  if (live.currentResponse) {
+    throw new Error("You have already submitted an answer for this question.");
+  }
 
   const objective = isObjectiveQuestion(live.currentQuestion.type);
   const correctAnswer = answerKeyValue(live.currentQuestion.answerKey);
@@ -375,6 +419,18 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
 
   try {
     return await db.$transaction(async (tx) => {
+      const participation = await participationDelegate(tx).findUnique({
+        where: { quizId_studentId: { quizId: live.quiz.id, studentId: live.student.id } },
+      });
+      if (participation && participation.sessionId !== live.session.id) {
+        throw new Error("You have submitted this quiz already. You cannot submit it again.");
+      }
+      if (!participation) {
+        await participationDelegate(tx).create({
+          data: { quizId: live.quiz.id, sessionId: live.session.id, studentId: live.student.id },
+        });
+      }
+
       const response = await tx.quizLiveResponse.create({
         data: {
           sessionId: live.session.id,
@@ -404,6 +460,12 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
     });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
+      const participation = await participationDelegate(db).findUnique({
+        where: { quizId_studentId: { quizId: live.quiz.id, studentId: live.student.id } },
+      });
+      if (participation && participation.sessionId !== live.session.id) {
+        throw new Error("You have submitted this quiz already. You cannot submit it again.");
+      }
       const existing = await db.quizLiveResponse.findUnique({
         where: {
           sessionId_questionId_studentId: {

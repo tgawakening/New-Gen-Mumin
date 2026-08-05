@@ -676,6 +676,18 @@ model QuizLiveSession {
   @@index([teacherUserId, status])
 }
 
+model QuizLiveParticipation {
+  id        String   @id @default(cuid())
+  quizId    String
+  sessionId String
+  studentId String
+  createdAt DateTime @default(now())
+
+  @@unique([quizId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+}
+
 model QuizLiveResponse {
   id                 String          @id @default(cuid())
   sessionId          String
