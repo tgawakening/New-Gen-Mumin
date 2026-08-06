@@ -11,6 +11,7 @@ import { OrderDetailsPopup } from "@/components/admin/OrderDetailsPopup";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { getCurrentSession } from "@/lib/auth/session";
+import { canAccessAdminFinance } from "@/lib/admin/access";
 import { db } from "@/lib/db";
 import { getAdminDashboardData, type AdminDashboardFilters } from "@/lib/admin/dashboard";
 import { createAdminProgramEnrollmentOrder } from "@/lib/admin/program-enrollment";
@@ -772,6 +773,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     );
   }
   const adminUserId = session.user.id;
+  const canViewFinance = await canAccessAdminFinance(adminUserId);
 
   async function completeOrder(formData: FormData) {
     "use server";
@@ -962,6 +964,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
   const params = searchParams ? await searchParams : {};
   const activeTab = TABS.some((tab) => tab.key === params?.tab) && params.tab ? params.tab : "home";
+  if (!canViewFinance && activeTab === "orders") redirect("/admin");
 
   const filters: AdminDashboardFilters = {
     orderSearch: params?.orderSearch,
@@ -970,10 +973,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     orderProgram: params?.orderProgram,
     orderPricing: params?.orderPricing,
     studentSearch: params?.studentSearch,
-    studentPayment: params?.studentPayment,
+    studentPayment: canViewFinance ? params?.studentPayment : undefined,
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
-    studentPricing: params?.studentPricing,
+    studentPricing: canViewFinance ? params?.studentPricing : undefined,
     studentPage: params?.studentPage,
   };
 
@@ -985,13 +988,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
         teacherId: params?.teacherReportTeacher && params.teacherReportTeacher !== "ALL" ? params.teacherReportTeacher : undefined,
       })
     : null;
-  const revenueOverview = activeTab === "home" ? await getAdminRevenueOverview(params?.revenueMonth) : null;
+  const revenueOverview = activeTab === "home" && canViewFinance ? await getAdminRevenueOverview(params?.revenueMonth) : null;
   const adminNavItems = [
-    ...TABS.map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
+    ...TABS.filter((tab) => canViewFinance || tab.key !== "orders").map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
     { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
     { key: "recordings", label: "Recordings", href: "/admin/recordings", icon: BookOpen },
     { key: "hours-log", label: "Hours Log", href: "/admin/hours-log", icon: ClipboardCheck },
-    { key: "monthly-payments", label: "Monthly Payments", href: "/admin/monthly-payments", icon: Banknote },
+    ...(canViewFinance ? [{ key: "monthly-payments", label: "Monthly Payments", href: "/admin/monthly-payments", icon: Banknote }] : []),
     { key: "community", label: "Community", href: "/admin/community", icon: Users },
     { key: "feedback", label: "Feedback", href: "/admin/feedback", icon: FileText },
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
@@ -1006,18 +1009,18 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
   });
   const currentStudentHref = buildReturnHref("students", {
     studentSearch: params?.studentSearch,
-    studentPayment: params?.studentPayment,
+    studentPayment: canViewFinance ? params?.studentPayment : undefined,
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
-    studentPricing: params?.studentPricing,
+    studentPricing: canViewFinance ? params?.studentPricing : undefined,
     studentPage: params?.studentPage,
   });
   const studentFilterHrefParams = {
     studentSearch: params?.studentSearch,
-    studentPayment: params?.studentPayment,
+    studentPayment: canViewFinance ? params?.studentPayment : undefined,
     studentRegistrationStatus: params?.studentRegistrationStatus,
     studentProgram: params?.studentProgram,
-    studentPricing: params?.studentPricing,
+    studentPricing: canViewFinance ? params?.studentPricing : undefined,
   };
 
   return (
@@ -1121,10 +1124,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               <MetricCard label="Active Enrollments" value={String(data.metrics.activeEnrollments)} />
               <MetricCard label="Pending Registrations" value={String(data.metrics.pendingRegistrations)} />
               <MetricCard label="Unread Messages" value={String(data.metrics.unreadMessages)} />
-              <MetricCard label="Revenue" value={formatMoney(data.metrics.revenueGbp, "GBP")} />
+              {canViewFinance ? <MetricCard label="Revenue" value={formatMoney(data.metrics.revenueGbp, "GBP")} /> : null}
             </section>
 
-            <RevenueBreakdown items={data.revenueByGateway} />
+            {canViewFinance ? <RevenueBreakdown items={data.revenueByGateway} /> : null}
 
             {revenueOverview ? <MonthlyRevenueOverview revenue={revenueOverview} /> : null}
 
@@ -1233,12 +1236,14 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
             </form>
 
             <div className="flex flex-wrap items-center gap-3">
+              {canViewFinance ? (
               <Link
                 href="/api/admin/orders/export"
                 className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
               >
                 Export completed orders CSV
               </Link>
+              ) : null}
               <Link
                 href="/api/admin/payments/monthly-export"
                 className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#182236]"
@@ -1316,6 +1321,8 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         </p>
                       ) : null}
                     </div>
+                    {canViewFinance ? (
+                    <>
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
                       <p className="mt-2">{order.gateway}</p>
@@ -1333,6 +1340,8 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         </span>
                       </div>
                     </div>
+                    </>
+                    ) : null}
                     <div className="space-y-2 text-sm">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
                       {canMarkOrderPaid(order) ? (
@@ -1458,10 +1467,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                   className="rounded-full border border-[#c9d7e6] bg-white px-4 py-3 text-sm font-medium text-[#22304a] outline-none transition focus:border-[#0f4d81]"
                 />
               </label>
-              <FilterSelect name="studentPayment" defaultValue={params?.studentPayment ?? "ALL"} options={["ALL", "STRIPE", "PAYPAL", "BANK_TRANSFER", "Pending"]} />
-              <FilterSelect name="studentRegistrationStatus" defaultValue={params?.studentRegistrationStatus ?? "ALL"} options={["ALL", "PAID", "PENDING_PAYMENT", "SUBMITTED", "PAYMENT_REVIEW", "Pending"]} />
+              {canViewFinance ? <FilterSelect name="studentPayment" defaultValue={params?.studentPayment ?? "ALL"} options={["ALL", "STRIPE", "PAYPAL", "BANK_TRANSFER", "Pending"]} /> : null}
+              {canViewFinance ? <FilterSelect name="studentRegistrationStatus" defaultValue={params?.studentRegistrationStatus ?? "ALL"} options={["ALL", "PAID", "PENDING_PAYMENT", "SUBMITTED", "PAYMENT_REVIEW", "Pending"]} /> : null}
               <FilterSelect name="studentProgram" defaultValue={params?.studentProgram ?? "ALL"} options={["ALL", ...data.filterOptions.studentPrograms]} />
-              <FilterSelect name="studentPricing" defaultValue={params?.studentPricing ?? "ALL"} options={["ALL", "Full", "Discounted"]} />
+              {canViewFinance ? <FilterSelect name="studentPricing" defaultValue={params?.studentPricing ?? "ALL"} options={["ALL", "Full", "Discounted"]} /> : null}
               <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white xl:col-span-4 xl:justify-self-start">
                 Apply filters
               </button>
@@ -1477,12 +1486,14 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
               >
                 Add student manually
               </Link>
+              {canViewFinance ? (
               <Link
                 href="/api/admin/orders/export"
                 className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f5f8fb]"
               >
                 Export completed orders CSV
               </Link>
+              ) : null}
             </div>
 
             <div className="space-y-4">
@@ -1500,6 +1511,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Children: {student.childCount}</p>
                       <ChildDetailsList items={student.childDetails} />
                     </div>
+                    {canViewFinance ? (
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Payment</p>
                       <p className="mt-2">{student.paymentGateway}</p>
@@ -1516,18 +1528,19 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         </p>
                       ) : null}
                     </div>
+                    ) : null}
                     <div className="space-y-2 text-sm">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Registration</p>
                       <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${badgeClasses(student.registrationStatus)}`}>
-                        {student.registrationStatus.replace(/_/g, " ")}
+                        {canViewFinance ? student.registrationStatus.replace(/_/g, " ") : "REGISTERED"}
                       </span>
                       <p className="pt-2 font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Actions</p>
-                      <AdminProgramChangePopup
+                      {canViewFinance ? <AdminProgramChangePopup
                         student={student}
                         offers={registrationOptions.offers}
                         action={createProgramChangeOrder}
                         returnUrl={currentStudentHref}
-                      />
+                      /> : null}
                       <form action={deleteStudent}>
                         <input type="hidden" name="userId" value={student.userId} />
                         <input type="hidden" name="returnUrl" value={currentStudentHref} />
@@ -1543,8 +1556,10 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                         <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Enrollment and order dates</p>
                         <p className="mt-2 text-[#617184]">
                           Registration: {formatOptionalDate(student.registrationCreatedAt)}
+                          {canViewFinance ? <>
                           {student.orderPaidAt ? ` - Paid: ${formatOptionalDate(student.orderPaidAt)}` : ""}
                           {student.orderNumber ? ` - Order ${student.orderNumber}` : ""}
+                          </> : null}
                         </p>
                       </div>
                       <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#0f4d81]">

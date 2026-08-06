@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { db } from "@/lib/db";
 import { getCurrentSession } from "@/lib/auth/session";
+import { canAccessAdminFinance } from "@/lib/admin/access";
 import { markOrderPaid, recordManualPaidAmount, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
 import { extendStripeSubscriptionBillingDateForOrderItem } from "@/lib/payments/monthly-ledger";
 
@@ -64,6 +65,9 @@ export default async function AdminOrdersPage({
 }: {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
 }) {
+  const viewerSession = await getCurrentSession();
+  if (!viewerSession || viewerSession.user.role !== "ADMIN" || !(await canAccessAdminFinance(viewerSession.user.id))) redirect("/admin");
+
   async function approveManualPayment(formData: FormData) {
     "use server";
 

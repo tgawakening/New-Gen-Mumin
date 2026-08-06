@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { MonthlyPaymentStatus } from "@prisma/client";
 
 import { getCurrentSession } from "@/lib/auth/session";
+import { canAccessAdminFinance } from "@/lib/admin/access";
 import {
   extendStripeSubscriptionBillingDate,
   getAdminMonthlyPaymentRecords,
@@ -47,7 +48,7 @@ function noticeHref(message: string, tone: "success" | "error" = "success", mont
 
 export default async function AdminMonthlyPaymentsPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
-  if (!session || session.user.role !== "ADMIN") redirect("/admin");
+  if (!session || session.user.role !== "ADMIN" || !(await canAccessAdminFinance(session.user.id))) redirect("/admin");
 
   const params = searchParams ? await searchParams : {};
   const selectedMonth = params.month && /^\d{4}-\d{2}$/.test(params.month) ? params.month : monthKey(new Date());

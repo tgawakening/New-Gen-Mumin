@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 export function AdminLoginModal() {
   const router = useRouter();
-  const [email, setEmail] = useState("tgawakening786@gmail.com");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);

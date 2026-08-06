@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
+import { canAccessAdminFinance } from "@/lib/admin/access";
 import { db } from "@/lib/db";
 import { completedOrderWhere } from "@/lib/payments/completed-orders";
 import { convertAmountToGbp } from "@/lib/registration/catalog";
@@ -265,8 +266,8 @@ function buildWorkbook(rows: Array<Array<SheetCell | null>>, merges: string[]) {
 export async function GET(request: Request) {
   const session = await getCurrentSession();
 
-  if (!session || session.user.role !== "ADMIN") {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session || session.user.role !== "ADMIN" || !(await canAccessAdminFinance(session.user.id))) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);

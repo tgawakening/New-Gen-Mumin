@@ -255,12 +255,26 @@ function getAdminDashboardCredentials() {
 
 export async function loginAdminDashboardAccount(payload: LoginPayload) {
   const adminCredentials = getAdminDashboardCredentials();
+  const normalizedEmail = payload.email.trim().toLowerCase();
+  const isMasterAdmin =
+    normalizedEmail === adminCredentials.email.trim().toLowerCase() &&
+    payload.password === adminCredentials.password;
 
-  if (
-    payload.email.trim().toLowerCase() !== adminCredentials.email.trim().toLowerCase() ||
-    payload.password !== adminCredentials.password
-  ) {
-    throw new Error("Invalid admin email or password.");
+  if (!isMasterAdmin) {
+    const databaseAdmin = await db.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { adminProfile: true },
+    });
+    if (
+      !databaseAdmin?.passwordHash ||
+      databaseAdmin.role !== "ADMIN" ||
+      databaseAdmin.status !== "ACTIVE" ||
+      !verifyPassword(payload.password, databaseAdmin.passwordHash)
+    ) {
+      throw new Error("Invalid admin email or password.");
+    }
+    await createSession(databaseAdmin.id);
+    return databaseAdmin;
   }
 
   let user = await db.user.findUnique({
@@ -276,24 +290,16 @@ export async function loginAdminDashboardAccount(payload: LoginPayload) {
         status: "ACTIVE",
         firstName: "TGA",
         lastName: "Admin",
-        adminProfile: {
-          create: {
-            title: "Gen-Mumins Admin",
-          },
-        },
+        adminProfile: { create: { title: "Gen-Mumins Admin" } },
       },
     });
   } else if (user.role !== "ADMIN") {
     user = await db.user.update({
       where: { id: user.id },
-      data: {
-        role: "ADMIN",
-        status: "ACTIVE",
-      },
+      data: { role: "ADMIN", status: "ACTIVE" },
     });
   }
 
   await createSession(user.id);
-
   return user;
 }
