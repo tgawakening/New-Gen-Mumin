@@ -1,11 +1,20 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { getCurrentSession } from "@/lib/auth/session";
-import { formatHoursMinutes, getAdminTeacherHoursLogData, MIN_PAYABLE_TRACKED_SESSION_MINUTES, parseHoursMonth } from "@/lib/teacher/hours-log";
+import {
+  deleteAdminHoursEntry,
+  formatHoursMinutes,
+  getAdminTeacherHoursLogData,
+  MIN_PAYABLE_TRACKED_SESSION_MINUTES,
+  parseHoursMonth,
+  updateAdminHoursEntry,
+} from "@/lib/teacher/hours-log";
 
 const STATUS_BADGE: Record<string, string> = {
   DRAFT: "bg-[#fff7eb] text-[#8a6326]",
@@ -23,6 +32,28 @@ type AdminHoursEntry = AdminHoursReport["entries"][number];
 
 function formatDate(value: Date) {
   return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(value);
+}
+
+function formatDateInput(value: Date) {
+  return value.toISOString().slice(0, 10);
+}
+
+function parseDate(value: FormDataEntryValue | null) {
+  const text = String(value ?? "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const parsed = new Date(text + "T00:00:00.000Z");
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function adminHoursHref(formData: FormData, message: string, tone: "success" | "error" = "success") {
+  return "/admin/hours-log" + queryString({
+    month: String(formData.get("month") || ""),
+    start: String(formData.get("filterStart") || ""),
+    end: String(formData.get("filterEnd") || ""),
+    teacherId: String(formData.get("teacherId") || ""),
+    notice: message,
+    tone,
+  });
 }
 
 function monthOptions() {
@@ -89,6 +120,43 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
   const rowCount = visibleReports.reduce((sum, report) => sum + report.entries.length, 0);
   const filterParams = { month: params.month || data.period.key, start: params.start, end: params.end };
   const selectedExportQuery = queryString(filterParams, selectedTeacherId === "all" ? {} : { teacherId: selectedTeacherId });
+
+  async function amendEntry(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    const sessionDate = parseDate(formData.get("sessionDate"));
+    const durationMinutes = Math.round(Number(formData.get("durationMinutes") || 0));
+    if (!sessionDate || durationMinutes <= 0) redirect(adminHoursHref(formData, "Choose a valid date and duration.", "error"));
+    try {
+      await updateAdminHoursEntry({
+        adminUserId: currentSession.user.id,
+        entryId: String(formData.get("entryId") || ""),
+        sessionDate,
+        startTime: String(formData.get("startTime") || ""),
+        durationMinutes,
+      });
+      revalidatePath("/admin/hours-log");
+      revalidatePath("/teacher/hours-log");
+    } catch (error) {
+      redirect(adminHoursHref(formData, error instanceof Error ? error.message : "Unable to amend session.", "error"));
+    }
+    redirect(adminHoursHref(formData, "Session timing updated."));
+  }
+
+  async function removeEntry(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    try {
+      await deleteAdminHoursEntry(currentSession.user.id, String(formData.get("entryId") || ""));
+      revalidatePath("/admin/hours-log");
+      revalidatePath("/teacher/hours-log");
+    } catch (error) {
+      redirect(adminHoursHref(formData, error instanceof Error ? error.message : "Unable to remove session.", "error"));
+    }
+    redirect(adminHoursHref(formData, "Session removed from hours log."));
+  }
 
   return (
     <div className="bg-[#edf2f6] py-8">
@@ -200,6 +268,7 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
                       <th className="px-4 py-3">Rate</th>
                       <th className="px-4 py-3">Status</th>
                       <th className="px-4 py-3">Notes</th>
+                      <th className="px-4 py-3">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -214,11 +283,35 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
                           <td className="px-4 py-3 text-[#9aa6b5]">Client fill</td>
                           <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_BADGE[label] ?? "bg-[#eef2f6] text-[#556274]"}`}>{label}</span></td>
                           <td className="px-4 py-3 text-[#617184]">{entry.notes ?? (entry.source === "TRACKED" ? "Published auto-tracked website session." : "-")}</td>
+                          <td className="px-4 py-3">
+                            <details>
+                              <summary className="cursor-pointer rounded-full border border-[#cbd9e8] px-3 py-1.5 text-xs font-semibold text-[#0f4d81]">Edit / remove</summary>
+                              <form action={amendEntry} className="mt-2 grid min-w-[260px] gap-2 rounded-2xl bg-[#fbf6ef] p-3">
+                                <input type="hidden" name="entryId" value={entry.id} />
+                                <input type="hidden" name="month" value={filterParams.month ?? ""} />
+                                <input type="hidden" name="filterStart" value={filterParams.start ?? ""} />
+                                <input type="hidden" name="filterEnd" value={filterParams.end ?? ""} />
+                                <input type="hidden" name="teacherId" value={selectedTeacherId} />
+                                <input name="sessionDate" type="date" defaultValue={formatDateInput(entry.sessionDate)} className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
+                                <input name="startTime" type="time" defaultValue={entry.startTime ?? ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
+                                <input name="durationMinutes" type="number" min="1" defaultValue={entry.durationMinutes} className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
+                                <button className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save timing</button>
+                              </form>
+                              <form action={removeEntry} className="mt-2">
+                                <input type="hidden" name="entryId" value={entry.id} />
+                                <input type="hidden" name="month" value={filterParams.month ?? ""} />
+                                <input type="hidden" name="filterStart" value={filterParams.start ?? ""} />
+                                <input type="hidden" name="filterEnd" value={filterParams.end ?? ""} />
+                                <input type="hidden" name="teacherId" value={selectedTeacherId} />
+                                <button className="rounded-full border border-[#efb3b3] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Remove session</button>
+                              </form>
+                            </details>
+                          </td>
                         </tr>
                       );
                     })}
                     {!report.entries.length ? (
-                      <tr><td colSpan={7} className="px-4 py-6 text-center text-[#617184]">No payable rows for this teacher in {data.period.label}.</td></tr>
+                      <tr><td colSpan={8} className="px-4 py-6 text-center text-[#617184]">No payable rows for this teacher in {data.period.label}.</td></tr>
                     ) : null}
                   </tbody>
                 </table>

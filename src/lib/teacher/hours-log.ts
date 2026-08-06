@@ -7,6 +7,7 @@ import { sendTeacherHoursSubmittedEmail } from "@/lib/email/notifications";
 import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
 
 export const MIN_PAYABLE_TRACKED_SESSION_MINUTES = 15;
+const HOURS_LOG_EXCLUDED_MARKER = "[HOURS_LOG_EXCLUDED]";
 
 export type HoursLogFilter = {
   month?: string | null;
@@ -90,43 +91,42 @@ function occurrenceMode(source: string) {
 }
 
 function isTeacherEditedTrackedRow(notes?: string | null) {
-  return Boolean(notes?.includes("Teacher edited from original:"));
+  return Boolean(notes?.includes("Teacher edited from original:") || notes?.includes("Admin edited from original:"));
 }
 
-function hasMatchingTeacherStart(
-  occurrence: { scheduleId: string; startedAt: Date },
-  teacherStarts: Array<{ scheduleId: string; startedAt: Date }>,
-) {
-  const toleranceMs = 20 * 60 * 1000;
-  return teacherStarts.some(
-    (start) =>
-      start.scheduleId === occurrence.scheduleId &&
-      Math.abs(start.startedAt.getTime() - occurrence.startedAt.getTime()) <= toleranceMs,
-  );
-}
-
-function duplicateTrackedOccurrenceIds(occurrences: Array<{ id: string; scheduleId: string; startedAt: Date; durationMinutes: number | null; source: string }>) {
+function duplicateTrackedOccurrenceIds(occurrences: Array<{
+  id: string;
+  scheduleId: string;
+  startedAt: Date;
+  durationMinutes: number | null;
+  completedAt: Date | null;
+  endedAt: Date | null;
+  source: string;
+}>) {
   const duplicateIds = new Set<string>();
-  const sourcePriority = (source: string) => source === "teacher-start" ? 0 : source === "teacher-member-start" ? 1 : 2;
   const ordered = [...occurrences].sort((left, right) =>
-    sourcePriority(left.source) - sourcePriority(right.source) || left.startedAt.getTime() - right.startedAt.getTime(),
+    left.scheduleId.localeCompare(right.scheduleId) || left.startedAt.getTime() - right.startedAt.getTime(),
   );
 
   for (let index = 0; index < ordered.length; index += 1) {
-    const canonical = ordered[index];
-    if (duplicateIds.has(canonical.id) || !canonical.durationMinutes || canonical.durationMinutes < MIN_PAYABLE_TRACKED_SESSION_MINUTES) continue;
-    for (let candidateIndex = index + 1; candidateIndex < ordered.length; candidateIndex += 1) {
-      const candidate = ordered[candidateIndex];
-      if (duplicateIds.has(candidate.id) || candidate.scheduleId !== canonical.scheduleId || !candidate.durationMinutes) continue;
-      const startDifferenceMinutes = Math.abs(candidate.startedAt.getTime() - canonical.startedAt.getTime()) / 60000;
-      const durationDifferenceMinutes = Math.abs(candidate.durationMinutes - canonical.durationMinutes);
-      if (startDifferenceMinutes <= 10 && durationDifferenceMinutes <= 10) duplicateIds.add(candidate.id);
+    const first = ordered[index];
+    if (duplicateIds.has(first.id)) continue;
+    const sameStart = ordered.filter((candidate) =>
+      candidate.scheduleId === first.scheduleId &&
+      Math.abs(candidate.startedAt.getTime() - first.startedAt.getTime()) <= 2 * 60 * 1000,
+    );
+    if (sameStart.length < 2) continue;
+    const quality = (occurrence: (typeof sameStart)[number]) =>
+      (occurrence.completedAt || occurrence.endedAt ? 100000 : 0) +
+      (occurrence.source === "zoom-recording" ? 10000 : 0) +
+      (occurrence.durationMinutes ?? 0);
+    const canonical = [...sameStart].sort((left, right) => quality(right) - quality(left))[0];
+    for (const occurrence of sameStart) {
+      if (occurrence.id !== canonical.id) duplicateIds.add(occurrence.id);
     }
   }
-
   return duplicateIds;
 }
-
 async function syncTrackedHours(teacher: { id: string; userId: string }, startsAt: Date, endsAt: Date) {
   const occurrences = await db.liveClassSessionOccurrence.findMany({
     where: {
@@ -143,7 +143,6 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
     },
     orderBy: { startedAt: "asc" },
   });
-  const teacherStartedOccurrences = occurrences.filter((occurrence) => occurrence.source === "teacher-start" || occurrence.source === "teacher-member-start");
   const duplicateOccurrenceIds = duplicateTrackedOccurrenceIds(occurrences);
 
   for (const occurrence of occurrences) {
@@ -161,12 +160,6 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
       continue;
     }
 
-    if (occurrence.source === "zoom-recording" && !hasMatchingTeacherStart(occurrence, teacherStartedOccurrences)) {
-      if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
-        await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
-      }
-      continue;
-    }
 
     const trackedDuration = occurrence.durationMinutes ?? 0;
     if (trackedDuration > 0 && trackedDuration < MIN_PAYABLE_TRACKED_SESSION_MINUTES) {
@@ -176,7 +169,7 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
       continue;
     }
 
-    if (existing && isTeacherEditedTrackedRow(existing.notes)) continue;
+    if (existing?.notes?.includes(HOURS_LOG_EXCLUDED_MARKER) || (existing && isTeacherEditedTrackedRow(existing.notes))) continue;
 
     const fallbackDuration = trackedDuration > 0 ? trackedDuration : 60;
     const startTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(occurrence.startedAt);
@@ -228,6 +221,7 @@ export async function getTeacherHoursLogData(userId: string, filter?: HoursLogFi
       where: {
         teacherId: teacher.id,
         sessionDate: { gte: period.startsAt, lt: period.endsAt },
+        NOT: { notes: { contains: HOURS_LOG_EXCLUDED_MARKER } },
       },
       orderBy: [{ sessionDate: "asc" }, { startTime: "asc" }],
     }),
@@ -276,7 +270,7 @@ export async function getAdminTeacherHoursLogData(filter?: HoursLogFilter | stri
 
   const [entries, submissions] = await Promise.all([
     db.teacherHoursLogEntry.findMany({
-      where: { sessionDate: { gte: period.startsAt, lt: period.endsAt } },
+      where: { sessionDate: { gte: period.startsAt, lt: period.endsAt }, NOT: { notes: { contains: HOURS_LOG_EXCLUDED_MARKER } } },
       include: { teacher: { include: { user: true } } },
       orderBy: [{ sessionDate: "asc" }, { startTime: "asc" }],
     }),
@@ -355,7 +349,6 @@ export async function updateTeacherHoursEntry(input: {
 
   const entry = await db.teacherHoursLogEntry.findFirst({ where: { id: input.entryId, teacherId: teacher.id } });
   if (!entry) throw new Error("Hours entry not found.");
-  if (entry.status === TeacherHoursLogStatus.SUBMITTED) throw new Error("Submitted hours cannot be edited. Please ask admin if this needs correction.");
 
   const teacherNote = input.notes || null;
   const editedTrackedNote =
@@ -386,12 +379,50 @@ export async function deleteTeacherHoursEntry(userId: string, entryId: string) {
 
   const entry = await db.teacherHoursLogEntry.findFirst({ where: { id: entryId, teacherId: teacher.id } });
   if (!entry) throw new Error("Hours entry not found.");
-  if (entry.source === TeacherHoursLogSource.TRACKED) throw new Error("Tracked website rows cannot be deleted; edit the row and add a note for admin.");
-  if (entry.status === TeacherHoursLogStatus.SUBMITTED) throw new Error("Submitted hours cannot be deleted.");
-
-  await db.teacherHoursLogEntry.delete({ where: { id: entry.id } });
+  await db.teacherHoursLogEntry.update({
+    where: { id: entry.id },
+    data: { notes: [entry.notes, HOURS_LOG_EXCLUDED_MARKER, "Excluded by teacher from hours log."].filter(Boolean).join("\n") },
+  });
 }
 
+export async function updateAdminHoursEntry(input: {
+  adminUserId: string;
+  entryId: string;
+  sessionDate: Date;
+  startTime?: string | null;
+  durationMinutes: number;
+}) {
+  const admin = await db.user.findFirst({ where: { id: input.adminUserId, role: "ADMIN" }, select: { id: true } });
+  if (!admin) throw new Error("Admin access required.");
+  if (input.durationMinutes <= 0) throw new Error("Duration must be at least 1 minute.");
+  const entry = await db.teacherHoursLogEntry.findUnique({ where: { id: input.entryId } });
+  if (!entry) throw new Error("Hours entry not found.");
+
+  return db.teacherHoursLogEntry.update({
+    where: { id: entry.id },
+    data: {
+      sessionDate: input.sessionDate,
+      startTime: input.startTime || null,
+      durationMinutes: input.durationMinutes,
+      notes: [
+        entry.notes,
+        "Admin edited from original: " + entry.sessionDate.toISOString().slice(0, 10) + " | " + (entry.startTime ?? "time not set") + " | " + formatHoursMinutes(entry.durationMinutes),
+      ].filter(Boolean).join("\n"),
+    },
+  });
+}
+
+export async function deleteAdminHoursEntry(adminUserId: string, entryId: string) {
+  const admin = await db.user.findFirst({ where: { id: adminUserId, role: "ADMIN" }, select: { id: true } });
+  if (!admin) throw new Error("Admin access required.");
+  const entry = await db.teacherHoursLogEntry.findUnique({ where: { id: entryId } });
+  if (!entry) throw new Error("Hours entry not found.");
+
+  await db.teacherHoursLogEntry.update({
+    where: { id: entry.id },
+    data: { notes: [entry.notes, HOURS_LOG_EXCLUDED_MARKER, "Excluded by admin from hours log."].filter(Boolean).join("\n") },
+  });
+}
 export async function submitTeacherHours(input: {
   teacherUserId: string;
   periodStart: Date;
@@ -407,6 +438,7 @@ export async function submitTeacherHours(input: {
       teacherId: teacher.id,
       status: TeacherHoursLogStatus.DRAFT,
       sessionDate: { gte: input.periodStart, lt: input.periodEnd },
+      NOT: { notes: { contains: HOURS_LOG_EXCLUDED_MARKER } },
     },
     orderBy: { sessionDate: "asc" },
   });

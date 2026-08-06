@@ -119,7 +119,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     const sessionDate = parseDate(formData.get("sessionDate"));
     const title = String(formData.get("title") || "").trim();
     const durationMinutes = asNumber(formData.get("durationMinutes"));
-    if (!sessionDate || !title) redirect(noticeHref(filter, "Title and date are required.", "error"));
+    if (!sessionDate || !title || durationMinutes <= 0) redirect(noticeHref(filter, "Title, date, and a positive duration are required.", "error"));
 
     try {
       await updateTeacherHoursEntry({
@@ -151,7 +151,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     } catch (error) {
       redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to delete row.", "error"));
     }
-    redirect(noticeHref(filter, "Manual hours row deleted."));
+    redirect(noticeHref(filter, "Hours row removed."));
   }
 
   async function submitHoursAction(formData: FormData) {
@@ -272,13 +272,11 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
                         <textarea name="notes" rows={2} defaultValue={entry.notes ?? ""} placeholder="Notes" className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
                         <button className="w-fit rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save</button>
                       </form>
-                      {entry.source === "MANUAL" && entry.status === "DRAFT" ? (
-                        <form action={deleteEntry} className="mt-2">
-                          <HiddenFilterFields month={currentFilter.month} start={currentFilter.start} end={currentFilter.end} />
-                          <input type="hidden" name="entryId" value={entry.id} />
-                          <button className="rounded-full border border-[#efb3b3] bg-white px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete manual row</button>
-                        </form>
-                      ) : null}
+                      <form action={deleteEntry} className="mt-2">
+                        <HiddenFilterFields month={currentFilter.month} start={currentFilter.start} end={currentFilter.end} />
+                        <input type="hidden" name="entryId" value={entry.id} />
+                        <button className="rounded-full border border-[#efb3b3] bg-white px-3 py-1.5 text-xs font-semibold text-[#b24646]">Remove session</button>
+                      </form>
                     </details>
                   </td>
                 </tr>
