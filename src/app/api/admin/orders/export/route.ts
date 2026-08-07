@@ -65,6 +65,29 @@ function formatPaymentMethod(gateway: string) {
     .join(" ");
 }
 
+function normalizedIdentity(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function uniqueLatestOrders<T extends {
+  parent: { user: { email: string; firstName: string; lastName: string | null } };
+  registration: { parentFirstName: string; parentLastName: string } | null;
+}>(orders: T[]) {
+  const seenEmails = new Set<string>();
+  const seenNames = new Set<string>();
+
+  return orders.filter((order) => {
+    const parentName = order.registration
+      ? formatPersonName(order.registration.parentFirstName, order.registration.parentLastName)
+      : formatPersonName(order.parent.user.firstName, order.parent.user.lastName);
+    const emailKey = normalizedIdentity(order.parent.user.email);
+    const nameKey = normalizedIdentity(parentName);
+    if ((emailKey && seenEmails.has(emailKey)) || (nameKey && seenNames.has(nameKey))) return false;
+    if (emailKey) seenEmails.add(emailKey);
+    if (nameKey) seenNames.add(nameKey);
+    return true;
+  });
+}
 export async function GET() {
   const session = await getCurrentSession();
 
@@ -74,7 +97,7 @@ export async function GET() {
 
   const orders = await db.order.findMany({
     where: completedOrderWhere,
-    orderBy: { paidAt: "desc" },
+    orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
     include: {
       parent: {
         include: {
@@ -98,6 +121,8 @@ export async function GET() {
     },
   });
 
+  const uniqueOrders = uniqueLatestOrders(orders);
+
   const rows: Array<Array<string | number | null | undefined>> = [
     [
       "Parent name",
@@ -113,7 +138,7 @@ export async function GET() {
     ],
   ];
 
-  for (const order of orders) {
+  for (const order of uniqueOrders) {
     const registration = order.registration;
     const parentName = registration
       ? formatPersonName(registration.parentFirstName, registration.parentLastName)
