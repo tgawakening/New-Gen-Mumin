@@ -19,6 +19,15 @@ type QuestAction = {
   variant?: "primary" | "secondary";
 };
 
+type HousePointsSummary = {
+  total: number;
+  quiz: number;
+  sunnah: number;
+  other: number;
+  awards: number;
+  recent: Array<{ id: string; points: number; reason: string; sourceType: string }>;
+};
+
 type StudentQuestHubProps = {
   studentName: string;
   roleLabel: string;
@@ -37,6 +46,7 @@ type StudentQuestHubProps = {
   nextClassLabel: string;
   circleLabel: string;
   avatarVariant?: "boy" | "girl" | "neutral";
+  points: HousePointsSummary;
 };
 
 
@@ -96,7 +106,10 @@ export function StudentQuestHub({
   nextClassLabel,
   circleLabel,
   avatarVariant,
+  points,
 }: StudentQuestHubProps) {
+  const nextMilestone = Math.max(25, Math.ceil((points.total + 1) / 25) * 25);
+  const progress = Math.min(100, (points.total / nextMilestone) * 100);
   return (
     <section className="relative overflow-hidden rounded-[32px] border border-[#eadfce] bg-[#fff8ef] shadow-[0_22px_70px_rgba(34,48,74,0.11)]">
       <div className="absolute left-6 top-5 h-20 w-20 rounded-full border border-[#f2d5b3] bg-[#fff1dc]" />
@@ -178,6 +191,67 @@ export function StudentQuestHub({
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-5 overflow-hidden rounded-[26px] border border-[#dfd8c9] bg-[#14233d] text-white shadow-sm">
+            <div className="grid gap-5 p-4 sm:p-5 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)] lg:items-center">
+              <div>
+                <div className="flex items-end justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#f7c56f]">My house points journey</p>
+                    <p className="mt-2 text-4xl font-bold tabular-nums">{points.total}</p>
+                  </div>
+                  <span className="rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white/75">{points.awards} awards</span>
+                </div>
+                <p className="mt-2 text-sm text-white/70">
+                  {points.total > 0 ? (
+                    <>Wonderful effort, {studentName}. Every completed challenge helps {houseName}.</>
+                  ) : (
+                    <>Your first house points are ready to be earned, {studentName}.</>
+                  )}
+                </p>
+                <div className="mt-4 h-3 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full rounded-full bg-[#f5a33b] transition-[width] duration-700" style={{ width: String(progress) + "%" }} />
+                </div>
+                <div className="mt-2 flex justify-between text-xs font-semibold text-white/60">
+                  <span>{points.total} earned</span>
+                  <span>{nextMilestone} next milestone</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { label: "Quiz answers", value: points.quiz, icon: Trophy },
+                  { label: "Sunnah tracker", value: points.sunnah, icon: Star },
+                  { label: "Other growth", value: points.other, icon: Sparkles },
+                ].map(({ label, value, icon: Icon }) => (
+                  <div key={label} className="rounded-[20px] bg-white/10 p-3 text-center">
+                    <Icon className="mx-auto h-5 w-5 text-[#f7c56f]" />
+                    <p className="mt-2 text-xl font-bold tabular-nums">{value}</p>
+                    <p className="mt-1 text-[11px] font-semibold leading-4 text-white/65">{label}</p>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full bg-[#f7c56f]"
+                        style={{ width: String(points.total ? Math.min(100, (value / points.total) * 100) : 0) + "%" }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {points.recent.length ? (
+              <div className="border-t border-white/10 bg-white/[0.04] px-4 py-3 sm:px-5">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/50">Latest points</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                  {points.recent.slice(0, 3).map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between gap-2 rounded-2xl bg-white/8 px-3 py-2">
+                      <p className="line-clamp-1 text-xs text-white/75">{entry.reason}</p>
+                      <span className="shrink-0 text-sm font-bold text-[#f7c56f]">+{entry.points}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 

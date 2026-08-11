@@ -132,7 +132,7 @@ export default async function StudentDashboardPage() {
   const dashboardMetrics = [
     { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
     { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-    { label: "House points", value: String(quest.studentTotal || stats.housePoints), hint: `${house.name} contribution.` },
+    { label: "House points", value: String(quest.studentTotal), hint: `${house.name} contribution.` },
     { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
   ];
   const badgeItems = child.badges.length
@@ -216,6 +216,16 @@ export default async function StudentDashboardPage() {
         }
         circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
         avatarVariant={avatarVariantForGender(child.profile.gender)}
+        points={{
+          total: quest.studentTotal,
+          ...quest.pointBreakdown,
+          recent: quest.pointLedger.map((entry) => ({
+            id: entry.id,
+            points: entry.points,
+            reason: entry.reason,
+            sourceType: entry.sourceType,
+          })),
+        }}
       />
       <section className="grid gap-4 rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
         <div className="overflow-hidden rounded-[26px] border bg-[#fffaf3] p-5" style={{ borderColor: house.color }}>
@@ -236,7 +246,7 @@ export default async function StudentDashboardPage() {
             </div>
             <div className="rounded-2xl bg-white p-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#617184]">Your contribution</p>
-              <p className="mt-2 text-3xl font-semibold text-[#22304a]">{quest.studentTotal || stats.housePoints}</p>
+              <p className="mt-2 text-3xl font-semibold text-[#22304a]">{quest.studentTotal}</p>
             </div>
           </div>
         </div>
@@ -276,7 +286,7 @@ export default async function StudentDashboardPage() {
               </div>
               <div className="rounded-[22px] bg-white/10 p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">My points</p>
-                <p className="mt-2 text-3xl font-semibold">{quest.studentTotal || stats.housePoints}</p>
+                <p className="mt-2 text-3xl font-semibold">{quest.studentTotal}</p>
                 <p className="mt-1 text-xs text-white/65">Your contribution</p>
               </div>
             </div>

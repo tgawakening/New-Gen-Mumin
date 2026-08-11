@@ -112,7 +112,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
   const dashboardMetrics = [
     { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
     { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-    { label: "House points", value: String(quest.studentTotal || stats.housePoints), hint: `${house.name} contribution.` },
+    { label: "House points", value: String(quest.studentTotal), hint: `${house.name} contribution.` },
     { label: "Attendance", value: `${selectedChild.attendanceRate}%`, hint: "Recent class presence." },
   ];
   const badgeItems = selectedChild.badges.length
@@ -175,6 +175,16 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
         }
         circleLabel={classCircle?.roomName ?? "Age-aware class circle opening soon."}
         avatarVariant={avatarVariantForGender(selectedChild.profile.gender)}
+        points={{
+          total: quest.studentTotal,
+          ...quest.pointBreakdown,
+          recent: quest.pointLedger.map((entry) => ({
+            id: entry.id,
+            points: entry.points,
+            reason: entry.reason,
+            sourceType: entry.sourceType,
+          })),
+        }}
       />
 
       <div className="sr-only">

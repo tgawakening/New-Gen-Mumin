@@ -139,6 +139,16 @@ export async function getStudentQuestData(studentId: string, programIds: string[
     orderBy: { awardedAt: "desc" },
     take: 12,
   });
+  const pointBreakdownRows = await db.housePointLedger.groupBy({
+    by: ["sourceType"],
+    where: { studentId },
+    _sum: { points: true },
+    _count: { _all: true },
+  });
+  const pointsFor = (test: (sourceType: string) => boolean) =>
+    pointBreakdownRows.reduce((sum, row) => sum + (test(row.sourceType) ? row._sum.points ?? 0 : 0), 0);
+  const quizPoints = pointsFor((sourceType) => sourceType.startsWith("QUIZ"));
+  const sunnahPoints = pointsFor((sourceType) => sourceType.startsWith("SUNNAH"));
   const canonicalHouseIds = await getCanonicalHouseIdsForHouseId(membership.houseId);
   const houseTotal = await db.housePointLedger.aggregate({
     where: { houseId: { in: canonicalHouseIds } },
@@ -165,6 +175,12 @@ export async function getStudentQuestData(studentId: string, programIds: string[
     teammates,
     houseTotal: houseTotal._sum.points ?? 0,
     studentTotal: studentTotal._sum.points ?? 0,
+    pointBreakdown: {
+      quiz: quizPoints,
+      sunnah: sunnahPoints,
+      other: Math.max(0, (studentTotal._sum.points ?? 0) - quizPoints - sunnahPoints),
+      awards: pointBreakdownRows.reduce((sum, row) => sum + row._count._all, 0),
+    },
   };
 }
 
