@@ -537,3 +537,25 @@ export async function diagnoseZoomRecordingAccess() {
     details,
   };
 }
+
+export async function diagnoseZoomParticipantAccess(meetingId: string) {
+  const accessToken = await getZoomAccessToken();
+  const url = new URL("https://api.zoom.us/v2/past_meetings/" + encodeURIComponent(meetingId) + "/participants");
+  url.searchParams.set("page_size", "1");
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: "Bearer " + accessToken,
+    },
+    cache: "no-store",
+  });
+
+  const details = response.ok ? "Past meeting participant lookup succeeded." : await readZoomError(response);
+  return {
+    participantsEndpoint: "past_meetings/{meetingId}/participants",
+    participantsEndpointStatus: response.status,
+    hasParticipantLookupScope: response.ok,
+    details,
+  };
+}
