@@ -7,6 +7,8 @@ import { redirect } from "next/navigation";
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { getCurrentSession } from "@/lib/auth/session";
 import { ManualRecordingForm } from "./ManualRecordingForm";
+import { CopyRecordingLinkButton } from "./CopyRecordingLinkButton";
+import { createRecordingShareToken } from "@/lib/live-classes/recording-share";
 import {
   deleteRecordingForAdmin,
   listAdminRecordings,
@@ -306,7 +308,10 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       {recording.isReadyForPlayback && recording.watchUrl ? (
-                        <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
+                        <>
+                          <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
+                          {(() => { const share = createRecordingShareToken(recording.id); return <CopyRecordingLinkButton path={`/shared/recordings/${recording.id}?expires=${share.expiresAt}&token=${share.token}`} />; })()}
+                        </>
                       ) : (
                         <form action={`/api/recordings/${recording.id}/prepare`} method="post">
                           <input type="hidden" name="returnTo" value={recordingsHref({ teacher: activeTeacher, page })} />

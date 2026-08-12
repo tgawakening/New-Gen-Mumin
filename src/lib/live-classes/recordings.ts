@@ -1081,6 +1081,20 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
   };
 }
 
+export async function getSharedRecordingPlaybackDetails(recordingId: string) {
+  const recording = await db.liveClassRecording.findFirst({ where: { id: recordingId, deletedAt: null }, include: includeRecordingRelations() });
+  if (!recording || !recording.driveFileId || recording.storageProvider !== "google-drive") return null;
+  return {
+    id: recording.id,
+    title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
+    programTitle: displayProgramTitle(recording.schedule.program.title),
+    teacherName: teacherName(recording.schedule.teacher),
+    recordingStart: recording.recordingStart,
+    availableAt: recording.availableAt,
+    driveFileId: recording.driveFileId,
+  };
+}
+
 export async function listManualRecordingFormOptions() {
   const teachers = await db.teacherProfile.findMany({
     where: { isActive: true },
