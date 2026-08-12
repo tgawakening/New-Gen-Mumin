@@ -614,7 +614,7 @@ model ZoomAttendanceInterval {
   schedule          ClassSchedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   student           StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
 
-  @@unique([scheduleId, meetingId, zoomParticipantId, joinedAt])
+  @@unique([scheduleId, meetingId, zoomParticipantId, joinedAt], map: "ZoomAttendance_meeting_participant_joined_key")
   @@index([scheduleId, joinedAt])
   @@index([studentId, joinedAt])
   @@index([meetingId, joinedAt])

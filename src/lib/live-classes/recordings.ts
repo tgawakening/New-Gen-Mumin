@@ -293,10 +293,10 @@ async function repairUploadedRecordingStates() {
   return recordings.map((recording) => recording.id);
 }
 
-function recordingIsVisibleToStudent(recording: any, studentId: string) {
-  if (!isLiveClassVisibleToStudents(recording.schedule.title)) return false;
-  const rosterIds = recording.schedule.scheduleRosters.map((entry: { studentId: string }) => entry.studentId);
-  return !rosterIds.length || rosterIds.includes(studentId);
+function recordingIsVisibleToStudent(recording: any, _studentId: string) {
+  // The caller already verifies an active enrolment in the recording's programme.
+  // Session rosters control live notifications, not access to programme replays.
+  return isLiveClassVisibleToStudents(recording.schedule.title);
 }
 
 function isRecordingTableUnavailable(error: unknown) {

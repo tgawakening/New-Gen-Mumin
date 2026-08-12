@@ -32,7 +32,7 @@ CREATE TABLE `ZoomAttendanceInterval` (
   `matchMethod` VARCHAR(191) NULL,
   `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `updatedAt` DATETIME(3) NOT NULL,
-  UNIQUE INDEX `ZoomAttendanceInterval_scheduleId_meetingId_zoomParticipantId_joinedAt_key` (`scheduleId`, `meetingId`, `zoomParticipantId`, `joinedAt`),
+  UNIQUE INDEX `ZoomAttendance_meeting_participant_joined_key` (`scheduleId`, `meetingId`, `zoomParticipantId`, `joinedAt`),
   INDEX `ZoomAttendanceInterval_scheduleId_joinedAt_idx` (`scheduleId`, `joinedAt`),
   INDEX `ZoomAttendanceInterval_studentId_joinedAt_idx` (`studentId`, `joinedAt`),
   INDEX `ZoomAttendanceInterval_meetingId_joinedAt_idx` (`meetingId`, `joinedAt`),
