@@ -9,11 +9,24 @@ import { TeacherHomeDashboard } from "@/components/dashboard/teacher/TeacherHome
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
-import { getTeacherNavItems } from "@/lib/teacher/nav";
 
 type PageProps = {
   searchParams?: Promise<{ teacher?: string }>;
 };
+
+function adminTeacherNav(teacherId: string) {
+  return [
+    { label: "Admin Home", href: "/admin", icon: "home" },
+    { label: "Dashboard", href: `/admin/teachers?teacher=${teacherId}`, icon: "home" },
+    { label: "Roster", href: `/admin/teachers/${teacherId}/roster`, icon: "check" },
+    { label: "Live Sessions", href: "/admin/classes", icon: "video" },
+    { label: "Classes", href: "/admin/classes", icon: "classes" },
+    { label: "Hours Log", href: `/admin/hours-log?teacherId=${teacherId}`, icon: "reports" },
+    { label: "Recordings", href: `/admin/recordings?teacher=${teacherId}`, icon: "video" },
+    { label: "Materials", href: "/admin/materials", icon: "folder" },
+    { label: "Feedback", href: "/admin/feedback", icon: "journal" },
+  ];
+}
 
 function teacherName(teacher: {
   id: string;
@@ -71,7 +84,7 @@ export default async function AdminTeacherDashboardsPage({ searchParams }: PageP
     <TeacherDashboardFrame
       title={dashboard.teacherName}
       subtitle="Admin preview of the selected teacher dashboard. Use the profile switcher to monitor each teacher without separate logins."
-      navItems={[{ label: "Admin Home", href: "/admin" }, { label: "Live Classes", href: "/admin/classes" }, ...getTeacherNavItems()]}
+      navItems={adminTeacherNav(selectedTeacher.id)}
     >
       <TeacherSection eyebrow="Admin profile switcher" title="View teacher dashboard">
         <div className="flex flex-wrap gap-2">
