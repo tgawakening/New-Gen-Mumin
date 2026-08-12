@@ -43,6 +43,7 @@ type ZoomMeetingRecordingsResponse = {
   id?: number | string;
   uuid?: string;
   topic?: string;
+  duration?: number;
   recording_files?: ZoomRecordingFile[];
 };
 
@@ -536,6 +537,23 @@ export async function diagnoseZoomRecordingAccess() {
     hasRecordingLookupScope,
     details,
   };
+}
+
+export async function getZoomPastMeetingParticipants(meetingId: string) {
+  const accessToken = await getZoomAccessToken();
+  const participants: Array<{ id?: string; user_id?: string; name?: string; user_email?: string; join_time?: string; leave_time?: string; duration?: number }> = [];
+  let nextPageToken = "";
+  do {
+    const url = new URL("https://api.zoom.us/v2/past_meetings/" + encodeURIComponent(meetingId) + "/participants");
+    url.searchParams.set("page_size", "300");
+    if (nextPageToken) url.searchParams.set("next_page_token", nextPageToken);
+    const response = await fetch(url, { headers: { Authorization: "Bearer " + accessToken }, cache: "no-store" });
+    if (!response.ok) throw new Error("Zoom participant report failed: " + await readZoomError(response));
+    const payload = await response.json() as { participants?: typeof participants; next_page_token?: string };
+    participants.push(...(payload.participants ?? []));
+    nextPageToken = payload.next_page_token ?? "";
+  } while (nextPageToken);
+  return participants;
 }
 
 export async function diagnoseZoomParticipantAccess(meetingId: string) {

@@ -111,7 +111,7 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
                   </p>
                   {entry.meetingUrl && !selectedChild.accessLocked ? (
                     <Link
-                      href={entry.meetingUrl}
+                      href={`/api/live-classes/${entry.id}/join?student=${encodeURIComponent(selectedChild.id)}`}
                       target="_blank"
                       className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
                     >

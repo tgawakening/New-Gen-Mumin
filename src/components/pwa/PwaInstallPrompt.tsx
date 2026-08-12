@@ -20,9 +20,14 @@ function isIOS() {
   return /iphone|ipad|ipod/i.test(navigator.userAgent);
 }
 
-export function PwaInstallPrompt({ audience = "dashboard" }: { audience?: "dashboard" | "parent" | "teacher" | "student" }) {
+type Props = {
+  audience?: "dashboard" | "parent" | "teacher" | "student";
+  force?: boolean;
+};
+
+export function PwaInstallPrompt({ audience = "dashboard", force = false }: Props) {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [visible, setVisible] = useState(false);
+  const [visible, setVisible] = useState(force);
   const [iosDevice, setIosDevice] = useState(false);
 
   const label = useMemo(() => {
@@ -32,9 +37,8 @@ export function PwaInstallPrompt({ audience = "dashboard" }: { audience?: "dashb
   }, [audience]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (isStandalone()) return;
-    if (window.localStorage.getItem(DISMISS_KEY) === "true") return;
+    if (typeof window === "undefined" || isStandalone()) return;
+    if (!force && window.sessionStorage.getItem(DISMISS_KEY) === "true") return;
 
     setIosDevice(isIOS());
     setVisible(true);
@@ -47,8 +51,7 @@ export function PwaInstallPrompt({ audience = "dashboard" }: { audience?: "dashb
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     return () => window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-  }, []);
-
+  }, [force]);
 
   if (!visible) return null;
 
@@ -57,14 +60,14 @@ export function PwaInstallPrompt({ audience = "dashboard" }: { audience?: "dashb
     await installEvent.prompt();
     const choice = await installEvent.userChoice;
     if (choice.outcome === "accepted") {
-      window.localStorage.setItem(DISMISS_KEY, "true");
-      setVisible(false);
+      window.sessionStorage.setItem(DISMISS_KEY, "true");
+      if (!force) setVisible(false);
     }
     setInstallEvent(null);
   }
 
   function dismiss() {
-    window.localStorage.setItem(DISMISS_KEY, "true");
+    window.sessionStorage.setItem(DISMISS_KEY, "true");
     setVisible(false);
   }
 
@@ -85,27 +88,17 @@ export function PwaInstallPrompt({ audience = "dashboard" }: { audience?: "dashb
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {installEvent ? (
-            <button
-              type="button"
-              onClick={installApp}
-              className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#17243a] transition hover:bg-[#fff3df]"
-            >
-              <Download className="h-4 w-4" />
-              Install
+            <button type="button" onClick={installApp} className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#17243a] transition hover:bg-[#fff3df]">
+              <Download className="h-4 w-4" /> Install
             </button>
           ) : (
-            <span className="rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-white/80">
-              Add to Home Screen
-            </span>
+            <span className="rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-white/80">Add to Home Screen</span>
           )}
-          <button
-            type="button"
-            onClick={dismiss}
-            aria-label="Dismiss install prompt"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/8 text-white transition hover:bg-white/15"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          {!force ? (
+            <button type="button" onClick={dismiss} aria-label="Dismiss install prompt" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/8 text-white transition hover:bg-white/15">
+              <X className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
       </div>
     </section>

@@ -40,6 +40,7 @@ model User {
   studentProfile    StudentProfile?
   teacherProfile    TeacherProfile?
   feedbackResponses WeeklyFeedbackResponse[]
+  zoomJoinIntents    ZoomJoinIntent[]
 }
 
 model ParentProfile {
@@ -104,6 +105,8 @@ model StudentProfile {
   user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   feedbackResponses       WeeklyFeedbackResponse[]
   monthlyPayments         MonthlyPaymentRecord[]
+  zoomJoinIntents         ZoomJoinIntent[]
+  zoomAttendanceIntervals ZoomAttendanceInterval[]
 }
 
 model TeacherProfile {
@@ -300,6 +303,8 @@ model ClassSchedule {
   scheduleRosters   ClassScheduleRoster[]
   sessionOccurrences LiveClassSessionOccurrence[]
   hoursLogEntries TeacherHoursLogEntry[]
+  zoomJoinIntents ZoomJoinIntent[]
+  zoomAttendanceIntervals ZoomAttendanceInterval[]
 
   @@index([createdByUserId], map: "ClassSchedule_createdByUserId_fkey")
   @@index([programId], map: "ClassSchedule_programId_fkey")
@@ -556,8 +561,12 @@ model AttendanceRecord {
   scheduleId     String?
   lessonDate     DateTime
   status         AttendanceStatus
-  note           String?
-  markedByUserId String?
+  note            String?
+  joinedAt        DateTime?
+  leftAt          DateTime?
+  durationMinutes Int?
+  source          String?          @default("manual")
+  markedByUserId  String?
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
   enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
@@ -569,6 +578,46 @@ model AttendanceRecord {
   @@index([enrollmentId], map: "AttendanceRecord_enrollmentId_fkey")
   @@index([markedByUserId], map: "AttendanceRecord_markedByUserId_fkey")
   @@index([scheduleId], map: "AttendanceRecord_scheduleId_fkey")
+}
+
+model ZoomJoinIntent {
+  id         String         @id @default(cuid())
+  scheduleId String
+  studentId  String
+  userId     String
+  clickedAt  DateTime       @default(now())
+  createdAt  DateTime       @default(now())
+  schedule   ClassSchedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  student    StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  user       User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([scheduleId, clickedAt])
+  @@index([studentId, clickedAt])
+  @@index([userId, clickedAt])
+}
+
+model ZoomAttendanceInterval {
+  id                String          @id @default(cuid())
+  scheduleId        String
+  studentId         String?
+  meetingId         String
+  meetingUuid       String?
+  zoomParticipantId String?
+  participantEmail  String?
+  participantName   String?
+  joinedAt          DateTime
+  leftAt            DateTime?
+  durationSeconds   Int             @default(0)
+  matchMethod       String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  schedule          ClassSchedule   @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  student           StudentProfile? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+
+  @@unique([scheduleId, meetingId, zoomParticipantId, joinedAt])
+  @@index([scheduleId, joinedAt])
+  @@index([studentId, joinedAt])
+  @@index([meetingId, joinedAt])
 }
 
 model LessonLog {

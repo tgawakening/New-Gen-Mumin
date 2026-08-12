@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { buildTrackedZoomJoinUrl } from "@/lib/live-classes/attendance";
 import { sendLiveClassStartedEmail } from "@/lib/email/notifications";
 import { env } from "@/lib/env";
 import {
@@ -284,7 +285,7 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
   const visibleRosterIds = new Set(scheduleRosterIds.length ? scheduleRosterIds : defaultRosterIds);
   const hasRosterFilter = visibleRosterIds.size > 0;
   const scheduleLabel = `${WEEKDAY_LABELS[schedule.weekday] ?? "Weekly class"} ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}`;
-  const emailRecipients = new Map<string, { toEmail: string; recipientName: string }>();
+  const emailRecipients = new Map<string, { toEmail: string; recipientName: string; studentId: string }>();
   const notificationRecipients = new Map<string, { href: string }>();
 
   for (const enrollment of schedule.program.enrollments) {
@@ -293,18 +294,20 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
 
     notificationRecipients.set(enrollment.student.user.id, { href: "/student/schedule" });
     if (canSendLiveClassEmail(enrollment.student.user.email)) {
-      emailRecipients.set(enrollment.student.user.email.toLowerCase(), {
+      emailRecipients.set(`${enrollment.student.user.email.toLowerCase()}:${enrollment.studentId}`, {
         toEmail: enrollment.student.user.email,
         recipientName: notificationPersonName(enrollment.student.user),
+        studentId: enrollment.studentId,
       });
     }
 
     if (enrollment.parent?.user.id) {
       notificationRecipients.set(enrollment.parent.user.id, { href: `/parent/schedule?child=${enrollment.studentId}` });
       if (canSendLiveClassEmail(enrollment.parent.user.email)) {
-        emailRecipients.set(enrollment.parent.user.email.toLowerCase(), {
+        emailRecipients.set(`${enrollment.parent.user.email.toLowerCase()}:${enrollment.studentId}`, {
           toEmail: enrollment.parent.user.email,
           recipientName: notificationPersonName(enrollment.parent.user),
+          studentId: enrollment.studentId,
         });
       }
     }
@@ -350,7 +353,7 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
           sessionTitle: title,
           teacherName: teacherName(schedule.teacher),
           schedule: scheduleLabel,
-          joinUrl: schedule.meetingUrl!,
+          joinUrl: buildTrackedZoomJoinUrl(schedule.id, recipient.studentId),
         }),
       ),
   );

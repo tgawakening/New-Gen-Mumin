@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { closeOpenZoomAttendanceIntervals, reconcileZoomParticipantReport, recordZoomParticipantJoined, recordZoomParticipantLeft } from "@/lib/live-classes/attendance";
 import { recordLiveClassSessionEnd, recordLiveClassSessionFromRecording, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import {
   cleanLiveClassTitle,
@@ -93,10 +94,20 @@ export async function POST(request: NextRequest) {
       plainToken?: string;
       object?: {
         id?: string | number;
+        uuid?: string;
         topic?: string;
         join_url?: string;
         host_email?: string;
         end_time?: string;
+        participant?: {
+          id?: string;
+          user_id?: string;
+          user_name?: string;
+          email?: string;
+          join_time?: string;
+          leave_time?: string;
+          duration?: number;
+        };
         recording_files?: Array<{
           id?: string;
           play_url?: string;
@@ -160,6 +171,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  const participant = payload.payload?.object?.participant;
+  if (payload.event === "meeting.participant_joined" && participant) {
+    await recordZoomParticipantJoined(schedule.id, {
+      meetingId,
+      meetingUuid: payload.payload?.object?.uuid,
+      participantId: participant.user_id ?? participant.id,
+      email: participant.email,
+      name: participant.user_name,
+      occurredAt: participant.join_time ? new Date(participant.join_time) : new Date(),
+    });
+    return NextResponse.json({ received: true });
+  }
+
+  if (payload.event === "meeting.participant_left" && participant) {
+    await recordZoomParticipantLeft(schedule.id, {
+      meetingId,
+      meetingUuid: payload.payload?.object?.uuid,
+      participantId: participant.user_id ?? participant.id,
+      email: participant.email,
+      name: participant.user_name,
+      occurredAt: participant.leave_time ? new Date(participant.leave_time) : new Date(),
+      durationSeconds: participant.duration,
+    });
+    return NextResponse.json({ received: true });
+  }
+
   if (payload.event === "meeting.started") {
     await recordLiveClassSessionOccurrence({
       scheduleId: schedule.id,
@@ -193,16 +230,19 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "meeting.ended") {
+    const endedAt = payload.payload?.object?.end_time ? new Date(payload.payload.object.end_time) : new Date();
     await recordLiveClassSessionEnd({
       scheduleId: schedule.id,
       meetingId,
-      endedAt: payload.payload?.object?.end_time ? new Date(payload.payload.object.end_time) : new Date(),
+      endedAt,
     });
+    await closeOpenZoomAttendanceIntervals(schedule.id, meetingId, endedAt);
 
     return NextResponse.json({ received: true });
   }
 
   if (payload.event === "recording.completed") {
+    await reconcileZoomParticipantReport(schedule.id, meetingId).catch((error) => console.error("Unable to reconcile Zoom attendance", error));
     const primaryFile = choosePrimaryRecordingFile(payload.payload?.object?.recording_files ?? []);
     if (!primaryFile) {
       return NextResponse.json({ received: true, recordings: 0 });

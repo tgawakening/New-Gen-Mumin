@@ -124,6 +124,11 @@ function recordingProcessingState(recording: { driveFileId?: string | null; stor
   };
 }
 
+function isAdvancedArabicRecording(recording: any) {
+  const value = [recording.topic, recording.schedule?.title, teacherName(recording.schedule.teacher)].filter(Boolean).join(" ").toLowerCase();
+  return value.includes("advanced arabic") || (value.includes("abdul") && value.includes("badee"));
+}
+
 function mapRecording(recording: any): LiveClassRecordingSummary {
   const processingState = recordingProcessingState(recording);
   const collaborators = recordingCollaboratorNames(recording);
@@ -132,11 +137,12 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
       ? Math.max(0, Math.round((recording.recordingEnd.getTime() - recording.recordingStart.getTime()) / 60000))
       : null;
 
+  const advancedArabic = isAdvancedArabicRecording(recording);
   return {
     id: recording.id,
     title: cleanRecordingTitle(recording.topic || recording.schedule.title),
-    programTitle: displayProgramTitle(recording.schedule.program.title),
-    programSlug: recording.schedule.program.slug,
+    programTitle: advancedArabic ? "Advanced Arabic" : displayProgramTitle(recording.schedule.program.title),
+    programSlug: advancedArabic ? "advanced-arabic" : recording.schedule.program.slug,
     teacherId: recording.schedule.teacherId,
     teacherName: collaborators.join(", "),
     teacherNames: collaborators,
@@ -326,7 +332,7 @@ export async function listStudentRecordings(studentUserId: string) {
     });
 
     return collapseRecordingsBySession(
-      recordings.filter((recording) => recording.driveFileId && recording.storageProvider === "google-drive" && recordingIsVisibleToStudent(recording, student.id)),
+      recordings.filter((recording) => recordingIsVisibleToStudent(recording, student.id)),
     ).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
@@ -367,7 +373,7 @@ export async function listParentChildRecordings(parentUserId: string, childId: s
     });
 
     return collapseRecordingsBySession(
-      recordings.filter((recording) => recording.driveFileId && recording.storageProvider === "google-drive" && recordingIsVisibleToStudent(recording, childId)),
+      recordings.filter((recording) => recordingIsVisibleToStudent(recording, childId)),
     ).map(mapRecording);
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
@@ -930,7 +936,9 @@ export async function syncRecentZoomRecordingsForAdmin() {
 
     const recordingFileId = primaryFile.id ?? fallbackZoomRecordingFileId(schedule.id, primaryFile.play_url);
     const recordingStart = primaryFile.recording_start ? new Date(primaryFile.recording_start) : null;
-    const recordingEnd = primaryFile.recording_end ? new Date(primaryFile.recording_end) : null;
+    const recordingEnd = recordingStart && meeting.duration && meeting.duration > 0
+      ? new Date(recordingStart.getTime() + meeting.duration * 60 * 1000)
+      : primaryFile.recording_end ? new Date(primaryFile.recording_end) : null;
     const existingRecording = await db.liveClassRecording.findUnique({
       where: { recordingFileId },
       select: { driveFileId: true, storageProvider: true },
