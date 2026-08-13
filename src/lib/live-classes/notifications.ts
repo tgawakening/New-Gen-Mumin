@@ -31,7 +31,7 @@ type ScheduleWithRosters = ScheduleForReminder & {
 };
 
 function reminderMinutes() {
-  return env.success ? env.data.LIVE_CLASS_REMINDER_MINUTES : 15;
+  return 5;
 }
 
 async function createReminder(userId: string, schedule: ScheduleForReminder, href: string, now: Date) {
@@ -55,7 +55,7 @@ async function createReminder(userId: string, schedule: ScheduleForReminder, hre
     data: {
       userId,
       title: "Live class starting soon",
-      body: `${schedule.title} starts in ${Math.max(minutesUntilStart, 0)} minutes. Join from your schedule page.`,
+      body: `${schedule.title} starts in ${Math.max(minutesUntilStart, 0)} minutes. Click to join now.`,
       href,
     },
   });
@@ -129,7 +129,7 @@ export async function ensureStudentLiveClassReminders(userId: string) {
       ])) {
         continue;
       }
-      await createReminder(userId, schedule, "/student/schedule", now);
+      await createReminder(userId, schedule, buildTrackedZoomJoinUrl(schedule.id, student.id), now);
     }
   }
 }
@@ -197,7 +197,7 @@ export async function ensureParentLiveClassReminders(userId: string) {
       ])) {
         continue;
       }
-      await createReminder(userId, schedule, "/parent/schedule", now);
+      await createReminder(userId, schedule, buildTrackedZoomJoinUrl(schedule.id, enrollment.studentId), now);
     }
   }
 }
@@ -286,13 +286,13 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
   const hasRosterFilter = visibleRosterIds.size > 0;
   const scheduleLabel = `${WEEKDAY_LABELS[schedule.weekday] ?? "Weekly class"} ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}`;
   const emailRecipients = new Map<string, { toEmail: string; recipientName: string; studentId: string }>();
-  const notificationRecipients = new Map<string, { href: string }>();
+  const notificationRecipients = new Map<string, { userId: string; href: string }>();
 
   for (const enrollment of schedule.program.enrollments) {
     if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
     if (hasRosterFilter && !visibleRosterIds.has(enrollment.studentId)) continue;
 
-    notificationRecipients.set(enrollment.student.user.id, { href: "/student/schedule" });
+    notificationRecipients.set(`${enrollment.student.user.id}:${enrollment.studentId}`, { userId: enrollment.student.user.id, href: buildTrackedZoomJoinUrl(schedule.id, enrollment.studentId) });
     if (canSendLiveClassEmail(enrollment.student.user.email)) {
       emailRecipients.set(`${enrollment.student.user.email.toLowerCase()}:${enrollment.studentId}`, {
         toEmail: enrollment.student.user.email,
@@ -302,7 +302,7 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
     }
 
     if (enrollment.parent?.user.id) {
-      notificationRecipients.set(enrollment.parent.user.id, { href: `/parent/schedule?child=${enrollment.studentId}` });
+      notificationRecipients.set(`${enrollment.parent.user.id}:${enrollment.studentId}`, { userId: enrollment.parent.user.id, href: buildTrackedZoomJoinUrl(schedule.id, enrollment.studentId) });
       if (canSendLiveClassEmail(enrollment.parent.user.email)) {
         emailRecipients.set(`${enrollment.parent.user.email.toLowerCase()}:${enrollment.studentId}`, {
           toEmail: enrollment.parent.user.email,
@@ -313,12 +313,13 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
     }
   }
 
-  for (const [userId, recipient] of notificationRecipients.entries()) {
+  for (const recipient of notificationRecipients.values()) {
+    const userId = recipient.userId;
     const existing = await db.notification.findFirst({
       where: {
         userId,
         title: "Live class is now open",
-        href: recipient.href,
+        body: `${title} has started on Zoom. Click to join as a participant.`,
         createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
       },
     });

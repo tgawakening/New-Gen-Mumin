@@ -9,7 +9,7 @@ import {
   isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
-import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
+import { currentOrNextWeeklyOccurrence } from "@/lib/live-classes/time";
 import {
   genMCoreOutcomes,
   genMPolicies,
@@ -593,7 +593,7 @@ function mapScheduleSummary(schedule: any, title: string, category: "CLASS" | "P
     startTime: schedule.startTime,
     endTime: schedule.endTime,
     timezone: schedule.timezone,
-    nextStartsAt: nextWeeklyOccurrence(schedule.weekday, schedule.startTime),
+    nextStartsAt: currentOrNextWeeklyOccurrence(schedule.weekday, schedule.startTime, schedule.endTime),
     meetingUrl: schedule.meetingUrl,
     teacherName: buildTeacherName(schedule.teacher),
     provider: schedule.meetingProvider,

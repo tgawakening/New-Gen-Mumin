@@ -528,7 +528,7 @@ export default async function StudentDashboardPage() {
                 </p>
                 <LiveClassCountdown
                   startsAt={child.nextClass.nextStartsAt.toISOString()}
-                  meetingUrl={child.nextClass.meetingUrl}
+                  meetingUrl={child.nextClass.meetingUrl ? `/api/live-classes/${child.nextClass.id}/join?student=${encodeURIComponent(child.id)}` : null}
                   accessLocked={child.accessLocked}
                 />
                 {nextClassRoom ? (

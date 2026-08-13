@@ -28,7 +28,7 @@ export function LiveClassCountdown({
   const targetTime = useMemo(() => new Date(startsAt).getTime(), [startsAt]);
   const [now, setNow] = useState(() => Date.now());
   const millisecondsUntilStart = targetTime - now;
-  const canJoin = Boolean(meetingUrl) && !accessLocked && millisecondsUntilStart <= 15 * 60 * 1000;
+  const canJoin = Boolean(meetingUrl) && !accessLocked && millisecondsUntilStart <= 5 * 60 * 1000;
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 30000);
@@ -49,7 +49,7 @@ export function LiveClassCountdown({
         </Link>
       ) : meetingUrl && !accessLocked ? (
         <p className="mt-3 text-sm text-white/75">
-          Join button opens 15 minutes before class.
+          Join button opens 5 minutes before class.
         </p>
       ) : (
         <p className="mt-3 text-sm text-white/75">

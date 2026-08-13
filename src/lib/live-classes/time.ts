@@ -28,6 +28,18 @@ export function nextWeeklyOccurrence(weekday: number, startTime: string, from = 
   return next;
 }
 
+export function currentOrNextWeeklyOccurrence(weekday: number, startTime: string, endTime: string, from = new Date()) {
+  const start = new Date(from);
+  const [startHour, startMinute] = startTime.split(":").map(Number);
+  const [endHour, endMinute] = endTime.split(":").map(Number);
+  start.setHours(Number.isFinite(startHour) ? startHour : 0, Number.isFinite(startMinute) ? startMinute : 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(Number.isFinite(endHour) ? endHour : 0, Number.isFinite(endMinute) ? endMinute : 0, 0, 0);
+  if (end <= start) end.setDate(end.getDate() + 1);
+  if (from.getDay() === weekday && from <= end) return start;
+  return nextWeeklyOccurrence(weekday, startTime, from);
+}
+
 export function toZoomLocalStartTime(date: Date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

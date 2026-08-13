@@ -264,7 +264,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                 </div>
                 <LiveClassCountdown
                   startsAt={selectedChild.nextClass.nextStartsAt.toISOString()}
-                  meetingUrl={selectedChild.nextClass.meetingUrl}
+                  meetingUrl={selectedChild.nextClass.meetingUrl ? `/api/live-classes/${selectedChild.nextClass.id}/join?student=${encodeURIComponent(selectedChild.id)}` : null}
                   accessLocked={selectedChild.accessLocked}
                 />
               </div>
