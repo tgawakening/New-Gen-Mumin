@@ -1,6 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
+import { getTeacherProgramRosterStudentIds } from "@/lib/live-classes/service";
 import { QUIZ_AVATARS, normalizedQuizGender } from "@/lib/quizzes/avatars";
 import {
   CANONICAL_HOUSES,
@@ -130,14 +131,16 @@ export async function getTeacherLiveQuizSession(sessionId: string, teacherUserId
   });
   if (!quiz) return null;
 
+  const teacher = await db.teacherProfile.findUnique({
+    where: { userId: teacherUserId },
+    select: { id: true },
+  });
+  if (!teacher) return null;
+  const effectiveRosterStudentIds = await getTeacherProgramRosterStudentIds(teacher.id, quiz.programId);
+
   const rosterStudents = await db.studentProfile.findMany({
     where: {
-      programRosters: {
-        some: {
-          programId: quiz.programId,
-          teacher: { userId: teacherUserId },
-        },
-      },
+      id: { in: effectiveRosterStudentIds },
     },
     include: {
       user: true,
@@ -267,15 +270,13 @@ export async function getStudentLiveQuizSessionByStudentId(sessionId: string, st
   });
   if (!quiz || !quiz.isPublished) return null;
 
-  const teacherRoster = await db.teacherStudentRoster.findFirst({
-    where: {
-      studentId: student.id,
-      programId: quiz.programId,
-      teacher: { userId: session.teacherUserId },
-    },
+  const teacher = await db.teacherProfile.findUnique({
+    where: { userId: session.teacherUserId },
     select: { id: true },
   });
-  if (!teacherRoster) return null;
+  if (!teacher) return null;
+  const effectiveRosterStudentIds = await getTeacherProgramRosterStudentIds(teacher.id, quiz.programId);
+  if (!effectiveRosterStudentIds.includes(student.id)) return null;
 
   const enrollment = await db.enrollment.findUnique({
     where: { studentId_programId: { studentId: student.id, programId: quiz.programId } },
@@ -308,14 +309,38 @@ export async function getStudentLiveQuizSession(sessionId: string, studentUserId
 }
 
 export async function listStudentActiveLiveQuizzesByStudentId(studentId: string) {
-  const rosterRows = await db.teacherStudentRoster.findMany({
-    where: { studentId },
-    select: { programId: true, teacher: { select: { userId: true } } },
-  });
-  if (!rosterRows.length) return [];
+  const [rosterRows, enrollments] = await Promise.all([
+    db.teacherStudentRoster.findMany({
+      where: { studentId },
+      select: { teacherId: true, programId: true, teacher: { select: { userId: true } } },
+    }),
+    db.enrollment.findMany({
+      where: { studentId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+      select: { programId: true },
+    }),
+  ]);
+  const enrolledProgramIds = [...new Set(enrollments.map((entry) => entry.programId))];
+  const assignedTeachers = enrolledProgramIds.length
+    ? await db.teacherProgram.findMany({
+        where: { programId: { in: enrolledProgramIds } },
+        select: { teacherId: true, programId: true, teacher: { select: { userId: true } } },
+      })
+    : [];
+  const candidatePairs = new Map(
+    [...rosterRows, ...assignedTeachers].map((row) => [row.teacherId + ":" + row.programId, row]),
+  );
+  const allowedPairRows = (
+    await Promise.all(
+      [...candidatePairs.values()].map(async (row) => ({
+        row,
+        studentIds: await getTeacherProgramRosterStudentIds(row.teacherId, row.programId),
+      })),
+    )
+  ).filter(({ studentIds }) => studentIds.includes(studentId));
+  if (!allowedPairRows.length) return [];
 
-  const allowedPairs = new Set(rosterRows.map((row) => row.teacher.userId + ":" + row.programId));
-  const programIds = [...new Set(rosterRows.map((row) => row.programId))];
+  const allowedPairs = new Set(allowedPairRows.map(({ row }) => row.teacher.userId + ":" + row.programId));
+  const programIds = [...new Set(allowedPairRows.map(({ row }) => row.programId))];
   const quizzes = await db.quiz.findMany({
     where: { isPublished: true, programId: { in: programIds } },
     include: { program: true },

@@ -343,6 +343,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       },
       include: {
         user: true,
+        parents: { select: { parentId: true } },
         enrollments: {
           where: { program: { slug: { in: compatibleProgramSlugs } } },
           select: { status: true },
@@ -386,6 +387,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
         studentProfile: {
           include: {
             user: true,
+            parents: { select: { parentId: true } },
             enrollments: {
               where: { program: { slug: { in: compatibleProgramSlugs } } },
               select: { status: true },
@@ -467,7 +469,23 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     }
   }
 
-  return Array.from(studentsById.values()).sort((left, right) => {
+  const newestStudentByIdentity = new Map<string, (typeof directEnrollmentStudents)[number]>();
+  const latestRegistrationTime = (student: (typeof directEnrollmentStudents)[number]) =>
+    student.registrationStudents.reduce((latest, entry) => Math.max(latest, entry.createdAt.getTime()), 0);
+
+  for (const student of studentsById.values()) {
+    const normalizedName = (
+      student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email
+    ).trim().toLowerCase();
+    const parentKey = student.parents.map((entry) => entry.parentId).sort().join(",");
+    const identityKey = parentKey ? `${parentKey}:${normalizedName}` : `user:${student.user.email.toLowerCase()}`;
+    const existing = newestStudentByIdentity.get(identityKey);
+    if (!existing || latestRegistrationTime(student) > latestRegistrationTime(existing)) {
+      newestStudentByIdentity.set(identityKey, student);
+    }
+  }
+
+  return Array.from(newestStudentByIdentity.values()).sort((left, right) => {
     const leftName = left.displayName || `${left.user.firstName} ${left.user.lastName ?? ""}`.trim() || left.user.email;
     const rightName = right.displayName || `${right.user.firstName} ${right.user.lastName ?? ""}`.trim() || right.user.email;
     return leftName.localeCompare(rightName);
