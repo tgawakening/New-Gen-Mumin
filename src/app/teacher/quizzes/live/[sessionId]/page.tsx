@@ -6,6 +6,7 @@ import { ActionToast } from "@/components/dashboard/ActionToast";
 import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
+import { LiveQuizTeacherPresence } from "@/components/quizzes/LiveQuizTeacherPresence";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
 import { LiveQuizCountdown } from "@/components/quizzes/LiveQuizCountdown";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -116,6 +117,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
       navItems={getTeacherNavItems()}
     >
       <LiveQuizAutoRefresh intervalMs={2200} enabled={live.session.status !== "ENDED"} />
+      <LiveQuizTeacherPresence sessionId={sessionId} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">
