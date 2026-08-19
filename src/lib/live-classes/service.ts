@@ -213,35 +213,12 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
-async function getWholeProgramStudentIds() {
-  const requiredSlugs = ["seerah", "life-lessons", "arabic", "tajweed"];
-  const students = await db.studentProfile.findMany({
-    where: {
-      AND: requiredSlugs.map((slug) => ({
-        enrollments: {
-          some: { program: { slug }, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
-        },
-      })),
-    },
-    select: { id: true },
-  });
-  return students.map((student) => student.id);
-}
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
-    const [entries, assignments, wholeProgramStudentIds] = await Promise.all([
-      db.teacherStudentRoster.findMany({ where: { teacherId }, select: { programId: true, studentId: true } }),
-      db.teacherProgram.findMany({ where: { teacherId }, select: { programId: true } }),
-      getWholeProgramStudentIds(),
-    ]);
-    const merged = new Map(entries.map((entry) => [`${entry.programId}:${entry.studentId}`, entry]));
-    for (const assignment of assignments) {
-      for (const studentId of wholeProgramStudentIds) {
-        const entry = { programId: assignment.programId, studentId };
-        merged.set(`${entry.programId}:${entry.studentId}`, entry);
-      }
-    }
-    return [...merged.values()];
+    return await db.teacherStudentRoster.findMany({
+      where: { teacherId },
+      select: { programId: true, studentId: true },
+    });
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
@@ -253,14 +230,11 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
 
 export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
   try {
-    const [rosterEntries, wholeProgramStudentIds] = await Promise.all([
-      db.teacherStudentRoster.findMany({
-        where: { teacherId, programId },
-        select: { studentId: true },
-      }),
-      getWholeProgramStudentIds(),
-    ]);
-    return [...new Set([...rosterEntries.map((entry) => entry.studentId), ...wholeProgramStudentIds])];
+    const rosterEntries = await db.teacherStudentRoster.findMany({
+      where: { teacherId, programId },
+      select: { studentId: true },
+    });
+    return rosterEntries.map((entry) => entry.studentId);
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
@@ -272,31 +246,16 @@ export async function getTeacherProgramRosterStudentIds(teacherId: string, progr
 
 export async function syncTeacherProgramRoster(teacherId: string, programId: string, studentIds: string[]) {
   try {
-    const existing = await db.teacherStudentRoster.findMany({
-      where: { teacherId, programId },
-      select: { id: true, studentId: true },
-    });
-
-    const existingIds = new Set(existing.map((entry) => entry.studentId));
-    const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
-    const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
-
-    const operations = [
-      ...(toRemove.length ? [db.teacherStudentRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
-      ...toAdd.map((studentId) =>
-        db.teacherStudentRoster.create({
-          data: {
-            teacherId,
-            programId,
-            studentId,
-          },
-        }),
-      ),
-    ];
-
-    if (operations.length) {
-      await db.$transaction(operations);
-    }
+    const uniqueStudentIds = [...new Set(studentIds)];
+    await db.$transaction([
+      db.teacherStudentRoster.deleteMany({ where: { teacherId, programId } }),
+      ...(uniqueStudentIds.length
+        ? [db.teacherStudentRoster.createMany({
+            data: uniqueStudentIds.map((studentId) => ({ teacherId, programId, studentId })),
+            skipDuplicates: true,
+          })]
+        : []),
+    ]);
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       throw new Error("Roster saving is not ready yet because the roster database tables have not been deployed.");
@@ -343,7 +302,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       },
       include: {
         user: true,
-        parents: { select: { parentId: true } },
+        parents: { select: { parentId: true, parent: { select: { user: { select: { email: true } } } } } },
         enrollments: {
           where: { program: { slug: { in: compatibleProgramSlugs } } },
           select: { status: true },
@@ -353,6 +312,8 @@ export async function getProgramEligibleRosterStudents(programId: string) {
             registration: {
               select: {
                 status: true,
+                createdAt: true,
+                parentEmail: true,
               },
             },
             items: {
@@ -387,7 +348,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
         studentProfile: {
           include: {
             user: true,
-            parents: { select: { parentId: true } },
+            parents: { select: { parentId: true, parent: { select: { user: { select: { email: true } } } } } },
             enrollments: {
               where: { program: { slug: { in: compatibleProgramSlugs } } },
               select: { status: true },
@@ -397,6 +358,8 @@ export async function getProgramEligibleRosterStudents(programId: string) {
                 registration: {
                   select: {
                     status: true,
+                    createdAt: true,
+                    parentEmail: true,
                   },
                 },
                 items: {
@@ -470,17 +433,30 @@ export async function getProgramEligibleRosterStudents(programId: string) {
   }
 
   const newestStudentByIdentity = new Map<string, (typeof directEnrollmentStudents)[number]>();
-  const latestRegistrationTime = (student: (typeof directEnrollmentStudents)[number]) =>
-    student.registrationStudents.reduce((latest, entry) => Math.max(latest, entry.createdAt.getTime()), 0);
+  const latestApprovedRegistrationTime = (student: (typeof directEnrollmentStudents)[number]) =>
+    student.registrationStudents.reduce((latest, entry) => {
+      if (!PAID_REGISTRATION_STATUSES.includes(entry.registration.status as (typeof PAID_REGISTRATION_STATUSES)[number])) return latest;
+      return Math.max(latest, entry.registration.createdAt.getTime());
+    }, 0);
+  const normalizeIdentityPart = (value: string) => value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
   for (const student of studentsById.values()) {
-    const normalizedName = (
-      student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email
-    ).trim().toLowerCase();
-    const parentKey = student.parents.map((entry) => entry.parentId).sort().join(",");
-    const identityKey = parentKey ? `${parentKey}:${normalizedName}` : `user:${student.user.email.toLowerCase()}`;
+    const normalizedName = normalizeIdentityPart(
+      student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
+    );
+    const parentEmails = [
+      ...student.parents.map((entry) => entry.parent.user.email),
+      ...student.registrationStudents.map((entry) => entry.registration.parentEmail),
+    ].map((email) => email.trim().toLowerCase()).filter(Boolean).sort();
+    const parentKey = [...new Set(parentEmails)].join(",");
+    const parentIds = student.parents.map((entry) => entry.parentId).sort().join(",");
+    const identityKey = parentKey
+      ? `${parentKey}:${normalizedName}`
+      : parentIds
+        ? `${parentIds}:${normalizedName}`
+        : `user:${student.user.email.toLowerCase()}`;
     const existing = newestStudentByIdentity.get(identityKey);
-    if (!existing || latestRegistrationTime(student) > latestRegistrationTime(existing)) {
+    if (!existing || latestApprovedRegistrationTime(student) > latestApprovedRegistrationTime(existing)) {
       newestStudentByIdentity.set(identityKey, student);
     }
   }
