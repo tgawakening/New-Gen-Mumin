@@ -32,14 +32,22 @@ export async function GET(request: Request, { params }: RouteProps) {
     return NextResponse.json({ error: "Recording not found or access denied." }, { status: 404 });
   }
 
-  let driveFileId = recording.driveFileId;
+  const driveFileId = recording.driveFileId;
   if (!driveFileId) {
     return NextResponse.json({ error: "Recording is still being prepared for playback." }, { status: 409 });
   }
 
-  const driveResponse = await driveMediaRequest(driveFileId, request.headers.get("range"));
-  return new Response(driveResponse.body, {
-    status: driveResponse.status,
-    headers: passthroughHeaders(driveResponse),
-  });
+  try {
+    const driveResponse = await driveMediaRequest(driveFileId, request.headers.get("range"));
+    return new Response(driveResponse.body, {
+      status: driveResponse.status,
+      headers: passthroughHeaders(driveResponse),
+    });
+  } catch (error) {
+    console.error(`[recording-media] Temporary playback failure for ${recordingId}.`, error);
+    return NextResponse.json(
+      { error: "Recording playback is temporarily unavailable. Please retry in a moment." },
+      { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "3" } },
+    );
+  }
 }

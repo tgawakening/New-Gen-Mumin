@@ -5,6 +5,11 @@ import { SignJWT, importPKCS8 } from "jose";
 import { env } from "@/lib/env";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
+const ACCESS_TOKEN_CACHE_MS = 50 * 60 * 1000;
+const TRANSIENT_DRIVE_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+let cachedAccessToken: { value: string; expiresAt: number } | null = null;
+let accessTokenRequest: Promise<string> | null = null;
 
 function normalizePrivateKey(value: string) {
   let key = value.trim();
@@ -144,7 +149,7 @@ async function getServiceAccountAccessToken(config: ReturnType<typeof getDriveCo
   return payload.access_token;
 }
 
-async function getAccessToken() {
+async function requestAccessToken() {
   const config = getDriveConfig();
   if (config.oauthClientId && config.oauthClientSecret && config.oauthRefreshToken) {
     return getOAuthAccessToken(config);
@@ -153,6 +158,24 @@ async function getAccessToken() {
   return getServiceAccountAccessToken(config);
 }
 
+async function getAccessToken() {
+  if (cachedAccessToken && cachedAccessToken.expiresAt > Date.now()) return cachedAccessToken.value;
+  if (accessTokenRequest) return accessTokenRequest;
+
+  accessTokenRequest = requestAccessToken()
+    .then((value) => {
+      cachedAccessToken = { value, expiresAt: Date.now() + ACCESS_TOKEN_CACHE_MS };
+      return value;
+    })
+    .finally(() => {
+      accessTokenRequest = null;
+    });
+  return accessTokenRequest;
+}
+
+function invalidateAccessToken() {
+  cachedAccessToken = null;
+}
 async function parseDriveResponse<T>(response: Response) {
   const text = await response.text();
   if (!text.trim()) return undefined as T;
@@ -252,23 +275,33 @@ export async function driveResumableUploadRequest<T>(sessionUrl: string, init: R
 }
 
 export async function driveMediaRequest(fileId: string, rangeHeader?: string | null) {
-  const accessToken = await getAccessToken();
-  const response = await fetch(
-    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        ...(rangeHeader ? { Range: rangeHeader } : {}),
-      },
-      cache: "no-store",
-    },
-  );
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const accessToken = await getAccessToken();
+      const response = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`,
+        {
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...(rangeHeader ? { Range: rangeHeader } : {}),
+          },
+          cache: "no-store",
+        },
+      );
+      if (response.ok || response.status === 206) return response;
 
-  if (!response.ok && response.status !== 206) {
-    throw new Error(`Google Drive media request failed: ${await response.text()}`);
+      if (response.status === 401) invalidateAccessToken();
+      const detail = (await response.text()).slice(0, 240);
+      lastError = new Error(`Google Drive media request failed (${response.status}): ${detail}`);
+      if (!TRANSIENT_DRIVE_STATUSES.has(response.status) && response.status !== 401) throw lastError;
+    } catch (error) {
+      lastError = error;
+    }
+
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** attempt));
   }
-
-  return response;
+  throw lastError instanceof Error ? lastError : new Error("Google Drive media request failed temporarily.");
 }
 
 export function getDriveRootFolderId() {
