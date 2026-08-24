@@ -181,6 +181,7 @@ function choosePrimaryZoomRecordingFile(files: Array<{
   play_url?: string;
   download_url?: string;
   file_type?: string;
+  recording_type?: string;
   file_size?: number;
   recording_start?: string;
   recording_end?: string;
@@ -191,15 +192,22 @@ function choosePrimaryZoomRecordingFile(files: Array<{
     if (!file.play_url) return false;
     if (["CHAT", "CC", "TRANSCRIPT", "TIMELINE", "SUMMARY"].includes(fileType)) return false;
     if (playUrl.includes("file_type=chat")) return false;
-    return true;
+    return fileType === "MP4" || !fileType;
   });
 
-  return (
-    playable.find((file) => (file.file_type ?? "").toUpperCase() === "MP4") ??
-    playable.find((file) => (file.file_type ?? "").toUpperCase() === "M4A") ??
-    playable[0] ??
-    null
-  );
+  const layoutScore = (file: (typeof playable)[number]) => {
+    const layout = (file.recording_type ?? "").toLowerCase();
+    if (layout.includes("shared_screen_with_speaker_view")) return 500;
+    if (layout.includes("shared_screen_with_gallery_view")) return 480;
+    if (layout.includes("shared_screen")) return 450;
+    if (layout.includes("active_speaker") || layout.includes("speaker_view")) return 300;
+    if (layout.includes("gallery_view")) return 250;
+    return 100;
+  };
+
+  return playable.sort((left, right) =>
+    layoutScore(right) - layoutScore(left) || (right.file_size ?? 0) - (left.file_size ?? 0),
+  )[0] ?? null;
 }
 
 function fallbackZoomRecordingFileId(scheduleId: string, playUrl: string) {
@@ -939,38 +947,67 @@ export async function syncRecentZoomRecordingsForAdmin() {
     const recordingEnd = recordingStart && meeting.duration && meeting.duration > 0
       ? new Date(recordingStart.getTime() + meeting.duration * 60 * 1000)
       : primaryFile.recording_end ? new Date(primaryFile.recording_end) : null;
-    const existingRecording = await db.liveClassRecording.findUnique({
+    let existingRecording = await db.liveClassRecording.findUnique({
       where: { recordingFileId },
-      select: { driveFileId: true, storageProvider: true },
+      select: { id: true, recordingFileId: true, driveFileId: true, storageProvider: true },
     });
-    const shouldPreserveDriveState = Boolean(existingRecording?.driveFileId);
+    if (!existingRecording && recordingStart) {
+      const toleranceMs = 2 * 60 * 1000;
+      existingRecording = await db.liveClassRecording.findFirst({
+        where: {
+          scheduleId: schedule.id,
+          deletedAt: null,
+          recordingStart: {
+            gte: new Date(recordingStart.getTime() - toleranceMs),
+            lte: new Date(recordingStart.getTime() + toleranceMs),
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true, recordingFileId: true, driveFileId: true, storageProvider: true },
+      });
+    }
 
-    await db.liveClassRecording.upsert({
-      where: { recordingFileId },
-      create: {
-        scheduleId: schedule.id,
-        recordingFileId,
-        meetingId: meetingCandidates[0],
-        topic: meeting.topic ?? schedule.title,
-        fileType: primaryFile.file_type ?? null,
-        playUrl: primaryFile.play_url,
-        downloadUrl: primaryFile.download_url ?? null,
-        storageProvider: "zoom",
-        recordingStart,
-        recordingEnd,
-        fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
-      },
-      update: {
-        playUrl: shouldPreserveDriveState ? undefined : primaryFile.play_url,
-        downloadUrl: primaryFile.download_url ?? null,
-        storageProvider: shouldPreserveDriveState ? existingRecording?.storageProvider ?? "google-drive" : "zoom",
-        fileType: primaryFile.file_type ?? null,
-        recordingStart,
-        recordingEnd,
-        fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
-        deletedAt: null,
-      },
-    });
+    if (existingRecording) {
+      const replacingLayout = existingRecording.recordingFileId !== recordingFileId;
+      await db.liveClassRecording.update({
+        where: { id: existingRecording.id },
+        data: {
+          recordingFileId,
+          meetingId: meetingCandidates[0],
+          topic: meeting.topic ?? schedule.title,
+          playUrl: primaryFile.play_url,
+          downloadUrl: primaryFile.download_url ?? null,
+          storageProvider: replacingLayout ? "zoom" : existingRecording.storageProvider ?? "zoom",
+          driveFileId: replacingLayout ? null : undefined,
+          driveViewUrl: replacingLayout ? null : undefined,
+          driveFolderId: replacingLayout ? null : undefined,
+          driveUploadSessionUrl: replacingLayout ? null : undefined,
+          driveUploadOffset: replacingLayout ? BigInt(0) : undefined,
+          driveUploadTotal: replacingLayout ? null : undefined,
+          fileType: primaryFile.file_type ?? null,
+          recordingStart,
+          recordingEnd,
+          fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
+          deletedAt: null,
+        },
+      });
+    } else {
+      await db.liveClassRecording.create({
+        data: {
+          scheduleId: schedule.id,
+          recordingFileId,
+          meetingId: meetingCandidates[0],
+          topic: meeting.topic ?? schedule.title,
+          fileType: primaryFile.file_type ?? null,
+          playUrl: primaryFile.play_url,
+          downloadUrl: primaryFile.download_url ?? null,
+          storageProvider: "zoom",
+          recordingStart,
+          recordingEnd,
+          fileSize: typeof primaryFile.file_size === "number" ? BigInt(primaryFile.file_size) : null,
+        },
+      });
+    }
     imported += 1;
   }
 

@@ -27,32 +27,38 @@ function fallbackRecordingFileId(scheduleId: string, playUrl: string) {
   return `${scheduleId}-${createHash("sha256").update(playUrl).digest("hex").slice(0, 32)}`;
 }
 
-function choosePrimaryRecordingFile(
-  files: Array<{
-    id?: string;
-    play_url?: string;
-    download_url?: string;
-    file_type?: string;
-    file_size?: number;
-    recording_start?: string;
-    recording_end?: string;
-  }>,
-) {
+function choosePrimaryRecordingFile(files: Array<{
+  id?: string;
+  play_url?: string;
+  download_url?: string;
+  file_type?: string;
+  recording_type?: string;
+  file_size?: number;
+  recording_start?: string;
+  recording_end?: string;
+}>) {
   const playable = files.filter((file) => {
     const fileType = (file.file_type ?? "").toUpperCase();
     const playUrl = (file.play_url ?? "").toLowerCase();
     if (!file.play_url) return false;
     if (["CHAT", "CC", "TRANSCRIPT", "TIMELINE", "SUMMARY"].includes(fileType)) return false;
     if (playUrl.includes("file_type=chat")) return false;
-    return true;
+    return fileType === "MP4" || !fileType;
   });
 
-  return (
-    playable.find((file) => (file.file_type ?? "").toUpperCase() === "MP4") ??
-    playable.find((file) => (file.file_type ?? "").toUpperCase() === "M4A") ??
-    playable[0] ??
-    null
-  );
+  const layoutScore = (file: (typeof playable)[number]) => {
+    const layout = (file.recording_type ?? "").toLowerCase();
+    if (layout.includes("shared_screen_with_speaker_view")) return 500;
+    if (layout.includes("shared_screen_with_gallery_view")) return 480;
+    if (layout.includes("shared_screen")) return 450;
+    if (layout.includes("active_speaker") || layout.includes("speaker_view")) return 300;
+    if (layout.includes("gallery_view")) return 250;
+    return 100;
+  };
+
+  return playable.sort((left, right) =>
+    layoutScore(right) - layoutScore(left) || (right.file_size ?? 0) - (left.file_size ?? 0),
+  )[0] ?? null;
 }
 
 function isRecordingTableUnavailable(error: unknown) {
