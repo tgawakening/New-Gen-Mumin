@@ -7,7 +7,11 @@ import {
   sendTeacherZoomMeetingApprovedEmail,
 } from "@/lib/email/notifications";
 import { durationMinutes, nextWeeklyOccurrence, toZoomLocalStartTime } from "@/lib/live-classes/time";
-import { createRecurringZoomMeeting, isZoomConfigured } from "@/lib/zoom/client";
+import {
+  createRecurringZoomMeeting,
+  getZoomHostUserIdForTeacherEmail,
+  isZoomConfigured,
+} from "@/lib/zoom/client";
 import { DEFAULT_OFFERS, getCatalogOfferProgramSlugs } from "@/lib/registration/catalog";
 import { isArabicTajweedSlug } from "@/lib/genm/curriculum";
 
@@ -183,23 +187,30 @@ async function createZoomMeetingAllowingBasicUsers(
   }
 }
 
-async function createZoomMeetingForTeacher(input: CreateLiveClassInput, programTitle: string) {
+async function createZoomMeetingForTeacher(
+  input: CreateLiveClassInput,
+  programTitle: string,
+  teacherEmail: string,
+) {
   if (!input.createZoomMeeting) return null;
 
-  return createZoomMeetingAllowingBasicUsers({
-    topic: cleanLiveClassTitle(input.title),
-    agenda: `${programTitle} teacher-created live session`,
-    timezone: input.timezone,
-    startTime: toZoomLocalStartTime(getScheduleStartDate(input)),
-    durationMinutes: durationMinutes(input.startTime, input.endTime),
-    weekday: input.weekday,
-    waitingRoom: input.waitingRoom,
-    joinBeforeHost: input.joinBeforeHost,
-    muteUponEntry: input.muteUponEntry,
-    autoRecording: input.autoRecording,
-    passcode: input.passcode,
-    alternativeHosts: [],
-  });
+  return createZoomMeetingAllowingBasicUsers(
+    {
+      topic: cleanLiveClassTitle(input.title),
+      agenda: `${programTitle} teacher-created live session`,
+      timezone: input.timezone,
+      startTime: toZoomLocalStartTime(getScheduleStartDate(input)),
+      durationMinutes: durationMinutes(input.startTime, input.endTime),
+      weekday: input.weekday,
+      waitingRoom: input.waitingRoom,
+      joinBeforeHost: input.joinBeforeHost,
+      muteUponEntry: input.muteUponEntry,
+      autoRecording: input.autoRecording,
+      passcode: input.passcode,
+      alternativeHosts: [],
+    },
+    { hostUserId: getZoomHostUserIdForTeacherEmail(teacherEmail) },
+  );
 }
 
 function isRosterTableUnavailable(error: unknown) {
@@ -601,24 +612,30 @@ export async function createLiveClass(input: CreateLiveClassInput, createdByUser
       : await db.program.findMany({ where: { id: input.programId } });
   if (!programs.length) throw new Error("Program not found.");
 
+  const zoomHostUserId = teachers
+    .map((teacher) => getZoomHostUserIdForTeacherEmail(teacher.user.email))
+    .find((hostUserId): hostUserId is string => Boolean(hostUserId));
   const meeting = input.createZoomMeeting
-    ? await createZoomMeetingAllowingBasicUsers({
-        topic: cleanLiveClassTitle(input.title),
-        agenda:
-          input.programId === WHOLE_GEN_MUMIN_PROGRAM_ID
-            ? "Whole Gen-Mumin live session"
-            : `${programs[0].title} live class`,
-        timezone: input.timezone,
-        startTime: toZoomLocalStartTime(getScheduleStartDate(input)),
-        durationMinutes: durationMinutes(input.startTime, input.endTime),
-        weekday: input.weekday,
-        waitingRoom: input.waitingRoom,
-        joinBeforeHost: input.joinBeforeHost,
-        muteUponEntry: input.muteUponEntry,
-        autoRecording: input.autoRecording,
-        passcode: input.passcode,
-        alternativeHosts: [],
-      })
+    ? await createZoomMeetingAllowingBasicUsers(
+        {
+          topic: cleanLiveClassTitle(input.title),
+          agenda:
+            input.programId === WHOLE_GEN_MUMIN_PROGRAM_ID
+              ? "Whole Gen-Mumin live session"
+              : `${programs[0].title} live class`,
+          timezone: input.timezone,
+          startTime: toZoomLocalStartTime(getScheduleStartDate(input)),
+          durationMinutes: durationMinutes(input.startTime, input.endTime),
+          weekday: input.weekday,
+          waitingRoom: input.waitingRoom,
+          joinBeforeHost: input.joinBeforeHost,
+          muteUponEntry: input.muteUponEntry,
+          autoRecording: input.autoRecording,
+          passcode: input.passcode,
+          alternativeHosts: [],
+        },
+        { hostUserId: zoomHostUserId },
+      )
     : null;
 
   const createdSchedules = [];
@@ -691,7 +708,7 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
 
-  const meeting = await createZoomMeetingForTeacher(input, program.title);
+  const meeting = await createZoomMeetingForTeacher(input, program.title, teacher.user.email);
 
   const schedule = await db.classSchedule.create({
     data: {

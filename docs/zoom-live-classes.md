@@ -79,8 +79,25 @@ ZOOM_ACCOUNT_ID=""
 ZOOM_CLIENT_ID=""
 ZOOM_CLIENT_SECRET=""
 ZOOM_HOST_USER_ID=""
+ZOOM_TEACHER_HOSTS_JSON='{"teacher1@example.com":"teacher1@example.com","teacher2@example.com":"teacher2@example.com"}'
 ZOOM_WEBHOOK_SECRET_TOKEN=""
 LIVE_CLASS_REMINDER_MINUTES="15"
 ```
 
 `ZOOM_HOST_USER_ID` can be the Zoom host email address.
+
+## Concurrent Teacher Meetings
+
+`Join before host` does not bypass Zoom's concurrent-meeting limit. Give every teacher who may teach at the same time a separate licensed user under the same Zoom account, then map the teacher's portal email to that Zoom user in `ZOOM_TEACHER_HOSTS_JSON`.
+
+New meetings are created under the mapped teacher. If a teacher is not mapped, meeting creation falls back to `ZOOM_HOST_USER_ID`. Existing recurring meetings keep their original host, so recreate them after adding the mapping.
+
+In the Zoom web portal, configure these settings for the teacher users or lock them at account/group level:
+
+- `Waiting Room`: off when students must enter before the teacher.
+- `Allow participants to join before host`: on.
+- `Screen sharing` > `Who can share?`: `All Participants` if a teacher is joining as a participant.
+- `Automatic recording`: `Record in the cloud`.
+- Cloud recording: enable `Record active speaker with shared screen`, `Record gallery view with shared screen`, and `Record shared screen separately`.
+
+A teacher should use `Start as host` for a meeting assigned to their Zoom user. `Join as member` is only a participant fallback; it does not grant host controls and cannot overcome a meeting owned by another host who already has a meeting running.
