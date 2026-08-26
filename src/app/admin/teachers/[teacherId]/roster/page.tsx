@@ -9,7 +9,7 @@ import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/te
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, syncTeacherProgramRoster } from "@/lib/live-classes/service";
+import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, getTeacherRosterAssignments, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type Props = { params: Promise<{ teacherId: string }> };
 
@@ -40,6 +40,7 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
   });
   if (!teacher) redirect("/admin/teachers");
 
+  const rosterAssignments = getTeacherRosterAssignments(teacher);
   const entries = await getTeacherProgramRosterEntries(teacher.id);
   const selectedByProgram = new Map<string, Set<string>>();
   for (const entry of entries) {
@@ -47,7 +48,7 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
     selected.add(entry.studentId);
     selectedByProgram.set(entry.programId, selected);
   }
-  const eligibleByProgram = new Map(await Promise.all(teacher.programAssignments.map(async (assignment) => [assignment.programId, await getProgramEligibleRosterStudents(assignment.programId)] as const)));
+  const eligibleByProgram = new Map(await Promise.all(rosterAssignments.map(async (assignment) => [assignment.programId, await getProgramEligibleRosterStudents(assignment.programId)] as const)));
 
   async function saveRoster(formData: FormData) {
     "use server";
@@ -55,8 +56,9 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
     if (!current || current.user.role !== "ADMIN") redirect("/admin");
     const requestedTeacherId = String(formData.get("teacherId") || "");
     const programId = String(formData.get("programId") || "");
-    const target = await db.teacherProfile.findFirst({ where: { id: requestedTeacherId, programAssignments: { some: { programId } } }, select: { id: true } });
+    const target = await db.teacherProfile.findUnique({ where: { id: requestedTeacherId }, include: { user: true, programAssignments: { include: { program: true } } } });
     if (!target) redirect("/admin/teachers");
+    if (!getTeacherRosterAssignments(target).some((assignment) => assignment.programId === programId)) redirect("/admin/teachers");
     const eligible = await getProgramEligibleRosterStudents(programId);
     const allowed = new Set(eligible.map((student) => student.id));
     const studentIds = formData.getAll("studentIds").map(String).filter((id) => allowed.has(id));
@@ -72,7 +74,7 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
     <TeacherDashboardFrame title={`${name} - roster`} subtitle="Admin roster management. Changes appear in the teacher's own dashboard without changing their login or active sessions." navItems={adminTeacherNav(teacher.id)}>
       <TeacherSection eyebrow="Admin teacher access" title="Programme rosters" action={<Link href={`/admin/teachers?teacher=${teacher.id}`} className="rounded-full border px-4 py-2 text-sm font-semibold text-[#22304a]">Back to dashboard</Link>}>
         <div className="space-y-7">
-          {teacher.programAssignments.map((assignment) => {
+          {rosterAssignments.map((assignment) => {
             const students = eligibleByProgram.get(assignment.programId) ?? [];
             const selected = selectedByProgram.get(assignment.programId) ?? new Set<string>();
             return (
@@ -93,7 +95,7 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
               </form>
             );
           })}
-          {!teacher.programAssignments.length ? <p className="rounded-2xl bg-[#fbf6ef] p-5 text-sm text-[#617184]">Assign a programme to this teacher before creating a roster.</p> : null}
+          {!rosterAssignments.length ? <p className="rounded-2xl bg-[#fbf6ef] p-5 text-sm text-[#617184]">Assign a programme to this teacher before creating a roster.</p> : null}
         </div>
       </TeacherSection>
     </TeacherDashboardFrame>

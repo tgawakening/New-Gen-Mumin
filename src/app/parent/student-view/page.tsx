@@ -364,6 +364,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
                   startsAt={selectedChild.nextClass.nextStartsAt.toISOString()}
                   meetingUrl={selectedChild.nextClass.meetingUrl}
                   accessLocked={selectedChild.accessLocked}
+                  isLive={selectedChild.nextClass.isLive}
                 />
               </div>
             ) : (

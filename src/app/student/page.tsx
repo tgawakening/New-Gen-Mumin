@@ -530,6 +530,7 @@ export default async function StudentDashboardPage() {
                   startsAt={child.nextClass.nextStartsAt.toISOString()}
                   meetingUrl={child.nextClass.meetingUrl ? `/api/live-classes/${child.nextClass.id}/join?student=${encodeURIComponent(child.id)}` : null}
                   accessLocked={child.accessLocked}
+                  isLive={child.nextClass.isLive}
                 />
                 {nextClassRoom ? (
                   <div className="mt-4 rounded-2xl bg-white/10 p-3 text-sm">

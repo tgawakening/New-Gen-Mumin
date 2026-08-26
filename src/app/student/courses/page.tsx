@@ -301,6 +301,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                         startsAt={session.nextStartsAt.toISOString()}
                         meetingUrl={session.meetingUrl}
                         accessLocked={child.accessLocked}
+                        isLive={session.isLive}
                       />
                     </div>
                   ))}

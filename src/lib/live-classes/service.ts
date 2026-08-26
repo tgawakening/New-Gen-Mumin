@@ -239,6 +239,25 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
   }
 }
 
+type TeacherRosterAssignment = {
+  programId: string;
+  program: { slug: string; title: string };
+};
+
+export function getTeacherRosterAssignments<T extends TeacherRosterAssignment>(teacher: {
+  user: { firstName: string; lastName?: string | null; email: string };
+  programAssignments: T[];
+}) {
+  const identity = `${teacher.user.firstName} ${teacher.user.lastName ?? ""} ${teacher.user.email}`.toLowerCase();
+  if (identity.includes("mehran")) return teacher.programAssignments;
+
+  const teachesArabicTajweed = teacher.programAssignments.some((assignment) =>
+    isArabicTajweedSlug(assignment.program.slug),
+  );
+  return teachesArabicTajweed
+    ? teacher.programAssignments.filter((assignment) => isArabicTajweedSlug(assignment.program.slug))
+    : teacher.programAssignments;
+}
 export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
   try {
     const rosterEntries = await db.teacherStudentRoster.findMany({

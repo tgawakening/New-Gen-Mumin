@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
-  const schedule = await db.classSchedule.findFirst({
+  const schedules = await db.classSchedule.findMany({
     where: {
       OR: [{ meetingId }, { recurringSeriesId: meetingId }],
     },
@@ -173,6 +173,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
+  const schedule = schedules[0];
   if (!schedule) {
     return NextResponse.json({ received: true });
   }
@@ -204,19 +205,20 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "meeting.started") {
-    await recordLiveClassSessionOccurrence({
-      scheduleId: schedule.id,
-      meetingId,
-      source: "zoom-webhook",
-    });
-
     const users = new Map<string, "teacher" | "student" | "parent">();
-    users.set(schedule.teacher.user.id, "teacher");
 
-    if (isLiveClassVisibleToStudents(schedule.title)) {
-      const rosterStudentIds = new Set(await getScheduleRosterStudentIds(schedule.id));
-      const audienceGroup = getLiveClassAudienceGroup(schedule.title);
-      for (const enrollment of schedule.program.enrollments) {
+    for (const matchingSchedule of schedules) {
+      await recordLiveClassSessionOccurrence({
+        scheduleId: matchingSchedule.id,
+        meetingId,
+        source: "zoom-webhook",
+      });
+      users.set(matchingSchedule.teacher.user.id, "teacher");
+
+      if (!isLiveClassVisibleToStudents(matchingSchedule.title)) continue;
+      const rosterStudentIds = new Set(await getScheduleRosterStudentIds(matchingSchedule.id));
+      const audienceGroup = getLiveClassAudienceGroup(matchingSchedule.title);
+      for (const enrollment of matchingSchedule.program.enrollments) {
         if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
         if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
         users.set(enrollment.student.user.id, "student");
@@ -237,11 +239,13 @@ export async function POST(request: NextRequest) {
 
   if (payload.event === "meeting.ended") {
     const endedAt = payload.payload?.object?.end_time ? new Date(payload.payload.object.end_time) : new Date();
-    await recordLiveClassSessionEnd({
-      scheduleId: schedule.id,
-      meetingId,
-      endedAt,
-    });
+    for (const matchingSchedule of schedules) {
+      await recordLiveClassSessionEnd({
+        scheduleId: matchingSchedule.id,
+        meetingId,
+        endedAt,
+      });
+    }
     await closeOpenZoomAttendanceIntervals(schedule.id, meetingId, endedAt);
 
     return NextResponse.json({ received: true });

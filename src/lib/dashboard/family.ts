@@ -94,6 +94,7 @@ type ChildScheduleSummary = {
   meetingUrl: string | null;
   teacherName: string | null;
   provider: string | null;
+  isLive: boolean;
 };
 
 type ChildQuizSummary = {
@@ -597,6 +598,12 @@ function mapScheduleSummary(schedule: any, title: string, category: "CLASS" | "P
     meetingUrl: schedule.meetingUrl,
     teacherName: buildTeacherName(schedule.teacher),
     provider: schedule.meetingProvider,
+    isLive: Boolean(
+      schedule.sessionOccurrences?.some(
+        (occurrence: { startedAt: Date; endedAt?: Date | null }) =>
+          !occurrence.endedAt && occurrence.startedAt.getTime() >= Date.now() - 6 * 60 * 60 * 1000,
+      ),
+    ),
   };
 }
 
@@ -615,6 +622,11 @@ async function getParentalSessionSchedules() {
     orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
     include: {
       teacher: { include: { user: true } },
+      sessionOccurrences: {
+        where: { endedAt: null },
+        orderBy: { startedAt: "desc" },
+        take: 1,
+      },
     },
   });
 
@@ -748,7 +760,9 @@ function mapScheduleEntries(
     if (!deduped.has(key)) deduped.set(key, entry);
   }
 
-  return [...deduped.values()].sort((left, right) => left.nextStartsAt.getTime() - right.nextStartsAt.getTime());
+  return [...deduped.values()].sort(
+    (left, right) => Number(right.isLive) - Number(left.isLive) || left.nextStartsAt.getTime() - right.nextStartsAt.getTime(),
+  );
 }
 
 function mapQuizSummaries(quizzes: any[], quizAttempts: any[]) {
@@ -1211,6 +1225,11 @@ async function getParentProfile(userId: string) {
                               studentId: true,
                             },
                           },
+                          sessionOccurrences: {
+                            where: { endedAt: null },
+                            orderBy: { startedAt: "desc" },
+                            take: 1,
+                          },
                           teacher: {
                             include: {
                               user: true,
@@ -1428,6 +1447,11 @@ export async function getStudentDashboardData(userId: string) {
                     select: {
                       studentId: true,
                     },
+                  },
+                  sessionOccurrences: {
+                    where: { endedAt: null },
+                    orderBy: { startedAt: "desc" },
+                    take: 1,
                   },
                   teacher: {
                     include: {

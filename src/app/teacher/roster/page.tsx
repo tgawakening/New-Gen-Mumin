@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, syncTeacherProgramRoster } from "@/lib/live-classes/service";
+import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, getTeacherRosterAssignments, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -46,10 +46,11 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
 
   if (!teacher) redirect("/teacher-registration");
 
+  const rosterAssignments = getTeacherRosterAssignments(teacher);
   const programRosterEntries = await getTeacherProgramRosterEntries(teacher.id);
   const eligibleStudentsByProgram = new Map(
     await Promise.all(
-      teacher.programAssignments.map(async (assignment) => [
+      rosterAssignments.map(async (assignment) => [
         assignment.programId,
         await getProgramEligibleRosterStudents(assignment.programId),
       ] as const),
@@ -70,12 +71,12 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
 
     const teacherProfile = await db.teacherProfile.findUnique({
       where: { userId: currentSession.user.id },
-      include: { programAssignments: true },
+      include: { user: true, programAssignments: { include: { program: true } } },
     });
     if (!teacherProfile) redirect("/teacher-registration");
 
     const programId = String(formData.get("programId") || "");
-    if (!teacherProfile.programAssignments.some((assignment) => assignment.programId === programId)) {
+    if (!getTeacherRosterAssignments(teacherProfile).some((assignment) => assignment.programId === programId)) {
       redirect(noticeHref("You can only update rosters for your assigned programmes.", "error"));
     }
 
@@ -120,7 +121,7 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
           Your selected roster becomes the default audience for future session notifications and reduces noise for teachers with split groups.
         </p>
         <div className="mt-6 space-y-10">
-          {teacher.programAssignments.map((assignment) => {
+          {rosterAssignments.map((assignment) => {
             const selectedIds = selectedStudentIdsByProgram.get(assignment.programId) ?? new Set<string>();
             const eligibleStudents = eligibleStudentsByProgram.get(assignment.programId) ?? [];
             return (

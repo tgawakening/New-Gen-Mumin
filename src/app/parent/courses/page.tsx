@@ -310,6 +310,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                           startsAt={session.nextStartsAt.toISOString()}
                           meetingUrl={session.meetingUrl}
                           accessLocked={selectedChild.accessLocked}
+                          isLive={session.isLive}
                         />
                       </div>
                     ))}
