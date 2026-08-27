@@ -1521,6 +1521,11 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                           Final {formatMoney(student.totalAmount, student.currency)}
                         </p>
                       ) : null}
+                      {student.discountAmount > 0 && student.currency ? (
+                        <p className="mt-1 font-semibold text-[#2f6b4b]">
+                          Discount applied: {formatMoney(student.discountAmount, student.currency)} saved
+                        </p>
+                      ) : null}
                       {student.couponCode ? (
                         <p className="mt-1 text-[#2f6b4b]">
                           Coupon {student.couponCode}

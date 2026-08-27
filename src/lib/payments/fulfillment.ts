@@ -1,4 +1,4 @@
-﻿import { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import {
@@ -273,16 +273,32 @@ async function applyAdminProgramSwitch(orderId: string) {
   );
   if (!newProgramIds.size) return;
 
-  await db.enrollment.updateMany({
-    where: {
-      studentId: { in: studentIds },
-      programId: { notIn: [...newProgramIds] },
-      status: { in: ["PENDING", "CONFIRMED", "ACTIVE", "COMPLETED"] },
-    },
-    data: {
-      status: "CANCELLED",
-    },
-  });
+  await db.$transaction([
+    db.enrollment.updateMany({
+      where: {
+        studentId: { in: studentIds },
+        programId: { notIn: [...newProgramIds] },
+        status: { in: ["PENDING", "CONFIRMED", "ACTIVE", "COMPLETED"] },
+      },
+      data: {
+        status: "CANCELLED",
+      },
+    }),
+    db.teacherStudentRoster.deleteMany({
+      where: {
+        studentId: { in: studentIds },
+        programId: { notIn: [...newProgramIds] },
+      },
+    }),
+    db.classScheduleRoster.deleteMany({
+      where: {
+        studentId: { in: studentIds },
+        schedule: {
+          programId: { notIn: [...newProgramIds] },
+        },
+      },
+    }),
+  ]);
 }
 
 export async function updateStripeSubscriptionAmount(

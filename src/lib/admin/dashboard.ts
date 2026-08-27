@@ -5,6 +5,19 @@ import { convertAmountToGbp } from "@/lib/registration/catalog";
 
 const COMPLETED_ENROLLMENT_STATUSES = new Set(["ACTIVE", "CONFIRMED", "COMPLETED"]);
 const COMPLETED_ENROLLMENT_STATUS_LIST = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
+const SEERAH_LIFE_SKILLS_BUNDLE_LABEL = "Seerah + Life Lessons & Leadership";
+
+function exactProgramSelectionLabel(programs: Array<{ slug: string; title: string }>) {
+  const slugs = new Set(programs.map((program) => program.slug));
+  const isExact = (...expected: string[]) =>
+    slugs.size === expected.length && expected.every((slug) => slugs.has(slug));
+
+  if (isExact("seerah", "life-lessons", "arabic", "tajweed")) return "Gen-Mumin Bundle";
+  if (isExact("seerah", "life-lessons")) return SEERAH_LIFE_SKILLS_BUNDLE_LABEL;
+  if (isExact("arabic", "tajweed") || isExact("arabic")) return "Arabic & Tajweed";
+  if (programs.length === 1) return displayProgramTitle(programs[0].title);
+  return programs.map((program) => displayProgramTitle(program.title)).sort().join(" + ");
+}
 
 function extractNoteValue(notes: string | null | undefined, label: string) {
   if (!notes) return null;
@@ -309,6 +322,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
           },
         },
         enrollments: {
+          where: { status: { in: [...COMPLETED_ENROLLMENT_STATUS_LIST] } },
           include: {
             program: true,
           },
@@ -360,13 +374,18 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       typeof (order.metadata as Record<string, unknown>).subscriptionId === "string"
         ? String((order.metadata as Record<string, unknown>).subscriptionId)
         : null);
+    const registrationProgramTitles = order.registration?.items.flatMap((item) =>
+      item.offer ? [displayProgramTitle(formatProgramTitle(item.offer.title, item.offer.slug))] : [],
+    ) ?? [];
     const programTitles = Array.from(
       new Set(
-        order.items.flatMap((item) => {
-          if (item.enrollment?.program?.title) return [displayProgramTitle(item.enrollment.program.title)];
-          if (item.offer?.title) return [displayProgramTitle(formatProgramTitle(item.offer.title, item.offer.slug))];
-          return [];
-        }),
+        registrationProgramTitles.length
+          ? registrationProgramTitles
+          : order.items.flatMap((item) => {
+              if (item.offer?.title) return [displayProgramTitle(formatProgramTitle(item.offer.title, item.offer.slug))];
+              if (item.enrollment?.program?.title) return [displayProgramTitle(item.enrollment.program.title)];
+              return [];
+            }),
       ),
     );
 
@@ -445,6 +464,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const studentsViewRaw = students.map((student) => {
     const latestOrder = student.parents[0]?.parent.orders[0] ?? null;
     const latestRegistration = student.registrationStudents[0]?.registration ?? null;
+    const programSelectionLabel = exactProgramSelectionLabel(student.enrollments.map((enrollment) => enrollment.program));
     const enrollmentDetails = student.enrollments.map((enrollment) => ({
       id: enrollment.id,
       programTitle: displayProgramTitle(enrollment.program.title),
@@ -479,6 +499,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       age: entry.student.age,
       programs: Array.from(new Set(entry.student.enrollments.map((enrollment) => displayProgramTitle(enrollment.program.title)))),
     })) ?? [];
+    const discountAmount = student.registrationStudents[0]?.items.reduce((sum, item) => sum + item.discountAmount, 0) ?? 0;
     const pricingLabel = student.registrationStudents.some((entry) =>
       entry.items.some((item) => item.discountAmount > 0),
     )
@@ -500,6 +521,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
         status: enrollment.status,
       })),
       enrollmentDetails,
+      programSelectionLabel,
       paymentGateway: latestOrder?.gateway ?? "Pending",
       registrationStatus: latestRegistration?.status ?? "Pending",
       orderNumber: latestOrder?.orderNumber ?? null,
@@ -509,6 +531,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       registrationSubmittedAt: latestRegistration?.submittedAt ?? null,
       registrationConvertedAt: latestRegistration?.convertedAt ?? null,
       pricingLabel,
+      discountAmount,
       couponCode:
         typeof extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponCode") === "string"
           ? String(extractPricingSnapshotValue(latestRegistration?.pricingSnapshot, "couponCode"))
@@ -550,7 +573,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   const studentsView = Array.from(
     new Map(
       studentsViewRaw
-        .filter((student) => studentSearch || student.enrollments.some((enrollment) => COMPLETED_ENROLLMENT_STATUSES.has(enrollment.status)))
+        .filter((student) => student.enrollments.some((enrollment) => COMPLETED_ENROLLMENT_STATUSES.has(enrollment.status)))
         .map((student) => {
           const dedupeKey = [
             student.name.trim().toLowerCase(),
@@ -592,7 +615,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     if (
       filters.studentProgram &&
       filters.studentProgram !== "ALL" &&
-      !student.enrollments.some((enrollment) => enrollment.programTitle === filters.studentProgram)
+      student.programSelectionLabel !== filters.studentProgram
     ) {
       return false;
     }
@@ -613,10 +636,10 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
   );
 
   const uniqueOrderPrograms = Array.from(
-    new Set(ordersView.flatMap((order) => order.programTitles)),
+    new Set([...ordersView.flatMap((order) => order.programTitles), SEERAH_LIFE_SKILLS_BUNDLE_LABEL]),
   ).sort((a, b) => a.localeCompare(b));
   const uniqueStudentPrograms = Array.from(
-    new Set(studentsView.flatMap((student) => student.enrollments.map((entry) => entry.programTitle))),
+    new Set([...studentsView.map((student) => student.programSelectionLabel), SEERAH_LIFE_SKILLS_BUNDLE_LABEL]),
   ).sort((a, b) => a.localeCompare(b));
 
   const revenueGbp = paidOrders.reduce((sum, order) => {

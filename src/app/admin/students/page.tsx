@@ -35,6 +35,7 @@ export default async function AdminStudentsPage() {
         },
       },
       enrollments: {
+        where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
         include: {
           program: true,
         },
