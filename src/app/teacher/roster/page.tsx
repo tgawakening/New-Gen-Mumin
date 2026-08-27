@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, getTeacherRosterAssignments, syncTeacherProgramRoster } from "@/lib/live-classes/service";
+import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, getTeacherRosterAssignments, getTeacherRosterProgramIds, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string }>;
@@ -57,10 +57,16 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
     ),
   );
   const selectedStudentIdsByProgram = new Map<string, Set<string>>();
-  for (const rosterEntry of programRosterEntries) {
-    const selected = selectedStudentIdsByProgram.get(rosterEntry.programId) ?? new Set<string>();
-    selected.add(rosterEntry.studentId);
-    selectedStudentIdsByProgram.set(rosterEntry.programId, selected);
+  for (const assignment of rosterAssignments) {
+    const sourceProgramIds = new Set(getTeacherRosterProgramIds(teacher, assignment.programId));
+    selectedStudentIdsByProgram.set(
+      assignment.programId,
+      new Set(
+        programRosterEntries
+          .filter((entry) => sourceProgramIds.has(entry.programId))
+          .map((entry) => entry.studentId),
+      ),
+    );
   }
 
   async function saveProgramRosterAction(formData: FormData) {
@@ -76,7 +82,8 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
     if (!teacherProfile) redirect("/teacher-registration");
 
     const programId = String(formData.get("programId") || "");
-    if (!getTeacherRosterAssignments(teacherProfile).some((assignment) => assignment.programId === programId)) {
+    const rosterProgramIds = getTeacherRosterProgramIds(teacherProfile, programId);
+    if (!rosterProgramIds.length) {
       redirect(noticeHref("You can only update rosters for your assigned programmes.", "error"));
     }
 
@@ -87,7 +94,7 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
     const studentIds = selectedIds.filter((id) => validStudentIds.has(id));
 
     try {
-      await syncTeacherProgramRoster(teacherProfile.id, programId, studentIds);
+      await Promise.all(rosterProgramIds.map((targetProgramId) => syncTeacherProgramRoster(teacherProfile.id, targetProgramId, studentIds)));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save roster.";
       redirect(noticeHref(message, "error"));

@@ -249,14 +249,35 @@ export function getTeacherRosterAssignments<T extends TeacherRosterAssignment>(t
   programAssignments: T[];
 }) {
   const identity = `${teacher.user.firstName} ${teacher.user.lastName ?? ""} ${teacher.user.email}`.toLowerCase();
-  if (identity.includes("mehran")) return teacher.programAssignments;
-
   const teachesArabicTajweed = teacher.programAssignments.some((assignment) =>
     isArabicTajweedSlug(assignment.program.slug),
   );
-  return teachesArabicTajweed
+  const visibleAssignments = !identity.includes("mehran") && teachesArabicTajweed
     ? teacher.programAssignments.filter((assignment) => isArabicTajweedSlug(assignment.program.slug))
     : teacher.programAssignments;
+
+  let hasArabicTajweedRoster = false;
+  return visibleAssignments.filter((assignment) => {
+    if (!isArabicTajweedSlug(assignment.program.slug)) return true;
+    if (hasArabicTajweedRoster) return false;
+    hasArabicTajweedRoster = true;
+    return true;
+  });
+}
+
+export function getTeacherRosterProgramIds(
+  teacher: Parameters<typeof getTeacherRosterAssignments>[0],
+  displayedProgramId: string,
+) {
+  const displayedAssignment = getTeacherRosterAssignments(teacher).find(
+    (assignment) => assignment.programId === displayedProgramId,
+  );
+  if (!displayedAssignment) return [];
+  if (!isArabicTajweedSlug(displayedAssignment.program.slug)) return [displayedProgramId];
+
+  return teacher.programAssignments
+    .filter((assignment) => isArabicTajweedSlug(assignment.program.slug))
+    .map((assignment) => assignment.programId);
 }
 export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
   try {

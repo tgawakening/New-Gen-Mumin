@@ -9,7 +9,7 @@ import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/te
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, getTeacherRosterAssignments, syncTeacherProgramRoster } from "@/lib/live-classes/service";
+import { getProgramEligibleRosterStudents, getTeacherProgramRosterEntries, getTeacherRosterAssignments, getTeacherRosterProgramIds, syncTeacherProgramRoster } from "@/lib/live-classes/service";
 
 type Props = { params: Promise<{ teacherId: string }> };
 
@@ -43,10 +43,12 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
   const rosterAssignments = getTeacherRosterAssignments(teacher);
   const entries = await getTeacherProgramRosterEntries(teacher.id);
   const selectedByProgram = new Map<string, Set<string>>();
-  for (const entry of entries) {
-    const selected = selectedByProgram.get(entry.programId) ?? new Set<string>();
-    selected.add(entry.studentId);
-    selectedByProgram.set(entry.programId, selected);
+  for (const assignment of rosterAssignments) {
+    const sourceProgramIds = new Set(getTeacherRosterProgramIds(teacher, assignment.programId));
+    selectedByProgram.set(
+      assignment.programId,
+      new Set(entries.filter((entry) => sourceProgramIds.has(entry.programId)).map((entry) => entry.studentId)),
+    );
   }
   const eligibleByProgram = new Map(await Promise.all(rosterAssignments.map(async (assignment) => [assignment.programId, await getProgramEligibleRosterStudents(assignment.programId)] as const)));
 
@@ -58,11 +60,12 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
     const programId = String(formData.get("programId") || "");
     const target = await db.teacherProfile.findUnique({ where: { id: requestedTeacherId }, include: { user: true, programAssignments: { include: { program: true } } } });
     if (!target) redirect("/admin/teachers");
-    if (!getTeacherRosterAssignments(target).some((assignment) => assignment.programId === programId)) redirect("/admin/teachers");
+    const rosterProgramIds = getTeacherRosterProgramIds(target, programId);
+    if (!rosterProgramIds.length) redirect("/admin/teachers");
     const eligible = await getProgramEligibleRosterStudents(programId);
     const allowed = new Set(eligible.map((student) => student.id));
     const studentIds = formData.getAll("studentIds").map(String).filter((id) => allowed.has(id));
-    await syncTeacherProgramRoster(target.id, programId, studentIds);
+    await Promise.all(rosterProgramIds.map((targetProgramId) => syncTeacherProgramRoster(target.id, targetProgramId, studentIds)));
     revalidatePath(`/admin/teachers/${target.id}/roster`);
     revalidatePath("/teacher/roster");
     revalidatePath("/teacher/live-sessions");
