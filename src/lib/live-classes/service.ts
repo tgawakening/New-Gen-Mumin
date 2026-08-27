@@ -48,6 +48,7 @@ const AUDIENCE_LABELS: Record<LiveClassAudienceGroup, string> = {
 };
 const HIDDEN_FROM_STUDENTS_MARKER = "[Students:hidden]";
 const VISIBLE_TO_STUDENTS_MARKER = "[Students:visible]";
+export const PARENTAL_SESSION_MARKER = "[Category:PARENTAL]";
 const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const PAID_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
@@ -67,6 +68,7 @@ export function cleanLiveClassTitle(title: string) {
     .replace(/\s*\[Students:hidden\]\s*/gu, " ")
     .replace(/\s*\[Students:visible\]\s*/gu, " ")
     .replace(/\s*\[Audience:(PK_UK|US_CA|AU)\]\s*/gu, " ")
+    .replace(/\s*\[Category:PARENTAL\]\s*/gu, " ")
     .replace(/\s*\[Teachers:[^\]]+\]\s*/gu, " ")
     .replace(/\s+/gu, " ")
     .trim();
@@ -77,6 +79,14 @@ export function getLiveClassAudienceGroup(title: string): LiveClassAudienceGroup
   return match ? (match[1] as LiveClassAudienceGroup) : "ALL";
 }
 
+export function isParentalLiveClass(title?: string | null) {
+  const value = title ?? "";
+  return value.includes(PARENTAL_SESSION_MARKER) || /\b(parenting|parental|parents session|parent session)\b/iu.test(value);
+}
+
+export function liveClassCategoryTitle(title: string, programTitle: string) {
+  return isParentalLiveClass(title) ? "Parental Sessions" : programTitle;
+}
 export function isLiveClassVisibleToStudents(title: string) {
   return !title.includes(HIDDEN_FROM_STUDENTS_MARKER);
 }
@@ -478,7 +488,11 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     if (!registrationStudent.studentProfile) continue;
 
     const hasProgramOffer = registrationStudent.items.some((item) => offerIncludesProgram(item.offer, program));
-    if (hasProgramOffer) {
+    const hasActiveProgramEnrollment = registrationStudent.studentProfile.enrollments.some((enrollment) =>
+      ACTIVE_ENROLLMENT_STATUSES.includes(enrollment.status as (typeof ACTIVE_ENROLLMENT_STATUSES)[number]),
+    );
+    const hasProgramEnrollmentHistory = registrationStudent.studentProfile.enrollments.length > 0;
+    if (hasProgramOffer && (hasActiveProgramEnrollment || !hasProgramEnrollmentHistory)) {
       studentsById.set(registrationStudent.studentProfile.id, registrationStudent.studentProfile);
     }
   }
@@ -627,10 +641,16 @@ async function syncAutomaticScheduleRoster(scheduleId: string) {
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
   const defaultRosterStudentIds = new Set(await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId));
   const hasDefaultRoster = defaultRosterStudentIds.size > 0;
-  const studentIds = schedule.program.enrollments
-    .filter((enrollment) => !hasDefaultRoster || defaultRosterStudentIds.has(enrollment.studentId))
-    .filter((enrollment) => enrollmentMatchesLiveClassAudience(enrollment, audienceGroup))
-    .map((enrollment) => enrollment.studentId);
+  const studentIds = isParentalLiveClass(schedule.title)
+    ? await db.enrollment.findMany({
+        where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+        distinct: ["studentId"],
+        select: { studentId: true },
+      }).then((enrollments) => enrollments.map((enrollment) => enrollment.studentId))
+    : schedule.program.enrollments
+        .filter((enrollment) => !hasDefaultRoster || defaultRosterStudentIds.has(enrollment.studentId))
+        .filter((enrollment) => enrollmentMatchesLiveClassAudience(enrollment, audienceGroup))
+        .map((enrollment) => enrollment.studentId);
 
   await syncScheduleRoster(schedule.id, Array.from(new Set(studentIds)));
 }
@@ -950,7 +970,22 @@ export async function notifyEnrolledUsers(scheduleId: string) {
   const emailRecipients = new Map<string, { toEmail: string; recipientName: string; dashboardPath: string }>();
   users.set(schedule.teacher.user.id, { id: schedule.teacher.user.id, role: "teacher" });
 
-  for (const enrollment of schedule.program.enrollments) {
+  const notificationEnrollments = isParentalLiveClass(schedule.title)
+    ? await db.enrollment.findMany({
+        where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
+        include: {
+          parent: { include: { user: true } },
+          student: {
+            include: {
+              user: true,
+              registrationStudents: { select: { countryCode: true, countryName: true } },
+            },
+          },
+        },
+      })
+    : schedule.program.enrollments;
+
+  for (const enrollment of notificationEnrollments) {
     if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
     if (hasRosterOverride && !visibleStudentIds.has(enrollment.studentId)) continue;
     users.set(enrollment.student.user.id, { id: enrollment.student.user.id, role: "student" });
@@ -993,7 +1028,7 @@ export async function notifyEnrolledUsers(scheduleId: string) {
     [...emailRecipients.values()].map((recipient) =>
       sendLiveClassScheduledEmail({
         ...recipient,
-        programTitle: schedule.program.title,
+        programTitle: liveClassCategoryTitle(schedule.title, schedule.program.title),
         sessionTitle: visibleTitle,
         teacherName,
         schedule: scheduleLabel,

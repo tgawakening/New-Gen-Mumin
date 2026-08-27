@@ -4,7 +4,7 @@ import { TeacherHoursLogSource, TeacherHoursLogStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { sendTeacherHoursSubmittedEmail } from "@/lib/email/notifications";
-import { cleanLiveClassTitle, isLiveClassVisibleToStudents } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, isLiveClassVisibleToStudents, liveClassCategoryTitle } from "@/lib/live-classes/service";
 
 export const MIN_PAYABLE_TRACKED_SESSION_MINUTES = 15;
 const HOURS_LOG_EXCLUDED_MARKER = "[HOURS_LOG_EXCLUDED]";
@@ -179,7 +179,7 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
       occurrenceId: occurrence.id,
       source: TeacherHoursLogSource.TRACKED,
       title: cleanLiveClassTitle(occurrence.schedule.title),
-      programTitle: occurrence.schedule.program.title,
+      programTitle: liveClassCategoryTitle(occurrence.schedule.title, occurrence.schedule.program.title),
       sessionDate: occurrence.startedAt,
       startTime,
       durationMinutes: fallbackDuration,

@@ -10,6 +10,7 @@ import {
   getLiveClassAudienceGroup,
   getScheduleRosterStudentIds,
   isLiveClassVisibleToStudents,
+  isParentalLiveClass,
 } from "@/lib/live-classes/service";
 import { downloadZoomRecordingRange, findZoomRecordingDownloadUrl, getZoomUserRecordings } from "@/lib/zoom/client";
 
@@ -138,11 +139,12 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
       : null;
 
   const advancedArabic = isAdvancedArabicRecording(recording);
+  const parentalSession = isParentalLiveClass(recording.schedule.title) || isParentalLiveClass(recording.topic);
   return {
     id: recording.id,
     title: cleanRecordingTitle(recording.topic || recording.schedule.title),
-    programTitle: advancedArabic ? "Advanced Arabic" : displayProgramTitle(recording.schedule.program.title),
-    programSlug: advancedArabic ? "advanced-arabic" : recording.schedule.program.slug,
+    programTitle: parentalSession ? "Parental Sessions" : advancedArabic ? "Advanced Arabic" : displayProgramTitle(recording.schedule.program.title),
+    programSlug: parentalSession ? "parental-sessions" : advancedArabic ? "advanced-arabic" : recording.schedule.program.slug,
     teacherId: recording.schedule.teacherId,
     teacherName: collaborators.join(", "),
     teacherNames: collaborators,
@@ -324,16 +326,22 @@ export async function listStudentRecordings(studentUserId: string) {
     const recordings = await db.liveClassRecording.findMany({
       where: {
         deletedAt: null,
-        schedule: {
-          program: {
-            enrollments: {
-              some: {
-                studentId: student.id,
-                status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+        OR: [
+          { schedule: { title: { contains: "[Category:PARENTAL]" } } },
+          { schedule: { title: { contains: "parent" } } },
+          {
+            schedule: {
+              program: {
+                enrollments: {
+                  some: {
+                    studentId: student.id,
+                    status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+                  },
+                },
               },
             },
           },
-        },
+        ],
       },
       include: includeRecordingRelations(),
       orderBy: { availableAt: "desc" },
@@ -365,16 +373,22 @@ export async function listParentChildRecordings(parentUserId: string, childId: s
     const recordings = await db.liveClassRecording.findMany({
       where: {
         deletedAt: null,
-        schedule: {
-          program: {
-            enrollments: {
-              some: {
-                studentId: childId,
-                status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+        OR: [
+          { schedule: { title: { contains: "[Category:PARENTAL]" } } },
+          { schedule: { title: { contains: "parent" } } },
+          {
+            schedule: {
+              program: {
+                enrollments: {
+                  some: {
+                    studentId: childId,
+                    status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
+                  },
+                },
               },
             },
           },
-        },
+        ],
       },
       include: includeRecordingRelations(),
       orderBy: { availableAt: "desc" },

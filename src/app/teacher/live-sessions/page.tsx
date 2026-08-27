@@ -42,6 +42,8 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   if (!dashboard) redirect("/teacher-registration");
 
   const params = searchParams ? await searchParams : {};
+  const isMehran = (dashboard.teacherName + " " + dashboard.profile.email).toLowerCase().includes("mehran");
+  const seerahRoster = dashboard.rosters.find((roster) => roster.title.toLowerCase().includes("seerah"));
   const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
     ? params.programId
     : dashboard.rosters[0]?.programId;
@@ -68,13 +70,16 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
         <form action="/teacher/live-sessions/actions" method="post" className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <input type="hidden" name="intent" value="create" />
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
-            Program
+            Session category / programme
             <select name="programId" required defaultValue={defaultProgramId} className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
               {dashboard.rosters.map((roster) => (
                 <option key={roster.programId} value={roster.programId}>
                   {roster.title}
                 </option>
               ))}
+              {isMehran && seerahRoster ? (
+                <option value={"parental:" + seerahRoster.programId}>Parental Sessions (all families)</option>
+              ) : null}
             </select>
           </label>
 

@@ -17,7 +17,7 @@ import {
 } from "@/lib/teacher/hours-log";
 
 type PageProps = {
-  searchParams?: Promise<{ month?: string; start?: string; end?: string; notice?: string; tone?: string }>;
+  searchParams?: Promise<{ month?: string; start?: string; end?: string; program?: string; notice?: string; tone?: string }>;
 };
 
 function noticeHref(filter: { month?: string; start?: string; end?: string }, message: string, tone: "success" | "error" = "success") {
@@ -184,6 +184,20 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     start: params.start || "",
     end: params.end || "",
   };
+  const programTabs = Array.from(new Set(data.entries.map((entry) => entry.programTitle || "Programme not set"))).sort();
+  const activeProgram = params.program && programTabs.includes(params.program) ? params.program : "ALL";
+  const visibleEntries = activeProgram === "ALL"
+    ? data.entries
+    : data.entries.filter((entry) => (entry.programTitle || "Programme not set") === activeProgram);
+  const programHref = (program: string) => {
+    const query = new URLSearchParams();
+    if (currentFilter.month) query.set("month", currentFilter.month);
+    if (currentFilter.start) query.set("start", currentFilter.start);
+    if (currentFilter.end) query.set("end", currentFilter.end);
+    if (program !== "ALL") query.set("program", program);
+    return "/teacher/hours-log?" + query.toString();
+  };
+
   const monthOptions = Array.from({ length: 6 }, (_, index) => {
     const date = new Date();
     date.setUTCDate(1);
@@ -235,6 +249,13 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
       </TeacherSection>
 
       <TeacherSection eyebrow="Spreadsheet" title="Teaching hours rows">
+        <div className="mb-4 flex gap-2 overflow-x-auto pb-1">
+          {["ALL", ...programTabs].map((program) => (
+            <a key={program} href={programHref(program)} className={"shrink-0 rounded-full px-4 py-2 text-sm font-semibold " + (activeProgram === program ? "bg-[#22304a] text-white" : "border border-[#d8e3ed] bg-white text-[#22304a]")}>
+              {program === "ALL" ? "All programmes" : program}
+            </a>
+          ))}
+        </div>
         <div className="overflow-x-auto rounded-[24px] border border-[#eadfce] bg-white">
           <table className="min-w-[980px] w-full text-left text-sm">
             <thead className="bg-[#fbf6ef] text-xs uppercase tracking-[0.12em] text-[#8a6326]">
@@ -248,7 +269,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {data.entries.map((entry) => (
+              {visibleEntries.map((entry) => (
                 <tr key={entry.id} className="border-t border-[#f0e6d8] align-top">
                   <td className="px-4 py-3">{formatDate(entry.sessionDate)}<br /><span className="text-xs text-[#6d7785]">{entry.startTime ?? "Time not set"}</span></td>
                   <td className="px-4 py-3"><span className="font-semibold text-[#22304a]">{entry.title}</span><br /><span className="text-xs text-[#6d7785]">{entry.programTitle ?? "Programme not set"}</span></td>

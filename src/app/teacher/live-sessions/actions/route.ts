@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { requestTeacherLiveClass } from "@/lib/live-classes/service";
+import { PARENTAL_SESSION_MARKER, requestTeacherLiveClass } from "@/lib/live-classes/service";
 
 function noticeHref(message: string, tone: "success" | "error" = "success") {
   const params = new URLSearchParams({ notice: message, tone });
@@ -46,17 +46,22 @@ function revalidateLiveSessionViews() {
 
 async function createSession(request: NextRequest, formData: FormData, teacherUserId: string) {
   try {
+    const selectedProgram = String(formData.get("programId") || "");
+    const isParentalSession = selectedProgram.startsWith("parental:");
+    const programId = isParentalSession ? selectedProgram.slice("parental:".length) : selectedProgram;
+    const enteredTitle = String(formData.get("title") || "");
+    const title = isParentalSession ? enteredTitle + " " + PARENTAL_SESSION_MARKER : enteredTitle;
     const schedule = await requestTeacherLiveClass(
       {
-        programId: String(formData.get("programId") || ""),
-        title: String(formData.get("title") || ""),
+        programId,
+        title,
         startDate: String(formData.get("startDate") || ""),
         weekday: weekdayFromDateInput(String(formData.get("startDate") || "")) ?? 0,
         startTime: String(formData.get("startTime") || "16:00"),
         endTime: String(formData.get("endTime") || "17:00"),
         timezone: String(formData.get("timezone") || "Europe/London"),
         createZoomMeeting: true,
-        audienceGroup: String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
+        audienceGroup: isParentalSession ? "ALL" : String(formData.get("audienceGroup") || "ALL") as "ALL" | "PK_UK" | "US_CA" | "AU",
         waitingRoom: formData.get("waitingRoom") === "on",
         joinBeforeHost: formData.get("joinBeforeHost") === "on",
         muteUponEntry: formData.get("muteUponEntry") === "on",
