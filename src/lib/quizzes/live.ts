@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { getTeacherProgramRosterStudentIds } from "@/lib/live-classes/service";
-import { QUIZ_AVATARS, normalizedQuizGender } from "@/lib/quizzes/avatars";
+import { QUIZ_AVATARS } from "@/lib/quizzes/avatars";
 import {
   CANONICAL_HOUSES,
   QUIZ_CORRECT_MESSAGE,
@@ -520,20 +520,14 @@ export async function submitLiveQuizAnswer(input: { sessionId: string; studentUs
 
 export async function selectStudentQuizAvatar(input: { studentId: string; avatarId: string }) {
   const avatar = QUIZ_AVATARS.find((item) => item.id === input.avatarId);
-  if (!avatar) throw new Error("Choose a valid Gen-Mumin character.");
+  if (!avatar) throw new Error("Choose a valid quiz animal.");
+
   const student = await db.studentProfile.findUnique({
     where: { id: input.studentId },
-    include: { registrationStudents: { select: { gender: true }, orderBy: { createdAt: "desc" }, take: 1 } },
+    select: { userId: true },
   });
   if (!student) throw new Error("Student profile not found.");
-  if (avatar.gender !== normalizedQuizGender(student.registrationStudents[0]?.gender)) {
-    throw new Error("Choose a character from your child avatar collection.");
-  }
-  const claimed = await db.user.findFirst({
-    where: { avatarUrl: avatar.id, studentProfile: { isNot: { id: student.id } } },
-    select: { id: true },
-  });
-  if (claimed) throw new Error("That character is already chosen. Pick another exclusive avatar.");
+
   await db.user.update({ where: { id: student.userId }, data: { avatarUrl: avatar.id } });
   return avatar;
 }

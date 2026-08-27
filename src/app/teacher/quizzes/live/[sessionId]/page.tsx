@@ -13,6 +13,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { QUIZ_CORRECT_MESSAGE, QUIZ_INCORRECT_MESSAGE } from "@/lib/community/house-points";
 import { endLiveQuizSession, getTeacherLiveQuizSession, setLiveQuizQuestion } from "@/lib/quizzes/live";
 import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
+import { QuizAnimalAvatar } from "@/components/quizzes/QuizAnimalAvatar";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { quizAvatar } from "@/lib/quizzes/avatars";
 
@@ -185,7 +186,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
             <div className="mt-5 grid grid-cols-4 gap-2">
               {live.roster.slice(0, 16).map((student) => (
                 <div key={student.id} className={`rounded-2xl border p-2 text-center ${answeredStudentIds.has(student.id) ? "border-[#2f6b4b] bg-[#effaf3]" : "border-[#eadfce] bg-[#fbf6ef]"}`}>
-                  <img src={quizAvatar(student.avatarId, student.gender).image} alt="Student avatar" className="mx-auto h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
+                  <QuizAnimalAvatar avatarId={student.avatarId} size="sm" className="mx-auto h-10 w-10" />
                   <p className="mt-1 truncate text-[10px] font-semibold">{quizAvatar(student.avatarId, student.gender).badge} {student.name}</p>
                 </div>
               ))}
@@ -208,7 +209,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                 <article key={winner.id} className="relative rounded-[24px] bg-white p-3 text-center shadow-md">
                   <span className="absolute left-2 top-2 rounded-full bg-[#f7c56f] px-2 py-1 text-xs font-black text-[#22304a]">#{index + 1}</span>
                   <span className="absolute right-2 top-2 text-2xl">{avatar.badge}</span>
-                  <img src={avatar.image} alt={winner.studentName} className="mx-auto h-24 w-20 rounded-[18px] object-cover object-[50%_12%]" style={{ backgroundColor: avatar.accent }} />
+                  <QuizAnimalAvatar avatarId={avatar.id} animated size="lg" className="mx-auto h-24 w-24" />
                   <h3 className="mt-2 truncate text-sm font-bold text-[#22304a]">{winner.studentName}</h3>
                   <p className="text-xs text-[#2f6b4b]">Correct in {responseSeconds(winner.answer)}s</p>
                 </article>
@@ -248,7 +249,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {correctResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
-                    <img src={quizAvatar(response.avatarId, response.studentGender).image} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
+                    <QuizAnimalAvatar avatarId={response.avatarId} size="sm" className="h-10 w-10" />
                     <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName}: +1 house, +1 {response.houseName}</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
@@ -261,7 +262,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {effortResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
-                    <img src={quizAvatar(response.avatarId, response.studentGender).image} alt="Student avatar" className="h-10 w-10 rounded-xl object-cover object-[50%_12%]" />
+                    <QuizAnimalAvatar avatarId={response.avatarId} size="sm" className="h-10 w-10" />
                     <span>{response.studentName}</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_INCORRECT_MESSAGE}</span>
                   </div>
@@ -290,7 +291,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
               return (
                 <details key={student.id} className="rounded-[24px] border border-[#dfe5ec] bg-white p-4 shadow-sm">
                   <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3">
-                    <span className="flex items-center gap-3"><img src={quizAvatar(student.avatarId, student.gender).image} alt="Student avatar" className="h-12 w-12 rounded-xl object-cover object-[50%_12%]" /><strong className="text-[#22304a]">{student.name}</strong></span>
+                    <span className="flex items-center gap-3"><QuizAnimalAvatar avatarId={student.avatarId} size="sm" className="h-12 w-12" /><strong className="text-[#22304a]">{student.name}</strong></span>
                     <span className="flex gap-2 text-sm"><span className="rounded-full bg-[#ecfff3] px-3 py-2 font-semibold text-[#2f6b4b]">{correct} correct</span><span className="rounded-full bg-[#fff0f0] px-3 py-2 font-semibold text-[#b24646]">{wrong} wrong</span><span className="rounded-full bg-[#edf4ff] px-3 py-2 font-semibold text-[#245d85]">{correct + (perfect ? 10 : 0)} points</span></span>
                   </summary>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">

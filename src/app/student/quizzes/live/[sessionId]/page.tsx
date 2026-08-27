@@ -10,17 +10,18 @@ import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrat
 import { LiveQuizCountdown } from "@/components/quizzes/LiveQuizCountdown";
 import { LiveQuizSubmitButton } from "@/components/quizzes/LiveQuizSubmitButton";
 import { QuizQuestionImage } from "@/components/quizzes/QuizQuestionImage";
+import { QuizAnimalAvatar } from "@/components/quizzes/QuizAnimalAvatar";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentLiveQuizSession, liveQuizMessage, selectStudentQuizAvatarByUserId, submitLiveQuizAnswer } from "@/lib/quizzes/live";
-import { quizAvatarsForGender } from "@/lib/quizzes/avatars";
+import { quizAnimalAvatars, quizAvatar } from "@/lib/quizzes/avatars";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
   params: Promise<{ sessionId: string }>;
-  searchParams?: Promise<{ notice?: string; error?: string }>;
+  searchParams?: Promise<{ notice?: string; error?: string; choose?: string }>;
 };
 
 const choiceStyles = [
@@ -80,11 +81,11 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
       await selectStudentQuizAvatarByUserId({ studentUserId: currentSession.user.id, avatarId });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not choose character.";
-      redirect("/student/quizzes/live/" + sessionId + "?error=" + encodeURIComponent(message));
+      redirect("/student/quizzes/live/" + sessionId + "?choose=1&error=" + encodeURIComponent(message));
     }
     revalidatePath("/student/quizzes/live/" + sessionId);
     revalidatePath("/teacher/quizzes/live/" + sessionId);
-    redirect("/student/quizzes/live/" + sessionId + "?notice=Your exclusive character is ready");
+    redirect("/student/quizzes/live/" + sessionId + "?notice=Your animal avatar is ready");
   }
   const choices = live.currentQuestion ? choicesFromMeta(live.currentQuestion.meta) : [];
   const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
@@ -93,6 +94,44 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
   const completedResponses = live.session.responses;
   const correctCount = completedResponses.filter((response) => response.isCorrect).length;
   const perfectQuiz = live.quiz.questions.length > 0 && correctCount === live.quiz.questions.length;
+
+  if (query.choose === "1") {
+    return (
+      <FamilyDashboardFrame
+        roleLabel="Student Dashboard"
+        title="Choose Your Quiz Animal"
+        subtitle="Pick a funny animal face before entering the live quiz. Your choice will appear on the teacher screen and leaderboard."
+        navItems={getStudentNavItems()}
+        pendingReason={dashboard.pendingReason}
+      >
+        <ActionToast message={query.error} tone="error" />
+        <section className="overflow-hidden rounded-[34px] bg-gradient-to-br from-[#fff7df] via-white to-[#eaf7ff] p-5 shadow-lg sm:p-8">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#c27a2c]">Animal avatar parade</p>
+            <h2 className="mt-3 text-3xl font-semibold text-[#22304a] sm:text-4xl">Who will you be today?</h2>
+            <p className="mt-3 text-sm leading-7 text-[#617184]">Tap one animal to choose it and enter {live.quiz.title}.</p>
+          </div>
+          <div className="mx-auto mt-7 grid max-w-4xl grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {quizAnimalAvatars().map((avatar, index) => (
+              <form action={selectAvatarAction} key={avatar.id}>
+                <input type="hidden" name="avatarId" value={avatar.id} />
+                <button className="group flex w-full flex-col items-center rounded-[28px] border-2 border-white bg-white/85 p-4 text-center shadow-md transition hover:-translate-y-2 hover:rotate-1 hover:border-[#f5a33b] hover:shadow-xl focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#2563eb]">
+                  <QuizAnimalAvatar avatarId={avatar.id} animated={index % 3 === 0} size="xl" className="h-28 w-28 sm:h-32 sm:w-32" />
+                  <span className="mt-3 text-base font-black text-[#22304a]">{avatar.name}</span>
+                  <span className="mt-1 text-xs font-semibold text-[#c27a2c]">Choose & enter</span>
+                </button>
+              </form>
+            ))}
+          </div>
+          <div className="mt-7 text-center">
+            <Link href="/student/quizzes" className="inline-flex rounded-full border border-[#dce4ed] bg-white px-5 py-3 text-sm font-semibold text-[#22304a]">Back to quizzes</Link>
+          </div>
+        </section>
+      </FamilyDashboardFrame>
+    );
+  }
+
+  const selectedAnimal = quizAvatar(live.student.user.avatarUrl);
 
   return (
     <FamilyDashboardFrame
@@ -105,30 +144,15 @@ export default async function StudentLiveQuizPage({ params, searchParams }: Page
       <LiveQuizAutoRefresh intervalMs={3200} enabled={live.session.status !== "ENDED"} />
       <ActionToast message={query.notice ?? query.error} tone={query.error ? "error" : "success"} />
 
-      <section className="rounded-[30px] border border-[#eadfce] bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-[30px] border border-[#eadfce] bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex items-center gap-4">
+          <QuizAnimalAvatar avatarId={selectedAnimal.id} animated size="md" className="h-20 w-20" />
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">My exclusive character</p>
-            <h2 className="mt-1 text-xl font-semibold text-[#22304a]">Choose the avatar that represents you</h2>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">Playing as</p>
+            <h2 className="mt-1 text-xl font-semibold text-[#22304a]">{selectedAnimal.name}</h2>
           </div>
-          <p className="text-sm text-[#617184]">One character per child. Your choice appears on the teacher screen.</p>
         </div>
-        <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
-          {quizAvatarsForGender(live.student.gender).map((avatar) => {
-            const selected = live.student.user.avatarUrl === avatar.id;
-            return (
-              <form action={selectAvatarAction} key={avatar.id}>
-                <input type="hidden" name="avatarId" value={avatar.id} />
-                <button className={"relative w-full rounded-[22px] border-2 p-2 text-center transition hover:-translate-y-1 " + (selected ? "border-[#f5a33b] bg-[#fff5e7] shadow-md" : "border-[#e6e9ef] bg-[#f8fafc]")}>
-                  <span className="absolute right-1 top-1 z-10 rounded-full bg-white px-1.5 py-0.5 text-lg shadow">{avatar.badge}</span>
-                  <img src={avatar.image} alt={avatar.name} className="mx-auto h-20 w-full rounded-[16px] object-cover object-[50%_12%]" style={{ backgroundColor: avatar.accent }} />
-                  <span className="mt-1 block truncate text-xs font-bold text-[#22304a]">{avatar.name}</span>
-                  {selected ? <span className="text-[10px] font-semibold text-[#c27a2c]">Chosen</span> : null}
-                </button>
-              </form>
-            );
-          })}
-        </div>
+        <Link href={`/student/quizzes/live/${sessionId}?choose=1`} className="rounded-full border border-[#dce4ed] px-4 py-2 text-sm font-semibold text-[#22304a]">Change animal</Link>
       </section>
 
       <section className="overflow-hidden rounded-[34px] bg-[#0b1630] text-white shadow-lg">

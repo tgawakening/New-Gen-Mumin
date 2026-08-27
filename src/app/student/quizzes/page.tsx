@@ -256,8 +256,8 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
                     <p className="mt-2 text-sm leading-6 text-white/75">
                       Join now. Questions will appear one by one as your teacher opens them, and your house points update after each answer.
                     </p>
-                    <Link href={`/student/quizzes/live/${liveQuiz.id}`} className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
-                      Enter live quiz
+                    <Link href={`/student/quizzes/live/${liveQuiz.id}?choose=1`} className="mt-5 inline-flex rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">
+                      Choose animal & enter
                     </Link>
                   </div>
                   <img src="/gen-mumin-chars/ali-superhero.png" alt="Gen-Mumin live quiz character" className="mx-auto h-44 w-32 rounded-[26px] object-cover object-[50%_12%]" />
