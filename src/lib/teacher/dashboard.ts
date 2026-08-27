@@ -9,6 +9,7 @@ import {
   getProgramEligibleRosterStudents,
   getScheduleRosterStudentIds,
   getTeacherProgramRosterEntries,
+  getTeacherRosterAssignments,
 } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
@@ -373,16 +374,18 @@ export async function getTeacherDashboardData(userId: string) {
     rosterStudentIdsByProgram.set(rosterEntry.programId, studentSet);
   }
 
+  const rosterAssignments = getTeacherRosterAssignments(teacherProfile);
+
   const eligibleStudentsByProgram = new Map(
     await Promise.all(
-      teacherProfile.programAssignments.map(async (assignment) => [
+      rosterAssignments.map(async (assignment) => [
         assignment.program.id,
         await getProgramEligibleRosterStudents(assignment.program.id),
       ] as const),
     ),
   );
 
-  const rosterPrograms = teacherProfile.programAssignments.map((assignment) => {
+  const rosterPrograms = rosterAssignments.map((assignment) => {
     const rosterStudentIds = rosterStudentIdsByProgram.get(assignment.program.id);
     const eligibleStudents = eligibleStudentsByProgram.get(assignment.program.id) ?? [];
     const students = rosterStudentIds && rosterStudentIds.size
