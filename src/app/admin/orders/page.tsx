@@ -7,7 +7,7 @@ import { ActionToast } from "@/components/dashboard/ActionToast";
 import { db } from "@/lib/db";
 import { getCurrentSession } from "@/lib/auth/session";
 import { canAccessAdminFinance } from "@/lib/admin/access";
-import { markOrderPaid, recordManualPaidAmount, resendOrderCompletionEmails } from "@/lib/payments/fulfillment";
+import { markOrderPaid, recordManualPaidAmount, resendOrderCompletionEmails, updateStripeSubscriptionAmount } from "@/lib/payments/fulfillment";
 import { extendStripeSubscriptionBillingDateForOrderItem } from "@/lib/payments/monthly-ledger";
 
 function statusClass(status: string) {
@@ -50,6 +50,17 @@ function extractManualPaidAmountAdjustment(metadata: unknown) {
   };
 }
 
+function extractSubscriptionAmountAdjustment(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+  const adjustment = (metadata as Record<string, unknown>).subscriptionAmountAdjustment;
+  if (!adjustment || typeof adjustment !== "object" || Array.isArray(adjustment)) return null;
+  const record = adjustment as Record<string, unknown>;
+  return {
+    amount: typeof record.amount === "number" ? record.amount : null,
+    currency: typeof record.currency === "string" ? record.currency : null,
+    note: typeof record.note === "string" ? record.note : null,
+  };
+}
 function formatAdminDate(value: Date | null | undefined) {
   return value ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "Not set";
 }
@@ -187,6 +198,33 @@ export default async function AdminOrdersPage({
     }
   }
 
+  async function adjustStripeSubscriptionAmount(formData: FormData) {
+    "use server";
+
+    const session = await getCurrentSession();
+    if (!session || session.user.role !== "ADMIN" || !(await canAccessAdminFinance(session.user.id))) redirect("/admin");
+
+    const orderId = String(formData.get("orderId") || "");
+    const returnUrl = String(formData.get("returnUrl") || "/admin/orders");
+    const amount = Number(formData.get("subscriptionAmount"));
+    const currency = String(formData.get("subscriptionCurrency") || "").trim().toUpperCase();
+    const note = String(formData.get("subscriptionNote") || "").trim();
+    if (!orderId || !Number.isFinite(amount) || amount <= 0) {
+      redirect(`${returnUrl}?notice=Enter%20a%20valid%20upcoming%20subscription%20amount&tone=error`);
+    }
+
+    try {
+      const updated = await updateStripeSubscriptionAmount(orderId, { amount, currency, note });
+      revalidatePath("/admin/orders");
+      revalidatePath("/admin");
+      revalidatePath("/admin/monthly-payments");
+      revalidatePath("/parent");
+      redirect(`${returnUrl}?notice=${encodeURIComponent(`Future monthly Stripe charge updated to ${updated.currency} ${updated.amount}. No immediate charge or proration was created.`)}&tone=success`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update the Stripe subscription amount.";
+      redirect(`${returnUrl}?notice=${encodeURIComponent(message)}&tone=error`);
+    }
+  }
   async function adjustManualPaidAmount(formData: FormData) {
     "use server";
 
@@ -273,6 +311,7 @@ export default async function AdminOrdersPage({
               const city = extractNoteValue(order.registration?.notes, "City");
               const sourceLabel = registrationSourceLabel(order.registration?.notes);
               const manualPaidAmountAdjustment = extractManualPaidAmountAdjustment(order.metadata);
+              const subscriptionAmountAdjustment = extractSubscriptionAmountAdjustment(order.metadata);
               const stripeSubscriptionItems = order.items.filter((item) => item.subscription?.providerSubscriptionId);
               const isStripeOrder = order.gateway === "STRIPE" || latestPayment?.gateway === "STRIPE";
               const canApproveManual = canMarkOrderPaid({
@@ -390,6 +429,29 @@ export default async function AdminOrdersPage({
                       </details>
                     ) : null}
 
+
+                    {isStripeOrder && stripeSubscriptionItems.length ? (
+                      <details className="rounded-2xl border border-[#8fbbe4] bg-[#eef7ff] p-3">
+                        <summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Set monthly Stripe amount</summary>
+                        <form action={adjustStripeSubscriptionAmount} className="mt-3 grid gap-2">
+                          <input type="hidden" name="orderId" value={order.id} />
+                          <input type="hidden" name="returnUrl" value="/admin/orders" />
+                          <label className="text-[11px] font-semibold text-[#52677d]">
+                            New monthly amount
+                            <input name="subscriptionAmount" type="number" min="1" step="1" required defaultValue={subscriptionAmountAdjustment?.amount ?? order.totalAmount} className="mt-1 w-full rounded-xl border border-[#b9d4ef] bg-white px-3 py-2 text-xs text-[#22304a]" />
+                          </label>
+                          <label className="text-[11px] font-semibold text-[#52677d]">
+                            Currency
+                            <input name="subscriptionCurrency" readOnly value={subscriptionAmountAdjustment?.currency ?? order.currency} className="mt-1 w-full rounded-xl border border-[#b9d4ef] bg-[#e7f0f8] px-3 py-2 text-xs uppercase text-[#22304a]" />
+                          </label>
+                          <input name="subscriptionNote" maxLength={180} defaultValue={subscriptionAmountAdjustment?.note ?? ""} placeholder="Reason for changing the monthly amount" className="rounded-xl border border-[#b9d4ef] bg-white px-3 py-2 text-xs text-[#22304a]" />
+                          <p className="text-[10px] leading-4 text-[#52677d]">This replaces the linked Stripe subscription price. The fresh amount is deducted on every future monthly renewal; nothing is charged immediately.</p>
+                          <button className="rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Save monthly amount</button>
+                        </form>
+                      </details>
+                    ) : isStripeOrder ? (
+                      <p className="rounded-2xl border border-[#e5d6ad] bg-[#fff9e8] p-3 text-[11px] leading-4 text-[#72591b]">Monthly amount can be changed after Stripe creates and links the subscription ID for this order.</p>
+                    ) : null}
                     <form action={resendCompletionEmail}>
                       <input type="hidden" name="orderId" value={order.id} />
                       <input type="hidden" name="returnUrl" value="/admin/orders" />
