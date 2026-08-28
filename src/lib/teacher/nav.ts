@@ -10,6 +10,7 @@ export function getTeacherNavItems() {
     { label: "Course Builder", href: "/teacher/course-builder", icon: "builder" },
     { label: "Lesson Log", href: "/teacher/lesson-log", icon: "lesson" },
     { label: "Attendance", href: "/teacher/attendance", icon: "check" },
+    { label: "Live House Points", href: "/teacher/house-points", icon: "quiz" },
     { label: "Materials", href: "/teacher/materials", icon: "folder" },
     { label: "Quizzes", href: "/teacher/quizzes", icon: "quiz" },
     { label: "Journal", href: "/teacher/journal", icon: "journal" },

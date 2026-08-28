@@ -10,7 +10,8 @@ import {
   formatDate,
 } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { buildSunnahTrackerDescription, ensureStudentHouse, isSunnahTrackerMission, parseSunnahTrackerDescription } from "@/lib/community/quest";
+import { pointDayKey } from "@/lib/community/point-awards";
+import { buildSunnahTrackerDescription, isSunnahTrackerMission, parseSunnahTrackerDescription } from "@/lib/community/quest";
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
@@ -157,8 +158,13 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
       .map((task) => task.trim())
       .filter(Boolean);
     if (!taskLines.length) throw new Error("Add at least one Sunnah task.");
-    const taskPoints = Math.max(1, Number(formData.get("taskPoints") || 5));
-    const basePoints = Math.max(0, Number(formData.get("basePoints") || 5));
+    const taskPoints = 10;
+    const basePoints = 5;
+    const trackerMonth = String(formData.get("trackerMonth") || "");
+    if (!/^\d{4}-\d{2}$/.test(trackerMonth)) throw new Error("Choose the tracker month.");
+    const [trackerYear, trackerMonthNumber] = trackerMonth.split("-").map(Number);
+    const opensAt = new Date(trackerMonth + "-01T00:00:00+05:00");
+    const closesAt = new Date(Date.UTC(trackerYear, trackerMonthNumber, 1) - 1);
 
     await db.mission.create({
       data: {
@@ -168,6 +174,8 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
         kind: MissionKind.DAILY,
         status: formData.get("isPublished") === "on" ? MissionStatus.PUBLISHED : MissionStatus.DRAFT,
         basePoints,
+        opensAt,
+        closesAt,
         questions: {
           create: taskLines.map((task, index) => ({
             prompt: task,
@@ -216,8 +224,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
 
     const attemptId = String(formData.get("attemptId") || "");
     const feedback = String(formData.get("feedback") || "").trim();
-    const extraPoints = Math.max(0, Number(formData.get("extraPoints") || 0));
-    if (!feedback && extraPoints <= 0) throw new Error("Add a message or extra points before sending feedback.");
+    if (!feedback) throw new Error("Add a feedback message before sending.");
 
     const attempt = await db.missionAttempt.findUnique({
       where: { id: attemptId },
@@ -235,21 +242,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
       throw new Error("This Sunnah tracker submission is not available for this teacher.");
     }
 
-    const notificationBody = feedback || `You earned ${extraPoints} extra Sunnah tracker point${extraPoints === 1 ? "" : "s"}.`;
-    if (extraPoints > 0) {
-      const membership = await ensureStudentHouse(attempt.studentId);
-      await db.housePointLedger.create({
-        data: {
-          houseId: membership.houseId,
-          studentId: attempt.studentId,
-          points: extraPoints,
-          reason: feedback ? `Teacher feedback: ${feedback}` : `Teacher awarded extra Sunnah tracker points for ${attempt.mission.title}`,
-          sourceType: "SUNNAH_REVIEW",
-          sourceId: attempt.id,
-        },
-      });
-    }
-
+    const notificationBody = feedback;
     const notifyUsers = Array.from(new Set([attempt.student.userId, ...attempt.student.parents.map((link) => link.parent.userId)]));
     await db.notification.createMany({
       data: notifyUsers.map((userId) => ({
@@ -343,12 +336,8 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
                   </p>
                 ) : null}
 
-                <form action={reviewSunnahSubmission} className="mt-4 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[120px_minmax(0,1fr)_auto]">
+                <form action={reviewSunnahSubmission} className="mt-4 grid gap-3 rounded-2xl bg-white p-4 md:grid-cols-[minmax(0,1fr)_auto]">
                   <input type="hidden" name="attemptId" value={attempt.id} />
-                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                    Points
-                    <input name="extraPoints" type="number" min="0" defaultValue="0" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-                  </label>
                   <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                     Message to student/parent
                     <input name="feedback" placeholder="Good effort, keep practicing this Sunnah daily." className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
@@ -360,7 +349,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
           })}
           {!recentSunnahAttempts.length ? (
             <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
-              Sunnah tracker submissions will appear here as soon as parents or students submit them.
+              Sunnah tracker submissions will appear here as soon as students submit them.
             </p>
           ) : null}
         </div>
@@ -449,6 +438,10 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                Tracker month
+                <input name="trackerMonth" type="month" required defaultValue={pointDayKey().slice(0, 7)} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+              </label>
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Tracker title
                 <input name="title" defaultValue="Daily Sunnah Tracker" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
               </label>
@@ -470,11 +463,11 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
             <div className="grid gap-4 sm:grid-cols-[140px_140px_1fr]">
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Task points
-                <input name="taskPoints" type="number" min="1" defaultValue="5" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                <input name="taskPoints" type="number" value="10" readOnly className="rounded-2xl border border-[#d8e3ed] bg-[#f4f7fa] px-4 py-3 text-sm" />
               </label>
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Base points
-                <input name="basePoints" type="number" min="0" defaultValue="5" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                <input name="basePoints" type="number" value="5" readOnly className="rounded-2xl border border-[#d8e3ed] bg-[#f4f7fa] px-4 py-3 text-sm" />
               </label>
               <label className="flex items-center gap-3 rounded-2xl border border-[#d8e3ed] bg-[#fbfdff] px-4 py-3 text-sm font-semibold text-[#22304a]">
                 <input name="isPublished" type="checkbox" defaultChecked />

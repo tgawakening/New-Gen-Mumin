@@ -11,6 +11,7 @@ import {
   submitMissionAttempt,
 } from "@/lib/community/quest";
 import { db } from "@/lib/db";
+import { pointDayKey } from "@/lib/community/point-awards";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   FamilyDashboardFrame,
@@ -100,6 +101,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
             {visibleMissions.map((mission) => {
               const latestAttempt = mission.attempts[0] ?? null;
               const sunnahTracker = isSunnahTrackerMission(mission);
+              const submittedToday = Boolean(sunnahTracker && latestAttempt?.submittedAt && pointDayKey(latestAttempt.submittedAt) === pointDayKey());
               const sunnahDetails = parseSunnahTrackerDescription(mission.description);
               return (
                 <div key={mission.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
@@ -123,9 +125,9 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                     </p>
                   ) : null}
 
-                  <details className="mt-4 rounded-[18px] bg-white p-4" open={sunnahTracker && !latestAttempt}>
+                  <details className="mt-4 rounded-[18px] bg-white p-4" open={sunnahTracker && !submittedToday}>
                     <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
-                      {sunnahTracker ? "Open checklist" : latestAttempt ? "Try again" : "Start mission"}
+                      {submittedToday ? "Submitted today — come back tomorrow" : sunnahTracker ? "Open checklist" : latestAttempt ? "Try again" : "Start mission"}
                     </summary>
                     <form action={submitMission} encType="multipart/form-data" className="mt-4 space-y-3">
                       <input type="hidden" name="missionId" value={mission.id} />
@@ -176,8 +178,8 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                           <span className="text-xs font-normal text-[#617184]">Upload clear photos requested by your teacher. Maximum 8 MB per image.</span>
                         </label>
                       ) : null}
-                      <button disabled={child.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                        {sunnahTracker ? "Submit Sunnah tracker" : "Submit mission"}
+                      <button disabled={child.accessLocked || submittedToday} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                        {submittedToday ? "Already submitted today" : sunnahTracker ? "Submit Sunnah tracker" : "Submit mission"}
                       </button>
                     </form>
                   </details>

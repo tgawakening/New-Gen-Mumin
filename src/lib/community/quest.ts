@@ -3,6 +3,7 @@ import "server-only";
 import { MissionKind, MissionQuestionType, MissionStatus } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
 import { uploadSunnahTrackerEvidence } from "@/lib/google-drive/materials";
 import { CANONICAL_HOUSES, ensureStudentHouseMembership, getCanonicalHouseIdsForHouseId, getHouseLeaderboard, getHouseTeamMembers } from "@/lib/community/house-points";
 
@@ -198,9 +199,17 @@ export async function submitMissionAttempt(input: {
     throw new Error("Mission is not available.");
   }
 
-  const membership = await ensureStudentHouse(input.studentId);
+  await ensureStudentHouse(input.studentId);
   const sunnahTracker = isSunnahTrackerMission(mission);
   const generalReflection = String(input.formData.get("reflection") || "").trim();
+  const submissionDay = sunnahTracker ? pointDayKey() : null;
+  if (submissionDay) {
+    const submittedToday = await db.missionAttempt.findFirst({
+      where: { missionId: mission.id, studentId: input.studentId, submissionDay },
+      select: { id: true },
+    });
+    if (submittedToday) throw new Error("This student has already submitted this Sunnah tracker today.");
+  }
   const attemptCount = await db.missionAttempt.count({
     where: { missionId: mission.id, studentId: input.studentId },
   });
@@ -229,6 +238,7 @@ export async function submitMissionAttempt(input: {
       studentId: input.studentId,
       attemptNumber: attemptCount + 1,
       submittedAt: new Date(),
+      submissionDay,
     },
   });
 
@@ -239,7 +249,8 @@ export async function submitMissionAttempt(input: {
     const correctAnswer = answerKey?.answer?.trim().toLowerCase();
     const isObjective = ["MCQ", "TRUE_FALSE", "FILL_IN_BLANK"].includes(question.type);
     const isCorrect = Boolean(isObjective && correctAnswer && answer.toLowerCase() === correctAnswer);
-    if (isObjective && isCorrect) score += question.points;
+    const earnedQuestionPoints = sunnahTracker ? HOUSE_POINT_RULES.SUNNAH_TASK_COMPLETED.points : question.points;
+    if (isObjective && isCorrect) score += earnedQuestionPoints;
     if (question.type === MissionQuestionType.SHORT_REFLECTION && answer) {
       score += question.points;
       reflection = answer;
@@ -251,7 +262,7 @@ export async function submitMissionAttempt(input: {
         questionId: question.id,
         answer: questionIndex === 0 && evidence.length ? { value: answer, evidence } : { value: answer },
         isCorrect: isObjective ? isCorrect : null,
-        earnedPoints: isObjective ? (isCorrect ? question.points : 0) : question.type === MissionQuestionType.SHORT_REFLECTION && answer ? question.points : 0,
+        earnedPoints: isObjective ? (isCorrect ? earnedQuestionPoints : 0) : question.type === MissionQuestionType.SHORT_REFLECTION && answer ? question.points : 0,
       },
     });
   }
@@ -260,21 +271,38 @@ export async function submitMissionAttempt(input: {
     reflection = generalReflection;
   }
 
-  const pointsAwarded = mission.basePoints + score;
+  const pointsAwarded = (sunnahTracker ? HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.points : mission.basePoints) + score;
   await db.missionAttempt.update({
     where: { id: attempt.id },
     data: { score, pointsAwarded, reflection: reflection || null },
   });
-  await db.housePointLedger.create({
-    data: {
-      houseId: membership.houseId,
+  if (sunnahTracker && submissionDay) {
+    await awardHousePointsOnce({
+      studentId: input.studentId,
+      points: HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.points,
+      reason: HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.label + ": " + mission.title,
+      sourceType: "SUNNAH_DAILY",
+      sourceId: mission.id + ":" + submissionDay,
+    });
+    for (const question of mission.questions) {
+      if (String(input.formData.get("answer-" + question.id) || "").toLowerCase() !== "true") continue;
+      await awardHousePointsOnce({
+        studentId: input.studentId,
+        points: HOUSE_POINT_RULES.SUNNAH_TASK_COMPLETED.points,
+        reason: "Sunnah completed: " + question.prompt,
+        sourceType: "SUNNAH_TASK",
+        sourceId: mission.id + ":" + submissionDay + ":" + question.id,
+      });
+    }
+  } else {
+    await awardHousePointsOnce({
       studentId: input.studentId,
       points: pointsAwarded,
-      reason: `${input.studentName} completed ${mission.title}`,
-      sourceType: sunnahTracker ? "SUNNAH_TRACKER" : "MISSION",
-      sourceId: mission.id,
-    },
-  });
+      reason: input.studentName + " completed " + mission.title,
+      sourceType: "MISSION",
+      sourceId: attempt.id,
+    });
+  }
 
   if (sunnahTracker && mission.programId) {
     const teachers = await db.teacherProfile.findMany({

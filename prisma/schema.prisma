@@ -1131,6 +1131,7 @@ model HousePointLedger {
 
   @@index([houseId, awardedAt])
   @@index([studentId, awardedAt])
+  @@unique([studentId, sourceType, sourceId], map: "HousePointLedger_student_source_key")
 }
 
 model MaintenanceRun {
@@ -1186,6 +1187,7 @@ model MissionAttempt {
   pointsAwarded Int             @default(0)
   reflection    String?
   submittedAt   DateTime?
+  submissionDay String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   answers       MissionAnswer[]
@@ -1194,6 +1196,7 @@ model MissionAttempt {
 
   @@index([studentId, submittedAt])
   @@index([missionId, studentId])
+  @@unique([missionId, studentId, submissionDay], map: "MissionAttempt_daily_submission_key")
 }
 
 model MissionAnswer {

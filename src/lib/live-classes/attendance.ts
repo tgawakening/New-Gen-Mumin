@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "crypto";
 
 import { db } from "@/lib/db";
+import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
 import { env } from "@/lib/env";
 import { getZoomPastMeetingParticipants } from "@/lib/zoom/client";
 
@@ -161,6 +162,18 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
   };
   if (existing) await db.attendanceRecord.update({ where: { id: existing.id }, data });
   else await db.attendanceRecord.create({ data });
+
+  const joinedOnTime = Boolean(occurrence && joinedAt.getTime() <= occurrence.startedAt.getTime());
+  if (joinedOnTime) {
+    await awardHousePointsOnce({
+      studentId,
+      points: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.points,
+      reason: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.label,
+      sourceType: "ATTENDANCE_ON_TIME",
+      sourceId: scheduleId + ":" + pointDayKey(occurrence!.startedAt),
+      notificationHref: "/student/attendance",
+    });
+  }
 }
 
 export async function recordZoomParticipantJoined(scheduleId: string, event: ParticipantEvent) {

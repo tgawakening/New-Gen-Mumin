@@ -7,6 +7,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
+import { awardHousePointsOnce, HOUSE_POINT_RULES } from "@/lib/community/point-awards";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { listMaterials, uploadStudentSubmissionFile } from "@/lib/google-drive/materials";
 import { ActionToast } from "@/components/dashboard/ActionToast";
@@ -205,6 +206,15 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
             submittedAt: new Date(),
           },
         });
+
+    await awardHousePointsOnce({
+      studentId: student.id,
+      points: HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.points,
+      reason: HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.label + ": " + assignment.title,
+      sourceType: "HOMEWORK_SUBMITTED",
+      sourceId: assignment.id,
+      notificationHref: "/student/courses?course=" + assignment.programId,
+    });
 
     if (assignment.program.teacherAssignments.length) {
       await db.notification.createMany({
