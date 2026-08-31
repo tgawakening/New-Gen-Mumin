@@ -1153,6 +1153,8 @@ model RecognitionAward {
   pointsBonus     Int            @default(0)
   featuredWeek    String?
   isPublic        Boolean        @default(true)
+  revokedAt       DateTime?
+  revokedByUserId String?
   certificateCode String         @unique @default(cuid())
   awardedAt       DateTime       @default(now())
   student         StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)

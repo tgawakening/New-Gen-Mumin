@@ -157,7 +157,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
 
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
-    await db.housePointLedger.deleteMany({});
+    await db.$transaction([db.housePointLedger.deleteMany({}), db.houseUnlock.deleteMany({})]);
     revalidatePath("/admin/community");
     revalidatePath("/student/quizzes");
     revalidatePath("/parent/quizzes");
@@ -369,9 +369,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
               <h1 className="mt-2 text-2xl font-semibold text-[#22304a]">Community Safety Console</h1>
               <p className="mt-1 text-sm text-[#617184]">Review flagged messages, approve safe posts, hide risky content, and keep an audit trail.</p>
             </div>
-            <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
-              Back to admin
-            </Link>
+            <div className="flex gap-2"><Link href="/admin/rewards" className="rounded-full bg-[#172842] px-4 py-2 text-sm font-semibold text-white">Rewards audit</Link><Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Back to admin</Link></div>
           </div>
         </div>
 

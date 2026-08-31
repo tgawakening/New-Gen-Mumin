@@ -44,10 +44,12 @@ export async function awardRecognition(input: {
 }) {
   const definition = CHARACTER_BADGES.find((badge) => badge.key === input.badgeKey);
   if (!definition) throw new Error("Choose an approved character badge.");
+  const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
+  if (existing?.revokedAt) return existing;
   const award = await db.recognitionAward.upsert({
     where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } },
     create: { studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus ?? 0, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId },
-    update: { evidence: input.evidence, featuredWeek: input.featuredWeek, isPublic: true },
+    update: { evidence: input.evidence, featuredWeek: input.featuredWeek },
   });
   if ((input.pointsBonus ?? 0) > 0) await awardHousePointsOnce({ studentId: input.studentId, points: input.pointsBonus!, reason: definition.title + ": " + input.evidence, sourceType: "RECOGNITION_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   if (input.beneficiaryStudentId && ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key)) {
@@ -57,7 +59,7 @@ export async function awardRecognition(input: {
     await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another House helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   }
   const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { parents: { include: { parent: true } } } });
-  if (student) await db.notification.createMany({ data: [student.userId, ...student.parents.map((link) => link.parent.userId)].map((userId) => ({ userId, title: "Character recognition earned!", body: `${definition.title}: ${input.evidence}`, href: userId === student.userId ? "/student/rewards" : `/parent/rewards?child=${student.id}` })) });
+  if (student && !existing) await db.notification.createMany({ data: [student.userId, ...student.parents.map((link) => link.parent.userId)].map((userId) => ({ userId, title: "Character recognition earned!", body: `${definition.title}: ${input.evidence}`, href: userId === student.userId ? "/student/rewards" : `/parent/rewards?child=${student.id}` })) });
   return award;
 }
 
@@ -77,12 +79,13 @@ export async function getRecognitionDashboard(studentId: string) {
   await syncAutomaticRecognition(studentId);
   const membership = await ensureStudentHouseMembership(studentId);
   const houseIds = await getCanonicalHouseIdsForHouseId(membership.houseId);
-  const [student, awards, studentPoints, housePoints, activity] = await Promise.all([
+  const [student, awards, studentPoints, housePoints, activity, pointRows] = await Promise.all([
     db.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } }),
-    db.recognitionAward.findMany({ where: { studentId, isPublic: true }, orderBy: { awardedAt: "desc" } }),
+    db.recognitionAward.findMany({ where: { studentId, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" } }),
     db.housePointLedger.aggregate({ where: { studentId }, _sum: { points: true } }),
     db.housePointLedger.aggregate({ where: { houseId: { in: houseIds } }, _sum: { points: true } }),
     getRecentHousePointEvents(membership.houseId, 8),
+    db.housePointLedger.findMany({ where: { studentId }, select: { sourceType: true, points: true } }),
   ]);
   const total = studentPoints._sum.points ?? 0;
   const collective = housePoints._sum.points ?? 0;
@@ -90,5 +93,11 @@ export async function getRecognitionDashboard(studentId: string) {
   const nextLevel = RECOGNITION_LEVELS.find((entry) => entry.min > total) ?? null;
   const nextUnlock = HOUSE_UNLOCKS.find((entry) => entry.milestone > collective) ?? null;
   for (const unlock of HOUSE_UNLOCKS.filter((entry) => collective >= entry.milestone)) await db.houseUnlock.upsert({ where: { houseId_milestone: { houseId: membership.houseId, milestone: unlock.milestone } }, create: { houseId: membership.houseId, ...unlock, unlockedAt: new Date() }, update: {} });
-  return { student, membership, awards, total, collective, level, nextLevel, nextUnlock, activity, badgeDefinitions: CHARACTER_BADGES };
+  const unlocks = await db.houseUnlock.findMany({ where: { houseId: membership.houseId }, orderBy: { milestone: "asc" } });
+  const pointBreakdown = { attendance: 0, sunnah: 0, homework: 0, recognition: 0, quizzes: 0, other: 0 };
+  for (const row of pointRows) {
+    const key: keyof typeof pointBreakdown = row.sourceType.includes("ATTENDANCE") ? "attendance" : row.sourceType.includes("SUNNAH") ? "sunnah" : row.sourceType.includes("HOMEWORK") ? "homework" : row.sourceType.includes("RECOGNITION") || row.sourceType.includes("CROSS_HOUSE") ? "recognition" : row.sourceType.includes("QUIZ") ? "quizzes" : "other";
+    pointBreakdown[key] += row.points;
+  }
+  return { student, membership, awards, total, collective, level, nextLevel, nextUnlock, unlocks, pointBreakdown, activity, badgeDefinitions: CHARACTER_BADGES, recognitionLevels: RECOGNITION_LEVELS };
 }

@@ -1,0 +1,3 @@
+ALTER TABLE RecognitionAward
+  ADD COLUMN revokedAt DATETIME(3) NULL,
+  ADD COLUMN revokedByUserId VARCHAR(191) NULL;
