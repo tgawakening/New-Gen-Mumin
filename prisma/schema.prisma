@@ -1241,7 +1241,7 @@ model MissionAttempt {
 
   @@index([studentId, submittedAt])
   @@index([missionId, studentId])
-  @@unique([missionId, studentId, submissionDay], map: "MissionAttempt_daily_submission_key")
+  @@unique([studentId, submissionDay], map: "MissionAttempt_student_daily_submission_key")
 }
 
 model MissionAnswer {

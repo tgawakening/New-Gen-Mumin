@@ -603,7 +603,8 @@ export async function uploadSunnahTrackerEvidence(input: {
   attemptNumber: number;
   file: File;
 }) {
-  if (!input.file.type.startsWith("image/")) throw new Error("Sunnah evidence must be an image.");
+  const mobileImageExtension = /\.(jpe?g|png|webp|heic|heif)$/i.test(input.file.name);
+  if (input.file.type && !input.file.type.startsWith("image/") && !mobileImageExtension) throw new Error("Sunnah evidence must be an image.");
   if (input.file.size > 8 * 1024 * 1024) throw new Error("Each Sunnah evidence image must be 8 MB or smaller.");
 
   const rootFolderId = getDriveRootFolderId();

@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { SunnahAlreadySubmittedError } from "@/lib/community/quest";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -13,6 +14,7 @@ import {
 import { db } from "@/lib/db";
 import { pointDayKey } from "@/lib/community/point-awards";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { SunnahSubmitButton } from "@/components/dashboard/family/SunnahSubmitButton";
 import {
   FamilyDashboardFrame,
   MetricGrid,
@@ -21,7 +23,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ completed?: string; type?: string }>;
+  searchParams?: Promise<{ completed?: string; type?: string; already?: string }>;
 };
 
 export default async function StudentMissionsPage({ searchParams }: PageProps) {
@@ -41,6 +43,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : {};
   const sunnahOnly = params.type === "sunnah";
   const visibleMissions = sunnahOnly ? quest.missions.filter(isSunnahTrackerMission) : quest.missions;
+  const submittedToday = quest.missions.filter(isSunnahTrackerMission).some((mission) => mission.attempts.some((attempt) => attempt.submissionDay === pointDayKey()));
 
   async function submitMission(formData: FormData) {
     "use server";
@@ -51,12 +54,17 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
     if (!currentDashboard) redirect("/auth/login");
 
     const missionId = String(formData.get("missionId") || "");
-    await submitMissionAttempt({
-      missionId,
-      studentId: currentDashboard.child.id,
-      studentName: currentDashboard.studentName,
-      formData,
-    });
+    try {
+      await submitMissionAttempt({
+        missionId,
+        studentId: currentDashboard.child.id,
+        studentName: currentDashboard.studentName,
+        formData,
+      });
+    } catch (error) {
+      if (error instanceof SunnahAlreadySubmittedError) redirect("/student/missions?type=sunnah&already=1");
+      throw error;
+    }
 
     revalidatePath("/student");
     revalidatePath("/student/missions");
@@ -80,10 +88,13 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
         message={
           params.completed
             ? sunnahOnly
-              ? "Sunnah tracker submitted. House points awarded."
+              ? "Sunnah tracker submitted. House points awarded once for today."
               : "Mission completed. House points awarded."
-            : undefined
+            : params.already
+              ? "A Sunnah tracker was already submitted today. No extra points were awarded."
+              : undefined
         }
+        tone={params.already ? "error" : "success"}
       />
 
       <MetricGrid
@@ -101,7 +112,6 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
             {visibleMissions.map((mission) => {
               const latestAttempt = mission.attempts[0] ?? null;
               const sunnahTracker = isSunnahTrackerMission(mission);
-              const submittedToday = Boolean(sunnahTracker && latestAttempt?.submittedAt && pointDayKey(latestAttempt.submittedAt) === pointDayKey());
               const sunnahDetails = parseSunnahTrackerDescription(mission.description);
               return (
                 <div key={mission.id} className="rounded-[24px] bg-[#fbf6ef] p-5">
@@ -129,7 +139,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                     <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
                       {submittedToday ? "Submitted today — come back tomorrow" : sunnahTracker ? "Open checklist" : latestAttempt ? "Try again" : "Start mission"}
                     </summary>
-                    <form action={submitMission} encType="multipart/form-data" className="mt-4 space-y-3">
+                    <form action={submitMission} encType="multipart/form-data" className="mt-4 space-y-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
                       <input type="hidden" name="missionId" value={mission.id} />
                       {mission.questions.map((question) => {
                         const meta = question.meta as { choices?: string[] } | null;
@@ -178,9 +188,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                           <span className="text-xs font-normal text-[#617184]">Upload clear photos requested by your teacher. Maximum 8 MB per image.</span>
                         </label>
                       ) : null}
-                      <button disabled={child.accessLocked || submittedToday} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                        {submittedToday ? "Already submitted today" : sunnahTracker ? "Submit Sunnah tracker" : "Submit mission"}
-                      </button>
+                      {sunnahTracker ? <SunnahSubmitButton disabled={child.accessLocked} submittedToday={submittedToday} /> : <button disabled={child.accessLocked} className="min-h-11 w-full rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white touch-manipulation disabled:opacity-50 sm:w-auto">Submit mission</button>}
                     </form>
                   </details>
                 </div>

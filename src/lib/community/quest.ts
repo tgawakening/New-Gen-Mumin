@@ -1,6 +1,6 @@
 import "server-only";
 
-import { MissionKind, MissionQuestionType, MissionStatus } from "@prisma/client";
+import { MissionKind, MissionQuestionType, MissionStatus, Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
@@ -45,6 +45,7 @@ const STARTER_MISSIONS = [
   },
 ] as const;
 export const SUNNAH_TRACKER_PREFIX = "__SUNNAH_TRACKER__:";
+export class SunnahAlreadySubmittedError extends Error {}
 
 export function buildSunnahTrackerDescription(description?: string | null) {
   return `${SUNNAH_TRACKER_PREFIX}${JSON.stringify({ description: description?.trim() || null })}`;
@@ -205,10 +206,10 @@ export async function submitMissionAttempt(input: {
   const submissionDay = sunnahTracker ? pointDayKey() : null;
   if (submissionDay) {
     const submittedToday = await db.missionAttempt.findFirst({
-      where: { missionId: mission.id, studentId: input.studentId, submissionDay },
+      where: { studentId: input.studentId, submissionDay },
       select: { id: true },
     });
-    if (submittedToday) throw new Error("This student has already submitted this Sunnah tracker today.");
+    if (submittedToday) throw new SunnahAlreadySubmittedError("This student has already submitted a Sunnah tracker today.");
   }
   const attemptCount = await db.missionAttempt.count({
     where: { missionId: mission.id, studentId: input.studentId },
@@ -232,15 +233,23 @@ export async function submitMissionAttempt(input: {
       })))
     : [];
 
-  const attempt = await db.missionAttempt.create({
-    data: {
-      missionId: mission.id,
-      studentId: input.studentId,
-      attemptNumber: attemptCount + 1,
-      submittedAt: new Date(),
-      submissionDay,
-    },
-  });
+  let attempt;
+  try {
+    attempt = await db.missionAttempt.create({
+      data: {
+        missionId: mission.id,
+        studentId: input.studentId,
+        attemptNumber: attemptCount + 1,
+        submittedAt: new Date(),
+        submissionDay,
+      },
+    });
+  } catch (error) {
+    if (sunnahTracker && error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new SunnahAlreadySubmittedError("This student has already submitted a Sunnah tracker today.");
+    }
+    throw error;
+  }
 
   for (const [questionIndex, question] of mission.questions.entries()) {
     const rawAnswer = input.formData.get(`answer-${question.id}`);
@@ -282,7 +291,7 @@ export async function submitMissionAttempt(input: {
       points: HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.points,
       reason: HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.label + ": " + mission.title,
       sourceType: "SUNNAH_DAILY",
-      sourceId: mission.id + ":" + submissionDay,
+      sourceId: submissionDay,
     });
     for (const question of mission.questions) {
       if (String(input.formData.get("answer-" + question.id) || "").toLowerCase() !== "true") continue;
@@ -291,7 +300,7 @@ export async function submitMissionAttempt(input: {
         points: HOUSE_POINT_RULES.SUNNAH_TASK_COMPLETED.points,
         reason: "Sunnah completed: " + question.prompt,
         sourceType: "SUNNAH_TASK",
-        sourceId: mission.id + ":" + submissionDay + ":" + question.id,
+        sourceId: submissionDay + ":" + question.id,
       });
     }
   } else {

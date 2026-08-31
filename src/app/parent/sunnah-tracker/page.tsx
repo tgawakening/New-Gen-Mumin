@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { SunnahAlreadySubmittedError } from "@/lib/community/quest";
 import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
@@ -19,9 +20,11 @@ import {
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { db } from "@/lib/db";
+import { pointDayKey } from "@/lib/community/point-awards";
+import { SunnahSubmitButton } from "@/components/dashboard/family/SunnahSubmitButton";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; submitted?: string }>;
+  searchParams?: Promise<{ child?: string; submitted?: string; already?: string }>;
 };
 
 export default async function ParentSunnahTrackerPage({ searchParams }: PageProps) {
@@ -41,6 +44,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
   const programIds = selectedChild.courses.flatMap((course) => course.programIds.length ? course.programIds : [course.programId]);
   const quest = await getStudentQuestData(selectedChild.id, programIds);
   const trackers = quest.missions.filter(isSunnahTrackerMission);
+  const submittedToday = trackers.some((mission) => mission.attempts.some((attempt) => attempt.submissionDay === pointDayKey()));
 
   async function submitSunnahTracker(formData: FormData) {
     "use server";
@@ -58,12 +62,17 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
     if (!parentChild) throw new Error("This learner is not linked to your parent dashboard.");
 
     const missionId = String(formData.get("missionId") || "");
-    await submitMissionAttempt({
-      missionId,
-      studentId: childId,
-      studentName: parentChild.student.displayName || `${parentChild.student.user.firstName} ${parentChild.student.user.lastName}`.trim(),
-      formData,
-    });
+    try {
+      await submitMissionAttempt({
+        missionId,
+        studentId: childId,
+        studentName: parentChild.student.displayName || (parentChild.student.user.firstName + " " + (parentChild.student.user.lastName || "")).trim(),
+        formData,
+      });
+    } catch (error) {
+      if (error instanceof SunnahAlreadySubmittedError) redirect("/parent/sunnah-tracker?child=" + childId + "&already=1");
+      throw error;
+    }
 
     revalidatePath("/parent/sunnah-tracker");
     revalidatePath("/student/missions");
@@ -79,7 +88,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
       navItems={getParentNavItems(selectedChild.id)}
       pendingReason={dashboard.pendingReason}
     >
-      <ActionToast message={params.submitted ? "Sunnah tracker submitted. House points awarded." : undefined} />
+      <ActionToast message={params.submitted ? "Sunnah tracker submitted. House points awarded once for today." : params.already ? "This learner has already submitted a Sunnah tracker today. No extra points were awarded." : undefined} tone={params.already ? "error" : "success"} />
 
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
@@ -124,7 +133,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
                     </p>
                   ) : null}
 
-                  <form action={submitSunnahTracker} encType="multipart/form-data" className="mt-4 space-y-3 rounded-[18px] bg-white p-4">
+                  <form action={submitSunnahTracker} encType="multipart/form-data" className="mt-4 space-y-3 rounded-[18px] bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <input type="hidden" name="childId" value={selectedChild.id} />
                     <input type="hidden" name="missionId" value={mission.id} />
                     {mission.questions.map((question) => (
@@ -142,9 +151,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
                       <input name="evidenceImages" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple className="text-sm font-normal file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:font-semibold file:text-white" />
                       <span className="text-xs font-normal text-[#617184]">Upload clear photos requested by the teacher. Maximum 8 MB per image.</span>
                     </label>
-                    <button disabled={selectedChild.accessLocked} className="rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
-                      Submit Sunnah tracker
-                    </button>
+                    <SunnahSubmitButton disabled={selectedChild.accessLocked} submittedToday={submittedToday} />
                   </form>
                 </div>
               );
