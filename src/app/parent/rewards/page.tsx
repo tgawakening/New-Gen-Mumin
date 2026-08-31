@@ -1,0 +1,9 @@
+import { redirect } from "next/navigation";
+import { ChildSelector, FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { RewardsDashboard } from "@/components/dashboard/family/RewardsDashboard";
+import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { getRecognitionDashboard } from "@/lib/community/recognition";
+import { getParentDashboardData } from "@/lib/dashboard/family";
+import { getParentNavItems } from "@/lib/dashboard/family-nav";
+type Props={searchParams?:Promise<{child?:string}>};
+export default async function ParentRewardsPage({searchParams}:Props){const session=await getCurrentSession();if(!session)redirect("/auth/login");if(session.user.role!=="PARENT")redirect(getDashboardHome(session.user.role));const dashboard=await getParentDashboardData(session.user.id);if(!dashboard?.children.length)redirect("/registration");const params=searchParams?await searchParams:{};const child=dashboard.children.find((item)=>item.id===params.child)??dashboard.children[0];const data=await getRecognitionDashboard(child.id);return <FamilyDashboardFrame roleLabel="Parent Dashboard" title="Character & Community Journey" subtitle="See verified growth, meaningful badges, and House contribution." navItems={getParentNavItems(child.id)} pendingReason={dashboard.pendingReason}><SectionCard eyebrow="Learner switcher" title="Choose a learner"><ChildSelector learners={dashboard.children.map((item)=>({id:item.id,name:item.name}))} selectedChildId={child.id} basePath="/parent/rewards"/></SectionCard><RewardsDashboard data={data} parentView/></FamilyDashboardFrame>}

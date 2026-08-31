@@ -5,7 +5,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility, Mod
 
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { ensureDefaultHouses, getHouseLeaderboard } from "@/lib/community/house-points";
+import { ensureDefaultHouses, ensureStudentHouseMembership, getHouseLeaderboard } from "@/lib/community/house-points";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 
 type PageProps = {
@@ -23,6 +23,12 @@ function formatDate(value: Date) {
 
 const AGE_BANDS = ["ALL", "6-8", "9-12", "13-17", "GENERAL"] as const;
 const GENDER_SCOPES = ["ALL", "BOYS", "GIRLS", "MENTOR_SUPERVISED"] as const;
+const CURRENT_QABILA_DRAFT = [
+  ["Amna Ali", "Girls Qabila A", "CAPTAIN"], ["Muntaha", "Girls Qabila A", "VICE_CAPTAIN"], ["Tehreem", "Girls Qabila A", "MEMBER"], ["Anayah", "Girls Qabila A", "MEMBER"], ["Emeena", "Girls Qabila A", "MEMBER"], ["Zainab", "Girls Qabila A", "MEMBER"], ["Amal", "Girls Qabila A", "MEMBER"], ["Adan", "Girls Qabila A", "MEMBER"],
+  ["Mishal", "Girls Qabila B", "CAPTAIN"], ["Rania", "Girls Qabila B", "VICE_CAPTAIN"], ["Noor", "Girls Qabila B", "MEMBER"], ["Sara Ali", "Girls Qabila B", "MEMBER"], ["Halima", "Girls Qabila B", "MEMBER"], ["Aram Fatma", "Girls Qabila B", "MEMBER"], ["Huda", "Girls Qabila B", "MEMBER"],
+  ["Musa AH Naveed", "Boys Qabila A", "CAPTAIN"], ["Ibrahim Hassan", "Boys Qabila A", "VICE_CAPTAIN"], ["Salar", "Boys Qabila A", "MEMBER"], ["Mussab", "Boys Qabila A", "MEMBER"], ["TaaHaa", "Boys Qabila A", "MEMBER"], ["Hanzla", "Boys Qabila A", "MEMBER"], ["Raahum", "Boys Qabila A", "MEMBER"],
+  ["Arham", "Boys Qabila B", "CAPTAIN"], ["Mustafa", "Boys Qabila B", "VICE_CAPTAIN"], ["Yashur", "Boys Qabila B", "MEMBER"], ["Zaran", "Boys Qabila B", "MEMBER"], ["Reyhan", "Boys Qabila B", "MEMBER"], ["Talha", "Boys Qabila B", "MEMBER"],
+] as const;
 
 function normalizeGender(value?: string | null) {
   const gender = (value ?? "").trim().toLowerCase();
@@ -111,21 +117,41 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
 
     const studentId = String(formData.get("studentId") || "");
     const houseId = String(formData.get("houseId") || "");
+    const role = String(formData.get("role") || "MEMBER");
+    const qabilaGroup = String(formData.get("qabilaGroup") || "").trim() || null;
     if (!studentId || !houseId) redirect(noticeHref("Choose a student and house.", "error"));
 
     await db.houseMembership.upsert({
       where: { studentId },
-      create: { studentId, houseId },
-      update: { houseId },
+      create: { studentId, houseId, role, qabilaGroup },
+      update: { houseId, role, qabilaGroup },
     });
 
     revalidatePath("/admin/community");
     revalidatePath("/student/quizzes");
     revalidatePath("/parent/quizzes");
     revalidatePath("/teacher/quizzes");
-    redirect(noticeHref("Student house updated."));
+    redirect(noticeHref("Student House, Qabila group, and role updated."));
   }
 
+  async function applyCurrentQabilaDraft() {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    const students = await db.studentProfile.findMany({ include: { user: true } });
+    const normalized = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+    let assigned = 0;
+    let skipped = 0;
+    for (const [draftName, qabilaGroup, role] of CURRENT_QABILA_DRAFT) {
+      const matches = students.filter((student) => normalized(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`) === normalized(draftName));
+      if (matches.length !== 1) { skipped += 1; continue; }
+      const membership = await ensureStudentHouseMembership(matches[0].id);
+      await db.houseMembership.update({ where: { id: membership.id }, data: { qabilaGroup, role } });
+      assigned += 1;
+    }
+    revalidatePath("/admin/community"); revalidatePath("/student/rewards"); revalidatePath("/parent/rewards");
+    redirect(noticeHref(`Qabila draft applied to ${assigned} unique students; ${skipped} unmatched or duplicate names were safely skipped.`));
+  }
   async function resetHousePoints() {
     "use server";
 
@@ -371,11 +397,11 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">House system</p>
                 <h2 className="mt-2 text-xl font-semibold text-[#22304a]">House leaderboard</h2>
               </div>
-              <form action={resetHousePoints}>
+              <div className="flex flex-wrap gap-2"><form action={applyCurrentQabilaDraft}><button className="rounded-full border border-[#b9d4ef] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]">Apply current Qabila draft</button></form><form action={resetHousePoints}>
                 <button className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
                   Reset points
                 </button>
-              </form>
+              </form></div>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {houseLeaderboard.map((house, index) => (
@@ -397,7 +423,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">House assignment</p>
               <h2 className="mt-2 text-xl font-semibold text-[#22304a]">Assign student to house</h2>
             </div>
-            <form action={assignHouse} className="grid gap-3 md:grid-cols-[1fr_220px_auto]">
+            <form action={assignHouse} className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_190px_170px_150px_auto]">
               <select name="studentId" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                 <option value="">Choose active student</option>
                 {studentsForHouses.map((student) => (
@@ -410,7 +436,12 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
                 <option value="">Choose house</option>
                 {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
               </select>
-              <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white">Assign</button>
+              <select name="qabilaGroup" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                <option value="">No Qabila group</option><option>Girls Qabila A</option><option>Girls Qabila B</option><option>Boys Qabila A</option><option>Boys Qabila B</option>
+              </select>
+              <select name="role" defaultValue="MEMBER" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
+                <option value="MEMBER">Member</option><option value="VICE_CAPTAIN">Vice Captain</option><option value="CAPTAIN">Captain</option>
+              </select>              <button className="rounded-full bg-[#0f4d81] px-5 py-3 text-sm font-semibold text-white">Assign</button>
             </form>
             <p className="text-sm leading-7 text-[#617184]">
               Students without a house are automatically placed into the least-filled house when they open quizzes, but admin can override it here.
