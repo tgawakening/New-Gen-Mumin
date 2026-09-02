@@ -12,9 +12,10 @@ import {
   SectionCard,
   formatWeekday,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; tab?: string }>;
+  searchParams?: Promise<{ child?: string; tab?: string; join?: string }>;
 };
 
 function scheduleHref(childId: string | undefined, tab: "classes" | "parental") {
@@ -53,6 +54,12 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
+
+      {params?.join ? (
+        <div role="alert" className="rounded-[20px] border border-[#f0d3aa] bg-[#fff7eb] px-5 py-4 text-sm font-semibold text-[#7a531c]">
+          {params.join === "ended" ? "This Zoom class has already ended." : "This class has not started on Zoom yet. Join now will appear after the teacher starts it."}
+        </div>
+      ) : null}
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
           learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
@@ -109,15 +116,7 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
                   <p className="mt-2 text-sm text-[#5f6b7a]">
                     Teacher: {entry.teacherName ?? "Assigned soon"} - {entry.provider ?? "Live class"}
                   </p>
-                  {entry.meetingUrl && !selectedChild.accessLocked ? (
-                    <Link
-                      href={`/api/live-classes/${entry.id}/join?student=${encodeURIComponent(selectedChild.id)}`}
-                      target="_blank"
-                      className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
-                    >
-                      Join meeting
-                    </Link>
-                  ) : null}
+                  <LiveClassCountdown startsAt={entry.nextStartsAt.toISOString()} meetingUrl={entry.meetingUrl ? `/api/live-classes/${entry.id}/join?student=${encodeURIComponent(selectedChild.id)}` : null} accessLocked={selectedChild.accessLocked} isLive={entry.isLive} />
                 </div>
               ))}
               {!visibleSessions.length ? (

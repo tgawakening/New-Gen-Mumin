@@ -32,7 +32,7 @@ export function LiveClassCountdown({
   const targetTime = useMemo(() => new Date(startsAt).getTime(), [startsAt]);
   const [now, setNow] = useState(() => Date.now());
   const millisecondsUntilStart = targetTime - now;
-  const canJoin = Boolean(meetingUrl) && !accessLocked && (isLive || millisecondsUntilStart <= 5 * 60 * 1000);
+  const canJoin = Boolean(meetingUrl) && !accessLocked && isLive;
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 30000);
@@ -40,7 +40,7 @@ export function LiveClassCountdown({
   }, []);
 
   useEffect(() => {
-    if (isLive || millisecondsUntilStart > 15 * 60 * 1000 || millisecondsUntilStart < -3 * 60 * 60 * 1000) return;
+    if (millisecondsUntilStart > 15 * 60 * 1000 || millisecondsUntilStart < -6 * 60 * 60 * 1000) return;
     const interval = window.setInterval(() => router.refresh(), 30000);
     return () => window.clearInterval(interval);
   }, [isLive, millisecondsUntilStart, router]);
@@ -55,11 +55,11 @@ export function LiveClassCountdown({
           target="_blank"
           className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
         >
-          {isLive ? "Join now" : "Join Zoom class"}
+          Join now
         </Link>
       ) : meetingUrl && !accessLocked ? (
         <p className="mt-3 text-sm text-white/75">
-          Join button opens 5 minutes before class.
+          Join now will appear as soon as the teacher starts this class on Zoom.
         </p>
       ) : (
         <p className="mt-3 text-sm text-white/75">

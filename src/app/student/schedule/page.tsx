@@ -6,9 +6,10 @@ import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { FamilyDashboardFrame, MetricGrid, SectionCard, formatWeekday } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 
 type PageProps = {
-  searchParams?: Promise<{ tab?: string }>;
+  searchParams?: Promise<{ tab?: string; join?: string }>;
 };
 
 function scheduleHref(tab: "classes" | "parental") {
@@ -40,6 +41,12 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
+
+      {params?.join ? (
+        <div role="alert" className="rounded-[20px] border border-[#f0d3aa] bg-[#fff7eb] px-5 py-4 text-sm font-semibold text-[#7a531c]">
+          {params.join === "ended" ? "This Zoom class has already ended." : "This class has not started on Zoom yet. Join now will appear after the teacher starts it."}
+        </div>
+      ) : null}
       <MetricGrid
         metrics={[
           { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
@@ -91,19 +98,7 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 Teacher: {entry.teacherName ?? "Assigned soon"}
               </p>
-              {entry.meetingUrl && !child.accessLocked ? (
-                <Link
-                  href={`/api/live-classes/${entry.id}/join?student=${encodeURIComponent(child.id)}`}
-                  target="_blank"
-                  className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
-                >
-                  Join meeting
-                </Link>
-              ) : (
-                <p className="mt-4 text-sm text-[#5f6b7a]">
-                  Meeting link will become available after access unlocks.
-                </p>
-              )}
+              <LiveClassCountdown startsAt={entry.nextStartsAt.toISOString()} meetingUrl={entry.meetingUrl ? `/api/live-classes/${entry.id}/join?student=${encodeURIComponent(child.id)}` : null} accessLocked={child.accessLocked} isLive={entry.isLive} />
             </div>
           ))}
           {!visibleSessions.length ? (

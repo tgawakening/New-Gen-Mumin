@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { cleanLiveClassTitle } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, resolveScheduleStudentIds } from "@/lib/live-classes/service";
 
 export type AttendanceHistoryEntry = {
   id: string;
@@ -96,7 +96,14 @@ export async function getTeacherAttendanceReport(userId: string, range: "week" |
     },
     orderBy: [{ lessonDate: "desc" }, { student: { displayName: "asc" } }],
   });
-  const uniqueRecords = deduplicateAttendance(records);
+  const rosterEntries = await Promise.all(schedules.map(async (schedule) => [schedule.id, new Set(await resolveScheduleStudentIds(schedule.id))] as const));
+  const rosterBySchedule = new Map(rosterEntries);
+  const rosterScopedRecords = records.filter((record) => {
+    if (!record.scheduleId) return true;
+    if (record.source !== "zoom" || record.status !== "ABSENT") return true;
+    return rosterBySchedule.get(record.scheduleId)?.has(record.studentId) ?? false;
+  });
+  const uniqueRecords = deduplicateAttendance(rosterScopedRecords);
   const counts = { present: 0, late: 0, absent: 0, excused: 0 };
   let durationTotal = 0;
   let durationCount = 0;

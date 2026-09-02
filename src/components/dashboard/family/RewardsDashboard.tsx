@@ -13,12 +13,13 @@ export function RewardsDashboard({ data, parentView = false }: { data: Data; par
   const gender = data.student?.registrationStudents[0]?.gender?.toLowerCase() ?? "";
   const characterSrc = gender.includes("girl") || gender.includes("female") ? "/gen-mumin-chars/rania-superhero.png" : "/gen-mumin-chars/ali-superhero.png";
   return <div className="space-y-5">
-    <section className="relative overflow-hidden rounded-[28px] border border-[#eadfce] bg-white p-5 shadow-sm lg:pr-44">
+    <section className="relative overflow-hidden rounded-[28px] border border-[#eadfce] bg-gradient-to-br from-white via-white to-[#fff2dc] p-5 shadow-sm lg:min-h-64 lg:pr-64">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">Character & community journey</p><h2 className="mt-2 text-2xl font-semibold text-[#22304a]">{name}&apos;s House & Rewards</h2><p className="mt-2 text-sm text-[#617184]">Every verified action strengthens character and the whole House.</p></div>
         <span className="rounded-full border border-[#d8e3ed] bg-[#fbf6ef] px-4 py-2 text-sm font-semibold text-[#22304a]">{data.membership.qabilaGroup || data.membership.house.name}{data.membership.role !== "MEMBER" ? ` — ${data.membership.role.replace("_", " ")}` : ""}</span>
       </div>
-      <div className="absolute bottom-4 right-4 hidden h-40 w-32 overflow-hidden rounded-[26px] border-4 border-white shadow-lg lg:block"><Image src={characterSrc} alt="Gen-M character" fill className="object-cover object-[50%_12%]" /></div>
+      <div className="absolute right-8 top-5 z-20 hidden max-w-44 rounded-[22px] border border-[#f1c878] bg-white px-4 py-3 text-center text-sm font-bold text-[#22304a] shadow-lg lg:block">{data.nextUnlock ? `Only ${Math.max(0, data.nextUnlock.milestone - data.collective)} points to the next House unlock!` : "Your House unlocked every published reward!"}</div>
+      <div className="absolute bottom-0 right-3 hidden h-52 w-52 overflow-hidden rounded-t-[34px] lg:block"><Image src={characterSrc} alt="Gen-M character celebrating House progress" fill className="object-cover object-[50%_14%]" /></div>
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[{label:"My points",value:data.total,icon:Star},{label:"Recognition level",value:data.level.title,icon:Trophy},{label:"Badges earned",value:data.awards.length,icon:Award},{label:"House points",value:data.collective,icon:Users}].map(({label,value,icon:Icon})=><div key={label} className="rounded-[20px] border border-[#eadfce] bg-[#fffaf4] p-4"><Icon className="h-5 w-5 text-[#c27a2c]"/><p className="mt-3 text-2xl font-semibold text-[#22304a]">{value}</p><p className="text-xs text-[#617184]">{label}</p></div>)}
       </div>

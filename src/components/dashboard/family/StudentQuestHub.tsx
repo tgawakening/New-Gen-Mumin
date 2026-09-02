@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { BookOpen, CalendarDays, CheckCircle2, Flame, ShieldCheck, Sparkles, Star, Trophy, UsersRound } from "lucide-react";
 
 type QuestMetric = {
@@ -86,9 +87,12 @@ function AvatarCharacter({
   const alt = variant === "girl" ? "Rania Gen-Mumin character" : "Ali Gen-Mumin character";
 
   return (
-    <div className="relative mx-auto flex h-[190px] w-[170px] items-end justify-center overflow-hidden rounded-[28px] bg-[#f7efe5] sm:h-[220px] sm:w-[190px]" aria-label={`${name} Gen-Mumin character`}>
+    <div className="relative mx-auto flex h-[240px] w-full min-w-0 items-end justify-center overflow-hidden rounded-[28px] bg-gradient-to-b from-white to-[#fff3df] sm:h-[280px]" aria-label={`${name} Gen-Mumin character`}>
+      <div className="absolute right-3 top-3 z-20 max-w-32 rounded-[20px] border border-[#f1c878] bg-white px-3 py-2 text-center text-xs font-bold leading-4 text-[#22304a] shadow-lg">
+        Amazing, {name}! Keep building your House.
+      </div>
       <div className="absolute inset-x-5 bottom-1 h-12 rounded-full bg-[#22304a]/10 blur-xl" />
-      <img src={src} alt={alt} className="relative z-10 h-full w-full object-cover object-[50%_12%]" />
+      <Image src={src} alt={alt} width={420} height={560} priority className="relative z-10 h-full w-full object-cover object-[50%_18%] transition-transform duration-300 hover:scale-[1.03]" />
     </div>
   );
 }

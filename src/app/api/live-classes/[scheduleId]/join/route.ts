@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { recordZoomJoinIntent, verifyTrackedZoomJoin } from "@/lib/live-classes/attendance";
+import { getLiveClassAccessState, resolveScheduleStudentIds } from "@/lib/live-classes/service";
 
 type RouteContext = { params: Promise<{ scheduleId: string }> };
 
@@ -22,9 +23,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
   const schedule = await db.classSchedule.findUnique({
     where: { id: scheduleId },
-    select: { meetingUrl: true, programId: true, scheduleRosters: { select: { studentId: true } } },
+    select: { meetingUrl: true, programId: true },
   });
   if (!schedule?.meetingUrl) return NextResponse.redirect(new URL("/student/schedule", request.url));
+
+  const liveState = await getLiveClassAccessState(scheduleId);
+  if (liveState !== "live") {
+    const destination = new URL("/student/schedule", request.url);
+    destination.searchParams.set("join", liveState === "ended" ? "ended" : "not-started");
+    return NextResponse.redirect(destination);
+  }
 
   const student = await db.studentProfile.findUnique({
     where: { id: studentId },
@@ -34,7 +42,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       enrollments: { where: { programId: schedule.programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } }, select: { id: true } },
     },
   });
-  const rosterAllows = !schedule.scheduleRosters.length || schedule.scheduleRosters.some((item) => item.studentId === studentId);
+  const rosterAllows = (await resolveScheduleStudentIds(scheduleId)).includes(studentId);
   if (!student?.enrollments.length || !rosterAllows) return NextResponse.redirect(new URL("/student/schedule", request.url));
 
   if (!signed && session) {

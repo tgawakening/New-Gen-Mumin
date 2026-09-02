@@ -69,7 +69,7 @@ export function TeacherNavLinkClient({
         href={href}
         title={label}
         aria-current={isActive ? "page" : undefined}
-        className={`flex min-w-[9rem] snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
+        className={`flex min-h-16 w-[10.5rem] shrink-0 snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
           isActive
             ? "bg-white text-[#22304a] ring-1 ring-white/40"
             : "bg-white/10 text-white/90 hover:bg-white/16"
@@ -78,7 +78,7 @@ export function TeacherNavLinkClient({
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${isActive ? "bg-[#fff0db] text-[#c27a2c]" : "bg-white/12 text-[#ffd79b]"}`}>
           <TeacherNavIcon icon={icon} />
         </span>
-        <span className="whitespace-nowrap">{label}</span>
+        <span className="min-w-0 whitespace-normal break-words text-left leading-5">{label}</span>
       </Link>
     );
   }

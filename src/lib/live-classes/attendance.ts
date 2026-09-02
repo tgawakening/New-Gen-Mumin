@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
 import { env } from "@/lib/env";
 import { getZoomPastMeetingParticipants } from "@/lib/zoom/client";
+import { resolveScheduleStudentIds } from "@/lib/live-classes/service";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const JOIN_MATCH_WINDOW_MS = 4 * 60 * 60 * 1000;
@@ -51,30 +52,8 @@ type ParticipantEvent = {
   occurredAt: Date;
 };
 
-async function eligibleStudentIds(scheduleId: string) {
-  const schedule = await db.classSchedule.findUnique({
-    where: { id: scheduleId },
-    select: {
-      programId: true,
-      scheduleRosters: { select: { studentId: true } },
-      program: {
-        select: {
-          enrollments: {
-            where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } },
-            select: { studentId: true },
-          },
-        },
-      },
-    },
-  });
-  if (!schedule) return [];
-  return schedule.scheduleRosters.length
-    ? schedule.scheduleRosters.map((item) => item.studentId)
-    : schedule.program.enrollments.map((item) => item.studentId);
-}
-
 async function matchParticipantToStudent(scheduleId: string, event: ParticipantEvent) {
-  const studentIds = await eligibleStudentIds(scheduleId);
+  const studentIds = await resolveScheduleStudentIds(scheduleId);
   if (!studentIds.length) return { studentId: null, method: null };
   const email = normalize(event.email);
   if (email) {
@@ -242,7 +221,7 @@ export async function recordZoomParticipantLeft(scheduleId: string, event: Parti
 }
 
 async function markRosterAbsences(scheduleId: string, endedAt: Date) {
-  const studentIds = await eligibleStudentIds(scheduleId);
+  const studentIds = await resolveScheduleStudentIds(scheduleId);
   const schedule = await db.classSchedule.findUnique({ where: { id: scheduleId }, select: { programId: true } });
   if (!schedule || !studentIds.length) return;
   const attendanceDay = pointDayKey(endedAt);

@@ -291,11 +291,20 @@ export function getTeacherRosterProgramIds(
 }
 export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
   try {
+    const program = await db.program.findUnique({ where: { id: programId }, select: { slug: true } });
+    const compatibleProgramIds = program && isArabicTajweedSlug(program.slug)
+      ? (await db.program.findMany({
+          where: { OR: [{ slug: { contains: "arabic" } }, { slug: { contains: "tajweed" } }] },
+          select: { id: true, slug: true },
+        }))
+          .filter((item) => isArabicTajweedSlug(item.slug))
+          .map((item) => item.id)
+      : [programId];
     const rosterEntries = await db.teacherStudentRoster.findMany({
-      where: { teacherId, programId },
+      where: { teacherId, programId: { in: compatibleProgramIds } },
       select: { studentId: true },
     });
-    return rosterEntries.map((entry) => entry.studentId);
+    return [...new Set(rosterEntries.map((entry) => entry.studentId))];
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
@@ -565,6 +574,25 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
   }
 
   return getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
+}
+
+/** The authoritative learner set for live access and automatic attendance. */
+export async function resolveScheduleStudentIds(scheduleId: string) {
+  return getScheduleRosterStudentIds(scheduleId);
+}
+
+const LIVE_OCCURRENCE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+export type LiveClassAccessState = "scheduled" | "live" | "ended";
+
+export async function getLiveClassAccessState(scheduleId: string): Promise<LiveClassAccessState> {
+  const latest = await db.liveClassSessionOccurrence.findFirst({
+    where: { scheduleId },
+    orderBy: { startedAt: "desc" },
+    select: { startedAt: true, endedAt: true },
+  });
+  if (!latest) return "scheduled";
+  if (latest.endedAt) return "ended";
+  return latest.startedAt.getTime() >= Date.now() - LIVE_OCCURRENCE_MAX_AGE_MS ? "live" : "ended";
 }
 
 export async function syncScheduleRoster(scheduleId: string, studentIds: string[]) {

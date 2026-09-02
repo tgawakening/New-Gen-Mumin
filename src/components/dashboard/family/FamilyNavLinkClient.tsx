@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react-hooks/static-components -- navigation icons are selected from stable imports. */
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -87,7 +88,7 @@ export function FamilyNavLinkClient({
         <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ${isActive ? "bg-[#fff0db] text-[#c27a2c]" : "bg-white/12 text-[#ffd79b]"}`}>
           <IconComp className="h-4 w-4" />
         </span>
-        <span className="whitespace-nowrap">{label}</span>
+        <span className="min-w-0 whitespace-normal break-words text-left leading-5">{label}</span>
       </Link>
     );
   }
