@@ -561,6 +561,7 @@ model AttendanceRecord {
   studentId      String
   scheduleId     String?
   lessonDate     DateTime
+  attendanceDay  String?
   status         AttendanceStatus
   note            String?
   joinedAt        DateTime?
@@ -575,6 +576,7 @@ model AttendanceRecord {
   schedule       ClassSchedule?   @relation(fields: [scheduleId], references: [id])
   student        StudentProfile   @relation(fields: [studentId], references: [id], onDelete: Cascade)
 
+  @@unique([scheduleId, studentId, attendanceDay], map: "AttendanceRecord_session_student_day_key")
   @@index([studentId, lessonDate])
   @@index([enrollmentId], map: "AttendanceRecord_enrollmentId_fkey")
   @@index([markedByUserId], map: "AttendanceRecord_markedByUserId_fkey")

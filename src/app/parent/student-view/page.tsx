@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
@@ -135,6 +136,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
       navItems={getParentNavItems(selectedChild.id)}
       pendingReason={dashboard.pendingReason}
     >
+      <FamilyJourneyLinks role="parent" childId={selectedChild.id} />
       <SectionCard
         eyebrow="Learner switcher"
         title="Choose which student dashboard to view"

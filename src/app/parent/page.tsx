@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { ParentCalendarSubscribeCard } from "@/components/calendar/ParentCalendarSubscribeCard";
@@ -156,6 +157,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
+      {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
       <LiveQuizAutoRefresh intervalMs={3000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (

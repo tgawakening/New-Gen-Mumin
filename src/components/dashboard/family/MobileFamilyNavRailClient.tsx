@@ -1,85 +1,39 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronUp, LayoutGrid } from "lucide-react";
 
 import { FamilyNavLinkClient } from "@/components/dashboard/family/FamilyNavLinkClient";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
 
-type NavItem = {
-  label: string;
-  href: string;
-  icon?: FamilyNavIcon;
-};
+type NavItem = { label: string; href: string; icon?: FamilyNavIcon };
+
+const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Attendance", "House & Rewards", "Progress"]);
 
 export function MobileFamilyNavRailClient({ navItems }: { navItems: NavItem[] }) {
-  const railRef = useRef<HTMLElement | null>(null);
-  const [canScrollLeft, setCanScrollLeft] = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  function updateScrollState() {
-    const rail = railRef.current;
-    if (!rail) return;
-    const maxScrollLeft = rail.scrollWidth - rail.clientWidth;
-    setCanScrollLeft(rail.scrollLeft > 4);
-    setCanScrollRight(rail.scrollLeft < maxScrollLeft - 4);
-  }
-
-  useEffect(() => {
-    const rail = railRef.current;
-    if (!rail) return;
-
-    updateScrollState();
-    rail.addEventListener("scroll", updateScrollState, { passive: true });
-    window.addEventListener("resize", updateScrollState);
-
-    return () => {
-      rail.removeEventListener("scroll", updateScrollState);
-      window.removeEventListener("resize", updateScrollState);
-    };
-  }, [navItems.length]);
-
-  function scrollByTabs(direction: -1 | 1) {
-    railRef.current?.scrollBy({ left: direction * 260, behavior: "smooth" });
-  }
+  const [expanded, setExpanded] = useState(false);
+  const primary = navItems.filter((item) => PRIMARY_LABELS.has(item.label));
+  const more = navItems.filter((item) => !PRIMARY_LABELS.has(item.label));
 
   return (
-    <div className="relative mt-5">
-      {canScrollLeft ? (
-        <button
-          type="button"
-          aria-label="Previous dashboard tabs"
-          onClick={() => scrollByTabs(-1)}
-          className="absolute left-1 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d8e3ed] bg-white text-[#22304a] shadow-md"
-        >
-          <ChevronLeft className="h-4 w-4" />
+    <div className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.06] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3 px-1">
+        <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f2c58f]">Quick navigation</p><p className="mt-1 text-xs text-white/65">Your most-used sections are always visible.</p></div>
+        <button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white">
+          <LayoutGrid className="h-4 w-4" /> {expanded ? "Show less" : "All sections"} {expanded ? <ChevronUp className="h-4 w-4"/> : <ChevronDown className="h-4 w-4"/>}
         </button>
-      ) : null}
-      {canScrollRight ? (
-        <button
-          type="button"
-          aria-label="Next dashboard tabs"
-          onClick={() => scrollByTabs(1)}
-          className="absolute right-1 top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d8e3ed] bg-white text-[#22304a] shadow-md"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      ) : null}
-      <nav
-        ref={railRef}
-        className="-mx-4 flex snap-x gap-2 overflow-x-auto px-4 pb-2 [scrollbar-width:none] sm:-mx-2 sm:px-2 [&::-webkit-scrollbar]:hidden"
-        aria-label="Dashboard sections"
-      >
-        {navItems.map((item) => (
-          <FamilyNavLinkClient
-            key={item.href}
-            href={item.href}
-            label={item.label}
-            icon={item.icon}
-            variant="mobileTab"
-          />
-        ))}
+      </div>
+      <nav className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap" aria-label="Main dashboard sections">
+        {primary.map((item) => <FamilyNavLinkClient key={item.href} href={item.href} label={item.label} icon={item.icon} variant="mobileTab"/>)}
       </nav>
+      {expanded ? (
+        <div className="mt-3 border-t border-white/10 pt-3">
+          <p className="mb-2 px-1 text-xs font-semibold text-white/70">Everything else</p>
+          <nav className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5" aria-label="All dashboard sections">
+            {more.map((item) => <FamilyNavLinkClient key={item.href} href={item.href} label={item.label} icon={item.icon} variant="mobileTab"/>)}
+          </nav>
+        </div>
+      ) : null}
     </div>
   );
 }

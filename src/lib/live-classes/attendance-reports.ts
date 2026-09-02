@@ -20,7 +20,21 @@ function personName(user: { firstName: string; lastName: string | null }) {
   return `${user.firstName} ${user.lastName ?? ""}`.trim();
 }
 
-function mapAttendance(record: any): AttendanceHistoryEntry {
+function attendanceDay(record: { attendanceDay?: string | null; lessonDate: Date }) {
+  return record.attendanceDay ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" }).format(record.lessonDate);
+}
+
+function deduplicateAttendance<T extends { id: string; scheduleId: string | null; studentId: string; attendanceDay?: string | null; lessonDate: Date; status: string; durationMinutes: number | null }>(records: T[]) {
+  const statusRank: Record<string, number> = { PRESENT: 4, LATE: 3, EXCUSED: 2, ABSENT: 1 };
+  const unique = new Map<string, T>();
+  for (const record of records) {
+    const key = record.scheduleId ? record.scheduleId + ":" + record.studentId + ":" + attendanceDay(record) : "manual:" + record.id;
+    const current = unique.get(key);
+    if (!current || (statusRank[record.status] ?? 0) > (statusRank[current.status] ?? 0) || ((statusRank[record.status] ?? 0) === (statusRank[current.status] ?? 0) && (record.durationMinutes ?? 0) > (current.durationMinutes ?? 0))) unique.set(key, record);
+  }
+  return [...unique.values()];
+}
+function mapAttendance(record: { id: string; lessonDate: Date; status: string; joinedAt: Date | null; leftAt: Date | null; durationMinutes: number | null; source: string | null; enrollment: { program: { title: string } }; schedule: { title: string; teacher: { user: { firstName: string; lastName: string | null } } | null } | null }): AttendanceHistoryEntry {
   return {
     id: record.id,
     lessonDate: record.lessonDate,
@@ -57,7 +71,7 @@ async function listStudentAttendance(studentId: string) {
     orderBy: { lessonDate: "desc" },
     take: 120,
   });
-  return records.map(mapAttendance);
+  return deduplicateAttendance(records).map(mapAttendance);
 }
 
 export async function getTeacherAttendanceReport(userId: string, range: "week" | "month") {
@@ -82,10 +96,11 @@ export async function getTeacherAttendanceReport(userId: string, range: "week" |
     },
     orderBy: [{ lessonDate: "desc" }, { student: { displayName: "asc" } }],
   });
+  const uniqueRecords = deduplicateAttendance(records);
   const counts = { present: 0, late: 0, absent: 0, excused: 0 };
   let durationTotal = 0;
   let durationCount = 0;
-  const mapped = records.map((record) => {
+  const mapped = uniqueRecords.map((record) => {
     counts[record.status.toLowerCase() as keyof typeof counts] += 1;
     if (record.durationMinutes != null) { durationTotal += record.durationMinutes; durationCount += 1; }
     return {

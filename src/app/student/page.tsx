@@ -9,6 +9,7 @@ import { db } from "@/lib/db";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
@@ -177,6 +178,7 @@ export default async function StudentDashboardPage() {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
+      <FamilyJourneyLinks role="student" />
       <LiveQuizAutoRefresh intervalMs={3000} enabled />
       {activeLiveQuizzes.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">

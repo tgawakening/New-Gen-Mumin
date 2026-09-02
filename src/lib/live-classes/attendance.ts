@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHmac, timingSafeEqual } from "crypto";
+import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
 import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
@@ -121,6 +122,7 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
   dayStart.setUTCHours(0, 0, 0, 0);
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+  const attendanceDay = pointDayKey(sessionDate);
   const [schedule, intervals] = await Promise.all([
     db.classSchedule.findUnique({ where: { id: scheduleId }, select: { programId: true } }),
     db.zoomAttendanceInterval.findMany({
@@ -145,7 +147,7 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
   });
   const late = occurrence ? joinedAt.getTime() > occurrence.startedAt.getTime() + 10 * 60 * 1000 : false;
   const existing = await db.attendanceRecord.findFirst({
-    where: { scheduleId, studentId, lessonDate: { gte: dayStart, lt: dayEnd } },
+    where: { scheduleId, studentId, attendanceDay },
     orderBy: { updatedAt: "desc" },
   });
   const data = {
@@ -153,6 +155,7 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
     studentId,
     scheduleId,
     lessonDate: occurrence?.startedAt ?? joinedAt,
+    attendanceDay,
     status: late ? "LATE" as const : "PRESENT" as const,
     note: `Automatically tracked from Zoom (${durationMinutes} minutes).`,
     joinedAt,
@@ -161,7 +164,14 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
     source: "zoom",
   };
   if (existing) await db.attendanceRecord.update({ where: { id: existing.id }, data });
-  else await db.attendanceRecord.create({ data });
+  else {
+    try {
+      await db.attendanceRecord.create({ data });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      await db.attendanceRecord.updateMany({ where: { scheduleId, studentId, attendanceDay }, data });
+    }
+  }
 
   const joinedOnTime = Boolean(occurrence && joinedAt.getTime() <= occurrence.startedAt.getTime());
   if (joinedOnTime) {
@@ -235,15 +245,14 @@ async function markRosterAbsences(scheduleId: string, endedAt: Date) {
   const studentIds = await eligibleStudentIds(scheduleId);
   const schedule = await db.classSchedule.findUnique({ where: { id: scheduleId }, select: { programId: true } });
   if (!schedule || !studentIds.length) return;
-  const dayStart = new Date(endedAt); dayStart.setUTCHours(0, 0, 0, 0);
-  const dayEnd = new Date(dayStart); dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+  const attendanceDay = pointDayKey(endedAt);
   const [enrollments, existing] = await Promise.all([
     db.enrollment.findMany({ where: { studentId: { in: studentIds }, programId: schedule.programId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } }, select: { id: true, studentId: true } }),
-    db.attendanceRecord.findMany({ where: { scheduleId, lessonDate: { gte: dayStart, lt: dayEnd } }, select: { studentId: true } }),
+    db.attendanceRecord.findMany({ where: { scheduleId, attendanceDay }, select: { studentId: true } }),
   ]);
   const recorded = new Set(existing.map((item) => item.studentId));
   const missing = enrollments.filter((item) => !recorded.has(item.studentId));
-  if (missing.length) await db.attendanceRecord.createMany({ data: missing.map((item) => ({ enrollmentId: item.id, studentId: item.studentId, scheduleId, lessonDate: endedAt, status: "ABSENT" as const, note: "No verified Zoom attendance was detected.", source: "zoom" })) });
+  if (missing.length) await db.attendanceRecord.createMany({ data: missing.map((item) => ({ enrollmentId: item.id, studentId: item.studentId, scheduleId, lessonDate: endedAt, attendanceDay, status: "ABSENT" as const, note: "No verified Zoom attendance was detected.", source: "zoom" })), skipDuplicates: true });
 }
 
 export async function reconcileZoomParticipantReport(scheduleId: string, meetingId: string) {
