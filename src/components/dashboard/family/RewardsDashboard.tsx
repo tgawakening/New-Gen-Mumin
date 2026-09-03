@@ -1,3 +1,4 @@
+export { InteractiveRewardsDashboard as RewardsDashboard } from "@/components/dashboard/family/InteractiveRewardsDashboard";
 import Image from "next/image";
 import Link from "next/link";
 import { Award, Download, LockKeyhole, ShieldCheck, Sparkles, Star, Trophy, Users } from "lucide-react";
@@ -7,7 +8,7 @@ import { QuizAnimalAvatar } from "@/components/quizzes/QuizAnimalAvatar";
 
 type Data = Awaited<ReturnType<typeof getRecognitionDashboard>>;
 
-export function RewardsDashboard({ data, parentView = false }: { data: Data; parentView?: boolean }) {
+export function LegacyRewardsDashboard({ data, parentView = false }: { data: Data; parentView?: boolean }) {
   const name = data.student?.displayName || [data.student?.user.firstName, data.student?.user.lastName].filter(Boolean).join(" ") || "Student";
   const featured = data.awards.find((award) => award.featuredWeek);
   const gender = data.student?.registrationStudents[0]?.gender?.toLowerCase() ?? "";
