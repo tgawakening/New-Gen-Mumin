@@ -193,6 +193,13 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   } else if (room.genderScope !== genderScope) {
     room = await db.communityRoom.update({ where: { id: room.id }, data: { genderScope } });
   }
+  await db.communityMembership.deleteMany({
+    where: {
+      studentId,
+      roomId: { not: room.id },
+      room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: ["Girls Qabila A", "Girls Qabila B", "Boys Qabila A", "Boys Qabila B"] } },
+    },
+  });
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
 }
 

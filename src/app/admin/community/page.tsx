@@ -27,8 +27,8 @@ const GENDER_SCOPES = ["ALL", "BOYS", "GIRLS", "MENTOR_SUPERVISED"] as const;
 const CURRENT_QABILA_DRAFT = [
   ["Amna Ali", "Girls Qabila A", "CAPTAIN"], ["Muntaha", "Girls Qabila A", "VICE_CAPTAIN"], ["Tehreem", "Girls Qabila A", "MEMBER"], ["Anayah", "Girls Qabila A", "MEMBER"], ["Emeena", "Girls Qabila A", "MEMBER"], ["Zainab", "Girls Qabila A", "MEMBER"], ["Amal", "Girls Qabila A", "MEMBER"], ["Adan", "Girls Qabila A", "MEMBER"],
   ["Mishal", "Girls Qabila B", "CAPTAIN"], ["Rania", "Girls Qabila B", "VICE_CAPTAIN"], ["Noor", "Girls Qabila B", "MEMBER"], ["Sara Ali", "Girls Qabila B", "MEMBER"], ["Halima", "Girls Qabila B", "MEMBER"], ["Aram Fatma", "Girls Qabila B", "MEMBER"], ["Huda", "Girls Qabila B", "MEMBER"],
-  ["Musa AH Naveed", "Boys Qabila A", "CAPTAIN"], ["Ibrahim Hassan", "Boys Qabila A", "VICE_CAPTAIN"], ["Salar", "Boys Qabila A", "MEMBER"], ["Mussab", "Boys Qabila A", "MEMBER"], ["TaaHaa", "Boys Qabila A", "MEMBER"], ["Hanzla", "Boys Qabila A", "MEMBER"],
-  ["Yashur", "Boys Qabila B", "CAPTAIN"], ["Mustafa", "Boys Qabila B", "VICE_CAPTAIN"], ["Arham", "Boys Qabila B", "MEMBER"], ["Zaran", "Boys Qabila B", "MEMBER"], ["Reyhan", "Boys Qabila B", "MEMBER"], ["Talha", "Boys Qabila B", "MEMBER"],
+  ["Musa AH Naveed", "Boys Qabila A", "CAPTAIN"], ["Ibrahim Hassan", "Boys Qabila A", "VICE_CAPTAIN"], ["Talha", "Boys Qabila A", "MEMBER"], ["Mussab", "Boys Qabila A", "MEMBER"], ["TaaHaa", "Boys Qabila A", "MEMBER"], ["Hanzla", "Boys Qabila A", "MEMBER"],
+  ["Yashur", "Boys Qabila B", "CAPTAIN"], ["Mustafa", "Boys Qabila B", "VICE_CAPTAIN"], ["Arham", "Boys Qabila B", "MEMBER"], ["Zaran", "Boys Qabila B", "MEMBER"], ["Reyhan", "Boys Qabila B", "MEMBER"], ["Salar", "Boys Qabila B", "MEMBER"],
 ] as const;
 const QABILA_NAME_ALIASES: Record<string, string[]> = {
   "Muntaha": ["Muntaha Fatima"], "Tehreem": ["Tehreem Khurram"], "Anayah": ["Anayah khan"],
