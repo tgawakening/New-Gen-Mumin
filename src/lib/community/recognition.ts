@@ -80,7 +80,7 @@ export async function getRecognitionDashboard(studentId: string) {
   const membership = await ensureStudentHouseMembership(studentId);
   const houseIds = await getCanonicalHouseIdsForHouseId(membership.houseId);
   const [student, awards, studentPoints, housePoints, activity, pointRows] = await Promise.all([
-    db.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } }),
+    db.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, registrationStudents: { orderBy: { createdAt: "desc" }, select: { firstName: true, lastName: true, displayName: true, gender: true } } } }),
     db.recognitionAward.findMany({ where: { studentId, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" } }),
     db.housePointLedger.aggregate({ where: { studentId }, _sum: { points: true } }),
     db.housePointLedger.aggregate({ where: { houseId: { in: houseIds } }, _sum: { points: true } }),
@@ -91,6 +91,19 @@ export async function getRecognitionDashboard(studentId: string) {
   const collective = housePoints._sum.points ?? 0;
   const level = recognitionLevel(total);
   const nextLevel = RECOGNITION_LEVELS.find((entry) => entry.min > total) ?? null;
+  const identityKey = (value?: string | null) => (value ?? "").toLowerCase().replace(/\b(parent|student)\b/gu, "").replace(/[^a-z0-9]+/gu, "");
+  const profileNames = student
+    ? [student.displayName, `${student.user.firstName} ${student.user.lastName ?? ""}`].map(identityKey).filter(Boolean)
+    : [];
+  const matchingRegistration = student?.registrationStudents.find((entry) => {
+    const registrationNames = [entry.displayName, `${entry.firstName} ${entry.lastName ?? ""}`, entry.firstName].map(identityKey).filter(Boolean);
+    return registrationNames.some((entryName) => profileNames.some((profileName) => entryName === profileName || (entryName.length > 3 && profileName.includes(entryName))));
+  });
+  const linkedGenders = [...new Set((student?.registrationStudents ?? []).map((entry) => entry.gender?.trim()).filter(Boolean))];
+  const qabilaGender = membership.qabilaGroup?.toLowerCase().startsWith("girls")
+    ? "Girl"
+    : membership.qabilaGroup?.toLowerCase().startsWith("boys") ? "Boy" : null;
+  const resolvedGender = qabilaGender ?? matchingRegistration?.gender ?? (linkedGenders.length === 1 ? linkedGenders[0] : null);
   const nextUnlock = HOUSE_UNLOCKS.find((entry) => entry.milestone > collective) ?? null;
   for (const unlock of HOUSE_UNLOCKS.filter((entry) => collective >= entry.milestone)) await db.houseUnlock.upsert({ where: { houseId_milestone: { houseId: membership.houseId, milestone: unlock.milestone } }, create: { houseId: membership.houseId, ...unlock, unlockedAt: new Date() }, update: {} });
   const unlocks = await db.houseUnlock.findMany({ where: { houseId: membership.houseId }, orderBy: { milestone: "asc" } });
@@ -99,5 +112,5 @@ export async function getRecognitionDashboard(studentId: string) {
     const key: keyof typeof pointBreakdown = row.sourceType.includes("ATTENDANCE") ? "attendance" : row.sourceType.includes("SUNNAH") ? "sunnah" : row.sourceType.includes("HOMEWORK") ? "homework" : row.sourceType.includes("RECOGNITION") || row.sourceType.includes("CROSS_HOUSE") ? "recognition" : row.sourceType.includes("QUIZ") ? "quizzes" : "other";
     pointBreakdown[key] += row.points;
   }
-  return { student, membership, awards, total, collective, level, nextLevel, nextUnlock, unlocks, pointBreakdown, activity, badgeDefinitions: CHARACTER_BADGES, recognitionLevels: RECOGNITION_LEVELS };
+  return { student, resolvedGender, membership, awards, total, collective, level, nextLevel, nextUnlock, unlocks, pointBreakdown, activity, badgeDefinitions: CHARACTER_BADGES, recognitionLevels: RECOGNITION_LEVELS };
 }

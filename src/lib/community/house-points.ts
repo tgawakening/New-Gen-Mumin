@@ -224,18 +224,22 @@ export async function getRecentHousePointEvents(houseId: string, take = 8) {
   const rows = await db.housePointLedger.findMany({
     where: { houseId: { in: houseIds } },
     orderBy: { awardedAt: "desc" },
-    take,
+    take: Math.max(take, take * 5),
     include: { student: { include: { user: true } }, house: true },
   });
 
-  return rows.map((row) => ({
-    id: row.id,
-    points: row.points,
-    reason: row.reason,
-    awardedAt: row.awardedAt,
-    house: normalizeHouseDisplay(row.house),
-    studentName: row.student.displayName || `${row.student.user.firstName} ${row.student.user.lastName}`.trim(),
-  }));
+  const grouped = new Map<string, { id: string; points: number; reason: string; awardedAt: Date; house: ReturnType<typeof normalizeHouseDisplay>; studentName: string; occurrenceCount: number }>();
+  for (const row of rows) {
+    const day = row.awardedAt.toISOString().slice(0, 10);
+    const key = `${row.studentId}:${row.points}:${row.reason.trim().toLowerCase()}:${day}`;
+    const existing = grouped.get(key);
+    if (existing) {
+      existing.occurrenceCount += 1;
+      continue;
+    }
+    grouped.set(key, { id: row.id, points: row.points, reason: row.reason, awardedAt: row.awardedAt, house: normalizeHouseDisplay(row.house), studentName: row.student.displayName || `${row.student.user.firstName} ${row.student.user.lastName}`.trim(), occurrenceCount: 1 });
+  }
+  return [...grouped.values()].slice(0, take);
 }
 
 export async function awardHousePointsForQuizAttempt(input: {

@@ -42,19 +42,23 @@ async function getStudentCommunityProfile(studentId: string) {
     include: {
       registrationStudents: {
         orderBy: { createdAt: "desc" },
-        take: 1,
         select: { gender: true },
       },
+      houseMembership: { select: { qabilaGroup: true } },
     },
   });
 
   return {
     age: student?.age ?? null,
-    genderScope: normalizeGender(student?.registrationStudents[0]?.gender),
+    genderScope: student?.houseMembership?.qabilaGroup?.toLowerCase().startsWith("girls")
+      ? "GIRLS"
+      : student?.houseMembership?.qabilaGroup?.toLowerCase().startsWith("boys")
+        ? "BOYS"
+        : normalizeGender([...new Set((student?.registrationStudents ?? []).map((entry) => entry.gender).filter(Boolean))].length === 1 ? student?.registrationStudents.find((entry) => entry.gender)?.gender : null),
   };
 }
 
-async function addStudentToRoom(roomId: string, studentId: string) {
+async function addStudentToRoom(roomId: string, studentId: string, role = "MEMBER") {
   await db.communityMembership.upsert({
     where: {
       roomId_studentId: {
@@ -62,10 +66,11 @@ async function addStudentToRoom(roomId: string, studentId: string) {
         studentId,
       },
     },
-    update: {},
+    update: { role },
     create: {
       roomId,
       studentId,
+      role,
     },
   });
 }
@@ -161,6 +166,37 @@ async function ensureAnnouncementRoom(studentId: string) {
   await addStudentToRoom(room.id, studentId);
 }
 
+export async function ensureStudentQabilaRoom(studentId: string) {
+  const membership = await db.houseMembership.findUnique({
+    where: { studentId },
+    select: { qabilaGroup: true, role: true },
+  });
+  const qabilaGroup = membership?.qabilaGroup?.trim();
+  if (!qabilaGroup) return;
+  const genderScope = qabilaGroup.toLowerCase().startsWith("girls")
+    ? "GIRLS"
+    : qabilaGroup.toLowerCase().startsWith("boys") ? "BOYS" : "MENTOR_SUPERVISED";
+  let room = await db.communityRoom.findFirst({
+    where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM, isActive: true },
+  });
+  if (!room) {
+    room = await db.communityRoom.create({
+      data: {
+        title: qabilaGroup,
+        description: "A supervised Qabila team room for mentor-guided planning, encouragement, and safe community projects. Personal contact details and external links are blocked.",
+        type: CommunityRoomType.PROJECT_TEAM,
+        visibility: CommunityRoomVisibility.STUDENTS,
+        genderScope,
+        ageBand: "GENERAL",
+      },
+    });
+  } else if (room.genderScope !== genderScope) {
+    room = await db.communityRoom.update({ where: { id: room.id }, data: { genderScope } });
+  }
+  await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
+}
+
+
 async function ensureStudentClassRooms(student: {
   id: string;
   age: number | null;
@@ -183,6 +219,7 @@ async function ensureStudentClassRooms(student: {
     });
   }
   await ensureCircleRoom(student.id, studentAge, profile.genderScope);
+  await ensureStudentQabilaRoom(student.id);
   await ensureAnnouncementRoom(student.id);
 }
 

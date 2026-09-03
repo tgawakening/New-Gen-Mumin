@@ -34,7 +34,7 @@ function studentName(data: Data) {
 }
 
 function Character({ data, className = "" }: { data: Data; className?: string }) {
-  const gender = data.student?.registrationStudents[0]?.gender?.toLowerCase() ?? "";
+  const gender = data.resolvedGender?.toLowerCase() ?? "";
   const isGirl = gender.includes("girl") || gender.includes("female");
   return (
     <Image
@@ -193,7 +193,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
           <section className="rounded-[30px] bg-[#102544] p-5 text-white shadow-lg sm:p-6">
             <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ffc96c]">House activity feed</p><h3 className="mt-2 text-xl font-black">Our House is growing</h3></div><Users className="h-9 w-9 text-[#ffc96c]" /></div>
             <div className="mt-5 space-y-3">
-              {data.activity.slice(0, 6).map((event) => <div key={event.id} className="flex items-start gap-3 rounded-[18px] bg-white/10 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ffc96c] font-black text-[#102544]">{event.studentName.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="font-bold">{event.studentName}</p><p className="mt-1 text-xs leading-5 text-white/65">{event.reason}</p></div><span className="shrink-0 font-black text-[#ffc96c]">+{event.points}</span></div>)}
+              {data.activity.slice(0, 6).map((event) => <div key={event.id} className="flex items-start gap-3 rounded-[18px] bg-white/10 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ffc96c] font-black text-[#102544]">{event.studentName.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="font-bold">{event.studentName}</p><p className="mt-1 text-xs leading-5 text-white/65">{event.reason}</p>{event.occurrenceCount > 1 ? <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-[#ffc96c]">{event.occurrenceCount} verified entries grouped</p> : null}</div><span className="shrink-0 font-black text-[#ffc96c]">+{event.points}</span></div>)}
               {!data.activity.length ? <div className="rounded-[20px] bg-white/10 p-5 text-center"><BookOpen className="mx-auto h-8 w-8 text-[#ffc96c]" /><p className="mt-3 text-sm text-white/70">House contributions will celebrate here as soon as activities are verified.</p></div> : null}
             </div>
           </section>

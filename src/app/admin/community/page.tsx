@@ -6,6 +6,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility, Mod
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { ensureDefaultHouses, ensureStudentHouseMembership, getHouseLeaderboard } from "@/lib/community/house-points";
+import { ensureStudentQabilaRoom } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 
 type PageProps = {
@@ -26,9 +27,23 @@ const GENDER_SCOPES = ["ALL", "BOYS", "GIRLS", "MENTOR_SUPERVISED"] as const;
 const CURRENT_QABILA_DRAFT = [
   ["Amna Ali", "Girls Qabila A", "CAPTAIN"], ["Muntaha", "Girls Qabila A", "VICE_CAPTAIN"], ["Tehreem", "Girls Qabila A", "MEMBER"], ["Anayah", "Girls Qabila A", "MEMBER"], ["Emeena", "Girls Qabila A", "MEMBER"], ["Zainab", "Girls Qabila A", "MEMBER"], ["Amal", "Girls Qabila A", "MEMBER"], ["Adan", "Girls Qabila A", "MEMBER"],
   ["Mishal", "Girls Qabila B", "CAPTAIN"], ["Rania", "Girls Qabila B", "VICE_CAPTAIN"], ["Noor", "Girls Qabila B", "MEMBER"], ["Sara Ali", "Girls Qabila B", "MEMBER"], ["Halima", "Girls Qabila B", "MEMBER"], ["Aram Fatma", "Girls Qabila B", "MEMBER"], ["Huda", "Girls Qabila B", "MEMBER"],
-  ["Musa AH Naveed", "Boys Qabila A", "CAPTAIN"], ["Ibrahim Hassan", "Boys Qabila A", "VICE_CAPTAIN"], ["Salar", "Boys Qabila A", "MEMBER"], ["Mussab", "Boys Qabila A", "MEMBER"], ["TaaHaa", "Boys Qabila A", "MEMBER"], ["Hanzla", "Boys Qabila A", "MEMBER"], ["Raahum", "Boys Qabila A", "MEMBER"],
-  ["Arham", "Boys Qabila B", "CAPTAIN"], ["Mustafa", "Boys Qabila B", "VICE_CAPTAIN"], ["Yashur", "Boys Qabila B", "MEMBER"], ["Zaran", "Boys Qabila B", "MEMBER"], ["Reyhan", "Boys Qabila B", "MEMBER"], ["Talha", "Boys Qabila B", "MEMBER"],
+  ["Musa AH Naveed", "Boys Qabila A", "CAPTAIN"], ["Ibrahim Hassan", "Boys Qabila A", "VICE_CAPTAIN"], ["Salar", "Boys Qabila A", "MEMBER"], ["Mussab", "Boys Qabila A", "MEMBER"], ["TaaHaa", "Boys Qabila A", "MEMBER"], ["Hanzla", "Boys Qabila A", "MEMBER"],
+  ["Yashur", "Boys Qabila B", "CAPTAIN"], ["Mustafa", "Boys Qabila B", "VICE_CAPTAIN"], ["Arham", "Boys Qabila B", "MEMBER"], ["Zaran", "Boys Qabila B", "MEMBER"], ["Reyhan", "Boys Qabila B", "MEMBER"], ["Talha", "Boys Qabila B", "MEMBER"],
 ] as const;
+const QABILA_NAME_ALIASES: Record<string, string[]> = {
+  "Muntaha": ["Muntaha Fatima"], "Tehreem": ["Tehreem Khurram"], "Anayah": ["Anayah khan"],
+  "Zainab": ["Zainab Ali"], "Amal": ["Amal Salihah"], "Adan": ["Adan Fakihah"],
+  "Mishal": ["Mishal ahmad"], "Rania": ["Rania Osman"], "Noor": ["Noor aftab"],
+  "Sara Ali": ["Sarah Ali", "Sarah Syed Hassan"], "Halima": ["Halimah", "Halimah zeeshan"],
+  "Aram Fatma": ["Aram Fatima"], "Huda": ["Huda Ahsan"],
+  "Musa AH Naveed": ["Moosa AbdulHaadi Naveed"], "Ibrahim Hassan": ["Ibrahim Syed Hassan"],
+  "Salar": ["Salaar", "Salaar Khurram"], "Mussab": ["Musab", "Mohammad Mussab Ashfaq", "Mohammad Mus'ab Ashfaq"],
+  "TaaHaa": ["Taha", "Muhammad Taha"], "Hanzla": ["Hanzala", "Hanzala rehman"],
+  "Yashur": ["Yasher", "Yasher Muhammad Shahbaz"], "Mustafa": ["Mustafa Asif Mukhtar"],
+  "Arham": ["Arham khan"], "Zaran": ["Zaran Nisar"], "Reyhan": ["Rehan", "Rehan Khan"],
+};
+const REMOVED_QABILA_NAMES = ["Raahum", "Ruhaan"];
+
 
 function normalizeGender(value?: string | null) {
   const gender = (value ?? "").trim().toLowerCase();
@@ -143,11 +158,19 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
     let assigned = 0;
     let skipped = 0;
     for (const [draftName, qabilaGroup, role] of CURRENT_QABILA_DRAFT) {
-      const matches = students.filter((student) => normalized(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`) === normalized(draftName));
+      const allowedNames = [draftName, ...(QABILA_NAME_ALIASES[draftName] ?? [])].map(normalized);
+      const matches = students.filter((student) => allowedNames.includes(normalized(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`)));
       if (matches.length !== 1) { skipped += 1; continue; }
       const membership = await ensureStudentHouseMembership(matches[0].id);
       await db.houseMembership.update({ where: { id: membership.id }, data: { qabilaGroup, role } });
+      await ensureStudentQabilaRoom(matches[0].id);
       assigned += 1;
+    }
+    const removedNames = REMOVED_QABILA_NAMES.map(normalized);
+    const removedStudents = students.filter((student) => removedNames.includes(normalized(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`)));
+    for (const removedStudent of removedStudents) {
+      await db.houseMembership.updateMany({ where: { studentId: removedStudent.id }, data: { qabilaGroup: null, role: "MEMBER" } });
+      await db.communityMembership.deleteMany({ where: { studentId: removedStudent.id, room: { type: CommunityRoomType.PROJECT_TEAM } } });
     }
     revalidatePath("/admin/community"); revalidatePath("/student/rewards"); revalidatePath("/parent/rewards");
     redirect(noticeHref(`Qabila draft applied to ${assigned} unique students; ${skipped} unmatched or duplicate names were safely skipped.`));
