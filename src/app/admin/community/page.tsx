@@ -6,7 +6,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility, Mod
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { ensureDefaultHouses, ensureStudentHouseMembership, getHouseLeaderboard } from "@/lib/community/house-points";
-import { ensureStudentQabilaRoom } from "@/lib/community/rooms";
+import { ensureStudentQabilaRoom, syncQabilaSupervisors } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 
 type PageProps = {
@@ -173,7 +173,8 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
       await db.communityMembership.deleteMany({ where: { studentId: removedStudent.id, room: { type: CommunityRoomType.PROJECT_TEAM } } });
     }
     revalidatePath("/admin/community"); revalidatePath("/student/rewards"); revalidatePath("/parent/rewards");
-    redirect(noticeHref(`Qabila draft applied to ${assigned} unique students; ${skipped} unmatched or duplicate names were safely skipped.`));
+    const supervisors = await syncQabilaSupervisors();
+    redirect(noticeHref(`Qabila draft applied to ${assigned} students; ${supervisors.assigned.length} faculty supervisors assigned; ${skipped + supervisors.skipped.length} ambiguous records safely skipped.`));
   }
   async function resetHousePoints() {
     "use server";

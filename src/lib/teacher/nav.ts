@@ -9,6 +9,7 @@ export function getTeacherNavItems() {
     { label: "Schedule", href: "/teacher/schedule", icon: "calendar" },
     { label: "Course Builder", href: "/teacher/course-builder", icon: "builder" },
     { label: "Lesson Log", href: "/teacher/lesson-log", icon: "lesson" },
+    { label: "Qabila Community", href: "/teacher/community", icon: "classes" },
     { label: "Attendance", href: "/teacher/attendance", icon: "check" },
     { label: "Live House Points", href: "/teacher/house-points", icon: "quiz" },
     { label: "Recognition", href: "/teacher/recognition", icon: "quiz" },

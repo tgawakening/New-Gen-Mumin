@@ -202,6 +202,40 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   });
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
 }
+const QABILA_SUPERVISOR_DRAFT: Record<string, string[]> = {
+  "Girls Qabila A": ["Saba"],
+  "Girls Qabila B": ["Aisha"],
+  "Boys Qabila A": ["Mehran", "Afira"],
+  "Boys Qabila B": ["Abdul Badee", "Javeria"],
+};
+
+export async function syncQabilaSupervisors() {
+  const [rooms, teachers] = await Promise.all([
+    db.communityRoom.findMany({ where: { type: CommunityRoomType.PROJECT_TEAM, title: { in: Object.keys(QABILA_SUPERVISOR_DRAFT) } } }),
+    db.user.findMany({ where: { role: "TEACHER", teacherProfile: { is: { isActive: true } } }, select: { id: true, firstName: true, lastName: true, email: true } }),
+  ]);
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const assigned: string[] = [];
+  const skipped: string[] = [];
+  for (const room of rooms) {
+    const requested = QABILA_SUPERVISOR_DRAFT[room.title] ?? [];
+    await db.communityRoomSupervisor.deleteMany({ where: { roomId: room.id } });
+    for (const name of requested) {
+      const key = normalize(name);
+      const matches = teachers.filter((teacher) => {
+        const full = normalize(`${teacher.firstName} ${teacher.lastName}`);
+        return full === key || full.startsWith(key) || normalize(teacher.email).startsWith(key);
+      });
+      if (matches.length !== 1) {
+        skipped.push(`${room.title}: ${name}`);
+        continue;
+      }
+      await db.communityRoomSupervisor.create({ data: { roomId: room.id, userId: matches[0].id, role: "MENTOR" } });
+      assigned.push(`${room.title}: ${name}`);
+    }
+  }
+  return { assigned, skipped };
+}
 
 
 async function ensureStudentClassRooms(student: {
