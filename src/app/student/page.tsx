@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -5,13 +6,13 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentQuestData } from "@/lib/community/quest";
+import { qabilaProfile } from "@/lib/community/qabilas";
 import { db } from "@/lib/db";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
-import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
   FamilyDashboardFrame,
@@ -125,15 +126,16 @@ export default async function StudentDashboardPage() {
     include: { enrollments: { select: { programId: true } } },
   });
   const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? []);
-  const house = quest.membership.house;
-  const teammates = quest.teammates.filter((member) => member.id !== child.id);
+  const qabila = qabilaProfile(quest.membership.qabilaGroup);
+  const qabilaName = qabila?.name ?? "Qabila assignment pending";
+  const teammates = qabila ? quest.teammates.filter((member) => member.id !== child.id && member.qabilaGroup === qabila.name) : [];
   const dailyMission = buildDailyMission(child, quest.missions[0]);
   const projectTask = child.assignments[0] ?? null;
   const classCircle = nextClassRoom ?? child.courses[0]?.roomAssignment ?? null;
   const dashboardMetrics = [
     { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
     { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-    { label: "House points", value: String(quest.studentTotal), hint: `${house.name} contribution.` },
+    { label: "Qabila contribution", value: String(quest.studentTotal), hint: `${qabilaName} verified points.` },
     { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
   ];
   const badgeItems = child.badges.length
@@ -164,12 +166,6 @@ export default async function StudentDashboardPage() {
         },
       ];
 
-  const houseLeaderboard = quest.leaderboard;
-  const totalHousePoints = houseLeaderboard.reduce((sum, entry) => sum + entry.points, 0);
-  const myHouseRank = Math.max(1, houseLeaderboard.findIndex((entry) => entry.isMine) + 1);
-  const myHouseStanding = houseLeaderboard.find((entry) => entry.isMine) ?? houseLeaderboard[0];
-  const nextHouseAhead = houseLeaderboard.find((entry) => !entry.isMine && entry.points > (myHouseStanding?.points ?? 0));
-  const pointsToNextRank = nextHouseAhead ? Math.max(0, nextHouseAhead.points - (myHouseStanding?.points ?? 0) + 1) : 0;
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
@@ -202,9 +198,9 @@ export default async function StudentDashboardPage() {
         studentName={dashboard.studentName}
         roleLabel="Student Home"
         mission={dailyMission}
-        houseName={house.name}
-        houseVirtue={house.virtue}
-        houseColor={house.color}
+        houseName={qabilaName}
+        houseVirtue={qabila ? `Mentored by ${qabila.mentor}` : "Mentor assignment pending"}
+        houseColor={qabila?.color ?? "#22304a"}
         metrics={dashboardMetrics}
         badges={badgeItems}
         actions={[
@@ -229,118 +225,13 @@ export default async function StudentDashboardPage() {
           })),
         }}
       />
-      <section className="grid gap-4 rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:items-stretch">
-        <div className="overflow-hidden rounded-[26px] border bg-[#fffaf3] p-5" style={{ borderColor: house.color }}>
-          <div className="flex items-center gap-4">
-            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[22px] text-lg font-black text-white shadow-sm" style={{ backgroundColor: house.color }}>
-              {house.name.replace(" House", "").slice(0, 1)}
-            </span>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Your fixed team</p>
-              <h2 className="mt-1 text-2xl font-semibold text-[#22304a]">You are in {house.name}</h2>
-              <p className="mt-1 text-sm text-[#617184]">All quiz, Sunnah tracker, homework, attendance, and behaviour points add to this team.</p>
-            </div>
-          </div>
-          <div className="mt-5 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#617184]">Team points</p>
-              <p className="mt-2 text-3xl font-semibold text-[#22304a]">{quest.houseTotal}</p>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#617184]">Your contribution</p>
-              <p className="mt-2 text-3xl font-semibold text-[#22304a]">{quest.studentTotal}</p>
-            </div>
-          </div>
+      <section className="overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
+        <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-4">{qabila ? <Image src={qabila.image} alt={`${qabila.name} Qabila`} width={80} height={80} className="h-20 w-20 shrink-0 rounded-[24px] object-cover shadow-sm"/> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-[#eef2f7] text-2xl">?</span>}<div><p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: qabila?.color ?? "#617184" }}>My Qabila</p><h2 className="mt-1 text-2xl font-semibold text-[#22304a]">{qabilaName}</h2><p className="mt-1 text-sm text-[#617184]">{qabila ? `${qabila.mentor} supervises this team. Your verified contribution is ${quest.studentTotal} points.` : "Your Qabila will appear here after assignment."}</p></div></div>
+          {qabila ? <Link href="/student/community" className="shrink-0 rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Open Qabila chat</Link> : null}
         </div>
-        <details className="rounded-[26px] border border-[#eadfce] bg-[#fffaf3] p-5" open>
-          <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">View teammates in {house.name}</summary>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className="rounded-full px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: house.color }}>{dashboard.studentName}</span>
-            {teammates.slice(0, 18).map((member) => (
-              <span key={member.id} className="rounded-full border border-[#eadfce] bg-white px-3 py-2 text-xs font-semibold text-[#22304a]">
-                {member.name}
-              </span>
-            ))}
-            {!teammates.length ? <span className="text-sm text-[#617184]">Team companions will appear as students are assigned.</span> : null}
-          </div>
-        </details>
+        {teammates.length ? <details className="border-t border-[#eadfce] px-5 py-4"><summary className="cursor-pointer text-sm font-semibold text-[#22304a]">View {qabilaName} teammates</summary><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: qabila?.color }}>{dashboard.studentName}</span>{teammates.slice(0,18).map((member)=><span key={member.id} className="rounded-full border border-[#eadfce] bg-[#fffaf4] px-3 py-2 text-xs font-semibold text-[#22304a]">{member.name}</span>)}</div></details> : null}
       </section>
-      <section className="overflow-hidden rounded-[34px] border border-[#eadfce] bg-white shadow-sm">
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-          <div className="relative overflow-hidden bg-[#10223d] p-5 text-white sm:p-7">
-            <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#f39f5f] via-[#f7c56f] to-[#2f6b4b]" />
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#f7c56f]">House leaderboard</p>
-            <h2 className="mt-3 text-3xl font-semibold leading-tight">Your house challenge</h2>
-            <p className="mt-3 max-w-xl text-sm leading-7 text-white/75">
-              Earn points from missions, quizzes, live classes, tasks, reflections, and good effort. The goal is teamwork, not fastest clicks.
-            </p>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[22px] bg-white/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">My house</p>
-                <p className="mt-2 text-xl font-semibold">{house.name}</p>
-                <p className="mt-1 text-xs text-white/65">{house.virtue}</p>
-              </div>
-              <div className="rounded-[22px] bg-white/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">Rank</p>
-                <p className="mt-2 text-3xl font-semibold">#{myHouseRank}</p>
-                <p className="mt-1 text-xs text-white/65">Current house position</p>
-              </div>
-              <div className="rounded-[22px] bg-white/10 p-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/60">My points</p>
-                <p className="mt-2 text-3xl font-semibold">{quest.studentTotal}</p>
-                <p className="mt-1 text-xs text-white/65">Your contribution</p>
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <Link href="/student/missions" className="rounded-full bg-[#f39f5f] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#e07e2b]">
-                Earn points
-              </Link>
-              <Link href="/student/quizzes" className="rounded-full border border-white/20 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/15">
-                Open quizzes
-              </Link>
-              {pointsToNextRank > 0 ? (
-                <span className="rounded-full bg-white/10 px-4 py-3 text-xs font-semibold text-white/80">
-                  {pointsToNextRank} points to climb one rank
-                </span>
-              ) : (
-                <span className="rounded-full bg-white/10 px-4 py-3 text-xs font-semibold text-white/80">
-                  Keep leading with steady effort
-                </span>
-              )}
-            </div>
-
-            <div className="mt-6 flex items-end gap-3 rounded-[28px] bg-white/8 px-4 pt-4">
-              <img src="/gen-mumin-chars/ali-superhero.png" alt="Ali Gen-Mumin character" className="h-36 w-28 rounded-3xl object-cover object-[50%_12%] sm:h-44 sm:w-36" />
-              <img src="/gen-mumin-chars/rania-superhero.png" alt="Rania Gen-Mumin character" className="h-36 w-28 rounded-3xl object-cover object-[50%_12%] sm:h-44 sm:w-36" />
-              <p className="pb-5 text-sm leading-6 text-white/70">Boys and girls help their houses grow through learning and adab.</p>
-            </div>
-          </div>
-
-          <div className="bg-[#fffaf3] p-5 sm:p-7">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#c27a2c]">Live standings</p>
-                <h3 className="mt-2 text-2xl font-semibold text-[#22304a]">House points board</h3>
-              </div>
-              <span className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#617184] shadow-sm">{totalHousePoints} collective points earned</span>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              {houseLeaderboard.map((entry, index) => (
-                <div key={entry.id} className="grid gap-3 sm:grid-cols-[86px_minmax(0,1fr)] sm:items-center">
-                  <div className="flex justify-center">
-                    <img src={index % 2 === 0 ? "/gen-mumin-chars/ali-superhero.png" : "/gen-mumin-chars/rania-superhero.png"} alt="Gen-Mumin house character" className="h-20 w-16 rounded-2xl bg-white object-cover object-[50%_12%] shadow-sm" />
-                  </div>
-                  <HouseLeaderboardRow rank={index + 1} name={entry.name} color={entry.color} virtue={entry.virtue} points={entry.points} isMine={entry.isMine} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
       <div className="sr-only">
         <ul>
           {dashboardMetrics.map((metric) => (
@@ -362,7 +253,7 @@ export default async function StudentDashboardPage() {
                   {dailyMission.label} - {dailyMission.detail}
                 </p>
               </div>
-              <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#245d85]">{house.name}</span>
+              <span className="rounded-full bg-[#eef6ff] px-3 py-1 text-xs font-semibold text-[#245d85]">{qabilaName}</span>
             </div>
             <div className="mt-6 h-3 overflow-hidden rounded-full bg-white/12">
               <div className="h-full rounded-full bg-[#f39f5f]" style={{ width: `${dailyMission.progress}%` }} />
@@ -385,7 +276,7 @@ export default async function StudentDashboardPage() {
           <div className="grid content-between gap-4 bg-[#fff9f2] p-5 sm:p-7">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Quest identity</p>
-              <h3 className="mt-2 text-xl font-semibold text-[#22304a]">{house.virtue} path</h3>
+              <h3 className="mt-2 text-xl font-semibold text-[#22304a]">{qabila ? `${qabila.name} path` : "Qabila path"}</h3>
               <p className="mt-2 text-sm leading-6 text-[#5f6b7a]">
                 Complete missions, reflections, classes, and projects to build your rank.
               </p>

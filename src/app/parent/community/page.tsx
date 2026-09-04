@@ -190,7 +190,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                     <p className="mt-2 text-xs text-[#6d7785]">{formatDate(message.createdAt)}</p>
                     {childMode && message.author.id === community.selectedChild?.userId && Date.now() - message.createdAt.getTime() <= 60 * 60 * 1000 ? (
                       <details className="mt-3 border-t border-[#eadfce] pt-2">
-                        <summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Edit or delete my message · available for 1 hour</summary>
+                        <summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Edit or delete my message Â· available for 1 hour</summary>
                         <form action={manageAsChild} className="mt-2 grid gap-2">
                           <input type="hidden" name="studentId" value={selectedChildId} />
                           <input type="hidden" name="messageId" value={message.id} />

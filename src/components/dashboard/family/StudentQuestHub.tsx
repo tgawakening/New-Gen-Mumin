@@ -89,7 +89,7 @@ function AvatarCharacter({
   return (
     <div className="relative mx-auto flex h-[270px] w-full min-w-0 flex-col overflow-hidden rounded-[28px] bg-gradient-to-b from-white to-[#fff3df] sm:h-[310px]" aria-label={`${name} Gen-Mumin character`}>
       <div className="relative z-20 mx-3 mt-3 shrink-0 rounded-[20px] border border-[#f1c878] bg-white px-3 py-2 text-center text-xs font-bold leading-4 text-[#22304a] shadow-lg">
-        Amazing, {name}! Keep building your House.
+        Amazing, {name}! Keep strengthening your Qabila.
       </div>
       <div className="relative min-h-0 flex-1">
         <div className="absolute inset-x-5 bottom-1 h-12 rounded-full bg-[#22304a]/10 blur-xl" />

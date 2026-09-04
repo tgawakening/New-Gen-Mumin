@@ -207,6 +207,7 @@ export async function getHouseTeamMembers(houseId: string) {
     include: {
       user: true,
       registrationStudents: { select: { age: true, gender: true }, orderBy: { createdAt: "desc" }, take: 1 },
+      houseMembership: { select: { qabilaGroup: true } },
     },
     orderBy: [{ displayName: "asc" }, { createdAt: "asc" }],
   });
@@ -216,13 +217,14 @@ export async function getHouseTeamMembers(houseId: string) {
     name: student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
     age: student.registrationStudents[0]?.age ?? null,
     gender: student.registrationStudents[0]?.gender ?? null,
+    qabilaGroup: student.houseMembership?.qabilaGroup ?? null,
   }));
 }
 
-export async function getRecentHousePointEvents(houseId: string, take = 8) {
+export async function getRecentHousePointEvents(houseId: string, take = 8, qabilaGroup?: string | null) {
   const houseIds = await getCanonicalHouseIdsForHouseId(houseId);
   const rows = await db.housePointLedger.findMany({
-    where: { houseId: { in: houseIds } },
+    where: qabilaGroup ? { student: { houseMembership: { qabilaGroup } } } : { houseId: { in: houseIds } },
     orderBy: { awardedAt: "desc" },
     take: Math.max(take, take * 5),
     include: { student: { include: { user: true } }, house: true },

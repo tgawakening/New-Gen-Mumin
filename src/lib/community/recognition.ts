@@ -2,7 +2,8 @@ import "server-only";
 
 import { db } from "@/lib/db";
 import { awardHousePointsOnce } from "@/lib/community/point-awards";
-import { ensureStudentHouseMembership, getCanonicalHouseIdsForHouseId, getRecentHousePointEvents } from "@/lib/community/house-points";
+import { ensureStudentHouseMembership, getRecentHousePointEvents } from "@/lib/community/house-points";
+import { qabilaProfile } from "@/lib/community/qabilas";
 
 export const RECOGNITION_LEVELS = [
   { key: "ROOKIE", title: "Rookie Mumin", min: 0 },
@@ -78,13 +79,16 @@ export async function syncAutomaticRecognition(studentId: string) {
 export async function getRecognitionDashboard(studentId: string) {
   await syncAutomaticRecognition(studentId);
   const membership = await ensureStudentHouseMembership(studentId);
-  const houseIds = await getCanonicalHouseIdsForHouseId(membership.houseId);
+  const qabilaMembers = membership.qabilaGroup
+    ? await db.houseMembership.findMany({ where: { qabilaGroup: membership.qabilaGroup }, select: { studentId: true } })
+    : [];
+  const collectiveStudentIds = qabilaMembers.length ? qabilaMembers.map((item) => item.studentId) : [studentId];
   const [student, awards, studentPoints, housePoints, activity, pointRows] = await Promise.all([
     db.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, registrationStudents: { orderBy: { createdAt: "desc" }, select: { firstName: true, lastName: true, displayName: true, gender: true } } } }),
     db.recognitionAward.findMany({ where: { studentId, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" } }),
     db.housePointLedger.aggregate({ where: { studentId }, _sum: { points: true } }),
-    db.housePointLedger.aggregate({ where: { houseId: { in: houseIds } }, _sum: { points: true } }),
-    getRecentHousePointEvents(membership.houseId, 8),
+    db.housePointLedger.aggregate({ where: { studentId: { in: collectiveStudentIds } }, _sum: { points: true } }),
+    getRecentHousePointEvents(membership.houseId, 8, membership.qabilaGroup),
     db.housePointLedger.findMany({ where: { studentId }, select: { sourceType: true, points: true } }),
   ]);
   const total = studentPoints._sum.points ?? 0;
@@ -100,9 +104,7 @@ export async function getRecognitionDashboard(studentId: string) {
     return registrationNames.some((entryName) => profileNames.some((profileName) => entryName === profileName || (entryName.length > 3 && profileName.includes(entryName))));
   });
   const linkedGenders = [...new Set((student?.registrationStudents ?? []).map((entry) => entry.gender?.trim()).filter(Boolean))];
-  const qabilaGender = membership.qabilaGroup?.toLowerCase().startsWith("girls")
-    ? "Girl"
-    : membership.qabilaGroup?.toLowerCase().startsWith("boys") ? "Boy" : null;
+  const qabilaGender = qabilaProfile(membership.qabilaGroup)?.gender === "GIRLS" ? "Girl" : qabilaProfile(membership.qabilaGroup)?.gender === "BOYS" ? "Boy" : null;
   const resolvedGender = qabilaGender ?? matchingRegistration?.gender ?? (linkedGenders.length === 1 ? linkedGenders[0] : null);
   const nextUnlock = HOUSE_UNLOCKS.find((entry) => entry.milestone > collective) ?? null;
   for (const unlock of HOUSE_UNLOCKS.filter((entry) => collective >= entry.milestone)) await db.houseUnlock.upsert({ where: { houseId_milestone: { houseId: membership.houseId, milestone: unlock.milestone } }, create: { houseId: membership.houseId, ...unlock, unlockedAt: new Date() }, update: {} });

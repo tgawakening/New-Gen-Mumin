@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
+import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import {
   ChildSelector,
   CompactList,
@@ -17,6 +18,8 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentQuestData } from "@/lib/community/quest";
+import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
+import { qabilaProfile } from "@/lib/community/qabilas";
 
 type ParentDashboard = NonNullable<Awaited<ReturnType<typeof getParentDashboardData>>>;
 type ParentChild = ParentDashboard["children"][number];
@@ -105,15 +108,16 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
   const params = searchParams ? await searchParams : {};
   const selectedChild = dashboard.children.find((child) => child.id === params.child) ?? dashboard.children[0];
   const stats = buildStudentStats(selectedChild);
-  const quest = await getStudentQuestData(selectedChild.id, []);
-  const house = quest.membership.house;
+  const [quest, activeLiveQuizzes] = await Promise.all([getStudentQuestData(selectedChild.id, []), listStudentActiveLiveQuizzesByStudentId(selectedChild.id)]);
+  const qabila = qabilaProfile(quest.membership.qabilaGroup);
+  const qabilaName = qabila?.name ?? "Qabila assignment pending";
   const dailyMission = buildDailyMission(selectedChild);
   const classCircle = currentCircle(selectedChild);
   const projectTask = selectedChild.assignments[0] ?? null;
   const dashboardMetrics = [
     { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
     { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
-    { label: "House points", value: String(quest.studentTotal), hint: `${house.name} contribution.` },
+    { label: "Qabila contribution", value: String(quest.studentTotal), hint: `${qabilaName} verified points.` },
     { label: "Attendance", value: `${selectedChild.attendanceRate}%`, hint: "Recent class presence." },
   ];
   const badgeItems = selectedChild.badges.length
@@ -161,13 +165,14 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
         />
       </SectionCard>
 
-      <StudentQuestHub
+      <LiveQuizAutoRefresh intervalMs={3000} enabled />
+      {activeLiveQuizzes.length ? <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-5 text-white shadow-lg"><p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Live quiz started</p><div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-2xl font-semibold">Your teacher has opened a quiz.</h2><p className="mt-1 text-sm text-white/75">Go directly to the answer screen for {selectedChild.name}.</p></div><div className="flex flex-wrap gap-2">{activeLiveQuizzes.map((quiz)=><Link key={quiz.quizId} href={`/parent/quizzes/live/${quiz.quizId}?child=${selectedChild.id}`} className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a]">Answer live quiz</Link>)}</div></div></section> : null}      <StudentQuestHub
         studentName={selectedChild.name}
         roleLabel="Student Home"
         mission={dailyMission}
-        houseName={house.name}
-        houseVirtue={house.virtue}
-        houseColor={house.color}
+        houseName={qabilaName}
+        houseVirtue={qabila ? `Mentored by ${qabila.mentor}` : "Mentor assignment pending"}
+        houseColor={qabila?.color ?? "#22304a"}
         metrics={dashboardMetrics}
         badges={badgeItems}
         actions={[
