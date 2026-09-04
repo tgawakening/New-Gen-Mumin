@@ -482,6 +482,51 @@ export async function postTeacherCommunityMessage(input: { userId: string; roomI
   return message;
 }
 
+export async function editCommunityMessage(input: { actorUserId: string; messageId: string; body: string }) {
+  const message = await db.communityMessage.findUnique({ where: { id: input.messageId } });
+  if (!message || message.authorUserId !== input.actorUserId || message.status === CommunityMessageStatus.HIDDEN) {
+    throw new Error("You can edit only your own visible messages.");
+  }
+  const body = input.body.trim().slice(0, 800);
+  if (!body) throw new Error("Message cannot be empty.");
+  const flagReason = detectFlagReason(body);
+  const updated = await db.communityMessage.update({
+    where: { id: message.id },
+    data: { body, flagReason, status: flagReason ? CommunityMessageStatus.FLAGGED : CommunityMessageStatus.VISIBLE },
+  });
+  if (flagReason) await db.moderationFlag.create({ data: { messageId: message.id, reason: `Possible ${flagReason} after edit` } });
+  await db.moderationAction.create({ data: { actorUserId: input.actorUserId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: "edit", note: "Author edited the message; safety checks were rerun." } });
+  return updated;
+}
+
+export async function deleteCommunityMessage(input: { actorUserId: string; messageId: string }) {
+  const [actor, message] = await Promise.all([
+    db.user.findUnique({ where: { id: input.actorUserId }, select: { role: true } }),
+    db.communityMessage.findUnique({ where: { id: input.messageId }, include: { room: { include: { supervisors: true } } } }),
+  ]);
+  if (!actor || !message) throw new Error("Message was not found.");
+  const ownMessage = message.authorUserId === input.actorUserId;
+  const assignedTeacher = actor.role === "TEACHER" && message.room.supervisors.some((entry) => entry.userId === input.actorUserId);
+  if (!ownMessage && actor.role !== "ADMIN" && !assignedTeacher) throw new Error("You cannot remove this message.");
+  await db.communityMessage.update({ where: { id: message.id }, data: { status: CommunityMessageStatus.HIDDEN } });
+  await db.moderationAction.create({ data: { actorUserId: input.actorUserId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: ownMessage ? "delete_own" : "remove", note: ownMessage ? "Author deleted message for everyone." : "Message removed from the Qabila discussion." } });
+}
+
+export async function postAdminCommunityMessage(input: { userId: string; roomId: string; body: string }) {
+  const [admin, room] = await Promise.all([
+    db.user.findUnique({ where: { id: input.userId }, select: { role: true } }),
+    db.communityRoom.findUnique({ where: { id: input.roomId } }),
+  ]);
+  if (admin?.role !== "ADMIN" || !room?.isActive || room.type !== CommunityRoomType.PROJECT_TEAM) {
+    throw new Error("Admin Qabila room is not available.");
+  }
+  const body = input.body.trim().slice(0, 800);
+  if (!body) throw new Error("Message cannot be empty.");
+  const message = await db.communityMessage.create({ data: { roomId: room.id, authorUserId: input.userId, body, status: CommunityMessageStatus.VISIBLE } });
+  await db.moderationAction.create({ data: { actorUserId: input.userId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: "admin_post", note: `Posted to ${room.title}.` } });
+  return message;
+}
+
 export async function submitCommunityProjectWork(input: {
   userId: string;
   projectId: string;
