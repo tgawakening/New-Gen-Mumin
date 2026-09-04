@@ -149,9 +149,8 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
     redirect(`/admin/community?qabila=${roomId}&notice=${encodeURIComponent("Message removed and audit history retained.")}`);
   }
 
-    "use server";
   async function assignHouse(formData: FormData) {
-
+    "use server";
     const currentSession = await getCurrentSession();
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
 
