@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { ensureDefaultHouses, ensureStudentHouseMembership, getHouseLeaderboard } from "@/lib/community/house-points";
 import { deleteCommunityMessage, ensureStudentQabilaRoom, postAdminCommunityMessage, syncQabilaSupervisors } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 
 type PageProps = {
   searchParams?: Promise<{ notice?: string; tone?: string; qabila?: string }>;
@@ -25,10 +26,10 @@ function formatDate(value: Date) {
 const AGE_BANDS = ["ALL", "6-8", "9-12", "13-17", "GENERAL"] as const;
 const GENDER_SCOPES = ["ALL", "BOYS", "GIRLS", "MENTOR_SUPERVISED"] as const;
 const CURRENT_QABILA_DRAFT = [
-  ["Amna Ali", "Girls Qabila A", "CAPTAIN"], ["Muntaha", "Girls Qabila A", "VICE_CAPTAIN"], ["Tehreem", "Girls Qabila A", "MEMBER"], ["Anayah", "Girls Qabila A", "MEMBER"], ["Emeena", "Girls Qabila A", "MEMBER"], ["Zainab", "Girls Qabila A", "MEMBER"], ["Amal", "Girls Qabila A", "MEMBER"], ["Adan", "Girls Qabila A", "MEMBER"],
-  ["Mishal", "Girls Qabila B", "CAPTAIN"], ["Rania", "Girls Qabila B", "VICE_CAPTAIN"], ["Noor", "Girls Qabila B", "MEMBER"], ["Sara Ali", "Girls Qabila B", "MEMBER"], ["Halima", "Girls Qabila B", "MEMBER"], ["Aram Fatma", "Girls Qabila B", "MEMBER"], ["Huda", "Girls Qabila B", "MEMBER"],
-  ["Musa AH Naveed", "Boys Qabila A", "CAPTAIN"], ["Ibrahim Hassan", "Boys Qabila A", "VICE_CAPTAIN"], ["Talha", "Boys Qabila A", "MEMBER"], ["Mussab", "Boys Qabila A", "MEMBER"], ["TaaHaa", "Boys Qabila A", "MEMBER"], ["Hanzla", "Boys Qabila A", "MEMBER"],
-  ["Yashur", "Boys Qabila B", "CAPTAIN"], ["Mustafa", "Boys Qabila B", "VICE_CAPTAIN"], ["Arham", "Boys Qabila B", "MEMBER"], ["Zaran", "Boys Qabila B", "MEMBER"], ["Reyhan", "Boys Qabila B", "MEMBER"], ["Salar", "Boys Qabila B", "MEMBER"],
+  ["Amna Ali", "Maryam bint Imran", "CAPTAIN"], ["Muntaha", "Maryam bint Imran", "VICE_CAPTAIN"], ["Tehreem", "Maryam bint Imran", "MEMBER"], ["Anayah", "Maryam bint Imran", "MEMBER"], ["Emeena", "Maryam bint Imran", "MEMBER"], ["Zainab", "Maryam bint Imran", "MEMBER"], ["Amal", "Maryam bint Imran", "MEMBER"], ["Adan", "Maryam bint Imran", "MEMBER"],
+  ["Mishal", "Khadijah bint Khuwaylid", "CAPTAIN"], ["Rania", "Khadijah bint Khuwaylid", "VICE_CAPTAIN"], ["Noor", "Khadijah bint Khuwaylid", "MEMBER"], ["Sara Ali", "Khadijah bint Khuwaylid", "MEMBER"], ["Halima", "Khadijah bint Khuwaylid", "MEMBER"], ["Aram Fatma", "Khadijah bint Khuwaylid", "MEMBER"], ["Huda", "Khadijah bint Khuwaylid", "MEMBER"],
+  ["Musa AH Naveed", "Abubakr ibn Abi Qahafa", "CAPTAIN"], ["Ibrahim Hassan", "Abubakr ibn Abi Qahafa", "VICE_CAPTAIN"], ["Talha", "Abubakr ibn Abi Qahafa", "MEMBER"], ["Mussab", "Abubakr ibn Abi Qahafa", "MEMBER"], ["TaaHaa", "Abubakr ibn Abi Qahafa", "MEMBER"], ["Hanzla", "Abubakr ibn Abi Qahafa", "MEMBER"],
+  ["Yashur", "Umar Ibn Al Khattab", "CAPTAIN"], ["Mustafa", "Umar Ibn Al Khattab", "VICE_CAPTAIN"], ["Arham", "Umar Ibn Al Khattab", "MEMBER"], ["Zaran", "Umar Ibn Al Khattab", "MEMBER"], ["Reyhan", "Umar Ibn Al Khattab", "MEMBER"], ["Salar", "Umar Ibn Al Khattab", "MEMBER"],
 ] as const;
 const QABILA_NAME_ALIASES: Record<string, string[]> = {
   "Muntaha": ["Muntaha Fatima"], "Tehreem": ["Tehreem Khurram"], "Anayah": ["Anayah khan"],
@@ -304,7 +305,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
     const description = String(formData.get("description") || "").trim();
     if (!roomId || !title) redirect(noticeHref("Room title is required.", "error"));
     const existingRoom = await db.communityRoom.findUnique({ where: { id: roomId }, select: { title: true } });
-    const protectedTitle = existingRoom && ["Girls Qabila A", "Girls Qabila B", "Boys Qabila A", "Boys Qabila B"].includes(existingRoom.title);
+    const protectedTitle = existingRoom && ["Maryam bint Imran", "Khadijah bint Khuwaylid", "Abubakr ibn Abi Qahafa", "Umar Ibn Al Khattab"].includes(existingRoom.title);
     await db.communityRoom.update({ where: { id: roomId }, data: { title: protectedTitle ? existingRoom.title : title, description: description || null } });
     await db.moderationAction.create({ data: { actorUserId: currentSession.user.id, targetType: "COMMUNITY_ROOM", targetId: roomId, action: "update", note: "Room title or guidance updated." } });
     revalidatePath("/admin/community"); revalidatePath("/student/community"); revalidatePath("/parent/community"); revalidatePath("/teacher/community");
@@ -513,7 +514,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
                 {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
               </select>
               <select name="qabilaGroup" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                <option value="">No Qabila group</option><option>Girls Qabila A</option><option>Girls Qabila B</option><option>Boys Qabila A</option><option>Boys Qabila B</option>
+                <option value="">No Qabila group</option><option>Maryam bint Imran</option><option>Khadijah bint Khuwaylid</option><option>Abubakr ibn Abi Qahafa</option><option>Umar Ibn Al Khattab</option>
               </select>
               <select name="role" defaultValue="MEMBER" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                 <option value="MEMBER">Member</option><option value="VICE_CAPTAIN">Vice Captain</option><option value="CAPTAIN">Captain</option>
@@ -582,10 +583,12 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
         <section className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
           <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f7d8f]">Qabila discussions</p><h2 className="mt-2 text-xl font-semibold text-[#22304a]">Post and monitor every team</h2><p className="mt-1 text-sm text-[#617184]">Choose one Qabila. Student and teacher messages remain visible here with admin removal controls.</p></div>
           <div className="flex flex-wrap gap-2">{qabilaRooms.map((room) => <Link key={room.id} href={`/admin/community?qabila=${room.id}`} aria-current={selectedQabila?.id === room.id ? "page" : undefined} className={`rounded-full border px-4 py-2 text-sm font-semibold ${selectedQabila?.id === room.id ? "border-[#22304a] bg-[#22304a] text-white" : "border-[#d8e3ed] bg-white text-[#22304a]"}`}>{room.title}</Link>)}</div>
-          {selectedQabila ? <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
+          {selectedQabila ? <>
+          <QabilaIdentity name={selectedQabila.title} />
+          <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
             <form action={adminPostMessage} className="grid content-start gap-3 rounded-2xl bg-[#fbf6ef] p-4"><input type="hidden" name="roomId" value={selectedQabila.id}/><label className="grid gap-2 text-sm font-semibold text-[#22304a]">Admin message<textarea name="body" required maxLength={800} rows={4} placeholder="Post guidance or an announcement to this Qabila." className="rounded-xl border border-[#d8e3ed] bg-white px-3 py-2 font-normal"/></label><button className="w-fit rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">Post to {selectedQabila.title}</button></form>
             <div className="space-y-3 rounded-2xl bg-[#102544] p-4 text-white">{selectedQabila.messages.map((message) => <div key={message.id} className="rounded-xl bg-white/10 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{message.author.firstName} {message.author.lastName} <span className="text-xs font-normal text-white/55">({message.author.role})</span></strong><span className="text-xs text-white/55">{formatDate(message.createdAt)}</span></div><p className="mt-2 whitespace-pre-wrap text-white/80">{message.body}</p><form action={adminDeleteMessage} className="mt-2"><input type="hidden" name="roomId" value={selectedQabila.id}/><input type="hidden" name="messageId" value={message.id}/><button className="rounded-full border border-white/25 px-3 py-1 text-xs font-semibold">Remove message</button></form></div>)}{!selectedQabila.messages.length ? <p className="text-sm text-white/65">No visible discussion yet.</p> : null}</div>
-          </div> : <p className="rounded-2xl bg-[#fbf6ef] p-4 text-sm text-[#617184]">No active Qabila rooms yet.</p>}
+          </div></> : <p className="rounded-2xl bg-[#fbf6ef] p-4 text-sm text-[#617184]">No active Qabila rooms yet.</p>}
         </section>
 
         <section className="space-y-4 rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">

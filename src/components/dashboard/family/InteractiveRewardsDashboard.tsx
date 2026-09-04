@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 
 import type { getRecognitionDashboard } from "@/lib/community/recognition";
+import { qabilaProfile } from "@/lib/community/qabilas";
 
 type Data = Awaited<ReturnType<typeof getRecognitionDashboard>>;
 
@@ -66,6 +67,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
   const unlockTarget = data.nextUnlock?.milestone ?? Math.max(100, data.collective);
   const unlockProgress = data.nextUnlock ? Math.min(100, (data.collective / data.nextUnlock.milestone) * 100) : 100;
   const houseLabel = data.membership.qabilaGroup || data.membership.house.name;
+  const qabila = qabilaProfile(data.membership.qabilaGroup);
   const roleLabel = data.membership.role === "MEMBER" ? "" : ` ? ${data.membership.role.replaceAll("_", " ")}`;
   const spotlightTitle = featured ? featured.title : "Your next character badge";
   const spotlightEvidence = featured?.evidence ?? "Keep showing kindness, consistency, courage, and service. Your teacher can recognise your growth here.";
@@ -78,7 +80,8 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-xs font-bold uppercase tracking-[0.24em] text-[#c66d1f]">Student home</span>
-              <span className="rounded-full border border-[#e4d8c7] bg-white/90 px-3 py-1 text-xs font-bold text-[#22304a]">{houseLabel}{roleLabel}</span>
+              {qabila ? <Image src={qabila.image} alt={`${qabila.name} profile`} width={46} height={46} className="h-11 w-11 rounded-full object-cover shadow-md" /> : null}
+              <span className="rounded-full border bg-white/90 px-3 py-1 text-xs font-bold text-[#22304a]" style={{ borderColor: qabila ? `${qabila.color}66` : "#e4d8c7" }}>{houseLabel}{roleLabel}</span>
             </div>
             <h2 className="mt-3 text-3xl font-black tracking-tight text-[#12213b] sm:text-4xl">My House & Rewards</h2>
             <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[#5d6b7d]">Every good action strengthens your character and your House, {name}.</p>

@@ -3,6 +3,7 @@ import "server-only";
 import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
 
 const BLOCK_PATTERNS = [
   { label: "phone number", pattern: /(?:\+?\d[\s-]?){8,}/ },
@@ -171,16 +172,14 @@ export async function ensureStudentQabilaRoom(studentId: string) {
     where: { studentId },
     select: { qabilaGroup: true, role: true },
   });
-  const qabilaGroup = membership?.qabilaGroup?.trim();
+  const qabilaGroup = canonicalQabilaName(membership?.qabilaGroup?.trim());
   if (!qabilaGroup) {
     await db.communityMembership.deleteMany({
-      where: { studentId, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: ["Girls Qabila A", "Girls Qabila B", "Boys Qabila A", "Boys Qabila B"] } } },
+      where: { studentId, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES] } } },
     });
     return;
   }
-  const genderScope = qabilaGroup.toLowerCase().startsWith("girls")
-    ? "GIRLS"
-    : qabilaGroup.toLowerCase().startsWith("boys") ? "BOYS" : "MENTOR_SUPERVISED";
+  const genderScope = qabilaProfile(qabilaGroup)?.gender ?? "MENTOR_SUPERVISED";
   let room = await db.communityRoom.findFirst({
     where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM },
   });
@@ -203,16 +202,16 @@ export async function ensureStudentQabilaRoom(studentId: string) {
     where: {
       studentId,
       roomId: { not: room.id },
-      room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: ["Girls Qabila A", "Girls Qabila B", "Boys Qabila A", "Boys Qabila B"] } },
+      room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES] } },
     },
   });
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
 }
 const QABILA_SUPERVISOR_DRAFT: Record<string, string[]> = {
-  "Girls Qabila A": ["Saba"],
-  "Girls Qabila B": ["Aisha"],
-  "Boys Qabila A": ["Mehran", "Afira"],
-  "Boys Qabila B": ["Abdul Badee", "Javeria"],
+  "Maryam bint Imran": ["Saba"],
+  "Khadijah bint Khuwaylid": ["Aisha"],
+  "Abubakr ibn Abi Qahafa": ["Mehran"],
+  "Umar Ibn Al Khattab": ["Abdul Badee"],
 };
 
 export async function syncQabilaSupervisors() {

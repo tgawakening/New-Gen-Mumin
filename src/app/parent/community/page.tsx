@@ -7,6 +7,7 @@ import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { getParentCommunityData, postParentSupervisedCommunityMessage } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import {
   ChildSelector,
   CompactList,
@@ -122,6 +123,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
           {visibleMemberships.map((membership) => (
             <SectionCard key={membership.id} eyebrow={membership.room.type.replace(/_/g, " ")} title={membership.room.title} icon="sun">
               <div className="space-y-3">
+                {membership.room.type === "PROJECT_TEAM" ? <QabilaIdentity name={membership.room.title} /> : null}
                 <p className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#5f6b7a]">
                   {membership.room.description ?? "Mentor-supervised class room."}
                 </p>

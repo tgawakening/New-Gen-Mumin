@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { deleteCommunityMessage, editCommunityMessage, postTeacherCommunityMessage } from "@/lib/community/rooms";
@@ -63,6 +64,7 @@ export default async function TeacherCommunityPage({ searchParams }: PageProps) 
     <ActionToast message={params.error ?? (params.posted ? "Message posted to your Qabila and recorded for parent/admin visibility." : undefined)} tone={params.error ? "error" : "success"} />
     <div className="grid gap-5">
       {assignments.map(({ room }) => <section key={room.id} className="rounded-[26px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+        <QabilaIdentity name={room.title} />
         <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.18em] text-[#c27a2c]">Supervised Qabila</p><h2 className="mt-2 text-xl font-bold text-[#22304a]">{room.title}</h2><p className="mt-1 text-sm text-[#617184]">{room.description}</p></div><span className="rounded-full bg-[#eef6f0] px-3 py-1 text-xs font-bold text-[#2f6b4b]">{room.memberships.length} learners</span></div>
         <div className="mt-5 grid gap-4 lg:grid-cols-[280px_1fr]">
           <div className="rounded-2xl bg-[#fbf6ef] p-4"><h3 className="font-bold text-[#22304a]">Team members</h3><div className="mt-3 space-y-2">{room.memberships.map((membership)=><div key={membership.id} className="flex justify-between gap-2 text-sm"><span>{membership.student.displayName || `${membership.student.user.firstName} ${membership.student.user.lastName}`}</span><span className="text-xs font-bold text-[#c27a2c]">{membership.role.replace("_", " ")}</span></div>)}</div></div>

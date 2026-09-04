@@ -6,6 +6,7 @@ import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { deleteCommunityMessage, editCommunityMessage, getStudentCommunityData, postCommunityMessage, submitCommunityProjectWork } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import {
   CompactList,
   FamilyDashboardFrame,
@@ -141,6 +142,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
           {community.memberships.map((membership) => (
             <SectionCard key={membership.id} eyebrow={membership.room.type === "PROJECT_TEAM" ? "My Qabila Team" : membership.room.type.replace(/_/g, " ")} title={membership.room.title} icon="sun">
               <div className="space-y-4">
+                {membership.room.type === "PROJECT_TEAM" ? <QabilaIdentity name={membership.room.title} /> : null}
                 <div className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#5f6b7a]">
                   {membership.room.description ?? "Mentor-supervised room."}
                 </div>
