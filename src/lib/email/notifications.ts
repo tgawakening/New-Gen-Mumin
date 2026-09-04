@@ -492,6 +492,60 @@ export async function sendLiveClassStartedEmail(input: {
     }),
   });
 }
+export async function sendSunnahTrackerPublishedEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  studentName: string;
+  programTitle: string;
+  trackerTitle: string;
+  teacherName: string;
+  trackerPath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "New Sunnah tracker available",
+    template: "sunnahTrackerPublished",
+    html: renderGenMuminsEmailTemplate({
+      heading: "New Sunnah tracker available",
+      preview: `${input.trackerTitle} is ready for ${input.studentName}.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.teacherName} published a new Sunnah tracker for ${input.studentName}.`,
+      sections: [
+        { label: "Programme", value: input.programTitle },
+        { label: "Tracker", value: input.trackerTitle },
+        { label: "Points", value: "5 points for one daily submission, plus 10 points for each completed Sunnah task." },
+        { label: "Next step", value: "Open the tracker, select today's completed tasks, and submit once for this learner." },
+      ],
+      callToAction: { label: "Open Sunnah tracker", href: resolveHref(input.trackerPath) },
+    }),
+  });
+}
+
+export async function sendSunnahTrackerSubmittedEmail(input: {
+  toEmail: string;
+  teacherName: string;
+  studentName: string;
+  trackerTitle: string;
+  pointsAwarded: number;
+  reviewPath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Sunnah tracker submitted",
+    template: "sunnahTrackerSubmitted",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Sunnah tracker submitted",
+      preview: `${input.studentName} submitted ${input.trackerTitle}.`,
+      intro: `Assalamu alaikum ${input.teacherName}, ${input.studentName} has submitted a Sunnah tracker.`,
+      sections: [
+        { label: "Student", value: input.studentName },
+        { label: "Tracker", value: input.trackerTitle },
+        { label: "Automatically awarded", value: `${input.pointsAwarded} house points` },
+        { label: "Next step", value: "Open the submission to review its checklist, evidence, and provide feedback." },
+      ],
+      callToAction: { label: "Review submission", href: resolveHref(input.reviewPath) },
+    }),
+  });
+}
 export async function sendStudentTaskAssignedEmail(input: {
   toEmail: string;
   recipientName: string;

@@ -456,6 +456,19 @@ export async function postCommunityMessage(input: {
   return message;
 }
 
+export async function postParentSupervisedCommunityMessage(input: {
+  parentUserId: string;
+  studentId: string;
+  roomId: string;
+  body: string;
+}) {
+  const relation = await db.parentStudent.findFirst({
+    where: { studentId: input.studentId, parent: { userId: input.parentUserId } },
+    include: { student: { select: { userId: true } } },
+  });
+  if (!relation) throw new Error("This learner is not linked to your parent account.");
+  return postCommunityMessage({ userId: relation.student.userId, roomId: input.roomId, body: input.body });
+}
 export async function postTeacherCommunityMessage(input: { userId: string; roomId: string; body: string }) {
   const supervision = await db.communityRoomSupervisor.findUnique({
     where: { roomId_userId: { roomId: input.roomId, userId: input.userId } },

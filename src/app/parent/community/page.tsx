@@ -1,10 +1,12 @@
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
-import { getParentCommunityData } from "@/lib/community/rooms";
+import { getParentCommunityData, postParentSupervisedCommunityMessage } from "@/lib/community/rooms";
+import { ActionToast } from "@/components/dashboard/ActionToast";
 import {
   ChildSelector,
   CompactList,
@@ -15,7 +17,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; section?: string; room?: string }>;
+  searchParams?: Promise<{ child?: string; section?: string; room?: string; mode?: string; posted?: string; error?: string }>;
 };
 
 function childName(child: { displayName: string | null; user: { firstName: string; lastName: string } }) {
@@ -40,6 +42,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
   if (!dashboard || !community) redirect("/registration");
 
   const selectedChildId = community.selectedChild?.id ?? dashboard.children[0]?.id;
+  const childMode = params.mode === "child";
   const qabilaRooms = community.memberships.filter((membership) => membership.room.type === "PROJECT_TEAM");
   const announcementRooms = community.memberships.filter((membership) => ["ANNOUNCEMENT", "PARENT_NOTICE"].includes(membership.room.type));
   const programmeRooms = community.memberships.filter((membership) => !["PROJECT_TEAM", "ANNOUNCEMENT", "PARENT_NOTICE"].includes(membership.room.type));
@@ -49,22 +52,45 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
   const visibleMemberships = selectedRoom ? [selectedRoom] : [];
   const visibleMessages = community.memberships.reduce((sum, membership) => sum + membership.room.messages.length, 0);
   const projectCount = community.memberships.reduce((sum, membership) => sum + membership.room.projects.length, 0);
-  const tabHref = (nextSection: string) => `/parent/community?child=${selectedChildId}&section=${nextSection}`;
+  const modeSuffix = childMode ? "&mode=child" : "";
+  const tabHref = (nextSection: string) => `/parent/community?child=${selectedChildId}&section=${nextSection}${modeSuffix}`;
+  async function postAsChild(formData: FormData) {
+    "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "PARENT") redirect("/auth/login");
+    const studentId = String(formData.get("studentId") || "");
+    try {
+      await postParentSupervisedCommunityMessage({
+        parentUserId: current.user.id,
+        studentId,
+        roomId: String(formData.get("roomId") || ""),
+        body: String(formData.get("body") || ""),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to post message.";
+      redirect(`/parent/community?child=${studentId}&mode=child&error=${encodeURIComponent(message)}`);
+    }
+    revalidatePath("/parent/community");
+    revalidatePath("/student/community");
+    revalidatePath("/teacher/community");
+    redirect(`/parent/community?child=${studentId}&mode=child&posted=1`);
+  }
   return (
     <FamilyDashboardFrame
-      roleLabel="Parent Dashboard"
-      title="Community Visibility"
-      subtitle="Review supervised room membership and visible class discussion summaries for your child."
+      roleLabel={childMode ? "Parent-supervised Child View" : "Parent Dashboard"}
+      title={childMode ? "My Qabila Chat" : "Community Visibility"}
+      subtitle={childMode ? "Talk with your Qabila teammates in a supervised space. Assigned teachers and admins can see every message." : "Review supervised room membership and visible class discussion summaries for your child."}
       navItems={getParentNavItems(selectedChildId)}
       pendingReason={dashboard.pendingReason}
     >
+      <ActionToast message={params.error ?? (params.posted ? "Message posted to the Qabila." : undefined)} tone={params.error ? "error" : "success"} />
       <MetricGrid
         metrics={[
           { label: "Children", value: String(community.children.length), hint: "Linked learners." },
           { label: "Rooms", value: String(community.memberships.length), hint: "Supervised spaces assigned." },
           { label: "Messages", value: String(visibleMessages), hint: "Recent visible discussion items." },
           { label: "Projects", value: String(projectCount), hint: "Guided collaboration work." },
-          { label: "Mode", value: "Read-only", hint: "Parents see transparency without entering student rooms." },
+          { label: "Mode", value: childMode ? "Child conversation" : "Read-only", hint: childMode ? "Posting as the selected learner; mentor supervised." : "Parents see transparency without entering student rooms." },
         ]}
       />
 
@@ -72,7 +98,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
         <ChildSelector
           learners={community.children.map((child) => ({ id: child.id, name: childName(child) }))}
           selectedChildId={selectedChildId}
-          basePath="/parent/community"
+          basePath={childMode ? "/parent/community?mode=child" : "/parent/community"}
         />
       </SectionCard>
       <SectionCard eyebrow="Community areas" title="Choose what you want to review" icon="sun">
@@ -119,6 +145,18 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                     ))}
                   </div>
                 ))}
+                {childMode && section === "qabila" && !membership.room.isReadOnly ? (
+                  <form action={postAsChild} className="grid gap-3 rounded-[20px] border border-[#eadfce] bg-white p-4">
+                    <input type="hidden" name="studentId" value={selectedChildId} />
+                    <input type="hidden" name="roomId" value={membership.room.id} />
+                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
+                      Message your Qabila
+                      <textarea name="body" required maxLength={800} rows={3} placeholder="Share an idea, question, or kind encouragement. Do not share phone numbers, emails, or links." className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
+                    </label>
+                    <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">Send to my Qabila</button>
+                    <p className="text-xs leading-5 text-[#617184]">Posted as {community.selectedChild ? childName(community.selectedChild) : "the selected learner"}. Teachers and admins supervise this room.</p>
+                  </form>
+                ) : null}
                 {membership.room.messages.map((message) => (
                   <div key={message.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -149,7 +187,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
         <SectionCard eyebrow="Safety rules" title="Parent view" icon="check">
           <CompactList
             items={[
-              { label: "Read-only transparency", meta: "Parents do not enter student chat", icon: "check" },
+              { label: childMode ? "Child conversation mode" : "Read-only transparency", meta: childMode ? "Posts use the selected learner identity" : "Parents do not enter student chat", icon: "check" },
               { label: "Flagged content hidden", meta: "Admin reviews risky messages", icon: "check" },
               { label: "No private mixed chat", meta: "Structured room model", icon: "sun" },
               { label: "Mentor-visible history", meta: "Designed for safety", icon: "star" },

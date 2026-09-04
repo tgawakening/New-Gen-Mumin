@@ -133,7 +133,11 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
       roleLabel="Parent-supervised Student View"
       title={`${selectedChild.name}'s Gen Mu'min Hub`}
       subtitle="A child-specific dashboard opened from the parent account. Siblings stay separate by selecting a learner first."
-      navItems={getParentNavItems(selectedChild.id)}
+      navItems={getParentNavItems(selectedChild.id).map((item) =>
+        item.label === "Community"
+          ? { ...item, label: "Qabila Chat", href: `/parent/community?child=${selectedChild.id}&mode=child` }
+          : item,
+      )}
       pendingReason={dashboard.pendingReason}
     >
       <FamilyJourneyLinks role="parent" childId={selectedChild.id} />

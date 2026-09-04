@@ -23,7 +23,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ completed?: string; type?: string; already?: string }>;
+  searchParams?: Promise<{ completed?: string; type?: string; already?: string; points?: string }>;
 };
 
 export default async function StudentMissionsPage({ searchParams }: PageProps) {
@@ -54,13 +54,15 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
     if (!currentDashboard) redirect("/auth/login");
 
     const missionId = String(formData.get("missionId") || "");
+    let awardedPoints = 0;
     try {
-      await submitMissionAttempt({
+      const result = await submitMissionAttempt({
         missionId,
         studentId: currentDashboard.child.id,
         studentName: currentDashboard.studentName,
         formData,
       });
+      awardedPoints = result.pointsAwarded;
     } catch (error) {
       if (error instanceof SunnahAlreadySubmittedError) redirect("/student/missions?type=sunnah&already=1");
       throw error;
@@ -69,7 +71,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
     revalidatePath("/student");
     revalidatePath("/student/missions");
     revalidatePath("/parent/sunnah-tracker");
-    redirect(`/student/missions${sunnahOnly ? "?type=sunnah&" : "?"}completed=1`);
+    redirect(`/student/missions${sunnahOnly ? "?type=sunnah&" : "?"}completed=1&points=${awardedPoints}`);
   }
 
   return (
@@ -88,7 +90,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
         message={
           params.completed
             ? sunnahOnly
-              ? "Sunnah tracker submitted. House points awarded once for today."
+              ? `Sunnah tracker submitted. ${params.points ?? "0"} house points awarded for today.`
               : "Mission completed. House points awarded."
             : params.already
               ? "A Sunnah tracker was already submitted today. No extra points were awarded."

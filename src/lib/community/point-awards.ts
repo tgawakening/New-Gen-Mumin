@@ -95,7 +95,7 @@ export async function awardHousePointsOnce(input: {
         userId,
         title: "House points earned!",
         body: (student.displayName || student.user.firstName) + " earned " + input.points + " house points: " + input.reason + ".",
-        href: input.notificationHref || (userId === student.userId ? "/student/missions?type=sunnah" : "/parent/community"),
+        href: input.notificationHref || (userId === student.userId ? "/student/missions?type=sunnah" : input.sourceType.startsWith("SUNNAH") ? `/parent/sunnah-tracker?child=${student.id}` : "/parent/community"),
       })),
     });
   }

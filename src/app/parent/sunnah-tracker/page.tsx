@@ -24,7 +24,7 @@ import { pointDayKey } from "@/lib/community/point-awards";
 import { SunnahSubmitButton } from "@/components/dashboard/family/SunnahSubmitButton";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string; submitted?: string; already?: string }>;
+  searchParams?: Promise<{ child?: string; submitted?: string; already?: string; points?: string }>;
 };
 
 export default async function ParentSunnahTrackerPage({ searchParams }: PageProps) {
@@ -62,13 +62,15 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
     if (!parentChild) throw new Error("This learner is not linked to your parent dashboard.");
 
     const missionId = String(formData.get("missionId") || "");
+    let awardedPoints = 0;
     try {
-      await submitMissionAttempt({
+      const result = await submitMissionAttempt({
         missionId,
         studentId: childId,
         studentName: parentChild.student.displayName || (parentChild.student.user.firstName + " " + (parentChild.student.user.lastName || "")).trim(),
         formData,
       });
+      awardedPoints = result.pointsAwarded;
     } catch (error) {
       if (error instanceof SunnahAlreadySubmittedError) redirect("/parent/sunnah-tracker?child=" + childId + "&already=1");
       throw error;
@@ -77,7 +79,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
     revalidatePath("/parent/sunnah-tracker");
     revalidatePath("/student/missions");
     revalidatePath("/student");
-    redirect(`/parent/sunnah-tracker?child=${childId}&submitted=1`);
+    redirect(`/parent/sunnah-tracker?child=${childId}&submitted=1&points=${awardedPoints}`);
   }
 
   return (
@@ -88,7 +90,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
       navItems={getParentNavItems(selectedChild.id)}
       pendingReason={dashboard.pendingReason}
     >
-      <ActionToast message={params.submitted ? "Sunnah tracker submitted. House points awarded once for today." : params.already ? "This learner has already submitted a Sunnah tracker today. No extra points were awarded." : undefined} tone={params.already ? "error" : "success"} />
+      <ActionToast message={params.submitted ? `Sunnah tracker submitted. ${params.points ?? "0"} house points awarded for today's submission and completed tasks.` : params.already ? "This learner has already submitted a Sunnah tracker today. No extra points were awarded." : undefined} tone={params.already ? "error" : "success"} />
 
       <SectionCard eyebrow="Child selector" title="Choose a learner">
         <ChildSelector
@@ -166,14 +168,14 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
 
         <SectionCard eyebrow="Recent records" title="Points ledger" icon="trophy">
           <div className="space-y-3">
-            {quest.pointLedger.filter((entry) => entry.sourceType === "SUNNAH_TRACKER").slice(0, 8).map((entry) => (
+            {quest.pointLedger.filter((entry) => entry.sourceType.startsWith("SUNNAH")).slice(0, 8).map((entry) => (
               <div key={entry.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b]">
                 <p className="font-semibold text-[#22304a]">{entry.points} points</p>
                 <p className="mt-1 leading-5">{entry.reason}</p>
                 <p className="mt-1 text-xs text-[#6d7785]">{formatDate(entry.awardedAt)}</p>
               </div>
             ))}
-            {!quest.pointLedger.some((entry) => entry.sourceType === "SUNNAH_TRACKER") ? (
+            {!quest.pointLedger.some((entry) => entry.sourceType.startsWith("SUNNAH")) ? (
               <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
                 Sunnah tracker submissions will appear here.
               </p>

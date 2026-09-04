@@ -15,6 +15,7 @@ import { buildSunnahTrackerDescription, isSunnahTrackerMission, parseSunnahTrack
 import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { sendSunnahTrackerPublishedEmail } from "@/lib/email/notifications";
 
 function userName(user: { firstName: string; lastName: string | null; email: string }) {
   return `${user.firstName} ${user.lastName ?? ""}`.trim() || user.email;
@@ -166,13 +167,14 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
     const opensAt = new Date(trackerMonth + "-01T00:00:00+05:00");
     const closesAt = new Date(Date.UTC(trackerYear, trackerMonthNumber, 1) - 1);
 
-    await db.mission.create({
+    const isPublished = formData.get("isPublished") === "on";
+    const tracker = await db.mission.create({
       data: {
         programId,
         title,
         description: buildSunnahTrackerDescription(description),
         kind: MissionKind.DAILY,
-        status: formData.get("isPublished") === "on" ? MissionStatus.PUBLISHED : MissionStatus.DRAFT,
+        status: isPublished ? MissionStatus.PUBLISHED : MissionStatus.DRAFT,
         basePoints,
         opensAt,
         closesAt,
@@ -189,6 +191,28 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
       },
     });
 
+    if (isPublished) {
+      const enrollments = await db.enrollment.findMany({
+        where: { programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
+        include: { student: { include: { user: true } }, parent: { include: { user: true } }, program: true },
+      });
+      const recipients = new Map<string, { userId: string; href: string; body: string }>();
+      for (const enrollment of enrollments) {
+        const studentName = enrollment.student.displayName || userName(enrollment.student.user);
+        recipients.set(`${enrollment.student.userId}:${enrollment.studentId}`, { userId: enrollment.student.userId, href: "/student/missions?type=sunnah", body: `${title} is ready for ${studentName}. Submit once each day.` });
+        recipients.set(`${enrollment.parent.userId}:${enrollment.studentId}`, { userId: enrollment.parent.userId, href: `/parent/sunnah-tracker?child=${enrollment.studentId}`, body: `${title} is ready for ${studentName}. Submit once each day.` });
+      }
+      if (recipients.size) await db.notification.createMany({ data: [...recipients.values()].map((recipient) => ({ ...recipient, title: "New Sunnah tracker available" })) });
+      await Promise.allSettled(enrollments.map((enrollment) => sendSunnahTrackerPublishedEmail({
+        toEmail: enrollment.parent.user.email,
+        recipientName: userName(enrollment.parent.user),
+        studentName: enrollment.student.displayName || userName(enrollment.student.user),
+        programTitle: enrollment.program.title,
+        trackerTitle: tracker.title,
+        teacherName: userName(currentSession.user),
+        trackerPath: `/parent/sunnah-tracker?child=${enrollment.studentId}`,
+      })));
+    }
     revalidatePath("/teacher/missions");
     revalidatePath("/student/missions");
     revalidatePath("/parent/sunnah-tracker");

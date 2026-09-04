@@ -315,7 +315,7 @@ export function ChildSelector({
         return (
           <Link
             key={child.id}
-            href={`${basePath}?child=${child.id}`}
+            href={`${basePath}${basePath.includes("?") ? "&" : "?"}child=${child.id}`}
             className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
               active
                 ? "bg-[#22304a] text-white"
