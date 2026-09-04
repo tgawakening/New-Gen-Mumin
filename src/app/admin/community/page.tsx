@@ -100,6 +100,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
             messages: true,
           },
         },
+        supervisors: { include: { user: { select: { firstName: true, lastName: true } } } },
         projects: {
           orderBy: { createdAt: "desc" },
           take: 3,
@@ -141,6 +142,8 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
       create: { studentId, houseId, role, qabilaGroup },
       update: { houseId, role, qabilaGroup },
     });
+    await ensureStudentQabilaRoom(studentId);
+    await syncQabilaSupervisors();
 
     revalidatePath("/admin/community");
     revalidatePath("/student/quizzes");
@@ -269,6 +272,34 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
     revalidatePath("/parent/community");
     redirect(noticeHref("Community room created."));
   }
+  async function updateRoom(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    const roomId = String(formData.get("roomId") || "");
+    const title = String(formData.get("title") || "").trim();
+    const description = String(formData.get("description") || "").trim();
+    if (!roomId || !title) redirect(noticeHref("Room title is required.", "error"));
+    const existingRoom = await db.communityRoom.findUnique({ where: { id: roomId }, select: { title: true } });
+    const protectedTitle = existingRoom && ["Girls Qabila A", "Girls Qabila B", "Boys Qabila A", "Boys Qabila B"].includes(existingRoom.title);
+    await db.communityRoom.update({ where: { id: roomId }, data: { title: protectedTitle ? existingRoom.title : title, description: description || null } });
+    await db.moderationAction.create({ data: { actorUserId: currentSession.user.id, targetType: "COMMUNITY_ROOM", targetId: roomId, action: "update", note: "Room title or guidance updated." } });
+    revalidatePath("/admin/community"); revalidatePath("/student/community"); revalidatePath("/parent/community"); revalidatePath("/teacher/community");
+    redirect(noticeHref("Community room updated."));
+  }
+
+  async function archiveRoom(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    const roomId = String(formData.get("roomId") || "");
+    if (!roomId) redirect(noticeHref("Room was not selected.", "error"));
+    await db.communityRoom.update({ where: { id: roomId }, data: { isActive: false } });
+    await db.moderationAction.create({ data: { actorUserId: currentSession.user.id, targetType: "COMMUNITY_ROOM", targetId: roomId, action: "archive", note: "Room removed from student, parent, and teacher navigation; history retained for safeguarding." } });
+    revalidatePath("/admin/community"); revalidatePath("/student/community"); revalidatePath("/parent/community"); revalidatePath("/teacher/community");
+    redirect(noticeHref("Room deleted from active community spaces; its safety history was retained."));
+  }
+
 
   async function createProject(formData: FormData) {
     "use server";
@@ -576,7 +607,21 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
               <div key={room.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b]">
                 <p className="font-semibold text-[#22304a]">{room.title}</p>
                 <p className="mt-1">{room.type.replace(/_/g, " ")} - {room.ageBand ?? "All ages"}</p>
-                <p className="mt-1 text-xs text-[#6d7785]">{room.genderScope ?? "ALL"} - {room._count.memberships} members - {room._count.messages} messages</p>
+                <p className="mt-1 text-xs text-[#6d7785]">{room.genderScope ?? "ALL"} - {room._count.memberships} members - {room._count.messages} messages - {room.isActive ? "Active" : "Archived"}</p>
+                {room.supervisors.length ? <p className="mt-2 text-xs font-semibold text-[#2f6b4b]">Mentors: {room.supervisors.map((entry) => `${entry.user.firstName} ${entry.user.lastName}`.trim()).join(", ")}</p> : null}
+                <details className="mt-3 rounded-xl border border-[#e0d5c4] bg-white p-3">
+                  <summary className="cursor-pointer font-semibold text-[#0f4d81]">Edit or remove room</summary>
+                  <form action={updateRoom} className="mt-3 grid gap-2">
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <input name="title" defaultValue={room.title} required className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
+                    <textarea name="description" defaultValue={room.description ?? ""} rows={3} className="rounded-xl border border-[#d8e3ed] px-3 py-2" />
+                    <button className="w-fit rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Save room</button>
+                  </form>
+                  <form action={archiveRoom} className="mt-2">
+                    <input type="hidden" name="roomId" value={room.id} />
+                    <button className="rounded-full border border-[#efb3b3] px-4 py-2 text-xs font-semibold text-[#b24646]">Delete from active rooms</button>
+                  </form>
+                </details>
                 {room.projects.length ? (
                   <div className="mt-3 space-y-2">
                     {room.projects.map((project) => (

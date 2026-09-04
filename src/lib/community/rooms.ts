@@ -172,13 +172,19 @@ export async function ensureStudentQabilaRoom(studentId: string) {
     select: { qabilaGroup: true, role: true },
   });
   const qabilaGroup = membership?.qabilaGroup?.trim();
-  if (!qabilaGroup) return;
+  if (!qabilaGroup) {
+    await db.communityMembership.deleteMany({
+      where: { studentId, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: ["Girls Qabila A", "Girls Qabila B", "Boys Qabila A", "Boys Qabila B"] } } },
+    });
+    return;
+  }
   const genderScope = qabilaGroup.toLowerCase().startsWith("girls")
     ? "GIRLS"
     : qabilaGroup.toLowerCase().startsWith("boys") ? "BOYS" : "MENTOR_SUPERVISED";
   let room = await db.communityRoom.findFirst({
-    where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM, isActive: true },
+    where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM },
   });
+  if (room && !room.isActive) return;
   if (!room) {
     room = await db.communityRoom.create({
       data: {
@@ -280,7 +286,7 @@ export async function getStudentCommunityData(userId: string) {
   await ensureStudentClassRooms(student);
 
   const memberships = await db.communityMembership.findMany({
-    where: { studentId: student.id },
+    where: { studentId: student.id, room: { isActive: true } },
     orderBy: { joinedAt: "desc" },
     include: {
       room: {
@@ -354,7 +360,7 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
   await ensureStudentClassRooms(selectedChild);
 
   const memberships = await db.communityMembership.findMany({
-    where: { studentId: selectedChild.id },
+    where: { studentId: selectedChild.id, room: { isActive: true } },
     orderBy: { joinedAt: "desc" },
     include: {
       room: {

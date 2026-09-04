@@ -122,7 +122,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="space-y-6">
           {community.memberships.map((membership) => (
-            <SectionCard key={membership.id} eyebrow={membership.room.type.replace(/_/g, " ")} title={membership.room.title} icon="sun">
+            <SectionCard key={membership.id} eyebrow={membership.room.type === "PROJECT_TEAM" ? "My Qabila Team" : membership.room.type.replace(/_/g, " ")} title={membership.room.title} icon="sun">
               <div className="space-y-4">
                 <div className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#5f6b7a]">
                   {membership.room.description ?? "Mentor-supervised room."}

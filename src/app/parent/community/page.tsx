@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
@@ -14,7 +15,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ child?: string }>;
+  searchParams?: Promise<{ child?: string; section?: string; room?: string }>;
 };
 
 function childName(child: { displayName: string | null; user: { firstName: string; lastName: string } }) {
@@ -39,9 +40,16 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
   if (!dashboard || !community) redirect("/registration");
 
   const selectedChildId = community.selectedChild?.id ?? dashboard.children[0]?.id;
+  const qabilaRooms = community.memberships.filter((membership) => membership.room.type === "PROJECT_TEAM");
+  const announcementRooms = community.memberships.filter((membership) => ["ANNOUNCEMENT", "PARENT_NOTICE"].includes(membership.room.type));
+  const programmeRooms = community.memberships.filter((membership) => !["PROJECT_TEAM", "ANNOUNCEMENT", "PARENT_NOTICE"].includes(membership.room.type));
+  const section = params.section === "programmes" || params.section === "announcements" ? params.section : qabilaRooms.length ? "qabila" : "programmes";
+  const sectionRooms = section === "qabila" ? qabilaRooms : section === "announcements" ? announcementRooms : programmeRooms;
+  const selectedRoom = sectionRooms.find((membership) => membership.room.id === params.room) ?? sectionRooms[0] ?? null;
+  const visibleMemberships = selectedRoom ? [selectedRoom] : [];
   const visibleMessages = community.memberships.reduce((sum, membership) => sum + membership.room.messages.length, 0);
   const projectCount = community.memberships.reduce((sum, membership) => sum + membership.room.projects.length, 0);
-
+  const tabHref = (nextSection: string) => `/parent/community?child=${selectedChildId}&section=${nextSection}`;
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
@@ -67,10 +75,25 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
           basePath="/parent/community"
         />
       </SectionCard>
+      <SectionCard eyebrow="Community areas" title="Choose what you want to review" icon="sun">
+        <div className="flex flex-wrap gap-2">
+          {[
+            { key: "qabila", label: "My Qabila", count: qabilaRooms.length },
+            { key: "programmes", label: "Programme Rooms", count: programmeRooms.length },
+            { key: "announcements", label: "Announcements", count: announcementRooms.length },
+          ].map((tab) => <Link key={tab.key} href={tabHref(tab.key)} aria-current={section === tab.key ? "page" : undefined} className={`rounded-full border px-4 py-2 text-sm font-semibold ${section === tab.key ? "border-[#22304a] bg-[#22304a] text-white" : "border-[#d8e3ed] bg-white text-[#22304a]"}`}>{tab.label} <span className="ml-1 opacity-70">({tab.count})</span></Link>)}
+        </div>
+        {sectionRooms.length > 1 ? <div className="mt-3 flex flex-wrap gap-2 border-t border-[#eadfce] pt-3">
+          {sectionRooms.map((membership) => <Link key={membership.id} href={`${tabHref(section)}&room=${membership.room.id}`} aria-current={selectedRoom?.id === membership.id ? "page" : undefined} className={`rounded-xl px-3 py-2 text-xs font-semibold ${selectedRoom?.id === membership.id ? "bg-[#fff0d9] text-[#9a5b16]" : "bg-[#f3f6f9] text-[#526174]"}`}>{membership.room.title}</Link>)}
+        </div> : null}
+        <p className="mt-3 text-xs leading-5 text-[#617184]">
+          {section === "qabila" ? "Your child's main team space, shared only with their Qabila and assigned mentors." : section === "programmes" ? "Course-specific discussion rooms are kept here, separate from Qabila teamwork." : "Read-only notices and faculty updates."}
+        </p>
+      </SectionCard>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="space-y-6">
-          {community.memberships.map((membership) => (
+          {visibleMemberships.map((membership) => (
             <SectionCard key={membership.id} eyebrow={membership.room.type.replace(/_/g, " ")} title={membership.room.title} icon="sun">
               <div className="space-y-3">
                 <p className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#5f6b7a]">
@@ -114,10 +137,10 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
               </div>
             </SectionCard>
           ))}
-          {!community.memberships.length ? (
+          {!visibleMemberships.length ? (
             <SectionCard eyebrow="Community" title="No rooms assigned yet" icon="sun">
               <p className="text-sm leading-7 text-[#5f6b7a]">
-                Supervised rooms will appear once active enrollments are assigned.
+                No room is assigned in this section yet.
               </p>
             </SectionCard>
           ) : null}
