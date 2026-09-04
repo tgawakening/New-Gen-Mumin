@@ -87,12 +87,14 @@ function AvatarCharacter({
   const alt = variant === "girl" ? "Rania Gen-Mumin character" : "Ali Gen-Mumin character";
 
   return (
-    <div className="relative mx-auto flex h-[240px] w-full min-w-0 items-end justify-center overflow-hidden rounded-[28px] bg-gradient-to-b from-white to-[#fff3df] sm:h-[280px]" aria-label={`${name} Gen-Mumin character`}>
-      <div className="absolute right-3 top-3 z-20 max-w-32 rounded-[20px] border border-[#f1c878] bg-white px-3 py-2 text-center text-xs font-bold leading-4 text-[#22304a] shadow-lg">
+    <div className="relative mx-auto flex h-[270px] w-full min-w-0 flex-col overflow-hidden rounded-[28px] bg-gradient-to-b from-white to-[#fff3df] sm:h-[310px]" aria-label={`${name} Gen-Mumin character`}>
+      <div className="relative z-20 mx-3 mt-3 shrink-0 rounded-[20px] border border-[#f1c878] bg-white px-3 py-2 text-center text-xs font-bold leading-4 text-[#22304a] shadow-lg">
         Amazing, {name}! Keep building your House.
       </div>
-      <div className="absolute inset-x-5 bottom-1 h-12 rounded-full bg-[#22304a]/10 blur-xl" />
-      <Image src={src} alt={alt} width={420} height={560} priority className="relative z-10 h-full w-full object-cover object-[50%_18%] transition-transform duration-300 hover:scale-[1.03]" />
+      <div className="relative min-h-0 flex-1">
+        <div className="absolute inset-x-5 bottom-1 h-12 rounded-full bg-[#22304a]/10 blur-xl" />
+        <Image src={src} alt={alt} fill sizes="(min-width: 1280px) 300px, 220px" priority className="z-10 object-cover object-[50%_18%] transition-transform duration-300 hover:scale-[1.03]" />
+      </div>
     </div>
   );
 }

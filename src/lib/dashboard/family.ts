@@ -231,6 +231,9 @@ type ChildJournalMonthlySummary = {
 };
 
 type ChildRegistrationGenderSummary = {
+  firstName: string;
+  lastName: string | null;
+  displayName: string | null;
   gender: string | null;
   createdAt: Date;
 };
@@ -1018,11 +1021,15 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     submittedAssignments,
     journals,
   });
-  const gender =
-    (child.registrationStudents as ChildRegistrationGenderSummary[] | undefined)
-      ?.filter((student) => student.gender)
-      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())[0]
-      ?.gender ?? null;
+  const registrations = (child.registrationStudents as ChildRegistrationGenderSummary[] | undefined) ?? [];
+  const identityKey = (value?: string | null) => (value ?? "").toLowerCase().replace(/\b(parent|student)\b/gu, "").replace(/[^a-z0-9]+/gu, "");
+  const profileNames = [child.displayName, `${child.user?.firstName ?? ""} ${child.user?.lastName ?? ""}`].map(identityKey).filter(Boolean);
+  const matchingRegistration = registrations.find((student) => {
+    const names = [student.displayName, `${student.firstName} ${student.lastName ?? ""}`, student.firstName].map(identityKey).filter(Boolean);
+    return names.some((name) => profileNames.some((profileName) => name === profileName || (name.length > 3 && profileName.includes(name))));
+  });
+  const uniqueGenders = [...new Set(registrations.map((student) => student.gender?.trim()).filter((value): value is string => Boolean(value)))];
+  const gender = matchingRegistration?.gender ?? (uniqueGenders.length === 1 ? uniqueGenders[0] : null);
   const rawCourseSummaries: ChildCourseSummary[] = (validEnrollments as DashboardEnrollment[]).map((enrollment) => ({
     id: enrollment.id,
     programId: enrollment.program.id,
@@ -1205,6 +1212,9 @@ async function getParentProfile(userId: string) {
               user: true,
               registrationStudents: {
                 select: {
+                  firstName: true,
+                  lastName: true,
+                  displayName: true,
                   gender: true,
                   countryCode: true,
                   countryName: true,
@@ -1415,6 +1425,9 @@ export async function getStudentDashboardData(userId: string) {
       user: true,
       registrationStudents: {
         select: {
+          firstName: true,
+          lastName: true,
+          displayName: true,
           gender: true,
           countryCode: true,
           countryName: true,
