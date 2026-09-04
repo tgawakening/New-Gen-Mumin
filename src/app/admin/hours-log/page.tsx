@@ -13,6 +13,7 @@ import {
   getAdminTeacherHoursLogData,
   MIN_PAYABLE_TRACKED_SESSION_MINUTES,
   parseHoursMonth,
+  reassignAdminHoursEntry,
   updateAdminHoursEntry,
 } from "@/lib/teacher/hours-log";
 
@@ -156,6 +157,24 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
       redirect(adminHoursHref(formData, error instanceof Error ? error.message : "Unable to remove session.", "error"));
     }
     redirect(adminHoursHref(formData, "Session removed from hours log."));
+  }
+
+  async function reassignEntry(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    try {
+      await reassignAdminHoursEntry({
+        adminUserId: currentSession.user.id,
+        entryId: String(formData.get("entryId") || ""),
+        targetTeacherId: String(formData.get("targetTeacherId") || ""),
+      });
+      revalidatePath("/admin/hours-log");
+      revalidatePath("/teacher/hours-log");
+    } catch (error) {
+      redirect(adminHoursHref(formData, error instanceof Error ? error.message : "Unable to reassign session.", "error"));
+    }
+    redirect(adminHoursHref(formData, "Session moved to the selected teacher."));
   }
 
   return (
@@ -304,6 +323,20 @@ export default async function AdminHoursLogPage({ searchParams }: PageProps) {
                                 <input type="hidden" name="filterEnd" value={filterParams.end ?? ""} />
                                 <input type="hidden" name="teacherId" value={selectedTeacherId} />
                                 <button className="rounded-full border border-[#efb3b3] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Remove session</button>
+                              </form>
+                              <form action={reassignEntry} className="mt-2 grid min-w-[260px] gap-2 rounded-2xl bg-[#eef6ff] p-3">
+                                <input type="hidden" name="entryId" value={entry.id} />
+                                <input type="hidden" name="month" value={filterParams.month ?? ""} />
+                                <input type="hidden" name="filterStart" value={filterParams.start ?? ""} />
+                                <input type="hidden" name="filterEnd" value={filterParams.end ?? ""} />
+                                <input type="hidden" name="teacherId" value={selectedTeacherId} />
+                                <select name="targetTeacherId" required defaultValue="" className="rounded-xl border border-[#cbd9e8] bg-white px-3 py-2 text-xs text-[#22304a]">
+                                  <option value="" disabled>Move to teacher...</option>
+                                  {data.reports.filter((teacher) => teacher.teacherId !== report.teacherId).map((teacher) => (
+                                    <option key={teacher.teacherId} value={teacher.teacherId}>{teacher.teacherName}</option>
+                                  ))}
+                                </select>
+                                <button className="rounded-full bg-[#0f4d81] px-4 py-2 text-xs font-semibold text-white">Move session</button>
                               </form>
                             </details>
                           </td>

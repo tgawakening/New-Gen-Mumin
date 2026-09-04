@@ -441,6 +441,7 @@ export async function listAdminRecordings() {
       ...mapRecording(recording),
       scheduleId: recording.scheduleId,
       teacherId: recording.schedule.teacherId,
+      programId: recording.schedule.programId,
     }));
   } catch (error) {
     if (isRecordingTableUnavailable(error)) {
@@ -451,6 +452,60 @@ export async function listAdminRecordings() {
   }
 }
 
+export async function reassignRecordingForAdmin(input: {
+  adminUserId: string;
+  recordingId: string;
+  targetTeacherId: string;
+  targetProgramId: string;
+}) {
+  const [admin, recording, targetTeacher, programAssignment] = await Promise.all([
+    db.user.findFirst({ where: { id: input.adminUserId, role: "ADMIN" }, select: { id: true } }),
+    db.liveClassRecording.findFirst({
+      where: { id: input.recordingId, deletedAt: null },
+      include: { schedule: true },
+    }),
+    db.teacherProfile.findFirst({ where: { id: input.targetTeacherId, isActive: true }, select: { id: true } }),
+    db.teacherProgram.findUnique({
+      where: { teacherId_programId: { teacherId: input.targetTeacherId, programId: input.targetProgramId } },
+      select: { id: true },
+    }),
+  ]);
+
+  if (!admin) throw new Error("Admin access required.");
+  if (!recording) throw new Error("Recording not found.");
+  if (!targetTeacher) throw new Error("Choose an active teacher.");
+  if (!programAssignment) throw new Error("That teacher is not assigned to the selected program.");
+  if (recording.schedule.teacherId === input.targetTeacherId && recording.schedule.programId === input.targetProgramId) {
+    throw new Error("Choose a different teacher or program.");
+  }
+
+  const scheduleTitle = recording.schedule.title.replace(COLLABORATOR_MARKER_REGEX, " ").replace(/\s+/gu, " ").trim();
+  const topic = recording.topic?.replace(COLLABORATOR_MARKER_REGEX, " ").replace(/\s+/gu, " ").trim() || null;
+
+  await db.$transaction(async (transaction) => {
+    const schedule = await transaction.classSchedule.create({
+      data: {
+        programId: input.targetProgramId,
+        teacherId: input.targetTeacherId,
+        createdByUserId: input.adminUserId,
+        title: scheduleTitle,
+        timezone: recording.schedule.timezone,
+        weekday: recording.schedule.weekday,
+        startTime: recording.schedule.startTime,
+        endTime: recording.schedule.endTime,
+        meetingProvider: "Recording reassignment",
+        startsOn: recording.schedule.startsOn,
+        endsOn: recording.schedule.endsOn,
+      },
+    });
+
+    await transaction.liveClassRecording.update({
+      where: { id: recording.id },
+      data: { scheduleId: schedule.id, topic },
+    });
+  });
+  return { teacherId: input.targetTeacherId, programId: input.targetProgramId };
+}
 export async function deleteRecordingForAdmin(recordingId: string) {
   try {
     await db.liveClassRecording.update({

@@ -14,6 +14,7 @@ import {
   listAdminRecordings,
   listManualRecordingFormOptions,
   processPendingDriveRecordings,
+  reassignRecordingForAdmin,
   resetPendingRecordingImportsForAdmin,
   syncRecentZoomRecordingsForAdmin,
 } from "@/lib/live-classes/recordings";
@@ -127,6 +128,30 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to remove recording.", "error", context));
     }
     redirect(noticeHref("Recording removed from dashboards.", "danger", context));
+  }
+
+  async function reassignRecordingAction(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/recordings");
+
+    const context = actionContext(formData);
+    const [targetTeacherId, targetProgramId] = String(formData.get("targetAssignment") || "").split("::");
+    try {
+      await reassignRecordingForAdmin({
+        adminUserId: currentSession.user.id,
+        recordingId: String(formData.get("recordingId") || ""),
+        targetTeacherId: targetTeacherId || "",
+        targetProgramId: targetProgramId || "",
+      });
+      revalidatePath("/admin/recordings");
+      revalidatePath("/teacher/recordings");
+      revalidatePath("/student/recordings");
+      revalidatePath("/parent/recordings");
+    } catch (error) {
+      redirect(noticeHref(error instanceof Error ? error.message : "Unable to move recording.", "error", context));
+    }
+    redirect(noticeHref("Recording moved to the selected teacher and programme.", "success", { teacher: targetTeacherId, page: 1 }));
   }
 
   async function processPendingRecordingsAction(formData: FormData) {
@@ -320,6 +345,22 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                           </button>
                         </form>
                       )}
+                      <form action={reassignRecordingAction} className="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="recordingId" value={recording.id} />
+                        <input type="hidden" name="teacher" value={activeTeacher ?? ""} />
+                        <input type="hidden" name="page" value={page} />
+                        <select name="targetAssignment" required defaultValue="" className="max-w-[250px] rounded-full border border-[#c9d7e6] bg-white px-3 py-2 text-xs font-semibold text-[#22304a]">
+                          <option value="" disabled>Move to teacher / programme...</option>
+                          {manualRecordingOptions.map((teacher) => (
+                            <optgroup key={teacher.id} label={teacher.name}>
+                              {teacher.programs.filter((program) => teacher.id !== recording.teacherId || program.id !== recording.programId).map((program) => (
+                                <option key={`${teacher.id}:${program.id}`} value={`${teacher.id}::${program.id}`}>{teacher.name} - {program.title}</option>
+                              ))}
+                            </optgroup>
+                          ))}
+                        </select>
+                        <button className="rounded-full border border-[#9bbad5] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]">Move</button>
+                      </form>
                       <form action={deleteRecordingAction}>
                         <input type="hidden" name="recordingId" value={recording.id} />
                         <input type="hidden" name="teacher" value={activeTeacher ?? ""} />

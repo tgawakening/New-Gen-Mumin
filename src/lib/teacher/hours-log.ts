@@ -91,7 +91,7 @@ function occurrenceMode(source: string) {
 }
 
 function isTeacherEditedTrackedRow(notes?: string | null) {
-  return Boolean(notes?.includes("Teacher edited from original:") || notes?.includes("Admin edited from original:"));
+  return Boolean(notes?.includes("Teacher edited from original:") || notes?.includes("Admin edited from original:") || notes?.includes("Admin reassigned from teacher:"));
 }
 
 function duplicateTrackedOccurrenceIds(occurrences: Array<{
@@ -421,6 +421,36 @@ export async function deleteAdminHoursEntry(adminUserId: string, entryId: string
   await db.teacherHoursLogEntry.update({
     where: { id: entry.id },
     data: { notes: [entry.notes, HOURS_LOG_EXCLUDED_MARKER, "Excluded by admin from hours log."].filter(Boolean).join("\n") },
+  });
+}
+export async function reassignAdminHoursEntry(input: {
+  adminUserId: string;
+  entryId: string;
+  targetTeacherId: string;
+}) {
+  const admin = await db.user.findFirst({ where: { id: input.adminUserId, role: "ADMIN" }, select: { id: true } });
+  if (!admin) throw new Error("Admin access required.");
+
+  const [entry, targetTeacher] = await Promise.all([
+    db.teacherHoursLogEntry.findUnique({
+      where: { id: input.entryId },
+      include: { teacher: { include: { user: true } } },
+    }),
+    db.teacherProfile.findFirst({
+      where: { id: input.targetTeacherId, isActive: true },
+      include: { user: true },
+    }),
+  ]);
+  if (!entry) throw new Error("Hours entry not found.");
+  if (!targetTeacher) throw new Error("Choose an active teacher.");
+  if (entry.teacherId === targetTeacher.id) throw new Error("Choose a different teacher.");
+
+  return db.teacherHoursLogEntry.update({
+    where: { id: entry.id },
+    data: {
+      teacherId: targetTeacher.id,
+      notes: [entry.notes, "Admin reassigned from teacher: " + displayName(entry.teacher.user) + "."].filter(Boolean).join("\n"),
+    },
   });
 }
 export async function submitTeacherHours(input: {
