@@ -56,7 +56,7 @@ async function notifyQabilaMessage(input: { messageId: string; flagged: boolean 
     }
   }
   for (const supervisor of message.room.supervisors) {
-    if (supervisor.user.id !== message.authorUserId) recipients.set(supervisor.user.id, { ...supervisor.user, href: "/teacher/community" });
+    if (supervisor.user.id !== message.authorUserId) recipients.set(supervisor.user.id, { ...supervisor.user, href: supervisor.user.role === "ADMIN" ? `/admin/community?qabila=${message.room.id}` : `/teacher/community?room=${message.room.id}` });
   }
   for (const admin of admins) {
     if (admin.id !== message.authorUserId) recipients.set(admin.id, { ...admin, href: `/admin/community?qabila=${message.room.id}` });
@@ -271,7 +271,7 @@ export async function ensureStudentQabilaRoom(studentId: string) {
 }
 const QABILA_SUPERVISOR_DRAFT: Record<string, string[]> = {
   "Maryam bint Imran": ["Saba"],
-  "Khadijah bint Khuwaylid": ["Aisha"],
+  "Khadijah bint Khuwaylid": ["Aisha", "Ayesha", "Aishah"],
   "Abubakr ibn Abi Qahafa": ["Mehran"],
   "Umar Ibn Al Khattab": ["Abdul Badee"],
 };
@@ -286,20 +286,22 @@ export async function syncQabilaSupervisors() {
   const skipped: string[] = [];
   for (const room of rooms) {
     const requested = QABILA_SUPERVISOR_DRAFT[room.title] ?? [];
-    await db.communityRoomSupervisor.deleteMany({ where: { roomId: room.id } });
-    for (const name of requested) {
-      const key = normalize(name);
-      const matches = teachers.filter((teacher) => {
-        const full = normalize(`${teacher.firstName} ${teacher.lastName}`);
-        return full === key || full.startsWith(key) || normalize(teacher.email).startsWith(key);
-      });
-      if (matches.length !== 1) {
-        skipped.push(`${room.title}: ${name}`);
-        continue;
-      }
-      await db.communityRoomSupervisor.create({ data: { roomId: room.id, userId: matches[0].id, role: "MENTOR" } });
-      assigned.push(`${room.title}: ${name}`);
+    const keys = requested.map(normalize);
+    const matches = teachers.filter((teacher) => {
+      const full = normalize(`${teacher.firstName} ${teacher.lastName}`);
+      const email = normalize(teacher.email);
+      return keys.some((key) => full === key || full.startsWith(key) || full.includes(key) || email.includes(key));
+    });
+    if (matches.length !== 1) {
+      skipped.push(`${room.title}: ${requested.join("/")}`);
+      continue;
     }
+    await db.communityRoomSupervisor.upsert({
+      where: { roomId_userId: { roomId: room.id, userId: matches[0].id } },
+      update: { role: "MENTOR" },
+      create: { roomId: room.id, userId: matches[0].id, role: "MENTOR" },
+    });
+    assigned.push(`${room.title}: ${matches[0].firstName} ${matches[0].lastName}`.trim());
   }
   return { assigned, skipped };
 }
