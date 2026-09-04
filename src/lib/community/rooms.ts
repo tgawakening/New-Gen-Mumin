@@ -196,8 +196,8 @@ export async function ensureStudentQabilaRoom(studentId: string) {
         ageBand: "GENERAL",
       },
     });
-  } else if (room.genderScope !== genderScope) {
-    room = await db.communityRoom.update({ where: { id: room.id }, data: { genderScope } });
+  } else if (room.genderScope !== genderScope || room.isReadOnly) {
+    room = await db.communityRoom.update({ where: { id: room.id }, data: { genderScope, isReadOnly: false } });
   }
   await db.communityMembership.deleteMany({
     where: {
@@ -453,6 +453,32 @@ export async function postCommunityMessage(input: {
     });
   }
 
+  return message;
+}
+
+export async function postTeacherCommunityMessage(input: { userId: string; roomId: string; body: string }) {
+  const supervision = await db.communityRoomSupervisor.findUnique({
+    where: { roomId_userId: { roomId: input.roomId, userId: input.userId } },
+    include: { room: true, user: { select: { role: true } } },
+  });
+  if (!supervision || supervision.user.role !== "TEACHER" || !supervision.room.isActive) {
+    throw new Error("You are not assigned to supervise this Qabila.");
+  }
+  const body = input.body.trim().slice(0, 800);
+  if (!body) throw new Error("Message cannot be empty.");
+  const flagReason = detectFlagReason(body);
+  const message = await db.communityMessage.create({
+    data: {
+      roomId: input.roomId,
+      authorUserId: input.userId,
+      body,
+      status: flagReason ? CommunityMessageStatus.FLAGGED : CommunityMessageStatus.VISIBLE,
+      flagReason,
+    },
+  });
+  if (flagReason) {
+    await db.moderationFlag.create({ data: { messageId: message.id, reason: `Possible ${flagReason}` } });
+  }
   return message;
 }
 
