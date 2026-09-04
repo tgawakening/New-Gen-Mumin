@@ -546,6 +546,32 @@ export async function sendSunnahTrackerSubmittedEmail(input: {
     }),
   });
 }
+export async function sendQabilaMessageEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  authorName: string;
+  qabilaName: string;
+  reviewPath: string;
+  moderationOnly?: boolean;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: input.moderationOnly ? "New Qabila message needs review" : "New message in your Qabila",
+    template: "qabilaMessagePosted",
+    html: renderGenMuminsEmailTemplate({
+      heading: input.moderationOnly ? "Qabila message review" : "Your Qabila has a new message",
+      preview: `${input.authorName} posted in ${input.qabilaName}.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.authorName} posted a new message in ${input.qabilaName}.`,
+      sections: [
+        { label: "Qabila", value: input.qabilaName },
+        { label: "Posted by", value: input.authorName },
+        { label: "Safety", value: input.moderationOnly ? "This message was held for mentor/admin review and is not visible to students." : "This is a supervised team discussion visible to assigned mentors and admins." },
+        { label: "Next step", value: input.moderationOnly ? "Review the flagged message and take the appropriate moderation action." : "Open the Qabila discussion to read and respond." },
+      ],
+      callToAction: { label: input.moderationOnly ? "Review message" : "Open Qabila chat", href: resolveHref(input.reviewPath) },
+    }),
+  });
+}
 export async function sendStudentTaskAssignedEmail(input: {
   toEmail: string;
   recipientName: string;

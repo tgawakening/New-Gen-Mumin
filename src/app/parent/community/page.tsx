@@ -5,7 +5,7 @@ import Link from "next/link";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
-import { getParentCommunityData, postParentSupervisedCommunityMessage } from "@/lib/community/rooms";
+import { deleteParentSupervisedCommunityMessage, editParentSupervisedCommunityMessage, getParentCommunityData, postParentSupervisedCommunityMessage } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import {
@@ -75,6 +75,27 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
     revalidatePath("/student/community");
     revalidatePath("/teacher/community");
     redirect(`/parent/community?child=${studentId}&mode=child&posted=1`);
+  }
+  async function manageAsChild(formData: FormData) {
+    "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "PARENT") redirect("/auth/login");
+    const studentId = String(formData.get("studentId") || "");
+    const messageId = String(formData.get("messageId") || "");
+    try {
+      if (String(formData.get("intent") || "") === "edit") {
+        await editParentSupervisedCommunityMessage({ parentUserId: current.user.id, studentId, messageId, body: String(formData.get("body") || "") });
+      } else {
+        await deleteParentSupervisedCommunityMessage({ parentUserId: current.user.id, studentId, messageId });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to update message.";
+      redirect(`/parent/community?child=${studentId}&section=qabila&mode=child&error=${encodeURIComponent(message)}`);
+    }
+    revalidatePath("/parent/community");
+    revalidatePath("/student/community");
+    revalidatePath("/teacher/community");
+    redirect(`/parent/community?child=${studentId}&section=qabila&mode=child&posted=1`);
   }
   return (
     <FamilyDashboardFrame
@@ -167,6 +188,20 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                     </div>
                     <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>
                     <p className="mt-2 text-xs text-[#6d7785]">{formatDate(message.createdAt)}</p>
+                    {childMode && message.author.id === community.selectedChild?.userId && Date.now() - message.createdAt.getTime() <= 60 * 60 * 1000 ? (
+                      <details className="mt-3 border-t border-[#eadfce] pt-2">
+                        <summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Edit or delete my message · available for 1 hour</summary>
+                        <form action={manageAsChild} className="mt-2 grid gap-2">
+                          <input type="hidden" name="studentId" value={selectedChildId} />
+                          <input type="hidden" name="messageId" value={message.id} />
+                          <textarea name="body" defaultValue={message.body} required maxLength={800} rows={2} className="rounded-xl border border-[#d8e3ed] bg-white px-3 py-2" />
+                          <div className="flex flex-wrap gap-2">
+                            <button name="intent" value="edit" className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white">Save edit</button>
+                            <button name="intent" value="delete" formNoValidate className="rounded-full border border-[#efb3b3] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete for everyone</button>
+                          </div>
+                        </form>
+                      </details>
+                    ) : null}
                   </div>
                 ))}
                 {!membership.room.messages.length ? (

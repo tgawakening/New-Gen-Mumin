@@ -4,6 +4,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } fr
 
 import { db } from "@/lib/db";
 import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
+import { sendQabilaMessageEmail } from "@/lib/email/notifications";
 
 const BLOCK_PATTERNS = [
   { label: "phone number", pattern: /(?:\+?\d[\s-]?){8,}/ },
@@ -17,6 +18,67 @@ function detectFlagReason(body: string) {
   return match?.label ?? null;
 }
 
+async function notifyQabilaMessage(input: { messageId: string; flagged: boolean }) {
+  const message = await db.communityMessage.findUnique({
+    where: { id: input.messageId },
+    include: {
+      author: { select: { id: true, firstName: true, lastName: true, email: true } },
+      room: {
+        include: {
+          memberships: {
+            include: {
+              student: {
+                include: {
+                  user: true,
+                  parents: { include: { parent: { include: { user: true } } } },
+                },
+              },
+            },
+          },
+          supervisors: { include: { user: true } },
+        },
+      },
+    },
+  });
+  if (!message || message.room.type !== CommunityRoomType.PROJECT_TEAM) return;
+  const admins = await db.user.findMany({ where: { role: "ADMIN", status: "ACTIVE" }, select: { id: true, firstName: true, lastName: true, email: true, role: true } });
+  const recipients = new Map<string, { id: string; firstName: string; lastName: string | null; email: string; role: string; href: string }>();
+  if (!input.flagged) {
+    for (const membership of message.room.memberships) {
+      const user = membership.student.user;
+      if (user.id !== message.authorUserId) {
+        recipients.set(user.id, { ...user, href: "/student/community" });
+        for (const relation of membership.student.parents) {
+          const parent = relation.parent.user;
+          if (parent.id !== message.authorUserId) recipients.set(parent.id, { ...parent, href: `/parent/community?child=${membership.student.id}&section=qabila&mode=child` });
+        }
+      }
+    }
+  }
+  for (const supervisor of message.room.supervisors) {
+    if (supervisor.user.id !== message.authorUserId) recipients.set(supervisor.user.id, { ...supervisor.user, href: "/teacher/community" });
+  }
+  for (const admin of admins) {
+    if (admin.id !== message.authorUserId) recipients.set(admin.id, { ...admin, href: `/admin/community?qabila=${message.room.id}` });
+  }
+  if (!recipients.size) return;
+  const authorName = `${message.author.firstName} ${message.author.lastName ?? ""}`.trim() || message.author.email;
+  const notifications = [...recipients.values()].map((recipient) => ({
+    userId: recipient.id,
+    title: input.flagged ? "Qabila message needs review" : `New message in ${message.room.title}`,
+    body: `${authorName} posted ${input.flagged ? "a message requiring review" : "a new message"} in ${message.room.title}.`,
+    href: recipient.href,
+  }));
+  await db.notification.createMany({ data: notifications });
+  await Promise.allSettled([...recipients.values()].map((recipient) => sendQabilaMessageEmail({
+    toEmail: recipient.email,
+    recipientName: `${recipient.firstName} ${recipient.lastName ?? ""}`.trim() || recipient.email,
+    authorName,
+    qabilaName: message.room.title,
+    reviewPath: recipient.href,
+    moderationOnly: input.flagged,
+  })));
+}
 function ageBand(age?: number | null) {
   if (!age) return "GENERAL";
   if (age <= 8) return "6-8";
@@ -383,6 +445,7 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
             include: {
               author: {
                 select: {
+                  id: true,
                   firstName: true,
                   lastName: true,
                   role: true,
@@ -452,6 +515,7 @@ export async function postCommunityMessage(input: {
     });
   }
 
+  await notifyQabilaMessage({ messageId: message.id, flagged: Boolean(flagReason) });
   return message;
 }
 
@@ -467,6 +531,24 @@ export async function postParentSupervisedCommunityMessage(input: {
   });
   if (!relation) throw new Error("This learner is not linked to your parent account.");
   return postCommunityMessage({ userId: relation.student.userId, roomId: input.roomId, body: input.body });
+}
+async function resolveParentSupervisedStudentUser(parentUserId: string, studentId: string) {
+  const relation = await db.parentStudent.findFirst({
+    where: { parent: { userId: parentUserId }, studentId },
+    select: { student: { select: { userId: true } } },
+  });
+  if (!relation) throw new Error("This learner is not linked to your parent account.");
+  return relation.student.userId;
+}
+
+export async function editParentSupervisedCommunityMessage(input: { parentUserId: string; studentId: string; messageId: string; body: string }) {
+  const studentUserId = await resolveParentSupervisedStudentUser(input.parentUserId, input.studentId);
+  return editCommunityMessage({ actorUserId: studentUserId, messageId: input.messageId, body: input.body });
+}
+
+export async function deleteParentSupervisedCommunityMessage(input: { parentUserId: string; studentId: string; messageId: string }) {
+  const studentUserId = await resolveParentSupervisedStudentUser(input.parentUserId, input.studentId);
+  return deleteCommunityMessage({ actorUserId: studentUserId, messageId: input.messageId });
 }
 export async function postTeacherCommunityMessage(input: { userId: string; roomId: string; body: string }) {
   const supervision = await db.communityRoomSupervisor.findUnique({
@@ -491,13 +573,20 @@ export async function postTeacherCommunityMessage(input: { userId: string; roomI
   if (flagReason) {
     await db.moderationFlag.create({ data: { messageId: message.id, reason: `Possible ${flagReason}` } });
   }
+  await notifyQabilaMessage({ messageId: message.id, flagged: Boolean(flagReason) });
   return message;
 }
 
 export async function editCommunityMessage(input: { actorUserId: string; messageId: string; body: string }) {
-  const message = await db.communityMessage.findUnique({ where: { id: input.messageId } });
+  const [actor, message] = await Promise.all([
+    db.user.findUnique({ where: { id: input.actorUserId }, select: { role: true } }),
+    db.communityMessage.findUnique({ where: { id: input.messageId } }),
+  ]);
   if (!message || message.authorUserId !== input.actorUserId || message.status === CommunityMessageStatus.HIDDEN) {
     throw new Error("You can edit only your own visible messages.");
+  }
+  if (actor?.role === "STUDENT" && Date.now() - message.createdAt.getTime() > 60 * 60 * 1000) {
+    throw new Error("Student messages can be edited for one hour after posting.");
   }
   const body = input.body.trim().slice(0, 800);
   if (!body) throw new Error("Message cannot be empty.");
@@ -520,6 +609,9 @@ export async function deleteCommunityMessage(input: { actorUserId: string; messa
   const ownMessage = message.authorUserId === input.actorUserId;
   const assignedTeacher = actor.role === "TEACHER" && message.room.supervisors.some((entry) => entry.userId === input.actorUserId);
   if (!ownMessage && actor.role !== "ADMIN" && !assignedTeacher) throw new Error("You cannot remove this message.");
+  if (ownMessage && actor.role === "STUDENT" && Date.now() - message.createdAt.getTime() > 60 * 60 * 1000) {
+    throw new Error("Student messages can be deleted for one hour after posting. Ask your assigned teacher if an older message needs removal.");
+  }
   await db.communityMessage.update({ where: { id: message.id }, data: { status: CommunityMessageStatus.HIDDEN } });
   await db.moderationAction.create({ data: { actorUserId: input.actorUserId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: ownMessage ? "delete_own" : "remove", note: ownMessage ? "Author deleted message for everyone." : "Message removed from the Qabila discussion." } });
 }
@@ -536,6 +628,7 @@ export async function postAdminCommunityMessage(input: { userId: string; roomId:
   if (!body) throw new Error("Message cannot be empty.");
   const message = await db.communityMessage.create({ data: { roomId: room.id, authorUserId: input.userId, body, status: CommunityMessageStatus.VISIBLE } });
   await db.moderationAction.create({ data: { actorUserId: input.userId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: "admin_post", note: `Posted to ${room.title}.` } });
+  await notifyQabilaMessage({ messageId: message.id, flagged: false });
   return message;
 }
 
