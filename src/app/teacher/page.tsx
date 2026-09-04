@@ -5,6 +5,7 @@ import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { TeacherHomeDashboard } from "@/components/dashboard/teacher/TeacherHomeDashboard";
+import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 
 export default async function TeacherDashboardPage() {
   const session = await getCurrentSession();
@@ -20,6 +21,7 @@ export default async function TeacherDashboardPage() {
       subtitle="Run live classes, follow student rosters, review assessments, and prepare course delivery from one teaching workspace."
       navItems={getTeacherNavItems()}
     >
+      <FamilyJourneyLinks role="teacher" />
       <TeacherHomeDashboard dashboard={dashboard} />
     </TeacherDashboardFrame>
   );

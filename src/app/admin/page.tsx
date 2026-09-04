@@ -10,6 +10,7 @@ import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 import { OrderDetailsPopup } from "@/components/admin/OrderDetailsPopup";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { getCurrentSession } from "@/lib/auth/session";
 import { canAccessAdminFinance } from "@/lib/admin/access";
 import { db } from "@/lib/db";
@@ -1117,6 +1118,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
           </p>
         </div>
 
+        {activeTab === "home" ? <FamilyJourneyLinks role="admin" /> : null}
         {activeTab === "home" ? (
           <div className="space-y-5">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
