@@ -17,6 +17,8 @@ import {
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { MobileFamilyNavRailClient } from "@/components/dashboard/family/MobileFamilyNavRailClient";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { getCurrentSession } from "@/lib/auth/session";
+import { getNavigationActivity, type NavActivity } from "@/lib/notifications/navigation";
 import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
 import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
 
@@ -24,6 +26,7 @@ type NavItem = {
   label: string;
   href: string;
   icon?: FamilyNavIcon;
+  activity?: NavActivity;
 };
 
 function getNavIcon(icon?: FamilyNavIcon) {
@@ -113,7 +116,7 @@ function VisualIcon({ icon }: { icon?: DashboardVisualIcon }) {
   }
 }
 
-export function FamilyDashboardFrame({
+export async function FamilyDashboardFrame({
   roleLabel,
   title,
   subtitle,
@@ -128,6 +131,8 @@ export function FamilyDashboardFrame({
   children: ReactNode;
   pendingReason?: string | null;
 }) {
+  const session = await getCurrentSession();
+  const activityNavItems = session ? await getNavigationActivity(session.user.id, navItems) : navItems;
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#2e3d57] bg-[#17243a] text-white shadow-[0_14px_40px_rgba(23,36,58,0.18)]">
@@ -152,7 +157,7 @@ export function FamilyDashboardFrame({
             </div>
           </div>
           <PwaInstallPrompt audience={roleLabel.toLowerCase().includes("student") ? "student" : "parent"} />
-          <MobileFamilyNavRailClient navItems={navItems} />
+          <MobileFamilyNavRailClient navItems={activityNavItems} />
         </div>
       </div>
 

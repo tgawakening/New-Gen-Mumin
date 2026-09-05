@@ -99,13 +99,41 @@ export async function createLiveQuizSession(input: { quizId: string; teacherUser
   });
   if (existingSession) return existingSession;
 
-  return db.quizLiveSession.create({
+  const liveSession = await db.quizLiveSession.create({
     data: {
       quizId: quiz.id,
       teacherUserId: input.teacherUserId,
       status: "WAITING",
     },
   });
+
+  const rosterStudentIds = await getTeacherProgramRosterStudentIds(teacher.id, quiz.programId);
+  if (rosterStudentIds.length) {
+    const students = await db.studentProfile.findMany({
+      where: { id: { in: rosterStudentIds } },
+      select: {
+        userId: true,
+        parents: { select: { parent: { select: { userId: true } } } },
+      },
+    });
+    const recipients = new Map<string, "admin" | "student" | "parent">();
+    const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
+    for (const admin of admins) recipients.set(admin.id, "admin");
+    for (const student of students) {
+      recipients.set(student.userId, "student");
+      for (const relation of student.parents) recipients.set(relation.parent.userId, "parent");
+    }
+    await db.notification.createMany({
+      data: [...recipients].map(([userId, role]) => ({
+        userId,
+        title: "Live quiz has started",
+        body: `${quiz.title} is ready now. Open the live quiz to take part.`,
+        href: role === "admin" ? "/admin/quizzes" : role === "parent" ? "/parent/quizzes" : `/student/quizzes/live/${liveSession.id}`,
+      })),
+    });
+  }
+
+  return liveSession;
 }
 
 export async function heartbeatLiveQuizSession(input: { sessionId: string; teacherUserId: string }) {

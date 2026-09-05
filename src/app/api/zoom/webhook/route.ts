@@ -205,7 +205,13 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "meeting.started") {
-    const users = new Map<string, "teacher" | "student" | "parent">();
+    const users = new Map<string, "admin" | "teacher" | "student" | "parent">();
+
+    const admins = await db.user.findMany({
+      where: { role: "ADMIN" },
+      select: { id: true },
+    });
+    for (const admin of admins) users.set(admin.id, "admin");
 
     for (const matchingSchedule of schedules) {
       await recordLiveClassSessionOccurrence({
@@ -232,7 +238,13 @@ export async function POST(request: NextRequest) {
         userId,
         title: "Live class is now open",
         body: `${title} has started on Zoom. Open your schedule to join.`,
-        href: role === "teacher" ? "/teacher/schedule" : role === "parent" ? "/parent/schedule" : "/student/schedule",
+        href: role === "admin"
+          ? "/admin/classes"
+          : role === "teacher"
+            ? "/teacher/schedule"
+            : role === "parent"
+              ? "/parent/schedule"
+              : "/student/schedule",
       })),
     });
   }

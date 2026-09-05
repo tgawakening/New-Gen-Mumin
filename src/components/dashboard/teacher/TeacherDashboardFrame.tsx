@@ -4,14 +4,17 @@ import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutBu
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
 import { MobileTeacherNavRailClient } from "@/components/dashboard/teacher/MobileTeacherNavRailClient";
+import { getCurrentSession } from "@/lib/auth/session";
+import { getNavigationActivity, type NavActivity } from "@/lib/notifications/navigation";
 
 type NavItem = {
   label: string;
   href: string;
   icon?: string;
+  activity?: NavActivity;
 };
 
-export function TeacherDashboardFrame({
+export async function TeacherDashboardFrame({
   title,
   subtitle,
   navItems,
@@ -22,6 +25,8 @@ export function TeacherDashboardFrame({
   navItems: NavItem[];
   children: ReactNode;
 }) {
+  const session = await getCurrentSession();
+  const activityNavItems = session ? await getNavigationActivity(session.user.id, navItems) : navItems;
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#1c2b45] bg-[linear-gradient(135deg,#14243d_0%,#22304a_55%,#36536f_100%)] text-white shadow-[0_18px_50px_rgba(20,36,61,0.22)]">
@@ -46,7 +51,7 @@ export function TeacherDashboardFrame({
             </div>
           </div>
           <PwaInstallPrompt audience="teacher" />
-          <MobileTeacherNavRailClient navItems={navItems} />
+          <MobileTeacherNavRailClient navItems={activityNavItems} />
         </div>
       </div>
 

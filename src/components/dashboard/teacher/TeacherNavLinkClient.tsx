@@ -17,6 +17,8 @@ import {
   UserRound,
   Video,
 } from "lucide-react";
+import { clearNavActivity, NavActivityBadge } from "@/components/dashboard/NavActivityLink";
+import type { NavActivity } from "@/lib/notifications/navigation";
 
 function TeacherNavIcon({ icon, className = "h-4 w-4" }: { icon?: string; className?: string }) {
   switch (icon) {
@@ -54,11 +56,13 @@ export function TeacherNavLinkClient({
   label,
   icon,
   variant = "sidebar",
+  activity,
 }: {
   href: string;
   label: string;
   icon?: string;
   variant?: "sidebar" | "mobileTab";
+  activity?: NavActivity;
 }) {
   const pathname = usePathname();
   const isActive = pathname === href || (href !== "/teacher" && pathname.startsWith(`${href}/`));
@@ -67,9 +71,10 @@ export function TeacherNavLinkClient({
     return (
       <Link
         href={href}
-        title={label}
+        title={activity?.tooltip ?? label}
+        onClick={() => activity?.ids.length && clearNavActivity(activity.ids)}
         aria-current={isActive ? "page" : undefined}
-        className={`flex min-h-16 w-[10.5rem] shrink-0 snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
+        className={`relative flex min-h-16 w-[10.5rem] shrink-0 snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
           isActive
             ? "bg-white text-[#22304a] ring-1 ring-white/40"
             : "bg-white/10 text-white/90 hover:bg-white/16"
@@ -79,6 +84,7 @@ export function TeacherNavLinkClient({
           <TeacherNavIcon icon={icon} />
         </span>
         <span className="min-w-0 whitespace-normal break-words text-left leading-5">{label}</span>
+        <NavActivityBadge activity={activity} active={isActive} />
       </Link>
     );
   }
@@ -86,7 +92,8 @@ export function TeacherNavLinkClient({
   return (
     <Link
       href={href}
-      title={label}
+      title={activity?.tooltip ?? label}
+      onClick={() => activity?.ids.length && clearNavActivity(activity.ids)}
       aria-current={isActive ? "page" : undefined}
       className={`group/nav relative flex items-center justify-center gap-3 rounded-2xl px-2 py-3 text-sm font-medium transition xl:justify-start xl:px-4 ${
         isActive
@@ -98,6 +105,7 @@ export function TeacherNavLinkClient({
         <TeacherNavIcon icon={icon} />
       </span>
       <span className="hidden xl:inline">{label}</span>
+      <NavActivityBadge activity={activity} active={isActive} />
       <span className="pointer-events-none absolute left-[calc(100%+0.5rem)] top-1/2 z-40 hidden -translate-y-1/2 whitespace-nowrap rounded-xl bg-[#22304a] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-xl transition group-hover/nav:block group-hover/nav:opacity-100 xl:hidden">
         {label}
       </span>

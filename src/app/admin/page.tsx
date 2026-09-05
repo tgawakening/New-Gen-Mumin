@@ -10,6 +10,7 @@ import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
 import { OrderDetailsPopup } from "@/components/admin/OrderDetailsPopup";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
+import { NavActivityLink } from "@/components/dashboard/NavActivityLink";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { getCurrentSession } from "@/lib/auth/session";
 import { canAccessAdminFinance } from "@/lib/admin/access";
@@ -31,6 +32,7 @@ import {
   updateStripeSubscriptionAmount,
 } from "@/lib/payments/fulfillment";
 import { getRegistrationOptions } from "@/lib/registration/service";
+import { getNavigationActivity } from "@/lib/notifications/navigation";
 
 type AdminDashboardData = Awaited<ReturnType<typeof getAdminDashboardData>>;
 type RecentRegistration = AdminDashboardData["recentRegistrations"][number];
@@ -1001,6 +1003,8 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
     { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },
   ];
+  const adminPriority = ["home", "classes", "students", "community", "orders", "teacher-reports"];
+  const adminNavItemsWithActivity = (await getNavigationActivity(session.user.id, adminNavItems)).sort((left, right) => Number(Boolean(right.activity?.count)) - Number(Boolean(left.activity?.count)) || (adminPriority.indexOf(left.key) < 0 ? 99 : adminPriority.indexOf(left.key)) - (adminPriority.indexOf(right.key) < 0 ? 99 : adminPriority.indexOf(right.key)));
   const currentOrderHref = buildReturnHref("orders", {
     orderSearch: params?.orderSearch,
     orderStatus: params?.orderStatus,
@@ -1046,38 +1050,34 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 <div className="absolute left-0 z-50 mt-3 w-[min(280px,calc(100vw-2rem))] rounded-[24px] bg-[#22304a] p-3 text-white shadow-2xl">
                   <p className="px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f2c58f]">Admin menu</p>
                   <div className="mt-1 space-y-1">
-                    {adminNavItems.map((item) => {
+                    {adminNavItemsWithActivity.map((item) => {
                       const Icon = item.icon;
                       return (
-                        <Link key={item.key} href={item.href} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12">
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]">
-                            <Icon className="h-4 w-4" />
-                          </span>
+                        <NavActivityLink key={item.key} href={item.href} title={item.label} activity={item.activity} active={activeTab === item.key} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]"><Icon className="h-4 w-4" /></span>
                           <span>{item.label}</span>
-                        </Link>
+                        </NavActivityLink>
                       );
                     })}
                   </div>
                 </div>
               </details>
               <div className="hidden min-w-0 flex-wrap gap-2 md:ml-3 md:flex">
-                {adminNavItems.map((item) => {
+                {adminNavItemsWithActivity.map((item) => {
                   const active = activeTab === item.key;
                   const Icon = item.icon;
                   return (
-                    <Link
+                    <NavActivityLink
                       key={item.key}
                       href={item.href}
                       title={item.label}
-                      className={`group/nav relative inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${
-                        active
-                          ? "bg-[#0f4d81] text-white shadow-sm"
-                          : "border border-[#d9e2eb] bg-white text-[#22304a] hover:bg-[#f5f8fb]"
-                      }`}
+                      activity={item.activity}
+                      active={active}
+                      className={`group/nav inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${active ? "bg-[#0f4d81] text-white shadow-sm" : "border border-[#d9e2eb] bg-white text-[#22304a] hover:bg-[#f5f8fb]"}`}
                     >
                       <Icon className="h-4 w-4" />
                       <span className="hidden lg:inline">{item.label}</span>
-                    </Link>
+                    </NavActivityLink>
                   );
                 })}
               </div>
