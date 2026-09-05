@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { redirect } from "next/navigation";
@@ -111,6 +112,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
   const [quest, activeLiveQuizzes] = await Promise.all([getStudentQuestData(selectedChild.id, []), listStudentActiveLiveQuizzesByStudentId(selectedChild.id)]);
   const qabila = qabilaProfile(quest.membership.qabilaGroup);
   const qabilaName = qabila?.name ?? "Qabila assignment pending";
+  const qabilaTeammates = qabila ? quest.teammates.filter((member) => member.id !== selectedChild.id && member.qabilaGroup === qabila.name) : [];
   const dailyMission = buildDailyMission(selectedChild);
   const classCircle = currentCircle(selectedChild);
   const projectTask = selectedChild.assignments[0] ?? null;
@@ -198,6 +200,20 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
         }}
       />
 
+      <section className="overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
+        <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            {qabila ? <Image src={qabila.image} alt={`${qabila.name} Qabila`} width={80} height={80} className="h-20 w-20 shrink-0 rounded-[24px] object-cover shadow-sm"/> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-[#eef2f7] text-2xl">?</span>}
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: qabila?.color ?? "#617184" }}>My Qabila</p>
+              <h2 className="mt-1 text-2xl font-semibold text-[#22304a]">{qabilaName}</h2>
+              <p className="mt-1 text-sm text-[#617184]">{qabila ? `${qabila.mentor} supervises this team. ${selectedChild.name} has contributed ${quest.studentTotal} verified points.` : "This learner's Qabila will appear after assignment."}</p>
+            </div>
+          </div>
+          {qabila ? <Link href={`/parent/community?child=${selectedChild.id}&section=qabila&mode=child`} className="shrink-0 rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Open Qabila chat</Link> : null}
+        </div>
+        {qabilaTeammates.length ? <details className="border-t border-[#eadfce] px-5 py-4"><summary className="cursor-pointer text-sm font-semibold text-[#22304a]">View {qabilaName} teammates</summary><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: qabila?.color }}>{selectedChild.name}</span>{qabilaTeammates.slice(0,18).map((member)=><span key={member.id} className="rounded-full border border-[#eadfce] bg-[#fffaf4] px-3 py-2 text-xs font-semibold text-[#22304a]">{member.name}</span>)}</div></details> : null}
+      </section>
       <div className="sr-only">
         <ul>
           {dashboardMetrics.map((metric) => (
