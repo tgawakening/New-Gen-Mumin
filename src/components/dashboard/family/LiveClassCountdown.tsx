@@ -46,14 +46,14 @@ export function LiveClassCountdown({
   }, [isLive, millisecondsUntilStart, router]);
 
   return (
-    <div className="mt-4 rounded-[20px] bg-white/10 px-4 py-4">
+    <div className={`mt-4 rounded-[20px] border px-4 py-4 shadow-sm ${isLive ? "border-[#f4b85f] bg-[#102544]" : "border-white/10 bg-[#17243a]"}`}>
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">{isLive ? "Live now" : "Starts in"}</p>
       <p className="mt-1 text-3xl font-semibold text-white">{isLive ? "Class has started on Zoom" : formatCountdown(millisecondsUntilStart)}</p>
       {canJoin ? (
         <Link
           href={meetingUrl!}
           target="_blank"
-          className="mt-4 inline-flex rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#22304a]"
+          className="mt-4 inline-flex rounded-full bg-[#f4b85f] px-4 py-2 text-sm font-bold text-[#102544] shadow-sm transition hover:bg-[#ffd082] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           Join now
         </Link>
