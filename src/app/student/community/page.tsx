@@ -196,7 +196,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                     ))}
                   </div>
                 ) : null}
-                <form action={postMessage} className="grid gap-3 rounded-[22px] border border-[#eadfce] bg-white p-4">
+                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <form action={postMessage} className="grid gap-3 rounded-[22px] border border-[#eadfce] bg-white p-4">
                   <input type="hidden" name="roomId" value={membership.room.id} />
                   <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                     Message
@@ -212,8 +212,8 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                   <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">
                     Post safely
                   </button>
-                </form>
-                {membership.room.type === "PROJECT_TEAM" ? <CommunityVoiceRecorder roomId={membership.room.id}/> : null}
+                </form> : <div className="rounded-2xl bg-[#f3f6f9] px-4 py-3 text-sm text-[#617184]">{membership.room.isReadOnly ? "This is a read-only information room." : "Messaging is available inside your main Qabila room."}</div>}
+                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <CommunityVoiceRecorder roomId={membership.room.id}/> : null}
                 <div className="space-y-3">
                   {membership.room.messages.map((message) => (
                     <div key={message.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">

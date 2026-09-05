@@ -241,9 +241,8 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   }
   const genderScope = qabilaProfile(qabilaGroup)?.gender ?? "MENTOR_SUPERVISED";
   let room = await db.communityRoom.findFirst({
-    where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM },
+    where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM, isActive: true },
   });
-  if (room && !room.isActive) return;
   if (!room) {
     room = await db.communityRoom.create({
       data: {
@@ -386,7 +385,11 @@ export async function getStudentCommunityData(userId: string) {
     },
   });
 
-  return { student, memberships };
+  const orderedMemberships = [...memberships].sort((left, right) => {
+    const priority = (type: CommunityRoomType) => type === CommunityRoomType.PROJECT_TEAM ? 0 : type === CommunityRoomType.ANNOUNCEMENT ? 2 : 1;
+    return priority(left.room.type) - priority(right.room.type);
+  });
+  return { student, memberships: orderedMemberships };
 }
 
 export async function getParentCommunityData(parentUserId: string, selectedChildId?: string) {
