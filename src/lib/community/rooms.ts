@@ -356,6 +356,7 @@ export async function getStudentCommunityData(userId: string) {
             orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
             include: { student: { include: { user: true } } },
           },
+          supervisors: { include: { user: true } },
           projects: {
             where: { status: "ACTIVE" },
             orderBy: { createdAt: "desc" },
@@ -416,7 +417,16 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
   });
   if (!parent) return null;
 
-  const children = parent.students.map((relation) => relation.student);
+  const childrenByName = new Map<string, (typeof parent.students)[number]["student"]>();
+  for (const relation of parent.students) {
+    const student = relation.student;
+    const identity = (student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const existing = childrenByName.get(identity);
+    const score = student.enrollments.length * 1_000 + student.createdAt.getTime() / 1_000_000_000_000;
+    const existingScore = existing ? existing.enrollments.length * 1_000 + existing.createdAt.getTime() / 1_000_000_000_000 : -1;
+    if (!existing || score > existingScore) childrenByName.set(identity, student);
+  }
+  const children = [...childrenByName.values()];
   const selectedChild = children.find((child) => child.id === selectedChildId) ?? children[0] ?? null;
   if (!selectedChild) {
     return {
@@ -434,6 +444,8 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
     include: {
       room: {
         include: {
+          memberships: { orderBy: [{ role: "asc" }, { joinedAt: "asc" }], include: { student: { include: { user: true } } } },
+          supervisors: { include: { user: true } },
           projects: {
             where: { status: "ACTIVE" },
             orderBy: { createdAt: "desc" },
@@ -473,6 +485,18 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
   };
 }
 
+export async function formatQabilaMessage(formData: FormData) {
+  const roomId = String(formData.get("roomId") || "");
+  const body = String(formData.get("body") || "").trim();
+  const mentionName = String(formData.get("mentionName") || "").trim().replace(/[^a-zA-Z0-9 '\-]/g, "").slice(0, 80);
+  const replyToId = String(formData.get("replyToId") || "");
+  let context = "";
+  if (replyToId) {
+    const reply = await db.communityMessage.findFirst({ where: { id: replyToId, roomId, status: { not: CommunityMessageStatus.HIDDEN } }, include: { author: { select: { firstName: true, lastName: true } } } });
+    if (reply) context = `↪ Replying to ${`${reply.author.firstName} ${reply.author.lastName}`.trim()}: “${reply.body.replace(/\s+/g, " ").slice(0, 90)}${reply.body.length > 90 ? "…" : ""}”\n`;
+  }
+  return `${context}${mentionName ? `@${mentionName}\n` : ""}${body}`.slice(0, 800);
+}
 export async function postCommunityMessage(input: {
   userId: string;
   roomId: string;

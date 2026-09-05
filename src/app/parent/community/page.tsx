@@ -5,10 +5,11 @@ import Link from "next/link";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
-import { deleteParentSupervisedCommunityMessage, editParentSupervisedCommunityMessage, getParentCommunityData, postParentSupervisedCommunityMessage } from "@/lib/community/rooms";
+import { deleteParentSupervisedCommunityMessage, editParentSupervisedCommunityMessage, getParentCommunityData, postParentSupervisedCommunityMessage, formatQabilaMessage } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import { CommunityVoiceRecorder } from "@/components/community/CommunityVoiceRecorder";
+import { QabilaMessageComposer } from "@/components/community/QabilaMessageComposer";
 import {
   ChildSelector,
   CompactList,
@@ -61,7 +62,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
         parentUserId: current.user.id,
         studentId,
         roomId: String(formData.get("roomId") || ""),
-        body: String(formData.get("body") || ""),
+        body: await formatQabilaMessage(formData),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to post message.";
@@ -143,22 +144,11 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                     ))}
                   </div>
                 ))}
-                {childMode && section === "qabila" && !membership.room.isReadOnly ? (
-                  <form action={postAsChild} className="grid gap-3 rounded-[20px] border border-[#eadfce] bg-white p-4">
-                    <input type="hidden" name="studentId" value={selectedChildId} />
-                    <input type="hidden" name="roomId" value={membership.room.id} />
-                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                      Message your Qabila
-                      <textarea name="body" required maxLength={800} rows={3} placeholder="Share an idea, question, or kind encouragement. Do not share phone numbers, emails, or links." className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-                    </label>
-                    <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">Send to my Qabila</button><CommunityVoiceRecorder roomId={membership.room.id} studentId={selectedChildId}/>
-                    <p className="text-xs leading-5 text-[#617184]">Posted as {community.selectedChild ? childName(community.selectedChild) : "the selected learner"}. Teachers and admins supervise this room.</p>
-                  </form>
-                ) : null}
-                {membership.room.messages.map((message) => (
-                  <div key={message.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">
+
+                {[...membership.room.messages].reverse().map((message) => (
+                  <div key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-semibold text-[#22304a]">{authorName(message.author)}</p>
+                      <p className="font-semibold text-[#22304a]">{authorName(message.author)} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-[#9a651f]">{message.author.role === "TEACHER" ? "Teacher announcement" : membership.room.memberships.find((member)=>member.student.userId===message.author.id)?.role?.replace("_", " ") || "Member"}</span></p>
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#2f6b4b]">Visible</span>
                     </div>
                     <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}
@@ -184,6 +174,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                     No visible room messages yet.
                   </p>
                 ) : null}
+                {childMode && !membership.room.isReadOnly ? <div className="overflow-hidden rounded-[24px] border border-[#d8e3ed] bg-[#f4f7fa]"><div className="max-h-[520px] space-y-2 overflow-y-auto p-3"><p className="text-center text-xs font-semibold text-[#7a8797]">Earlier messages appear first · Qabila discussion is supervised</p></div><QabilaMessageComposer action={postAsChild} roomId={membership.room.id} studentId={selectedChildId} buttonLabel="Send to Qabila" mentions={[...membership.room.memberships.map((member)=>({id:member.student.userId,label:childName(member.student)})),...membership.room.supervisors.map((teacher)=>({id:teacher.userId,label:`Teacher ${teacher.user.firstName}`}))]} replies={membership.room.messages.map((message)=>({id:message.id,label:authorName(message.author),preview:message.body.slice(0,55)}))}/><div className="border-t border-[#dbe3ec] bg-white px-4 py-3"><CommunityVoiceRecorder roomId={membership.room.id} studentId={selectedChildId}/></div></div> : null}
               </div>
             </SectionCard>
           ))}

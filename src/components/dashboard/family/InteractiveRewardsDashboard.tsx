@@ -68,7 +68,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
   const unlockProgress = data.nextUnlock ? Math.min(100, (data.collective / data.nextUnlock.milestone) * 100) : 100;
   const houseLabel = data.membership.qabilaGroup || "Qabila assignment pending";
   const qabila = qabilaProfile(data.membership.qabilaGroup);
-  const roleLabel = data.membership.role === "MEMBER" ? "" : ` ? ${data.membership.role.replaceAll("_", " ")}`;
+  const roleLabel = data.membership.role === "MEMBER" ? "" : ` — ${data.membership.role.replaceAll("_", " ")}`;
   const spotlightTitle = featured ? featured.title : "Your next character badge";
   const spotlightEvidence = featured?.evidence ?? "Keep showing kindness, consistency, courage, and service. Your teacher can recognise your growth here.";
 

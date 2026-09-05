@@ -4,10 +4,11 @@ import { redirect } from "next/navigation";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { deleteCommunityMessage, editCommunityMessage, getStudentCommunityData, postCommunityMessage, submitCommunityProjectWork } from "@/lib/community/rooms";
+import { deleteCommunityMessage, editCommunityMessage, getStudentCommunityData, postCommunityMessage, submitCommunityProjectWork, formatQabilaMessage } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import { CommunityVoiceRecorder } from "@/components/community/CommunityVoiceRecorder";
+import { QabilaMessageComposer } from "@/components/community/QabilaMessageComposer";
 import {
   CompactList,
   FamilyDashboardFrame,
@@ -64,7 +65,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
       const message = await postCommunityMessage({
         userId: currentSession.user.id,
         roomId,
-        body,
+        body: await formatQabilaMessage(formData),
       });
 
       revalidatePath("/student/community");
@@ -205,29 +206,12 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                     ))}
                   </div>
                 ) : null}
-                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <form action={postMessage} className="grid gap-3 rounded-[22px] border border-[#eadfce] bg-white p-4">
-                  <input type="hidden" name="roomId" value={membership.room.id} />
-                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                    Message
-                    <textarea
-                      name="body"
-                      rows={3}
-                      maxLength={800}
-                      required
-                      placeholder="Share a class question or respectful reflection. Links and contact details are sent to review."
-                      className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm"
-                    />
-                  </label>
-                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">
-                    Post safely
-                  </button>
-                </form> : <div className="rounded-2xl bg-[#f3f6f9] px-4 py-3 text-sm text-[#617184]">{membership.room.isReadOnly ? "This is a read-only information room." : "Messaging is available inside your main Qabila room."}</div>}
-                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <CommunityVoiceRecorder roomId={membership.room.id}/> : null}
+
                 <div className="space-y-3">
-                  {membership.room.messages.map((message) => (
-                    <div key={message.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">
+                  {[...membership.room.messages].reverse().map((message) => (
+                    <div key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
-                        <p className="font-semibold text-[#22304a]">{displayName(message.author)}</p>
+                        <p className="font-semibold text-[#22304a]">{displayName(message.author)} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-[#9a651f]">{message.author.role === "TEACHER" ? "Teacher announcement" : membership.room.memberships.find((member)=>member.student.userId===message.author.id)?.role?.replace("_", " ") || "Member"}</span></p>
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${message.status === "FLAGGED" ? "bg-[#fff7eb] text-[#8a6326]" : "bg-white text-[#2f6b4b]"}`}>
                           {message.status === "FLAGGED" ? "Mentor review" : "Visible"}
                         </span>
@@ -242,6 +226,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                       This room is ready. Start with a class question or reflection.
                     </p>
                   ) : null}
+                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <div className="overflow-hidden rounded-[24px] border border-[#d8e3ed] bg-white"><QabilaMessageComposer action={postMessage} roomId={membership.room.id} mentions={[...membership.room.memberships.map((member)=>({id:member.student.userId,label:member.student.displayName || member.student.user.firstName})),...membership.room.supervisors.map((teacher)=>({id:teacher.userId,label:`Teacher ${teacher.user.firstName}`}))]} replies={membership.room.messages.map((message)=>({id:message.id,label:displayName(message.author),preview:message.body.slice(0,55)}))}/><div className="border-t border-[#dbe3ec] px-4 py-3"><CommunityVoiceRecorder roomId={membership.room.id}/></div></div> : null}
                 </div>
               </div>
             </SectionCard>
