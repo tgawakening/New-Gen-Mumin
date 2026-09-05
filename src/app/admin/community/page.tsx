@@ -26,10 +26,10 @@ function formatDate(value: Date) {
 const AGE_BANDS = ["ALL", "6-8", "9-12", "13-17", "GENERAL"] as const;
 const GENDER_SCOPES = ["ALL", "BOYS", "GIRLS", "MENTOR_SUPERVISED"] as const;
 const CURRENT_QABILA_DRAFT = [
-  ["Amna Ali", "Maryam bint Imran", "CAPTAIN"], ["Muntaha", "Maryam bint Imran", "VICE_CAPTAIN"], ["Tehreem", "Maryam bint Imran", "MEMBER"], ["Anayah", "Maryam bint Imran", "MEMBER"], ["Emeena", "Maryam bint Imran", "MEMBER"], ["Zainab", "Maryam bint Imran", "MEMBER"], ["Amal", "Maryam bint Imran", "MEMBER"], ["Adan", "Maryam bint Imran", "MEMBER"],
-  ["Mishal", "Khadijah bint Khuwaylid", "CAPTAIN"], ["Rania", "Khadijah bint Khuwaylid", "VICE_CAPTAIN"], ["Noor", "Khadijah bint Khuwaylid", "MEMBER"], ["Sara Ali", "Khadijah bint Khuwaylid", "MEMBER"], ["Halima", "Khadijah bint Khuwaylid", "MEMBER"], ["Aram Fatma", "Khadijah bint Khuwaylid", "MEMBER"], ["Huda", "Khadijah bint Khuwaylid", "MEMBER"],
-  ["Musa AH Naveed", "Abubakr ibn Abi Qahafa", "CAPTAIN"], ["Ibrahim Hassan", "Abubakr ibn Abi Qahafa", "VICE_CAPTAIN"], ["Talha", "Abubakr ibn Abi Qahafa", "MEMBER"], ["Mussab", "Abubakr ibn Abi Qahafa", "MEMBER"], ["TaaHaa", "Abubakr ibn Abi Qahafa", "MEMBER"], ["Hanzla", "Abubakr ibn Abi Qahafa", "MEMBER"],
-  ["Yashur", "Umar Ibn Al Khattab", "CAPTAIN"], ["Mustafa", "Umar Ibn Al Khattab", "VICE_CAPTAIN"], ["Arham", "Umar Ibn Al Khattab", "MEMBER"], ["Zaran", "Umar Ibn Al Khattab", "MEMBER"], ["Reyhan", "Umar Ibn Al Khattab", "MEMBER"], ["Salar", "Umar Ibn Al Khattab", "MEMBER"],
+  ["Amna Ali", "Qabila Banu Makhzum", "CAPTAIN"], ["Muntaha", "Qabila Banu Makhzum", "VICE_CAPTAIN"], ["Tehreem", "Qabila Banu Makhzum", "MEMBER"], ["Anayah", "Qabila Banu Makhzum", "MEMBER"], ["Emeena", "Qabila Banu Makhzum", "MEMBER"], ["Zainab", "Qabila Banu Makhzum", "MEMBER"], ["Amal", "Qabila Banu Makhzum", "MEMBER"], ["Adan", "Qabila Banu Makhzum", "MEMBER"],
+  ["Mishal", "Qabila Banu Zuhra", "CAPTAIN"], ["Rania", "Qabila Banu Zuhra", "VICE_CAPTAIN"], ["Noor", "Qabila Banu Zuhra", "MEMBER"], ["Sara Ali", "Qabila Banu Zuhra", "MEMBER"], ["Halima", "Qabila Banu Zuhra", "MEMBER"], ["Aram Fatma", "Qabila Banu Zuhra", "MEMBER"], ["Huda", "Qabila Banu Zuhra", "MEMBER"], ["Khadija", "Qabila Banu Zuhra", "MEMBER"],
+  ["Musa AH Naveed", "Qabila Banu Hashim", "CAPTAIN"], ["Ibrahim Hassan", "Qabila Banu Hashim", "VICE_CAPTAIN"], ["Talha", "Qabila Banu Hashim", "MEMBER"], ["Mussab", "Qabila Banu Hashim", "MEMBER"], ["TaaHaa", "Qabila Banu Hashim", "MEMBER"], ["Hanzla", "Qabila Banu Hashim", "MEMBER"], ["Ahmad", "Qabila Banu Hashim", "MEMBER"],
+  ["Yashur", "Qabila Banu Asad", "CAPTAIN"], ["Mustafa", "Qabila Banu Asad", "VICE_CAPTAIN"], ["Arham", "Qabila Banu Asad", "MEMBER"], ["Zaran", "Qabila Banu Asad", "MEMBER"], ["Reyhan", "Qabila Banu Asad", "MEMBER"], ["Salar", "Qabila Banu Asad", "MEMBER"],
 ] as const;
 const QABILA_NAME_ALIASES: Record<string, string[]> = {
   "Muntaha": ["Muntaha Fatima"], "Tehreem": ["Tehreem Khurram"], "Anayah": ["Anayah khan"],
@@ -42,6 +42,7 @@ const QABILA_NAME_ALIASES: Record<string, string[]> = {
   "TaaHaa": ["Taha", "Muhammad Taha"], "Hanzla": ["Hanzala", "Hanzala rehman"],
   "Yashur": ["Yasher", "Yasher Muhammad Shahbaz"], "Mustafa": ["Mustafa Asif Mukhtar"],
   "Arham": ["Arham khan"], "Zaran": ["Zaran Nisar"], "Reyhan": ["Rehan", "Rehan Khan"],
+  "Ahmad": ["Ahmad Parent"], "Khadija": ["Khadija Parent", "Khadjia Parent"],
 };
 const REMOVED_QABILA_NAMES = ["Raahum", "Ruhaan"];
 
@@ -305,7 +306,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
     const description = String(formData.get("description") || "").trim();
     if (!roomId || !title) redirect(noticeHref("Room title is required.", "error"));
     const existingRoom = await db.communityRoom.findUnique({ where: { id: roomId }, select: { title: true } });
-    const protectedTitle = existingRoom && ["Maryam bint Imran", "Khadijah bint Khuwaylid", "Abubakr ibn Abi Qahafa", "Umar Ibn Al Khattab"].includes(existingRoom.title);
+    const protectedTitle = existingRoom && ["Qabila Banu Makhzum", "Qabila Banu Zuhra", "Qabila Banu Hashim", "Qabila Banu Asad"].includes(existingRoom.title);
     await db.communityRoom.update({ where: { id: roomId }, data: { title: protectedTitle ? existingRoom.title : title, description: description || null } });
     await db.moderationAction.create({ data: { actorUserId: currentSession.user.id, targetType: "COMMUNITY_ROOM", targetId: roomId, action: "update", note: "Room title or guidance updated." } });
     revalidatePath("/admin/community"); revalidatePath("/student/community"); revalidatePath("/parent/community"); revalidatePath("/teacher/community");
@@ -514,7 +515,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
                 {houses.map((house) => <option key={house.id} value={house.id}>{house.name}</option>)}
               </select>
               <select name="qabilaGroup" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                <option value="">No Qabila group</option><option>Maryam bint Imran</option><option>Khadijah bint Khuwaylid</option><option>Abubakr ibn Abi Qahafa</option><option>Umar Ibn Al Khattab</option>
+                <option value="">No Qabila group</option><option>Qabila Banu Makhzum</option><option>Qabila Banu Zuhra</option><option>Qabila Banu Hashim</option><option>Qabila Banu Asad</option>
               </select>
               <select name="role" defaultValue="MEMBER" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
                 <option value="MEMBER">Member</option><option value="VICE_CAPTAIN">Vice Captain</option><option value="CAPTAIN">Captain</option>

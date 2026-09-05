@@ -268,10 +268,10 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
 }
 const QABILA_SUPERVISOR_DRAFT: Record<string, string[][]> = {
-  "Maryam bint Imran": [["Saba"]],
-  "Khadijah bint Khuwaylid": [["Aisha", "Ayesha", "Aishah"]],
-  "Abubakr ibn Abi Qahafa": [["Mehran"], ["Afira", "Afirah"]],
-  "Umar Ibn Al Khattab": [["Abdul Badee", "Abdel Badea", "Abdul Badea", "Abdel Badi"], ["Javeria", "Javeriya"]],
+  "Qabila Banu Makhzum": [["Saba"]],
+  "Qabila Banu Zuhra": [["Aisha", "Ayesha", "Aishah"]],
+  "Qabila Banu Hashim": [["Mehran"], ["Afira", "Afirah"]],
+  "Qabila Banu Asad": [["Abdul Badee", "Abdel Badea", "Abdul Badea", "Abdel Badi"], ["Javeria", "Javeriya"]],
 };
 
 export async function syncQabilaSupervisors() {
