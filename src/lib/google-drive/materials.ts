@@ -186,6 +186,22 @@ async function uploadFileToFolder(input: {
   });
 }
 
+export async function uploadCommunityVoiceFile(input: { roomId: string; file: File }) {
+  if (!input.file.type.toLowerCase().startsWith("audio/")) throw new Error("Choose or record an audio file.");
+  if (input.file.size <= 0 || input.file.size > 5 * 1024 * 1024) throw new Error("Voice messages must be smaller than 5 MB.");
+  const rootFolderId = getDriveRootFolderId();
+  const communityFolderId = await ensureChildFolder(rootFolderId, "Gen-M community");
+  const voiceFolderId = await ensureChildFolder(communityFolderId, "Qabila voice messages");
+  const roomFolderId = await ensureChildFolder(voiceFolderId, input.roomId);
+  const extension = input.file.type.includes("ogg") ? "ogg" : input.file.type.includes("mp4") ? "m4a" : "webm";
+  const uploaded = await uploadFileToFolder({
+    folderId: roomFolderId,
+    file: input.file,
+    name: `${Date.now()}-${crypto.randomUUID()}.${extension}`,
+    appProperties: { genMumin: "qabila-voice", roomId: input.roomId },
+  });
+  return { id: uploaded.id, mimeType: uploaded.mimeType || input.file.type };
+}
 async function uploadBufferToFolder(input: {
   folderId: string;
   buffer: Buffer;

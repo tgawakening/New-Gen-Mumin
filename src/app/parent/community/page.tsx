@@ -8,6 +8,7 @@ import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { deleteParentSupervisedCommunityMessage, editParentSupervisedCommunityMessage, getParentCommunityData, postParentSupervisedCommunityMessage } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { QabilaIdentity } from "@/components/community/QabilaIdentity";
+import { CommunityVoiceRecorder } from "@/components/community/CommunityVoiceRecorder";
 import {
   ChildSelector,
   CompactList,
@@ -109,7 +110,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
         eyebrow={childMode ? "Child conversation" : "Parent view"}
         title={community.selectedChild ? childName(community.selectedChild) : "Choose learner"}
         icon="star"
-        action={<span className="rounded-full bg-[#fbf6ef] px-3 py-1.5 text-xs font-semibold text-[#617184]">{visibleMessages} messages · {projectCount} projects</span>}
+        action={<span className="rounded-full bg-[#fbf6ef] px-3 py-1.5 text-xs font-semibold text-[#617184]">{visibleMessages} messages / {projectCount} projects</span>}
       >
         <ChildSelector
           learners={community.children.map((child) => ({ id: child.id, name: childName(child) }))}
@@ -170,7 +171,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                       Message your Qabila
                       <textarea name="body" required maxLength={800} rows={3} placeholder="Share an idea, question, or kind encouragement. Do not share phone numbers, emails, or links." className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                     </label>
-                    <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">Send to my Qabila</button>
+                    <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">Send to my Qabila</button><CommunityVoiceRecorder roomId={membership.room.id} studentId={selectedChildId}/>
                     <p className="text-xs leading-5 text-[#617184]">Posted as {community.selectedChild ? childName(community.selectedChild) : "the selected learner"}. Teachers and admins supervise this room.</p>
                   </form>
                 ) : null}
@@ -180,7 +181,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                       <p className="font-semibold text-[#22304a]">{authorName(message.author)}</p>
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#2f6b4b]">Visible</span>
                     </div>
-                    <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>
+                    <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}
                     <p className="mt-2 text-xs text-[#6d7785]">{formatDate(message.createdAt)}</p>
                     {childMode && message.author.id === community.selectedChild?.userId && Date.now() - message.createdAt.getTime() <= 60 * 60 * 1000 ? (
                       <details className="mt-3 border-t border-[#eadfce] pt-2">

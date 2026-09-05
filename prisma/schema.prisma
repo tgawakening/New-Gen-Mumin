@@ -1339,6 +1339,9 @@ model CommunityMessage {
   roomId       String
   authorUserId String
   body         String                 @db.LongText
+  audioDriveFileId String?
+  audioMimeType String?
+  audioDurationSeconds Int?
   status       CommunityMessageStatus @default(VISIBLE)
   flagReason   String?
   createdAt    DateTime               @default(now())

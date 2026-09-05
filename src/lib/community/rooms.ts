@@ -5,6 +5,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } fr
 import { db } from "@/lib/db";
 import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
 import { sendQabilaMessageEmail } from "@/lib/email/notifications";
+import { uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
 
 const BLOCK_PATTERNS = [
   { label: "phone number", pattern: /(?:\+?\d[\s-]?){8,}/ },
@@ -266,43 +267,45 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   });
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
 }
-const QABILA_SUPERVISOR_DRAFT: Record<string, string[]> = {
-  "Maryam bint Imran": ["Saba"],
-  "Khadijah bint Khuwaylid": ["Aisha", "Ayesha", "Aishah"],
-  "Abubakr ibn Abi Qahafa": ["Mehran"],
-  "Umar Ibn Al Khattab": ["Abdul Badee"],
+const QABILA_SUPERVISOR_DRAFT: Record<string, string[][]> = {
+  "Maryam bint Imran": [["Saba"]],
+  "Khadijah bint Khuwaylid": [["Aisha", "Ayesha", "Aishah"]],
+  "Abubakr ibn Abi Qahafa": [["Mehran"], ["Afira", "Afirah"]],
+  "Umar Ibn Al Khattab": [["Abdul Badee", "Abdel Badea", "Abdul Badea", "Abdel Badi"], ["Javeria", "Javeriya"]],
 };
 
 export async function syncQabilaSupervisors() {
   const [rooms, teachers] = await Promise.all([
-    db.communityRoom.findMany({ where: { type: CommunityRoomType.PROJECT_TEAM, title: { in: Object.keys(QABILA_SUPERVISOR_DRAFT) } } }),
-    db.user.findMany({ where: { role: "TEACHER", teacherProfile: { is: { isActive: true } } }, select: { id: true, firstName: true, lastName: true, email: true } }),
+    db.communityRoom.findMany({ where: { type: CommunityRoomType.PROJECT_TEAM, title: { in: Object.keys(QABILA_SUPERVISOR_DRAFT) }, isActive: true } }),
+    db.user.findMany({ where: { role: "TEACHER", status: "ACTIVE", teacherProfile: { is: { isActive: true } } }, select: { id: true, firstName: true, lastName: true, email: true } }),
   ]);
   const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const assigned: string[] = [];
   const skipped: string[] = [];
   for (const room of rooms) {
-    const requested = QABILA_SUPERVISOR_DRAFT[room.title] ?? [];
-    const keys = requested.map(normalize);
-    const matches = teachers.filter((teacher) => {
-      const full = normalize(`${teacher.firstName} ${teacher.lastName}`);
-      const email = normalize(teacher.email);
-      return keys.some((key) => full === key || full.startsWith(key) || full.includes(key) || email.includes(key));
-    });
-    if (matches.length !== 1) {
-      skipped.push(`${room.title}: ${requested.join("/")}`);
-      continue;
+    const mentorAliases = QABILA_SUPERVISOR_DRAFT[room.title] ?? [];
+    for (const aliases of mentorAliases) {
+      const keys = aliases.map(normalize);
+      const matches = teachers.filter((teacher) => {
+        const identity = normalize(`${teacher.firstName} ${teacher.lastName} ${teacher.email}`);
+        return keys.some((key) => identity.includes(key));
+      });
+      if (!matches.length) {
+        skipped.push(`${room.title}: ${aliases.join("/")}`);
+        continue;
+      }
+      for (const teacher of matches) {
+        await db.communityRoomSupervisor.upsert({
+          where: { roomId_userId: { roomId: room.id, userId: teacher.id } },
+          update: { role: "MENTOR" },
+          create: { roomId: room.id, userId: teacher.id, role: "MENTOR" },
+        });
+        assigned.push(`${room.title}: ${teacher.firstName} ${teacher.lastName}`.trim());
+      }
     }
-    await db.communityRoomSupervisor.upsert({
-      where: { roomId_userId: { roomId: room.id, userId: matches[0].id } },
-      update: { role: "MENTOR" },
-      create: { roomId: room.id, userId: matches[0].id, role: "MENTOR" },
-    });
-    assigned.push(`${room.title}: ${matches[0].firstName} ${matches[0].lastName}`.trim());
   }
-  return { assigned, skipped };
+  return { assigned: [...new Set(assigned)], skipped };
 }
-
 
 async function ensureStudentClassRooms(student: {
   id: string;
@@ -576,6 +579,58 @@ export async function postTeacherCommunityMessage(input: { userId: string; roomI
   return message;
 }
 
+export async function postCommunityVoiceMessage(input: {
+  actorUserId: string;
+  roomId: string;
+  studentId?: string | null;
+  file: File;
+  durationSeconds?: number | null;
+}) {
+  const [actor, room] = await Promise.all([
+    db.user.findUnique({ where: { id: input.actorUserId }, select: { role: true, studentProfile: { select: { id: true } } } }),
+    db.communityRoom.findUnique({ where: { id: input.roomId }, select: { id: true, type: true, isActive: true, isReadOnly: true } }),
+  ]);
+  if (!actor || !room?.isActive || room.isReadOnly || room.type !== CommunityRoomType.PROJECT_TEAM) throw new Error("This Qabila voice chat is not available.");
+
+  let authorUserId = input.actorUserId;
+  let memberStudentId = actor.studentProfile?.id ?? null;
+  if (actor.role === "PARENT") {
+    if (!input.studentId) throw new Error("Choose the learner posting this voice message.");
+    const relation = await db.parentStudent.findFirst({
+      where: { studentId: input.studentId, parent: { userId: input.actorUserId } },
+      select: { student: { select: { id: true, userId: true } } },
+    });
+    if (!relation) throw new Error("This learner is not linked to your parent account.");
+    memberStudentId = relation.student.id;
+    authorUserId = relation.student.userId;
+  }
+
+  if (actor.role === "STUDENT" || actor.role === "PARENT") {
+    if (!memberStudentId) throw new Error("Student profile not found.");
+    const membership = await db.communityMembership.findUnique({ where: { roomId_studentId: { roomId: room.id, studentId: memberStudentId } } });
+    if (!membership || (membership.mutedUntil && membership.mutedUntil > new Date())) throw new Error("You cannot post in this Qabila room.");
+  } else if (actor.role === "TEACHER") {
+    const supervision = await db.communityRoomSupervisor.findUnique({ where: { roomId_userId: { roomId: room.id, userId: input.actorUserId } } });
+    if (!supervision) throw new Error("You are not assigned to supervise this Qabila.");
+  } else if (actor.role !== "ADMIN") {
+    throw new Error("You cannot post in this Qabila room.");
+  }
+
+  const uploaded = await uploadCommunityVoiceFile({ roomId: room.id, file: input.file });
+  const message = await db.communityMessage.create({
+    data: {
+      roomId: room.id,
+      authorUserId,
+      body: "Voice message",
+      status: CommunityMessageStatus.VISIBLE,
+      audioDriveFileId: uploaded.id,
+      audioMimeType: uploaded.mimeType,
+      audioDurationSeconds: input.durationSeconds ? Math.min(60, Math.max(1, Math.round(input.durationSeconds))) : null,
+    },
+  });
+  await notifyQabilaMessage({ messageId: message.id, flagged: false });
+  return message;
+}
 export async function editCommunityMessage(input: { actorUserId: string; messageId: string; body: string }) {
   const [actor, message] = await Promise.all([
     db.user.findUnique({ where: { id: input.actorUserId }, select: { role: true } }),

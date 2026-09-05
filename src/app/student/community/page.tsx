@@ -7,6 +7,7 @@ import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { deleteCommunityMessage, editCommunityMessage, getStudentCommunityData, postCommunityMessage, submitCommunityProjectWork } from "@/lib/community/rooms";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { QabilaIdentity } from "@/components/community/QabilaIdentity";
+import { CommunityVoiceRecorder } from "@/components/community/CommunityVoiceRecorder";
 import {
   CompactList,
   FamilyDashboardFrame,
@@ -128,7 +129,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
       />
 
       <div className="flex flex-wrap gap-2 rounded-[18px] border border-[#eadfce] bg-white px-4 py-3 text-xs font-semibold text-[#617184] shadow-sm">
-        <span>{roomCount} supervised rooms</span><span>·</span><span>{messageCount} messages</span>{flaggedCount ? <><span>·</span><span className="text-[#9a5b16]">{flaggedCount} awaiting mentor review</span></> : null}
+        <span>{roomCount} supervised rooms</span><span>/</span><span>{messageCount} messages</span>{flaggedCount ? <><span>/</span><span className="text-[#9a5b16]">{flaggedCount} awaiting mentor review</span></> : null}
       </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="space-y-6">
@@ -212,6 +213,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                     Post safely
                   </button>
                 </form>
+                {membership.room.type === "PROJECT_TEAM" ? <CommunityVoiceRecorder roomId={membership.room.id}/> : null}
                 <div className="space-y-3">
                   {membership.room.messages.map((message) => (
                     <div key={message.id} className="rounded-[18px] bg-[#fbf6ef] p-4 text-sm">
@@ -221,7 +223,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                           {message.status === "FLAGGED" ? "Mentor review" : "Visible"}
                         </span>
                       </div>
-                      <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>
+                      <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}
                       <p className="mt-2 text-xs text-[#6d7785]">{formatDate(message.createdAt)}</p>
                       {message.author.id === session.user.id && Date.now() - message.createdAt.getTime() <= 60 * 60 * 1000 ? <details className="mt-3 border-t border-[#eadfce] pt-2"><summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Edit or delete my message Â· available for 1 hour</summary><form action={manageMessage} className="mt-2 grid gap-2"><input type="hidden" name="messageId" value={message.id}/><textarea name="body" defaultValue={message.body} required maxLength={800} rows={2} className="rounded-xl border border-[#d8e3ed] bg-white px-3 py-2"/><div className="flex gap-2"><button name="intent" value="edit" className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white">Save edit</button><button name="intent" value="delete" formNoValidate className="rounded-full border border-[#efb3b3] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete for everyone</button></div></form></details> : null}
                     </div>
