@@ -352,6 +352,10 @@ export async function getStudentCommunityData(userId: string) {
     include: {
       room: {
         include: {
+          memberships: {
+            orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
+            include: { student: { include: { user: true } } },
+          },
           projects: {
             where: { status: "ACTIVE" },
             orderBy: { createdAt: "desc" },

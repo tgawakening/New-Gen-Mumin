@@ -36,6 +36,15 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
   if (!dashboard || !community) redirect("/auth/login");
 
   const params = searchParams ? await searchParams : {};
+  const qabilaMemberships = community.memberships.filter((membership) => membership.room.type === "PROJECT_TEAM").map((membership) => ({
+    ...membership,
+    visibleMembers: membership.room.memberships.filter((member) => {
+      const identity = (member.student.displayName || `${member.student.user.firstName} ${member.student.user.lastName || ""}`).toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (membership.room.title === "Qabila Banu Asad" && ["ahmad", "ahmadparent"].includes(identity)) return false;
+      if (membership.room.title === "Qabila Banu Makhzum" && ["khadija", "khadijaparent", "khadjia", "khadjiaparent"].includes(identity)) return false;
+      return true;
+    }),
+  }));
   const roomCount = community.memberships.length;
   const messageCount = community.memberships.reduce((sum, membership) => sum + membership.room.messages.length, 0);
   const flaggedCount = community.memberships.reduce(
@@ -247,17 +256,15 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
           ) : null}
         </div>
 
-        <SectionCard eyebrow="Safety rules" title="Community guardrails" icon="check">
-          <CompactList
-            items={[
-              { label: "No phone numbers or emails", meta: "Automatically flagged", icon: "check" },
-              { label: "No external links", meta: "Sent to mentor review", icon: "check" },
-              { label: "No uncontrolled private chat", meta: "Room-based MVP", icon: "check" },
-              { label: "Mentor-visible logs", meta: "Designed for trust", icon: "star" },
-            ]}
-            emptyLabel="Safety rules will appear here."
-          />
-        </SectionCard>
+        <div className="space-y-5 xl:sticky xl:top-4 xl:self-start">
+          {qabilaMemberships.map((membership) => (
+            <SectionCard key={`members-${membership.room.id}`} eyebrow="My team" title="Qabila members" icon="star">
+              <div className="mb-3 rounded-2xl bg-[#fbf6ef] px-3 py-3"><p className="text-sm font-semibold text-[#22304a]">{membership.room.title}</p><p className="mt-1 text-xs text-[#617184]">{membership.visibleMembers.length} learners in your team</p></div>
+              <div className="space-y-2">{membership.visibleMembers.map((member) => { const ownProfile = member.student.userId === session.user.id; const name = member.student.displayName || `${member.student.user.firstName} ${member.student.user.lastName || ""}`.trim(); return <div key={member.id} className={`flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm ${ownProfile ? "bg-[#eef6f0]" : "bg-[#f7f9fb]"}`}><span className="font-semibold text-[#22304a]">{name}{ownProfile ? " (You)" : ""}</span><span className="text-[10px] font-bold uppercase tracking-wide text-[#c27a2c]">{member.role.replace("_", " ")}</span></div>; })}</div>
+            </SectionCard>
+          ))}
+          <SectionCard eyebrow="Safety rules" title="Community guardrails" icon="check"><CompactList items={[{ label: "No phone numbers or emails", meta: "Automatically flagged", icon: "check" }, { label: "No external links", meta: "Sent to mentor review", icon: "check" }, { label: "No uncontrolled private chat", meta: "Room-based MVP", icon: "check" }, { label: "Mentor-visible logs", meta: "Designed for trust", icon: "star" }]} emptyLabel="Safety rules will appear here." /></SectionCard>
+        </div>
       </div>
     </FamilyDashboardFrame>
   );
