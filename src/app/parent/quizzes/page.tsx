@@ -11,10 +11,8 @@ import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
 import {
   awardHousePointsForQuizAttempt,
   ensureStudentHouseMembership,
-  getHouseLeaderboard,
 } from "@/lib/community/house-points";
 import { ActionToast } from "@/components/dashboard/ActionToast";
-import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -44,9 +42,9 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
   const childName = selectedChild?.name.replace(/\s+parent$/iu, "").trim() || selectedChild?.name || "Learner";
   const totalAttempts = selectedChild?.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0) ?? 0;
   const bestScore = selectedChild?.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore;
-  const [houseMembership, houseLeaderboard, activeLiveQuizzes] = selectedChild
-    ? await Promise.all([ensureStudentHouseMembership(selectedChild.id), getHouseLeaderboard(), listStudentActiveLiveQuizzesByStudentId(selectedChild.id)])
-    : [null, [], []];
+  const [houseMembership, activeLiveQuizzes] = selectedChild
+    ? await Promise.all([ensureStudentHouseMembership(selectedChild.id), listStudentActiveLiveQuizzesByStudentId(selectedChild.id)])
+    : [null, []];
   const quizForms = selectedChild
     ? await db.quiz.findMany({
         where: {
@@ -194,35 +192,12 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
 
       {selectedChild ? (
         <>
-          {houseMembership ? (
-            <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Learner house</p>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <span className="inline-flex h-12 w-12 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: houseMembership.house.color ?? "#f8fafc" }} />
-                  <div>
-                    <h2 className="text-2xl font-semibold text-[#22304a]">{houseMembership.house.name}</h2>
-                    <p className="text-sm text-[#617184]">Quiz points, attendance, homework, and future Sunnah tracker points can feed this house total.</p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House leaderboard</p>
-                <div className="mt-3 space-y-2">
-                  {houseLeaderboard.map((house, index) => (
-                    <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} />
-                  ))}
-                </div>
-              </div>
-            </section>
-          ) : null}
-
           <MetricGrid
             metrics={[
               { label: "Quizzes", value: String(selectedChild.quizzes.length), hint: "Published assessments for the learner." },
               { label: "Attempts", value: String(totalAttempts), hint: "Total attempt history recorded." },
               { label: "Best score", value: bestScore === undefined ? "Pending" : String(bestScore), hint: "Highest recorded score." },
-              { label: "House trait", value: houseMembership?.house.virtue ?? "Pending", hint: houseMembership ? `${houseMembership.house.name} quiz points support the learner house.` : "Quiz points support the learner house." },
+              { label: "Qabila contribution", value: houseMembership ? "Verified" : "Pending", hint: "Quiz points support the selected learner Qabila contribution." },
             ]}
           />
 

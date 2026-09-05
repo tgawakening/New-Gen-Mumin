@@ -102,9 +102,9 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
 
       <MetricGrid
         metrics={[
-          { label: "House", value: quest.membership.house.name, hint: quest.membership.house.virtue },
+          { label: "Qabila", value: quest.membership.qabilaGroup ?? "Assignment pending", hint: "Your supervised community team." },
           { label: "Student points", value: String(quest.studentTotal), hint: "Total earned points." },
-          { label: "House points", value: String(quest.houseTotal), hint: "Team total." },
+          { label: "Qabila points", value: String(quest.houseTotal), hint: "Shared verified contribution." },
           { label: "Trackers", value: String(trackers.length), hint: "Available Sunnah templates." },
         ]}
       />

@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
-import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { TeacherDashboardFrame, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizTeacherPresence } from "@/components/quizzes/LiveQuizTeacherPresence";
@@ -250,7 +249,7 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
                 {correctResponses.map((response) => (
                   <div key={response.id} className="flex items-center gap-3 rounded-2xl bg-white px-3 py-2 text-sm font-semibold text-[#22304a]">
                     <QuizAnimalAvatar avatarId={response.avatarId} size="sm" className="h-10 w-10" />
-                    <span><span className="mr-2 inline-flex h-3 w-3 rounded-full" style={{ backgroundColor: response.houseColor ?? "#245d85" }} />{response.studentName}: +1 house, +1 {response.houseName}</span>
+                    <span>{response.studentName}: +1 personal, +1 Qabila contribution</span>
                     <span className="text-xs font-normal text-[#617184]">{QUIZ_CORRECT_MESSAGE}</span>
                   </div>
                 ))}
@@ -272,11 +271,6 @@ export default async function TeacherLiveQuizPage({ params, searchParams }: Page
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-5">
-            {live.leaderboard.map((house, index) => (
-              <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} dark={index !== 0} />
-            ))}
-          </div>
         </TeacherSection>
       </div>
 

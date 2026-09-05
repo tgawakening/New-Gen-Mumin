@@ -13,11 +13,9 @@ import {
   QUIZ_PARTICIPATION_MESSAGE,
   awardHousePointsForQuizAttempt,
   ensureStudentHouseMembership,
-  getHouseLeaderboard,
 } from "@/lib/community/house-points";
 import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { ActionToast } from "@/components/dashboard/ActionToast";
-import { HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import {
   FamilyDashboardFrame,
   MetricGrid,
@@ -39,9 +37,8 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
   const child = dashboard.child;
   const params = searchParams ? await searchParams : {};
   const totalAttempts = child.quizzes.reduce((sum, quiz) => sum + quiz.attempts.length, 0);
-  const [houseMembership, houseLeaderboard, activeLiveQuizzes] = await Promise.all([
+  const [, activeLiveQuizzes] = await Promise.all([
     ensureStudentHouseMembership(child.id),
-    getHouseLeaderboard(),
     listStudentActiveLiveQuizzes(session.user.id),
   ]);
   const student = await db.studentProfile.findUnique({
@@ -189,27 +186,6 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
     >
       <ActionToast message={params.submitted ? "Quiz submitted successfully. Your teacher has been notified." : undefined} />
 
-      <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
-        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Your house</p>
-          <div className="mt-3 flex flex-wrap items-center gap-3">
-            <span className="inline-flex h-12 w-12 rounded-full border border-[#d8e3ed]" style={{ backgroundColor: houseMembership.house.color ?? "#f8fafc" }} />
-            <div>
-              <h2 className="text-2xl font-semibold text-[#22304a]">{houseMembership.house.name}</h2>
-              <p className="text-sm text-[#617184]">{houseMembership.house.virtue} team points grow when you learn and take part.</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">House leaderboard</p>
-          <div className="mt-3 space-y-2">
-            {houseLeaderboard.map((house, index) => (
-              <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} />
-            ))}
-          </div>
-        </div>
-      </section>
-
       {resultAttempt ? (
         <SectionCard eyebrow="Quiz recognition" title="Well done for taking part">
           <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
@@ -229,7 +205,7 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
             <div className="rounded-[24px] bg-[#22304a] p-5 text-white">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f3d7aa]">House points earned</p>
               <p className="mt-3 text-5xl font-semibold">+{resultHousePoints?.points ?? 0}</p>
-              <p className="mt-3 text-sm leading-6 text-white/80">Added to {houseMembership.house.name}. Correct answers earn full points; speed does not decide the winner.</p>
+              <p className="mt-3 text-sm leading-6 text-white/80">Added to your verified Qabila contribution. Correct answers earn full points; speed does not decide the winner.</p>
             </div>
           </div>
         </SectionCard>
@@ -240,7 +216,7 @@ export default async function StudentQuizzesPage({ searchParams }: PageProps) {
           { label: "Published quizzes", value: String(child.quizzes.length), hint: "Pre-lesson and post-lesson assessments." },
           { label: "Attempts", value: String(totalAttempts), hint: "Total quiz attempt history." },
           { label: "Best score", value: child.quizzes.find((quiz) => quiz.bestScore !== null)?.bestScore?.toString() ?? "Pending", hint: "Highest recorded objective/manual score." },
-          { label: "House trait", value: houseMembership.house.virtue, hint: `${houseMembership.house.name} quiz points support your house team.` },
+          { label: "Qabila contribution", value: "Verified", hint: "Quiz points support your Qabila contribution." },
         ]}
       />
 

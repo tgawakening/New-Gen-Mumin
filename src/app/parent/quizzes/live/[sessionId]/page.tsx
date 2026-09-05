@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
-import { HouseBadge, HouseLeaderboardRow } from "@/components/community/HouseDisplay";
 import { FamilyDashboardFrame, SectionCard } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { LiveQuizCelebrationClient } from "@/components/quizzes/LiveQuizCelebrationClient";
@@ -80,8 +79,6 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
 
   const choices = live.currentQuestion ? choicesFromMeta(live.currentQuestion.meta) : [];
   const responseTone = live.currentResponse?.isCorrect ? "success" : "effort";
-  const myHouseStanding = live.leaderboard.find((house) => house.name === live.houseMembership.house.name) ?? live.leaderboard[0];
-  const myHouseRank = Math.max(1, live.leaderboard.findIndex((house) => house.name === live.houseMembership.house.name) + 1);
   const completedResponses = live.session.responses;
   const correctCount = completedResponses.filter((response) => response.isCorrect).length;
   const perfectQuiz = live.quiz.questions.length > 0 && correctCount === live.quiz.questions.length;
@@ -105,8 +102,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
               This is not a fastest-finger podium. Everyone who answers correctly in {live.settings.responseWindowSeconds} seconds earns full points.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <HouseBadge name={live.houseMembership.house.name} color={live.houseMembership.house.color} virtue="Your fixed team" dark />
-              <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">Trait: {live.houseMembership.house.virtue}</span>
+              <span className="rounded-full bg-white/12 px-4 py-2 text-sm font-semibold">Verified Qabila points</span>
             </div>
           </div>
           <div className="flex items-end justify-center gap-3 rounded-[28px] bg-white/8 px-4 pt-4">
@@ -155,7 +151,7 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
                       <p className="mt-3 max-w-xl text-sm leading-7 text-[#617184]">{liveQuizMessage(live.currentResponse)}</p>
                       <div className="mt-5 flex flex-wrap items-center justify-center gap-3 md:justify-start">
                         <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#2f6b4b] shadow-sm">{live.currentResponse.isCorrect ? "+1 personal house point" : "+0 house points"}</span>
-                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? `+1 for ${live.houseMembership.house.name}` : "Keep trying for your team"}</span>
+                        <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#245d85] shadow-sm">{live.currentResponse.isCorrect ? "+1 verified Qabila point" : "Keep trying and learning"}</span>
                         <span className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a] shadow-sm">Waiting for teacher</span>
                         <LiveQuizCelebrationClient tone={responseTone} label={live.currentResponse.isCorrect ? "Play celebration" : "Play encouragement"} />
                       </div>
@@ -192,26 +188,6 @@ export default async function ParentLiveQuizPage({ params, searchParams }: PageP
               )}
             </div>
 
-            <div className="rounded-[32px] bg-[#22304a] p-5 text-white">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#f3d7aa]">House leaderboard</p>
-              <div className="mt-4 rounded-[24px] bg-white/10 p-4">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-black text-white" style={{ backgroundColor: live.houseMembership.house.color }}>
-                    {live.houseMembership.house.name.replace(" House", "").slice(0, 1)}
-                  </span>
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f7c56f]">Your team</p>
-                    <p className="text-lg font-semibold">{live.houseMembership.house.name}</p>
-                    <p className="text-xs text-white/65">Rank #{myHouseRank} - {myHouseStanding?.points ?? 0} points</p>
-                  </div>
-                </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {live.leaderboard.map((house, index) => (
-                  <HouseLeaderboardRow key={house.id} rank={index + 1} name={house.name} color={house.color} virtue={house.virtue} points={house.points} dark />
-                ))}
-              </div>
-            </div>
           </div>
         ) : (
           <div className="grid gap-5 rounded-[32px] bg-[#10223d] p-6 text-white md:grid-cols-[1fr_280px] md:items-center">

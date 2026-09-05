@@ -101,9 +101,9 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
 
       <MetricGrid
         metrics={[
-          { label: "House", value: quest.membership.house.name, hint: quest.membership.house.virtue },
+          { label: "Qabila", value: quest.membership.qabilaGroup ?? "Assignment pending", hint: "Your supervised community team." },
           { label: "My points", value: String(quest.studentTotal), hint: "Your earned points." },
-          { label: "House points", value: String(quest.houseTotal), hint: "Total points from your house." },
+          { label: "Qabila points", value: String(quest.houseTotal), hint: "Shared verified contribution." },
           { label: sunnahOnly ? "Trackers" : "Missions", value: String(visibleMissions.length), hint: sunnahOnly ? "Daily Sunnah templates." : "Currently available missions." },
         ]}
       />

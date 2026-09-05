@@ -66,7 +66,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
   const nextPoints = data.nextUnlock ? Math.max(0, data.nextUnlock.milestone - data.collective) : 0;
   const unlockTarget = data.nextUnlock?.milestone ?? Math.max(100, data.collective);
   const unlockProgress = data.nextUnlock ? Math.min(100, (data.collective / data.nextUnlock.milestone) * 100) : 100;
-  const houseLabel = data.membership.qabilaGroup || data.membership.house.name;
+  const houseLabel = data.membership.qabilaGroup || "Qabila assignment pending";
   const qabila = qabilaProfile(data.membership.qabilaGroup);
   const roleLabel = data.membership.role === "MEMBER" ? "" : ` ? ${data.membership.role.replaceAll("_", " ")}`;
   const spotlightTitle = featured ? featured.title : "Your next character badge";
