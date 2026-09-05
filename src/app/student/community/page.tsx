@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -17,7 +18,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ posted?: string; flagged?: string; project?: string; error?: string }>;
+  searchParams?: Promise<{ posted?: string; flagged?: string; project?: string; error?: string; reply?: string }>;
 };
 
 function displayName(user: { firstName: string; lastName: string; role: string }) {
@@ -212,13 +213,10 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                     <div key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-semibold text-[#22304a]">{displayName(message.author)} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-[#9a651f]">{message.author.role === "TEACHER" ? "Teacher announcement" : membership.room.memberships.find((member)=>member.student.userId===message.author.id)?.role?.replace("_", " ") || "Member"}</span></p>
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${message.status === "FLAGGED" ? "bg-[#fff7eb] text-[#8a6326]" : "bg-white text-[#2f6b4b]"}`}>
-                          {message.status === "FLAGGED" ? "Mentor review" : "Visible"}
-                        </span>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}
+                        <div className="flex items-center gap-1"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${message.status === "FLAGGED" ? "bg-[#fff7eb] text-[#8a6326]" : "bg-white text-[#2f6b4b]"}`}>{message.status === "FLAGGED" ? "Mentor review" : "Visible"}</span><details className="relative"><summary className="cursor-pointer list-none rounded-full px-2 text-lg font-bold text-[#617184]" aria-label="Message options">⋯</summary><div className="absolute right-0 z-20 min-w-32 rounded-xl border border-[#d8e3ed] bg-white p-1 shadow-lg"><Link href={`/student/community?reply=${message.id}#qabila-composer`} className="block rounded-lg px-3 py-2 text-xs font-semibold text-[#22304a] hover:bg-[#f3f6f9]">↩ Reply{message.author.id===session.user.id?" to yourself":""}</Link>{message.author.id===session.user.id&&Date.now()-message.createdAt.getTime()<=60*60*1000?<form action={manageMessage} className="border-t border-[#e5ebf0] p-1"><input type="hidden" name="messageId" value={message.id}/><textarea name="body" defaultValue={message.body} required maxLength={800} rows={2} className="mt-1 w-56 rounded-lg border border-[#d8e3ed] px-2 py-1 text-xs"/><div className="mt-1 flex gap-1"><button name="intent" value="edit" className="rounded-lg bg-[#0f4d81] px-2 py-1 text-xs text-white">Edit</button><button name="intent" value="delete" formNoValidate className="rounded-lg px-2 py-1 text-xs text-[#b24646]">Delete</button></div></form>:null}</div></details></div>
+                      </div>                      <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}
                       <p className="mt-2 text-xs text-[#6d7785]">{formatDate(message.createdAt)}</p>
-                      {message.author.id === session.user.id && Date.now() - message.createdAt.getTime() <= 60 * 60 * 1000 ? <details className="mt-3 border-t border-[#eadfce] pt-2"><summary className="cursor-pointer text-xs font-semibold text-[#0f4d81]">Edit or delete my message · available for 1 hour</summary><form action={manageMessage} className="mt-2 grid gap-2"><input type="hidden" name="messageId" value={message.id}/><textarea name="body" defaultValue={message.body} required maxLength={800} rows={2} className="rounded-xl border border-[#d8e3ed] bg-white px-3 py-2"/><div className="flex gap-2"><button name="intent" value="edit" className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white">Save edit</button><button name="intent" value="delete" formNoValidate className="rounded-full border border-[#efb3b3] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete for everyone</button></div></form></details> : null}
+
                     </div>
                   ))}
                   {!membership.room.messages.length ? (
@@ -226,7 +224,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
                       This room is ready. Start with a class question or reflection.
                     </p>
                   ) : null}
-                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <div className="overflow-hidden rounded-[24px] border border-[#d8e3ed] bg-white"><QabilaMessageComposer action={postMessage} roomId={membership.room.id} mentions={[...membership.room.memberships.map((member)=>({id:member.student.userId,label:member.student.displayName || member.student.user.firstName})),...membership.room.supervisors.map((teacher)=>({id:teacher.userId,label:`Teacher ${teacher.user.firstName}`}))]} replies={membership.room.messages.map((message)=>({id:message.id,label:displayName(message.author),preview:message.body.slice(0,55)}))}/><div className="border-t border-[#dbe3ec] px-4 py-3"><CommunityVoiceRecorder roomId={membership.room.id}/></div></div> : null}
+                {membership.room.type === "PROJECT_TEAM" && !membership.room.isReadOnly ? <div className="overflow-hidden rounded-[24px] border border-[#d8e3ed] bg-white"><QabilaMessageComposer action={postMessage} roomId={membership.room.id} mentions={[...membership.room.memberships.map((member)=>({id:member.student.userId,label:member.student.displayName || member.student.user.firstName})),...membership.room.supervisors.map((teacher)=>({id:teacher.userId,label:`Teacher ${teacher.user.firstName}`}))]} replyTo={params.reply ? (()=>{const message=membership.room.messages.find((item)=>item.id===params.reply);return message?{id:message.id,label:displayName(message.author),preview:message.body.slice(0,55)}:null})() : null}/><div className="border-t border-[#dbe3ec] px-4 py-3"><CommunityVoiceRecorder roomId={membership.room.id}/></div></div> : null}
                 </div>
               </div>
             </SectionCard>
