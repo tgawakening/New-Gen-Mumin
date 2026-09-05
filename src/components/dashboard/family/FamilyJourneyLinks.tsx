@@ -21,7 +21,7 @@ function category(notification: { title: string; body: string; href: string | nu
 function roleItems(role: Role, childId?: string): Item[] {
   const suffix = role === "parent" && childId ? `?child=${encodeURIComponent(childId)}` : "";
   if (role === "teacher") return [
-    { key: "classes", label: "Live sessions", description: "Start or manage today’s classes.", href: "/teacher/live-sessions", icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
+    { key: "classes", label: "Live sessions", description: "Start or manage todayâ€™s classes.", href: "/teacher/live-sessions", icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "rewards", label: "Live House Points", description: "Award points while teaching.", href: "/teacher/house-points", icon: Star, tone: "bg-[#fff0db] text-[#c27a2c]" },
     { key: "quizzes", label: "Quizzes", description: "Run live quizzes and review answers.", href: "/teacher/quizzes", icon: PlayCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
     { key: "sunnah", label: "Sunnah Tracker", description: "Publish and review daily trackers.", href: "/teacher/missions", icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
@@ -37,15 +37,15 @@ function roleItems(role: Role, childId?: string): Item[] {
   if (role === "parent") return [
     { key: "classes", label: "Join next class", description: "Schedule and live Zoom access.", href: `/parent/schedule${suffix}`, icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "quizzes", label: "Activities", description: "Live quizzes and learning tasks.", href: `/parent/quizzes${suffix}`, icon: PlayCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
-    { key: "sunnah", label: "Sunnah Tracker", description: "Review today’s tracker.", href: `/parent/sunnah-tracker${suffix}`, icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
-    { key: "community", label: "Qabila Chat", description: "Supervise your child’s community.", href: `/parent/community${suffix}`, icon: MessageCircle, tone: "bg-[#e7f1ff] text-[#2465a5]" },
+    { key: "sunnah", label: "Sunnah Tracker", description: "Review todayâ€™s tracker.", href: `/parent/sunnah-tracker${suffix}`, icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
+    { key: "community", label: "Qabila Chat", description: "Supervise your childâ€™s community.", href: `/parent/community${suffix}`, icon: MessageCircle, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "rewards", label: "House & rewards", description: "Points, badges and recognition.", href: `/parent/rewards${suffix}`, icon: Trophy, tone: "bg-[#fff0db] text-[#c27a2c]" },
     { key: "updates", label: "Child dashboard", description: "Open the complete learner view.", href: `/parent/student-view${suffix}`, icon: Sparkles, tone: "bg-[#f0eaff] text-[#7453b8]" },
   ];
   return [
     { key: "classes", label: "Join next class", description: "See what is live and join quickly.", href: "/student/schedule", icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
-    { key: "quizzes", label: "Today’s activities", description: "Open live quizzes and tasks.", href: "/student/quizzes", icon: PlayCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
-    { key: "sunnah", label: "Sunnah Tracker", description: "Complete today’s tracker once.", href: "/student/missions?type=sunnah", icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
+    { key: "quizzes", label: "Todayâ€™s activities", description: "Open live quizzes and tasks.", href: "/student/quizzes", icon: PlayCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
+    { key: "sunnah", label: "Sunnah Tracker", description: "Complete todayâ€™s tracker once.", href: "/student/missions?type=sunnah", icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
     { key: "community", label: "Qabila Chat", description: "Talk with your supervised team.", href: "/student/community", icon: MessageCircle, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "rewards", label: "House & rewards", description: "See points, badges and progress.", href: "/student/rewards", icon: Trophy, tone: "bg-[#fff0db] text-[#c27a2c]" },
     { key: "updates", label: "My learning", description: "Courses, lessons and recordings.", href: "/student/courses", icon: BookOpen, tone: "bg-[#fff0db] text-[#c27a2c]" },
