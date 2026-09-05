@@ -6,7 +6,7 @@ import { TeacherNavLinkClient } from "@/components/dashboard/teacher/TeacherNavL
 import type { NavActivity } from "@/lib/notifications/navigation";
 
 type NavItem = { label: string; href: string; icon?: string; activity?: NavActivity };
-const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Live House Points", "Attendance", "Qabila Community", "Quizzes", "Missions & Sunnah"]);
+const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Live Points & Recognition", "Attendance", "Qabila Community", "Quizzes", "Missions & Sunnah"]);
 export function MobileTeacherNavRailClient({ navItems }: { navItems: NavItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const primary = navItems.filter((item) => PRIMARY_LABELS.has(item.label) || /\/community|\/missions/.test(item.href) || item.activity?.count);

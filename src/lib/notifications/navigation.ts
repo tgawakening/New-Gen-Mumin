@@ -7,7 +7,7 @@ type NotificationRow = { id: string; title: string; body: string; href: string |
 const searchable = (item: NotificationRow) => `${item.title} ${item.body} ${item.href ?? ""}`.toLowerCase();
 function matchesNavigation(label: string, href: string, item: NotificationRow) {
   const value = searchable(item); const nav = `${label} ${href}`.toLowerCase();
-  if (nav.includes("live house point")) return /class has started|live class|meeting started|house point/.test(value);
+  if (nav.includes("live house point") || nav.includes("live points & recognition")) return /class has started|live class|meeting started|house point/.test(value);
   if (nav.includes("live session") || nav.includes("schedule") || nav.includes("live class")) return /live.class|class has started|meeting started|\/schedule|\/live-sessions|\/classes/.test(value);
   if (nav.includes("quiz")) return /quiz|\/quizzes/.test(value);
   if (nav.includes("sunnah") || nav.includes("mission")) return /sunnah|mission|\/missions/.test(value);

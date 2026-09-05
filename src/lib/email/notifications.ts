@@ -546,6 +546,33 @@ export async function sendSunnahTrackerSubmittedEmail(input: {
     }),
   });
 }
+export async function sendRecognitionEarnedEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  studentName: string;
+  badgeTitle: string;
+  evidence: string;
+  pointsBonus: number;
+  rewardsPath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: `${input.studentName} earned ${input.badgeTitle}`,
+    template: "characterRecognitionEarned",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Character recognition earned!",
+      preview: `${input.studentName} earned the ${input.badgeTitle} badge.`,
+      intro: `Assalamu alaikum ${input.recipientName}, wonderful news: ${input.studentName} has received meaningful character recognition from Gen-Mumin faculty.`,
+      sections: [
+        { label: "Badge", value: input.badgeTitle },
+        { label: "Why it was awarded", value: input.evidence },
+        { label: "House contribution", value: input.pointsBonus > 0 ? `+${input.pointsBonus} House points` : "Character badge and certificate earned" },
+        { label: "Next step", value: "Open Rewards to celebrate the achievement and view the certificate." },
+      ],
+      callToAction: { label: "View badge and certificate", href: resolveHref(input.rewardsPath) },
+    }),
+  });
+}
 export async function sendQabilaMessageEmail(input: {
   toEmail: string;
   recipientName: string;

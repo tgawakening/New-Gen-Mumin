@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { awardHousePointsOnce } from "@/lib/community/point-awards";
 import { ensureStudentHouseMembership, getRecentHousePointEvents } from "@/lib/community/house-points";
 import { qabilaProfile } from "@/lib/community/qabilas";
+import { sendRecognitionEarnedEmail } from "@/lib/email/notifications";
 
 export const RECOGNITION_LEVELS = [
   { key: "ROOKIE", title: "Rookie Mumin", min: 0 },
@@ -45,6 +46,10 @@ export async function awardRecognition(input: {
 }) {
   const definition = CHARACTER_BADGES.find((badge) => badge.key === input.badgeKey);
   if (!definition) throw new Error("Choose an approved character badge.");
+  const isCrossHouseBadge = ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key);
+  if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another House who benefited from this action.");
+  if (isCrossHouseBadge && input.beneficiaryStudentId) {
+  }
   const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
   if (existing?.revokedAt) return existing;
   const award = await db.recognitionAward.upsert({
@@ -55,12 +60,18 @@ export async function awardRecognition(input: {
   if ((input.pointsBonus ?? 0) > 0) await awardHousePointsOnce({ studentId: input.studentId, points: input.pointsBonus!, reason: definition.title + ": " + input.evidence, sourceType: "RECOGNITION_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   if (input.beneficiaryStudentId && ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key)) {
     const otherBonus = definition.key === "ALLIANCE_CHAMPION" ? 30 : 20;
-    const [helperHouse, beneficiaryHouse] = await Promise.all([ensureStudentHouseMembership(input.studentId), ensureStudentHouseMembership(input.beneficiaryStudentId)]);
-    if (helperHouse.houseId === beneficiaryHouse.houseId) throw new Error("Cross-House recognition requires a learner from another House.");
     await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another House helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   }
-  const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { parents: { include: { parent: true } } } });
-  if (student && !existing) await db.notification.createMany({ data: [student.userId, ...student.parents.map((link) => link.parent.userId)].map((userId) => ({ userId, title: "Character recognition earned!", body: `${definition.title}: ${input.evidence}`, href: userId === student.userId ? "/student/rewards" : `/parent/rewards?child=${student.id}` })) });
+  const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, parents: { include: { parent: { include: { user: true } } } } } });
+  if (student && !existing) {
+    const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
+    const recipients = [
+      { userId: student.userId, email: student.user.email, name: studentName, href: "/student/rewards" },
+      ...student.parents.map((link) => ({ userId: link.parent.userId, email: link.parent.user.email, name: `${link.parent.user.firstName} ${link.parent.user.lastName ?? ""}`.trim(), href: `/parent/rewards?child=${student.id}` })),
+    ];
+    await db.notification.createMany({ data: recipients.map((recipient) => ({ userId: recipient.userId, title: "Character recognition earned!", body: `${definition.title}: ${input.evidence}`, href: recipient.href })) });
+    await Promise.allSettled(recipients.map((recipient) => sendRecognitionEarnedEmail({ toEmail: recipient.email, recipientName: recipient.name || recipient.email, studentName, badgeTitle: definition.title, evidence: input.evidence, pointsBonus: input.pointsBonus ?? 0, rewardsPath: recipient.href })));
+  }
   return award;
 }
 

@@ -65,7 +65,7 @@ export function TeacherNavLinkClient({
   activity?: NavActivity;
 }) {
   const pathname = usePathname();
-  const isActive = pathname === href || (href !== "/teacher" && pathname.startsWith(`${href}/`));
+  const isActive = pathname === href || (href !== "/teacher" && pathname.startsWith(`${href}/`)) || (href === "/teacher/house-points" && pathname === "/teacher/recognition");
 
   if (variant === "mobileTab") {
     return (

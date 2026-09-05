@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
+import { TeacherRewardWorkspaceTabs } from "@/components/dashboard/teacher/TeacherRewardWorkspaceTabs";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { awardHousePointsOnce, MANUAL_HOUSE_POINT_REASONS, pointDayKey, type ManualHousePointReason } from "@/lib/community/point-awards";
 import { db } from "@/lib/db";
@@ -111,8 +112,9 @@ export default async function TeacherHousePointsPage({ searchParams }: PageProps
   }
 
   const toast = params.awarded ? "House points awarded and the family was notified." : params.duplicate ? "Already awarded for this student, session, reason, and day." : params.updated ? "Live award updated and the family was notified." : params.removed ? "Live award removed; totals were reversed safely." : params.error;
-  return <TeacherDashboardFrame title="Live House Points" subtitle="Award fixed, auditable points during class, then review and correct your recent awards." navItems={getTeacherNavItems()}>
+  return <TeacherDashboardFrame title="Live Points & Recognition" subtitle="Award fair live-class points or evidence-based character badges from one clear workspace." navItems={getTeacherNavItems()}>
     <ActionToast message={toast} tone={params.error || params.duplicate ? "error" : "success"}/>
+    <TeacherRewardWorkspaceTabs active="points"/>
     <TeacherMetricGrid metrics={[{label:"Students",value:String(students.length),hint:"Eligible roster learners."},{label:"Live sessions",value:String(dashboard.classes.length),hint:"Choose where it happened."},{label:"Approved reasons",value:String(MANUAL_HOUSE_POINT_REASONS.length),hint:"Fixed fair values."},{label:"Recent awards",value:String(recentAwards.length),hint:"Your auditable history."}]}/>
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
       <TeacherSection eyebrow="Live award" title="Recognise a student contribution">
