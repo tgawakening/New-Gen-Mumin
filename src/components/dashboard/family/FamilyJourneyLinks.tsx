@@ -54,19 +54,36 @@ function roleItems(role: Role, childId?: string): Item[] {
 
 export async function FamilyJourneyLinks({ role, childId }: { role: Role; childId?: string }) {
   const session = await getCurrentSession();
-  const notifications = session ? await db.notification.findMany({ where: { userId: session.user.id, readAt: null }, orderBy: { createdAt: "desc" }, take: 100 }) : [];
-  const grouped = new Map<string, typeof notifications>();
+  type NotificationSummary = { id: string; title: string; body: string; href: string | null };
+  let notifications: NotificationSummary[] = [];
+  try {
+    notifications = session
+      ? await db.notification.findMany({
+          where: { userId: session.user.id, readAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+          select: { id: true, title: true, body: true, href: true },
+        })
+      : [];
+  } catch (error) {
+    console.error("Dashboard activity notifications unavailable", error);
+  }
+  const grouped = new Map<string, NotificationSummary[]>();
   for (const notification of notifications) grouped.set(category(notification), [...(grouped.get(category(notification)) ?? []), notification]);
 
   let liveClassTitle: string | null = null;
   let liveQuiz: { id: string } | null = null;
   if (session?.user.role === "TEACHER" && role === "teacher") {
-    const [occurrence, quiz] = await Promise.all([
-      db.liveClassSessionOccurrence.findFirst({ where: { teacherUserId: session.user.id, endedAt: null, startedAt: { gte: new Date(Date.now() - 12 * 60 * 60 * 1000) } }, orderBy: { startedAt: "desc" }, select: { schedule: { select: { title: true } } } }),
-      db.quizLiveSession.findFirst({ where: { teacherUserId: session.user.id, status: { in: ["WAITING", "LIVE"] }, updatedAt: { gte: new Date(Date.now() - 45 * 1000) } }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
-    ]);
-    liveClassTitle = occurrence?.schedule.title ?? null;
-    liveQuiz = quiz;
+    try {
+      const [occurrence, quiz] = await Promise.all([
+        db.liveClassSessionOccurrence.findFirst({ where: { teacherUserId: session.user.id, endedAt: null, startedAt: { gte: new Date(Date.now() - 12 * 60 * 60 * 1000) } }, orderBy: { startedAt: "desc" }, select: { schedule: { select: { title: true } } } }),
+        db.quizLiveSession.findFirst({ where: { teacherUserId: session.user.id, status: { in: ["WAITING", "LIVE"] }, updatedAt: { gte: new Date(Date.now() - 45 * 1000) } }, orderBy: { updatedAt: "desc" }, select: { id: true } }),
+      ]);
+      liveClassTitle = occurrence?.schedule.title ?? null;
+      liveQuiz = quiz;
+    } catch (error) {
+      console.error("Teacher live dashboard alerts unavailable", error);
+    }
   }
 
   const items = roleItems(role, childId).map((item) => {
