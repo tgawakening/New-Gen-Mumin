@@ -43,18 +43,14 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
   if (!dashboard || !community) redirect("/registration");
 
   const selectedChildId = community.selectedChild?.id ?? dashboard.children[0]?.id;
-  const childMode = params.mode === "child";
+  const childMode = true;
   const qabilaRooms = community.memberships.filter((membership) => membership.room.type === "PROJECT_TEAM");
-  const announcementRooms = community.memberships.filter((membership) => ["ANNOUNCEMENT", "PARENT_NOTICE"].includes(membership.room.type));
-  const programmeRooms = community.memberships.filter((membership) => !["PROJECT_TEAM", "ANNOUNCEMENT", "PARENT_NOTICE"].includes(membership.room.type));
-  const section = params.section === "programmes" || params.section === "announcements" ? params.section : qabilaRooms.length ? "qabila" : "programmes";
-  const sectionRooms = section === "qabila" ? qabilaRooms : section === "announcements" ? announcementRooms : programmeRooms;
+  const section = "qabila";
+  const sectionRooms = qabilaRooms;
   const selectedRoom = sectionRooms.find((membership) => membership.room.id === params.room) ?? sectionRooms[0] ?? null;
   const visibleMemberships = selectedRoom ? [selectedRoom] : [];
-  const visibleMessages = community.memberships.reduce((sum, membership) => sum + membership.room.messages.length, 0);
-  const projectCount = community.memberships.reduce((sum, membership) => sum + membership.room.projects.length, 0);
-  const modeSuffix = childMode ? "&mode=child" : "";
-  const tabHref = (nextSection: string) => `/parent/community?child=${selectedChildId}&section=${nextSection}${modeSuffix}`;
+  const visibleMessages = qabilaRooms.reduce((sum, membership) => sum + membership.room.messages.length, 0);
+  const projectCount = qabilaRooms.reduce((sum, membership) => sum + membership.room.projects.length, 0);
   async function postAsChild(formData: FormData) {
     "use server";
     const current = await getCurrentSession();
@@ -99,15 +95,15 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
   }
   return (
     <FamilyDashboardFrame
-      roleLabel={childMode ? "Parent-supervised Child View" : "Parent Dashboard"}
-      title={childMode ? "My Qabila Chat" : "Community Visibility"}
-      subtitle={childMode ? "Talk with your Qabila teammates in a supervised space. Assigned teachers and admins can see every message." : "Review supervised room membership and visible class discussion summaries for your child."}
+      roleLabel="Child Qabila"
+      title="My Qabila Chat"
+      subtitle="Talk with your Qabila teammates in a supervised space. Assigned teachers and admins can see every message."
       navItems={getParentNavItems(selectedChildId)}
       pendingReason={dashboard.pendingReason}
     >
       <ActionToast message={params.error ?? (params.posted ? "Message posted to the Qabila." : undefined)} tone={params.error ? "error" : "success"} />
       <SectionCard
-        eyebrow={childMode ? "Child conversation" : "Parent view"}
+        eyebrow="Switch learner"
         title={community.selectedChild ? childName(community.selectedChild) : "Choose learner"}
         icon="star"
         action={<span className="rounded-full bg-[#fbf6ef] px-3 py-1.5 text-xs font-semibold text-[#617184]">{visibleMessages} messages / {projectCount} projects</span>}
@@ -115,25 +111,9 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
         <ChildSelector
           learners={community.children.map((child) => ({ id: child.id, name: childName(child) }))}
           selectedChildId={selectedChildId}
-          basePath={childMode ? "/parent/community?mode=child" : "/parent/community"}
+          basePath="/parent/community?mode=child"
         />
       </SectionCard>
-      <SectionCard eyebrow="Community areas" title="Choose what you want to review" icon="sun">
-        <div className="flex flex-wrap gap-2">
-          {[
-            { key: "qabila", label: "My Qabila", count: qabilaRooms.length },
-            { key: "programmes", label: "Programme Rooms", count: programmeRooms.length },
-            { key: "announcements", label: "Announcements", count: announcementRooms.length },
-          ].map((tab) => <Link key={tab.key} href={tabHref(tab.key)} aria-current={section === tab.key ? "page" : undefined} className={`rounded-full border px-4 py-2 text-sm font-semibold ${section === tab.key ? "border-[#22304a] bg-[#22304a] text-white" : "border-[#d8e3ed] bg-white text-[#22304a]"}`}>{tab.label} <span className="ml-1 opacity-70">({tab.count})</span></Link>)}
-        </div>
-        {sectionRooms.length > 1 ? <div className="mt-3 flex flex-wrap gap-2 border-t border-[#eadfce] pt-3">
-          {sectionRooms.map((membership) => <Link key={membership.id} href={`${tabHref(section)}&room=${membership.room.id}`} aria-current={selectedRoom?.id === membership.id ? "page" : undefined} className={`rounded-xl px-3 py-2 text-xs font-semibold ${selectedRoom?.id === membership.id ? "bg-[#fff0d9] text-[#9a5b16]" : "bg-[#f3f6f9] text-[#526174]"}`}>{membership.room.title}</Link>)}
-        </div> : null}
-        <p className="mt-3 text-xs leading-5 text-[#617184]">
-          {section === "qabila" ? "Your child's main team space, shared only with their Qabila and assigned mentors." : section === "programmes" ? "Course-specific discussion rooms are kept here, separate from Qabila teamwork." : "Read-only notices and faculty updates."}
-        </p>
-      </SectionCard>
-
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="space-y-6">
           {visibleMemberships.map((membership) => (
@@ -216,7 +196,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
           ) : null}
         </div>
 
-        <SectionCard eyebrow="Safety rules" title="Parent view" icon="check">
+        <SectionCard eyebrow="Safety rules" title="Conversation safety" icon="check">
           <CompactList
             items={[
               { label: childMode ? "Child conversation mode" : "Read-only transparency", meta: childMode ? "Posts use the selected learner identity" : "Parents do not enter student chat", icon: "check" },

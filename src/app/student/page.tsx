@@ -6,6 +6,7 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentQuestData } from "@/lib/community/quest";
+import { getStudentCommunityData } from "@/lib/community/rooms";
 import { qabilaProfile } from "@/lib/community/qabilas";
 import { db } from "@/lib/db";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
@@ -126,6 +127,8 @@ export default async function StudentDashboardPage() {
     include: { enrollments: { select: { programId: true } } },
   });
   const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? []);
+  const community = await getStudentCommunityData(session.user.id);
+  const qabilaRoom = community?.memberships.find((membership) => membership.room.type === "PROJECT_TEAM")?.room ?? null;
   const qabila = qabilaProfile(quest.membership.qabilaGroup);
   const qabilaName = qabila?.name ?? "Qabila assignment pending";
   const teammates = qabila ? quest.teammates.filter((member) => member.id !== child.id && member.qabilaGroup === qabila.name) : [];
@@ -230,6 +233,7 @@ export default async function StudentDashboardPage() {
           <div className="flex min-w-0 items-center gap-4">{qabila ? <Image src={qabila.image} alt={`${qabila.name} Qabila`} width={80} height={80} className="h-20 w-20 shrink-0 rounded-[24px] object-cover shadow-sm"/> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-[#eef2f7] text-2xl">?</span>}<div><p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: qabila?.color ?? "#617184" }}>My Qabila</p><h2 className="mt-1 text-2xl font-semibold text-[#22304a]">{qabilaName}</h2><p className="mt-1 text-sm text-[#617184]">{qabila ? `${qabila.mentor} supervises this team. Your verified contribution is ${quest.studentTotal} points.` : "Your Qabila will appear here after assignment."}</p></div></div>
           {qabila ? <Link href="/student/community" className="shrink-0 rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Open Qabila chat</Link> : null}
         </div>
+        {qabilaRoom?.messages.length ? <div className="border-t border-[#eadfce] px-5 py-4"><div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm font-semibold text-[#22304a]">Recent Qabila messages</p><Link href="/student/community" className="text-xs font-semibold text-[#0f4d81]">Open conversation →</Link></div><div className="grid gap-2 sm:grid-cols-3">{qabilaRoom.messages.slice(0,3).map((message)=><div key={message.id} className="rounded-2xl bg-[#fbf6ef] px-3 py-3"><p className="text-xs font-semibold text-[#22304a]">{message.author.firstName}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-[#617184]">{message.body || "Voice message"}</p></div>)}</div></div> : <div className="border-t border-[#eadfce] px-5 py-4 text-sm text-[#617184]">No messages yet. <Link href="/student/community" className="font-semibold text-[#0f4d81]">Start the Qabila conversation →</Link></div>}
         {teammates.length ? <details className="border-t border-[#eadfce] px-5 py-4"><summary className="cursor-pointer text-sm font-semibold text-[#22304a]">View {qabilaName} teammates</summary><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full px-3 py-2 text-xs font-semibold text-white" style={{ backgroundColor: qabila?.color }}>{dashboard.studentName}</span>{teammates.slice(0,18).map((member)=><span key={member.id} className="rounded-full border border-[#eadfce] bg-[#fffaf4] px-3 py-2 text-xs font-semibold text-[#22304a]">{member.name}</span>)}</div></details> : null}
       </section>
       <div className="sr-only">

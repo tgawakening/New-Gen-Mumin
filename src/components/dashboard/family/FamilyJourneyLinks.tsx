@@ -38,7 +38,7 @@ function roleItems(role: Role, childId?: string): Item[] {
     { key: "classes", label: "Join next class", description: "Schedule and live Zoom access.", href: `/parent/schedule${suffix}`, icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "quizzes", label: "Activities", description: "Live quizzes and learning tasks.", href: `/parent/quizzes${suffix}`, icon: PlayCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
     { key: "sunnah", label: "Sunnah Tracker", description: "Review today’s tracker.", href: `/parent/sunnah-tracker${suffix}`, icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
-    { key: "community", label: "Qabila Chat", description: "Supervise your child’s community.", href: `/parent/community${suffix}`, icon: MessageCircle, tone: "bg-[#e7f1ff] text-[#2465a5]" },
+    { key: "community", label: "Qabila Chat", description: "Supervise your child’s community.", href: `/parent/community${suffix}${suffix ? "&" : "?"}mode=child`, icon: MessageCircle, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "rewards", label: "House & rewards", description: "Points, badges and recognition.", href: `/parent/rewards${suffix}`, icon: Trophy, tone: "bg-[#fff0db] text-[#c27a2c]" },
     { key: "updates", label: "Child dashboard", description: "Open the complete learner view.", href: `/parent/student-view${suffix}`, icon: Sparkles, tone: "bg-[#f0eaff] text-[#7453b8]" },
   ];
@@ -92,10 +92,13 @@ export async function FamilyJourneyLinks({ role, childId }: { role: Role; childI
     return { ...item, syntheticAlert: false };
   });
 
+  const visibleItems = items.filter((item) => item.syntheticAlert || (grouped.get(item.key)?.length ?? 0) > 0);
+  if (!visibleItems.length) return null;
+
   return <section className="rounded-[26px] border border-[#eadfce] bg-white p-4 shadow-sm sm:p-5">
     <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">Quick actions</p><h2 className="mt-1 text-xl font-semibold text-[#22304a]">Open what needs your attention</h2><p className="mt-1 text-sm text-[#617184]">Red numbers show new activity. Open a card to mark those updates as seen.</p></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {items.map(({ key, label, description, href, icon: Icon, tone, syntheticAlert }) => {
+      {visibleItems.map(({ key, label, description, href, icon: Icon, tone, syntheticAlert }) => {
         const updates = grouped.get(key) ?? [];
         const ids = updates.map((entry) => entry.id);
         const alertText = syntheticAlert ? description : updates[0]?.body ?? null;

@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -12,8 +11,6 @@ import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
-import { getStudentQuestData } from "@/lib/community/quest";
-import { qabilaProfile } from "@/lib/community/qabilas";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import { buildParentCalendarUrls } from "@/lib/calendar/tokens";
 import {
@@ -143,12 +140,6 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   const programEnrollmentOffers =
     showProgramEnrollmentModal && selectedChild ? eligibleProgramOffers(options.offers, selectedChild) : [];
   const calendarUrls = buildParentCalendarUrls(dashboard.parentProfile.id);
-  const selectedQuest = selectedChild ? await getStudentQuestData(selectedChild.id, []) : null;
-  const selectedQabila = qabilaProfile(selectedQuest?.membership.qabilaGroup);
-  const selectedTeammates = selectedQuest && selectedChild && selectedQabila
-    ? selectedQuest.teammates.filter((member) => member.id !== selectedChild.id && member.qabilaGroup === selectedQabila.name).slice(0, 8)
-    : [];
-
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
@@ -214,18 +205,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           selectedChildId={selectedChild?.id}
           basePath="/parent"
         />
-        {selectedChild && selectedQabila ? (
-          <div className="mt-4 overflow-hidden rounded-[24px] border bg-[#fffaf4] shadow-sm" style={{ borderColor: selectedQabila.color }}>
-            <div className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex min-w-0 items-center gap-4">
-                <Image src={selectedQabila.image} alt={`${selectedQabila.name} Qabila`} width={64} height={64} className="h-16 w-16 shrink-0 rounded-2xl object-cover shadow-sm" />
-                <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: selectedQabila.color }}>My child&apos;s Qabila</p><p className="mt-1 text-lg font-semibold text-[#22304a]">{selectedQabila.name}</p><p className="mt-1 text-sm text-[#617184]">{selectedChild.name} has contributed {selectedQuest?.studentTotal ?? 0} verified points.</p></div>
-              </div>
-              <Link href={`/parent/community?child=${selectedChild.id}&section=qabila&mode=child`} className="shrink-0 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open Qabila chat</Link>
-            </div>
-            {selectedTeammates.length ? <div className="border-t border-[#eadfce] px-4 py-3"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[#7a8797]">Qabila teammates</p><div className="flex flex-wrap gap-2">{selectedTeammates.map((member)=><span key={member.id} className="rounded-full border border-[#e4d7c5] bg-white px-3 py-1.5 text-xs font-semibold text-[#22304a]">{member.name}</span>)}</div></div> : null}
-          </div>
-        ) : null}</SectionCard>
+</SectionCard>
 
       {selectedChild && activity ? (
         <>
