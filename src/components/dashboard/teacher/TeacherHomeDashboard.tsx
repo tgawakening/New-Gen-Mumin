@@ -12,9 +12,11 @@ import type { TeacherDashboardData } from "@/lib/teacher/dashboard";
 export function TeacherHomeDashboard({
   dashboard,
   adminPreview = false,
+  qabilas = [],
 }: {
   dashboard: TeacherDashboardData;
   adminPreview?: boolean;
+  qabilas?: Array<{ id: string; title: string; members: Array<{ id: string; name: string; role: string; active: boolean }>; recentActivity: number }>;
 }) {
   const linkClass = "text-sm font-semibold text-[#2a76aa]";
 
@@ -51,6 +53,9 @@ export function TeacherHomeDashboard({
         </TeacherSection>
       ) : null}
 
+      {!adminPreview && qabilas.length ? <TeacherSection eyebrow="My Qabila" title="Team overview" action={<Link href="/teacher/community" className={linkClass}>Open Qabila community</Link>}>
+        <div className="grid gap-4 lg:grid-cols-2">{qabilas.map((qabila) => { const active = qabila.members.filter((member) => member.active).length; return <Link key={qabila.id} href={`/teacher/community#${qabila.id}`} className="rounded-2xl border border-[#dfe7ef] bg-[#fbf6ef] p-4 transition hover:border-[#f0b36f]"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold text-[#22304a]">{qabila.title}</p><p className="mt-1 text-xs text-[#617184]">{qabila.members.length} learners · {active} recently active</p></div><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#2f6b4b]">View team</span></div><div className="mt-3 flex flex-wrap gap-2">{qabila.members.slice(0,8).map((member)=><span key={member.id} className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-[#22304a]">{member.name}</span>)}</div>{qabila.members.length > 8 ? <p className="mt-2 text-xs text-[#617184]">+{qabila.members.length - 8} more learners</p> : null}</Link>; })}</div>
+      </TeacherSection> : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.75fr)]">
         <div className="space-y-6">
           <TeacherSection

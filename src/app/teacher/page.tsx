@@ -6,6 +6,8 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { TeacherHomeDashboard } from "@/components/dashboard/teacher/TeacherHomeDashboard";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
+import { db } from "@/lib/db";
+import { syncAllQabilaRoomMemberships, syncQabilaSupervisors } from "@/lib/community/rooms";
 
 export default async function TeacherDashboardPage() {
   const session = await getCurrentSession();
@@ -14,6 +16,13 @@ export default async function TeacherDashboardPage() {
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
+  await syncQabilaSupervisors();
+  await syncAllQabilaRoomMemberships();
+  const qabilas = await db.communityRoomSupervisor.findMany({
+    where: { userId: session.user.id, room: { isActive: true, type: "PROJECT_TEAM" } },
+    orderBy: { room: { title: "asc" } },
+    include: { room: { include: { memberships: { include: { student: true } }, messages: { where: { status: "VISIBLE" }, orderBy: { createdAt: "desc" }, take: 100 } } } },
+  });
 
   return (
     <TeacherDashboardFrame
@@ -22,7 +31,7 @@ export default async function TeacherDashboardPage() {
       navItems={getTeacherNavItems()}
     >
       <FamilyJourneyLinks role="teacher" />
-      <TeacherHomeDashboard dashboard={dashboard} />
+      <TeacherHomeDashboard dashboard={dashboard} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
     </TeacherDashboardFrame>
   );
 }
