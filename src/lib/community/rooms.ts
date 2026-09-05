@@ -258,14 +258,36 @@ export async function ensureStudentQabilaRoom(studentId: string) {
 export async function syncAllQabilaRoomMemberships() {
   const memberships = await db.houseMembership.findMany({
     where: { qabilaGroup: { not: null } },
-    select: { studentId: true },
+    include: {
+      student: {
+        include: {
+          user: true,
+          enrollments: { where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } }, select: { id: true } },
+          registrationStudents: { where: { registration: { status: { in: ["PAID", "CONVERTED"] } } }, orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+        },
+      },
+    },
   });
+  const canonical = new Map<string, (typeof memberships)[number]>();
+  const duplicates: Array<(typeof memberships)[number]> = [];
+  const identityOf = (entry: (typeof memberships)[number]) => (entry.student.displayName || `${entry.student.user.firstName} ${entry.student.user.lastName || ""}`).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const score = (entry: (typeof memberships)[number]) => entry.student.enrollments.length * 10_000_000_000_000 + (entry.student.registrationStudents[0]?.createdAt.getTime() ?? entry.student.createdAt.getTime());
   for (const membership of memberships) {
-    await ensureStudentQabilaRoom(membership.studentId);
+    const identity = identityOf(membership);
+    const existing = canonical.get(identity);
+    if (!existing || score(membership) > score(existing)) {
+      if (existing) duplicates.push(existing);
+      canonical.set(identity, membership);
+    } else {
+      duplicates.push(membership);
+    }
   }
-  return memberships.length;
-}
-const QABILA_SUPERVISOR_DRAFT: Record<string, string[][]> = {
+  if (duplicates.length) {
+    await db.communityMembership.deleteMany({ where: { studentId: { in: duplicates.map((entry) => entry.studentId) }, room: { type: CommunityRoomType.PROJECT_TEAM } } });
+  }
+  for (const membership of canonical.values()) await ensureStudentQabilaRoom(membership.studentId);
+  return canonical.size;
+}const QABILA_SUPERVISOR_DRAFT: Record<string, string[][]> = {
   "Qabila Banu Makhzum": [["Saba"]],
   "Qabila Banu Zuhra": [["Programme Lead", "globalawakeningchannel@gmail.com"]],
   "Qabila Banu Hashim": [["Mehran"], ["Afira", "Afirah"]],

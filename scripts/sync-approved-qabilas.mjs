@@ -48,13 +48,16 @@ async function main() {
       matched.push(`${requested} -> ${student.displayName || student.user.firstName} -> ${group.qabila}`);
     }
   }
-  const testStudents = await db.studentProfile.findMany({ include: { user: true } });
-  for (const student of testStudents) {
-    const identity = key(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`);
-    const qabilas = ["ahmad", "ahmadparent"].includes(identity) ? ["Qabila Banu Hashim", "Qabila Banu Asad"] : ["khadija", "khadijaparent", "khadjia", "khadjiaparent"].includes(identity) ? ["Qabila Banu Zuhra", "Qabila Banu Makhzum"] : [];
-    for (const qabila of qabilas) await db.communityMembership.upsert({ where: { roomId_studentId: { roomId: rooms.get(qabila).id, studentId: student.id } }, update: { role: "MEMBER" }, create: { roomId: rooms.get(qabila).id, studentId: student.id, role: "MEMBER" } });
-  }
-  const lead = await db.user.findUnique({ where: { email: "globalawakeningchannel@gmail.com" } });
+  const testStudents = await db.studentProfile.findMany({ include: { user: true, enrollments: { where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } }, select: { id: true } } }, orderBy: { createdAt: "desc" } });
+  for (const aliases of [["ahmad", "ahmadparent"], ["khadija", "khadijaparent", "khadjia", "khadjiaparent"]]) {
+    const candidates = testStudents.filter((student) => aliases.includes(key(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`))).sort((a, b) => b.enrollments.length - a.enrollments.length || b.createdAt.getTime() - a.createdAt.getTime());
+    const canonical = candidates[0];
+    if (!canonical) continue;
+    const duplicateIds = candidates.slice(1).map((student) => student.id);
+    if (duplicateIds.length) await db.communityMembership.deleteMany({ where: { studentId: { in: duplicateIds }, room: { type: "PROJECT_TEAM" } } });
+    const qabilas = aliases[0] === "ahmad" ? ["Qabila Banu Hashim", "Qabila Banu Asad"] : ["Qabila Banu Zuhra", "Qabila Banu Makhzum"];
+    for (const qabila of qabilas) await db.communityMembership.upsert({ where: { roomId_studentId: { roomId: rooms.get(qabila).id, studentId: canonical.id } }, update: { role: "MEMBER" }, create: { roomId: rooms.get(qabila).id, studentId: canonical.id, role: "MEMBER" } });
+  }  const lead = await db.user.findUnique({ where: { email: "globalawakeningchannel@gmail.com" } });
   const zuhrah = rooms.get("Qabila Banu Zuhra");
   if (lead && zuhrah) {
     await db.communityRoomSupervisor.deleteMany({ where: { roomId: zuhrah.id } });
