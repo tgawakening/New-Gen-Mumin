@@ -266,6 +266,16 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   });
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
 }
+export async function syncAllQabilaRoomMemberships() {
+  const memberships = await db.houseMembership.findMany({
+    where: { qabilaGroup: { not: null } },
+    select: { studentId: true },
+  });
+  for (const membership of memberships) {
+    await ensureStudentQabilaRoom(membership.studentId);
+  }
+  return memberships.length;
+}
 const QABILA_SUPERVISOR_DRAFT: Record<string, string[][]> = {
   "Qabila Banu Makhzum": [["Saba"]],
   "Qabila Banu Zuhra": [["Aisha", "Ayesha", "Aishah"]],

@@ -7,7 +7,7 @@ import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import { CommunityVoiceRecorder } from "@/components/community/CommunityVoiceRecorder";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { deleteCommunityMessage, editCommunityMessage, postTeacherCommunityMessage, syncQabilaSupervisors } from "@/lib/community/rooms";
+import { deleteCommunityMessage, editCommunityMessage, postTeacherCommunityMessage, syncAllQabilaRoomMemberships, syncQabilaSupervisors } from "@/lib/community/rooms";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 
 type PageProps = { searchParams?: Promise<{ posted?: string; error?: string; room?: string }> };
@@ -17,6 +17,7 @@ export default async function TeacherCommunityPage({ searchParams }: PageProps) 
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
   const params = searchParams ? await searchParams : {};
   await syncQabilaSupervisors();
+  await syncAllQabilaRoomMemberships();
   const assignments = await db.communityRoomSupervisor.findMany({
     where: { userId: session.user.id, room: { isActive: true } },
     orderBy: { room: { title: "asc" } },
