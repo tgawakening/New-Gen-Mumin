@@ -111,13 +111,10 @@ async function getStudentCommunityProfile(studentId: string) {
     },
   });
 
+  const assignedQabila = qabilaProfile(student?.houseMembership?.qabilaGroup);
   return {
     age: student?.age ?? null,
-    genderScope: student?.houseMembership?.qabilaGroup?.toLowerCase().startsWith("girls")
-      ? "GIRLS"
-      : student?.houseMembership?.qabilaGroup?.toLowerCase().startsWith("boys")
-        ? "BOYS"
-        : normalizeGender([...new Set((student?.registrationStudents ?? []).map((entry) => entry.gender).filter(Boolean))].length === 1 ? student?.registrationStudents.find((entry) => entry.gender)?.gender : null),
+    genderScope: assignedQabila?.gender ?? normalizeGender([...new Set((student?.registrationStudents ?? []).map((entry) => entry.gender).filter(Boolean))].length === 1 ? student?.registrationStudents.find((entry) => entry.gender)?.gender : null),
   };
 }
 

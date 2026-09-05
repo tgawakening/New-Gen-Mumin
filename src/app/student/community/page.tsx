@@ -10,7 +10,6 @@ import { QabilaIdentity } from "@/components/community/QabilaIdentity";
 import {
   CompactList,
   FamilyDashboardFrame,
-  MetricGrid,
   SectionCard,
   formatDate,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
@@ -128,15 +127,9 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
         tone={params.error ? "error" : "success"}
       />
 
-      <MetricGrid
-        metrics={[
-          { label: "Rooms", value: String(roomCount), hint: "Supervised spaces assigned to you." },
-          { label: "Messages", value: String(messageCount), hint: "Recent visible room activity." },
-          { label: "Safety alerts", value: String(flaggedCount), hint: "Messages waiting for mentor review." },
-          { label: "Mode", value: "Supervised", hint: "No uncontrolled private messaging." },
-        ]}
-      />
-
+      <div className="flex flex-wrap gap-2 rounded-[18px] border border-[#eadfce] bg-white px-4 py-3 text-xs font-semibold text-[#617184] shadow-sm">
+        <span>{roomCount} supervised rooms</span><span>·</span><span>{messageCount} messages</span>{flaggedCount ? <><span>·</span><span className="text-[#9a5b16]">{flaggedCount} awaiting mentor review</span></> : null}
+      </div>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_320px]">
         <div className="space-y-6">
           {community.memberships.map((membership) => (

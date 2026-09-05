@@ -12,7 +12,6 @@ import {
   ChildSelector,
   CompactList,
   FamilyDashboardFrame,
-  MetricGrid,
   SectionCard,
   formatDate,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
@@ -106,17 +105,12 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
       <ActionToast message={params.error ?? (params.posted ? "Message posted to the Qabila." : undefined)} tone={params.error ? "error" : "success"} />
-      <MetricGrid
-        metrics={[
-          { label: "Children", value: String(community.children.length), hint: "Linked learners." },
-          { label: "Rooms", value: String(community.memberships.length), hint: "Supervised spaces assigned." },
-          { label: "Messages", value: String(visibleMessages), hint: "Recent visible discussion items." },
-          { label: "Projects", value: String(projectCount), hint: "Guided collaboration work." },
-          { label: "Mode", value: childMode ? "Child conversation" : "Read-only", hint: childMode ? "Posting as the selected learner; mentor supervised." : "Parents see transparency without entering student rooms." },
-        ]}
-      />
-
-      <SectionCard eyebrow="Child selector" title="Choose learner" icon="star">
+      <SectionCard
+        eyebrow={childMode ? "Child conversation" : "Parent view"}
+        title={community.selectedChild ? childName(community.selectedChild) : "Choose learner"}
+        icon="star"
+        action={<span className="rounded-full bg-[#fbf6ef] px-3 py-1.5 text-xs font-semibold text-[#617184]">{visibleMessages} messages · {projectCount} projects</span>}
+      >
         <ChildSelector
           learners={community.children.map((child) => ({ id: child.id, name: childName(child) }))}
           selectedChildId={selectedChildId}
