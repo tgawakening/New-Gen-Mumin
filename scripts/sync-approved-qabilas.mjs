@@ -53,6 +53,10 @@ async function main() {
     const candidates = testStudents.filter((student) => aliases.includes(key(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`))).sort((a, b) => b.enrollments.length - a.enrollments.length || b.createdAt.getTime() - a.createdAt.getTime());
     const canonical = candidates[0];
     if (!canonical) continue;
+    if (aliases[0] === "khadija") {
+      await db.studentProfile.update({ where: { id: canonical.id }, data: { displayName: "Khadija" } });
+      await db.user.update({ where: { id: canonical.userId }, data: { firstName: "Khadija", lastName: "" } });
+    }
     const duplicateIds = candidates.slice(1).map((student) => student.id);
     if (duplicateIds.length) await db.communityMembership.deleteMany({ where: { studentId: { in: duplicateIds }, room: { type: "PROJECT_TEAM" } } });
     const qabilas = aliases[0] === "ahmad" ? ["Qabila Banu Hashim", "Qabila Banu Asad"] : ["Qabila Banu Zuhra", "Qabila Banu Makhzum"];
