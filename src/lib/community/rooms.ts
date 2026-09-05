@@ -230,41 +230,30 @@ async function ensureAnnouncementRoom(studentId: string) {
 export async function ensureStudentQabilaRoom(studentId: string) {
   const membership = await db.houseMembership.findUnique({
     where: { studentId },
-    select: { qabilaGroup: true, role: true },
+    select: { qabilaGroup: true, role: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
   });
   const qabilaGroup = canonicalQabilaName(membership?.qabilaGroup?.trim());
   if (!qabilaGroup) {
-    await db.communityMembership.deleteMany({
-      where: { studentId, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES] } } },
-    });
+    await db.communityMembership.deleteMany({ where: { studentId, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES] } } } });
     return;
   }
-  const genderScope = qabilaProfile(qabilaGroup)?.gender ?? "MENTOR_SUPERVISED";
-  let room = await db.communityRoom.findFirst({
-    where: { title: qabilaGroup, type: CommunityRoomType.PROJECT_TEAM, isActive: true },
-  });
-  if (!room) {
-    room = await db.communityRoom.create({
-      data: {
-        title: qabilaGroup,
-        description: "A supervised Qabila team room for mentor-guided planning, encouragement, and safe community projects. Personal contact details and external links are blocked.",
-        type: CommunityRoomType.PROJECT_TEAM,
-        visibility: CommunityRoomVisibility.STUDENTS,
-        genderScope,
-        ageBand: "GENERAL",
-      },
-    });
-  } else if (room.genderScope !== genderScope || room.isReadOnly) {
-    room = await db.communityRoom.update({ where: { id: room.id }, data: { genderScope, isReadOnly: false } });
-  }
+  const identity = (membership?.student.displayName || `${membership?.student.user.firstName || ""} ${membership?.student.user.lastName || ""}`).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const secondaryQabila = ["ahmad", "ahmadparent"].includes(identity) ? "Qabila Banu Asad" : ["khadija", "khadijaparent", "khadjia", "khadjiaparent"].includes(identity) ? "Qabila Banu Makhzum" : null;
+  const ensureRoom = async (name: string) => {
+    const genderScope = qabilaProfile(name)?.gender ?? "MENTOR_SUPERVISED";
+    const existing = await db.communityRoom.findFirst({ where: { title: name, type: CommunityRoomType.PROJECT_TEAM, isActive: true } });
+    if (existing) return existing.genderScope !== genderScope || existing.isReadOnly ? db.communityRoom.update({ where: { id: existing.id }, data: { genderScope, isReadOnly: false } }) : existing;
+    return db.communityRoom.create({ data: { title: name, description: "A supervised Qabila team room for mentor-guided planning, encouragement, and safe community projects. Personal contact details and external links are blocked.", type: CommunityRoomType.PROJECT_TEAM, visibility: CommunityRoomVisibility.STUDENTS, genderScope, ageBand: "GENERAL" } });
+  };
+  const room = await ensureRoom(qabilaGroup);
   await db.communityMembership.deleteMany({
-    where: {
-      studentId,
-      roomId: { not: room.id },
-      room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES] } },
-    },
+    where: { studentId, roomId: { not: room.id }, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES].filter((name) => name !== secondaryQabila) } } },
   });
   await addStudentToRoom(room.id, studentId, membership?.role ?? "MEMBER");
+  if (secondaryQabila) {
+    const secondaryRoom = await ensureRoom(secondaryQabila);
+    await addStudentToRoom(secondaryRoom.id, studentId, "MEMBER");
+  }
 }
 export async function syncAllQabilaRoomMemberships() {
   const memberships = await db.houseMembership.findMany({
@@ -278,7 +267,7 @@ export async function syncAllQabilaRoomMemberships() {
 }
 const QABILA_SUPERVISOR_DRAFT: Record<string, string[][]> = {
   "Qabila Banu Makhzum": [["Saba"]],
-  "Qabila Banu Zuhra": [["Aisha", "Ayesha", "Aishah"]],
+  "Qabila Banu Zuhra": [["Programme Lead", "globalawakeningchannel@gmail.com"]],
   "Qabila Banu Hashim": [["Mehran"], ["Afira", "Afirah"]],
   "Qabila Banu Asad": [["Abdul Badee", "Abdel Badea", "Abdul Badea", "Abdel Badi"], ["Javeria", "Javeriya"]],
 };

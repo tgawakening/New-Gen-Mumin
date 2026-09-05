@@ -1,4 +1,4 @@
-﻿import "server-only";
+import "server-only";
 
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
@@ -653,8 +653,6 @@ function normalizeChildIdentity(input: {
 
   return [
     baseName.toLowerCase().replace(/\s+/g, " "),
-    input.age ?? "",
-    (input.countryName ?? "").toLowerCase(),
   ].join("|");
 }
 
@@ -671,7 +669,8 @@ function childPriorityScore(student: any) {
     progressReports.length * 6 +
     journalEntries.length * 5 +
     quizAttempts.length * 3 +
-    attendances.length * 2
+    attendances.length * 2 +
+    (student.createdAt instanceof Date ? student.createdAt.getTime() / 1_000_000_000_000 : 0)
   );
 }
 

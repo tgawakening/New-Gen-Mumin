@@ -6,7 +6,7 @@
     "postinstall": "prisma generate",
     "dev": "next dev",
     "build": "next build",
-    "start": "prisma migrate resolve --rolled-back 20260805153000_add_maintenance_run || true && prisma migrate deploy && node scripts/sync-abdul-badee-teacher.mjs && node scripts/restore-aug-4-live-quiz-points.mjs && node scripts/sync-restricted-admin.mjs && next start",
+    "start": "prisma migrate resolve --rolled-back 20260805153000_add_maintenance_run || true && prisma migrate deploy && node scripts/sync-abdul-badee-teacher.mjs && node scripts/restore-aug-4-live-quiz-points.mjs && node scripts/sync-restricted-admin.mjs && node scripts/sync-approved-qabilas.mjs && next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck",

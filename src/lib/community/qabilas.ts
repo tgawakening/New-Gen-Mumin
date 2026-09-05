@@ -1,6 +1,6 @@
 export const QABILA_PROFILES = {
   "Qabila Banu Makhzum": { legacyNames: ["Girls Qabila A", "Maryam bint Imran"], gender: "GIRLS", mentor: "Sister Saba", color: "#9f2349", image: "/qabilas/qabila-banu-makhzum.png" },
-  "Qabila Banu Zuhra": { legacyNames: ["Girls Qabila B", "Khadijah bint Khuwaylid"], gender: "GIRLS", mentor: "Sister Aisha", color: "#6d247a", image: "/qabilas/qabila-banu-zuhra.png" },
+  "Qabila Banu Zuhra": { legacyNames: ["Girls Qabila B", "Khadijah bint Khuwaylid"], gender: "GIRLS", mentor: "Programme Lead", color: "#6d247a", image: "/qabilas/qabila-banu-zuhra.png" },
   "Qabila Banu Hashim": { legacyNames: ["Boys Qabila A", "Abubakr ibn Abi Qahafa"], gender: "BOYS", mentor: "Ustadh Mehran", color: "#07509b", image: "/qabilas/qabila-banu-hashim.png" },
   "Qabila Banu Asad": { legacyNames: ["Boys Qabila B", "Umar Ibn Al Khattab"], gender: "BOYS", mentor: "Ustadh Abdel Badea", color: "#087242", image: "/qabilas/qabila-banu-asad.png" },
 } as const;
