@@ -224,26 +224,59 @@ export async function getHouseTeamMembers(houseId: string) {
 export async function getRecentHousePointEvents(houseId: string, take = 8, qabilaGroup?: string | null) {
   const houseIds = await getCanonicalHouseIdsForHouseId(houseId);
   const rows = await db.housePointLedger.findMany({
-    where: qabilaGroup ? { student: { houseMembership: { qabilaGroup } } } : { houseId: { in: houseIds } },
+    where: qabilaGroup
+      ? { points: { gt: 0 }, student: { houseMembership: { qabilaGroup } } }
+      : { points: { gt: 0 }, houseId: { in: houseIds } },
     orderBy: { awardedAt: "desc" },
-    take: Math.max(take, take * 5),
+    take: Math.max(100, take * 20),
     include: { student: { include: { user: true } }, house: true },
   });
 
-  const grouped = new Map<string, { id: string; points: number; reason: string; awardedAt: Date; house: ReturnType<typeof normalizeHouseDisplay>; studentName: string; occurrenceCount: number }>();
+  type GroupedEvent = {
+    id: string;
+    studentId: string;
+    points: number;
+    reason: string;
+    awardedAt: Date;
+    house: ReturnType<typeof normalizeHouseDisplay>;
+    studentName: string;
+    occurrenceCount: number;
+  };
+  const grouped = new Map<string, GroupedEvent>();
   for (const row of rows) {
     const day = row.awardedAt.toISOString().slice(0, 10);
-    const key = `${row.studentId}:${row.points}:${row.reason.trim().toLowerCase()}:${day}`;
+    const activity = row.sourceType.startsWith("SUNNAH_")
+      ? { key: "SUNNAH", reason: "Completed the daily Sunnah Tracker" }
+      : row.sourceType.startsWith("QUIZ_LIVE_")
+        ? { key: "LIVE_QUIZ", reason: "Participated successfully in a live quiz" }
+        : { key: row.sourceType, reason: row.reason };
+    const activityDay = row.sourceType.startsWith("SUNNAH_") && row.sourceId?.match(/^\d{4}-\d{2}-\d{2}/u)?.[0] || day;
+    const key = `${row.studentId}:${activity.key}:${activityDay}`;
     const existing = grouped.get(key);
     if (existing) {
+      existing.points += row.points;
       existing.occurrenceCount += 1;
       continue;
     }
-    grouped.set(key, { id: row.id, points: row.points, reason: row.reason, awardedAt: row.awardedAt, house: normalizeHouseDisplay(row.house), studentName: row.student.displayName || `${row.student.user.firstName} ${row.student.user.lastName}`.trim(), occurrenceCount: 1 });
+    grouped.set(key, {
+      id: row.id,
+      studentId: row.studentId,
+      points: row.points,
+      reason: activity.reason,
+      awardedAt: row.awardedAt,
+      house: normalizeHouseDisplay(row.house),
+      studentName: row.student.displayName || `${row.student.user.firstName} ${row.student.user.lastName}`.trim(),
+      occurrenceCount: 1,
+    });
   }
-  return [...grouped.values()].slice(0, take);
-}
 
+  const featured = new Map<string, GroupedEvent>();
+  for (const event of grouped.values()) {
+    if (!featured.has(event.studentId)) featured.set(event.studentId, event);
+    if (featured.size >= take) break;
+  }
+  return [...featured.values()].map(({ studentId: _studentId, ...event }) => event);
+}
 export async function awardHousePointsForQuizAttempt(input: {
   attemptId: string;
   studentId: string;
