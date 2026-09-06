@@ -150,6 +150,22 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
     redirect(`/admin/community?qabila=${roomId}&notice=${encodeURIComponent("Message removed and audit history retained.")}`);
   }
 
+  async function adminFlagMessage(formData: FormData) {
+    "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "ADMIN") redirect("/admin");
+    const roomId = String(formData.get("roomId") || "");
+    const messageId = String(formData.get("messageId") || "");
+    const message = await db.communityMessage.findUnique({ where: { id: messageId }, select: { id: true, roomId: true, status: true } });
+    if (!message || message.roomId !== roomId || message.status !== CommunityMessageStatus.VISIBLE) redirect(noticeHref("Message is not available.", "error"));
+    await db.$transaction([
+      db.communityMessage.update({ where: { id: message.id }, data: { status: CommunityMessageStatus.FLAGGED, flagReason: "Flagged by admin" } }),
+      db.moderationFlag.create({ data: { messageId: message.id, reason: "Flagged by admin for review" } }),
+      db.moderationAction.create({ data: { actorUserId: current.user.id, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: "flag", note: "Admin manually flagged this Qabila message for review." } }),
+    ]);
+    revalidatePath("/admin/community"); revalidatePath("/student/community"); revalidatePath("/parent/community"); revalidatePath("/teacher/community");
+    redirect(`/admin/community?qabila=${roomId}&notice=${encodeURIComponent("Message flagged for review.")}`);
+  }
   async function assignHouse(formData: FormData) {
     "use server";
     const currentSession = await getCurrentSession();
@@ -553,7 +569,7 @@ export default async function AdminCommunityPage({ searchParams }: PageProps) {
           <QabilaIdentity name={selectedQabila.title} />
           <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
             <form action={adminPostMessage} className="grid content-start gap-3 rounded-2xl bg-[#fbf6ef] p-4"><input type="hidden" name="roomId" value={selectedQabila.id}/><label className="grid gap-2 text-sm font-semibold text-[#22304a]">Admin message<textarea name="body" required maxLength={800} rows={4} placeholder="Post guidance or an announcement to this Qabila." className="rounded-xl border border-[#d8e3ed] bg-white px-3 py-2 font-normal"/></label><button className="w-fit rounded-full bg-[#0f4d81] px-4 py-2 text-sm font-semibold text-white">Post to {selectedQabila.title}</button></form>
-            <div className="space-y-3 rounded-2xl bg-[#102544] p-4 text-white">{selectedQabila.messages.map((message) => <div key={message.id} className="rounded-xl bg-white/10 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{message.author.firstName} {message.author.lastName} <span className="text-xs font-normal text-white/55">({message.author.role})</span></strong><span className="text-xs text-white/55">{formatDate(message.createdAt)}</span></div><p className="mt-2 whitespace-pre-wrap text-white/80">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}<form action={adminDeleteMessage} className="mt-2"><input type="hidden" name="roomId" value={selectedQabila.id}/><input type="hidden" name="messageId" value={message.id}/><button className="rounded-full border border-white/25 px-3 py-1 text-xs font-semibold">Remove message</button></form></div>)}{!selectedQabila.messages.length ? <p className="text-sm text-white/65">No visible discussion yet.</p> : null}</div>
+            <div className="space-y-3 rounded-2xl bg-[#102544] p-4 text-white">{selectedQabila.messages.map((message) => <div key={message.id} className="rounded-xl bg-white/10 p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{message.author.firstName} {message.author.lastName} <span className="text-xs font-normal text-white/55">({message.author.role})</span></strong><span className="text-xs text-white/55">{formatDate(message.createdAt)}</span></div><p className="mt-2 whitespace-pre-wrap text-white/80">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}<div className="mt-2 flex flex-wrap gap-2">{message.status === CommunityMessageStatus.VISIBLE ? <form action={adminFlagMessage}><input type="hidden" name="roomId" value={selectedQabila.id}/><input type="hidden" name="messageId" value={message.id}/><button className="rounded-full border border-[#f4b85f] px-3 py-1 text-xs font-semibold text-[#f4d08a]">Flag for review</button></form> : <span className="rounded-full bg-[#f4b85f] px-3 py-1 text-xs font-semibold text-[#102544]">Awaiting review</span>}<form action={adminDeleteMessage}><input type="hidden" name="roomId" value={selectedQabila.id}/><input type="hidden" name="messageId" value={message.id}/><button className="rounded-full border border-white/25 px-3 py-1 text-xs font-semibold">Remove message</button></form></div></div>)}{!selectedQabila.messages.length ? <p className="text-sm text-white/65">No visible discussion yet.</p> : null}</div>
           </div></> : <p className="rounded-2xl bg-[#fbf6ef] p-4 text-sm text-[#617184]">No active Qabila rooms yet.</p>}
         </section>
 

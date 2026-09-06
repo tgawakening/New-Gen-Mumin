@@ -353,7 +353,22 @@ async function ensureStudentClassRooms(student: {
   await ensureAnnouncementRoom(student.id);
 }
 
+async function releaseLegacyAutomaticallyFlaggedMessages() {
+  const reasons = BLOCK_PATTERNS.map((entry) => entry.label);
+  const legacy = await db.communityMessage.findMany({
+    where: { status: CommunityMessageStatus.FLAGGED, flagReason: { in: reasons } },
+    select: { id: true },
+    take: 500,
+  });
+  if (!legacy.length) return;
+  const ids = legacy.map((message) => message.id);
+  await db.$transaction([
+    db.moderationFlag.updateMany({ where: { messageId: { in: ids } }, data: { status: "REVIEWED", reviewedAt: new Date() } }),
+    db.communityMessage.updateMany({ where: { id: { in: ids } }, data: { status: CommunityMessageStatus.VISIBLE, flagReason: null } }),
+  ]);
+}
 export async function getStudentCommunityData(userId: string) {
+  await releaseLegacyAutomaticallyFlaggedMessages();
   const student = await db.studentProfile.findUnique({
     where: { userId },
     include: {
@@ -419,6 +434,7 @@ export async function getStudentCommunityData(userId: string) {
 }
 
 export async function getParentCommunityData(parentUserId: string, selectedChildId?: string) {
+  await releaseLegacyAutomaticallyFlaggedMessages();
   const parent = await db.parentProfile.findUnique({
     where: { userId: parentUserId },
     include: {
@@ -549,27 +565,10 @@ export async function postCommunityMessage(input: {
   const body = input.body.trim().slice(0, 800);
   if (!body) throw new Error("Message cannot be empty.");
 
-  const flagReason = detectFlagReason(body);
   const message = await db.communityMessage.create({
-    data: {
-      roomId: input.roomId,
-      authorUserId: input.userId,
-      body,
-      status: flagReason ? CommunityMessageStatus.FLAGGED : CommunityMessageStatus.VISIBLE,
-      flagReason,
-    },
+    data: { roomId: input.roomId, authorUserId: input.userId, body, status: CommunityMessageStatus.VISIBLE, flagReason: null },
   });
-
-  if (flagReason) {
-    await db.moderationFlag.create({
-      data: {
-        messageId: message.id,
-        reason: `Possible ${flagReason}`,
-      },
-    });
-  }
-
-  await notifyQabilaMessage({ messageId: message.id, flagged: Boolean(flagReason) });
+  await notifyQabilaMessage({ messageId: message.id, flagged: false });
   return message;
 }
 
@@ -614,20 +613,10 @@ export async function postTeacherCommunityMessage(input: { userId: string; roomI
   }
   const body = input.body.trim().slice(0, 800);
   if (!body) throw new Error("Message cannot be empty.");
-  const flagReason = detectFlagReason(body);
   const message = await db.communityMessage.create({
-    data: {
-      roomId: input.roomId,
-      authorUserId: input.userId,
-      body,
-      status: flagReason ? CommunityMessageStatus.FLAGGED : CommunityMessageStatus.VISIBLE,
-      flagReason,
-    },
+    data: { roomId: input.roomId, authorUserId: input.userId, body, status: CommunityMessageStatus.VISIBLE, flagReason: null },
   });
-  if (flagReason) {
-    await db.moderationFlag.create({ data: { messageId: message.id, reason: `Possible ${flagReason}` } });
-  }
-  await notifyQabilaMessage({ messageId: message.id, flagged: Boolean(flagReason) });
+  await notifyQabilaMessage({ messageId: message.id, flagged: false });
   return message;
 }
 
@@ -696,13 +685,11 @@ export async function editCommunityMessage(input: { actorUserId: string; message
   }
   const body = input.body.trim().slice(0, 800);
   if (!body) throw new Error("Message cannot be empty.");
-  const flagReason = detectFlagReason(body);
   const updated = await db.communityMessage.update({
     where: { id: message.id },
-    data: { body, flagReason, status: flagReason ? CommunityMessageStatus.FLAGGED : CommunityMessageStatus.VISIBLE },
+    data: { body, flagReason: null, status: CommunityMessageStatus.VISIBLE },
   });
-  if (flagReason) await db.moderationFlag.create({ data: { messageId: message.id, reason: `Possible ${flagReason} after edit` } });
-  await db.moderationAction.create({ data: { actorUserId: input.actorUserId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: "edit", note: "Author edited the message; safety checks were rerun." } });
+  await db.moderationAction.create({ data: { actorUserId: input.actorUserId, targetType: "COMMUNITY_MESSAGE", targetId: message.id, action: "edit", note: "Author edited the message." } });
   return updated;
 }
 
