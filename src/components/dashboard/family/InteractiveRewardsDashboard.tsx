@@ -98,7 +98,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
                 { icon: Star, value: data.total, label: "My points", tone: "text-[#db7a15] bg-[#fff0d9]" },
                 { icon: Trophy, value: data.level.title, label: "My rank", tone: "text-[#287b55] bg-[#e8f7ed]" },
                 { icon: Medal, value: earnedByKey.size, label: "Badges earned", tone: "text-[#704bc0] bg-[#f1eafe]" },
-                { icon: Users, value: data.collective, label: "House points", tone: "text-[#226da0] bg-[#e8f5ff]" },
+                { icon: Users, value: data.collective, label: "Qabila points", tone: "text-[#226da0] bg-[#e8f5ff]" },
               ].map(({ icon: Icon, value, label, tone }) => (
                 <div key={label} className="group rounded-[22px] border border-[#e9dfd0] bg-white/95 p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
                   <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tone}`}><Icon className="h-6 w-6" /></span>
@@ -111,9 +111,9 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
             <div className="mt-5 overflow-hidden rounded-[28px] bg-[#102544] p-5 text-white shadow-[0_18px_35px_rgba(16,37,68,0.25)]">
               <div className="flex flex-wrap items-end justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ffc96c]">My House points journey</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ffc96c]">My Qabila points journey</p>
                   <p className="mt-2 text-4xl font-black tabular-nums">{data.collective}<span className="text-lg font-semibold text-white/55"> / {unlockTarget}</span></p>
-                  <p className="mt-1 text-sm text-white/70">{data.nextUnlock ? `${nextPoints} points to unlock ${data.nextUnlock.title}` : "Every published House reward is unlocked!"}</p>
+                  <p className="mt-1 text-sm text-white/70">{data.nextUnlock ? `${nextPoints} points to unlock ${data.nextUnlock.title}` : "Every published Qabila reward is unlocked!"}</p>
                 </div>
                 <div className="flex h-20 w-24 items-center justify-center rounded-[24px] bg-gradient-to-br from-[#ffd16c] to-[#df7f18] text-[#102544] shadow-[0_0_28px_rgba(255,190,73,0.38)]">
                   {data.nextUnlock ? <LockKeyhole className="h-10 w-10" /> : <Trophy className="h-10 w-10" />}
@@ -134,7 +134,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
 
           <aside className="relative min-h-72 overflow-hidden rounded-[30px] border border-[#f0d6a9] bg-white/75 xl:min-h-0">
             <div className="absolute left-1/2 top-4 z-20 w-[84%] -translate-x-1/2 rounded-[22px] border border-[#f0bf66] bg-white px-4 py-3 text-center text-sm font-black leading-5 text-[#14233e] shadow-lg">
-              {data.nextUnlock ? <>Amazing! Only <span className="text-[#d67519]">{nextPoints} points</span> to our next House unlock!</> : <>Amazing! Your House unlocked every reward!</>}
+              {data.nextUnlock ? <>Amazing! Only <span className="text-[#d67519]">{nextPoints} points</span> to our next Qabila unlock!</> : <>Amazing! Your Qabila unlocked every reward!</>}
             </div>
             <Character data={data} className="absolute inset-x-0 bottom-0 h-[86%] w-full transition-transform duration-500 hover:scale-[1.035]" />
           </aside>
@@ -201,10 +201,10 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
           </section>
 
           <section className="rounded-[30px] bg-[#102544] p-5 text-white shadow-lg sm:p-6">
-            <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ffc96c]">House activity feed</p><h3 className="mt-2 text-xl font-black">Our House is growing</h3></div><Users className="h-9 w-9 text-[#ffc96c]" /></div>
+            <div className="flex items-center justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#ffc96c]">Qabila activity feed</p><h3 className="mt-2 text-xl font-black">Our Qabila is growing</h3></div><Users className="h-9 w-9 text-[#ffc96c]" /></div>
             <div className="mt-5 space-y-3">
-              {data.activity.slice(0, 6).map((event) => <div key={event.id} className="flex items-start gap-3 rounded-[18px] bg-white/10 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ffc96c] font-black text-[#102544]">{event.studentName.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="font-bold">{event.studentName}</p><p className="mt-1 text-xs leading-5 text-white/65">{event.reason}</p>{event.occurrenceCount > 1 ? <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-[#ffc96c]">{event.occurrenceCount} verified entries grouped</p> : null}</div><span className="shrink-0 font-black text-[#ffc96c]">+{event.points}</span></div>)}
-              {!data.activity.length ? <div className="rounded-[20px] bg-white/10 p-5 text-center"><BookOpen className="mx-auto h-8 w-8 text-[#ffc96c]" /><p className="mt-3 text-sm text-white/70">House contributions will celebrate here as soon as activities are verified.</p></div> : null}
+              {data.activity.slice(0, 6).map((event) => <div key={event.id} className="flex items-start gap-3 rounded-[18px] bg-white/10 p-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#ffc96c] font-black text-[#102544]">{event.studentName.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="font-bold">{event.studentName}</p><p className="mt-1 text-xs leading-5 text-white/65">{event.reason}</p>{event.occurrenceCount > 1 ? <p className="mt-1 text-[10px] font-bold uppercase tracking-wide text-[#ffc96c]">{event.reason.includes("Sunnah Tracker") ? `${event.occurrenceCount - 1} completed task${event.occurrenceCount === 2 ? "" : "s"} + daily submission` : `${event.occurrenceCount} verified entries grouped`}</p> : null}</div><span className="shrink-0 font-black text-[#ffc96c]">+{event.points}</span></div>)}
+              {!data.activity.length ? <div className="rounded-[20px] bg-white/10 p-5 text-center"><BookOpen className="mx-auto h-8 w-8 text-[#ffc96c]" /><p className="mt-3 text-sm text-white/70">Qabila contributions will celebrate here as soon as activities are verified.</p></div> : null}
             </div>
           </section>
         </div>
@@ -212,7 +212,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
 
       <section className="flex flex-col items-center justify-center gap-3 rounded-[26px] border border-[#efd4a8] bg-gradient-to-r from-[#fff9ef] via-white to-[#fff5e6] px-5 py-5 text-center sm:flex-row">
         <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#102544] text-[#ffc96c]"><Shield className="h-6 w-6" /></span>
-        <p className="text-base font-black text-[#172742]">Our Houses compete. Our people <span className="text-[#db731b]">cooperate.</span>{parentView ? " From my child to our children." : ""}</p>
+        <p className="text-base font-black text-[#172742]">Our Qabilas grow. Our people <span className="text-[#db731b]">cooperate.</span>{parentView ? " From my child to our children." : ""}</p>
       </section>
     </div>
   );

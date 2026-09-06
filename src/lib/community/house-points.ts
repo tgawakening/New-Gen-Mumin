@@ -275,7 +275,12 @@ export async function getRecentHousePointEvents(houseId: string, take = 8, qabil
     if (!featured.has(event.studentId)) featured.set(event.studentId, event);
     if (featured.size >= take) break;
   }
-  return [...featured.values()].map(({ studentId: _studentId, ...event }) => event);
+  return [...featured.values()].map((event) => ({
+    ...event,
+    reason: event.reason === "Completed the daily Sunnah Tracker" && event.occurrenceCount > 1
+      ? `Submitted the daily Sunnah Tracker and completed ${event.occurrenceCount - 1} task${event.occurrenceCount === 2 ? "" : "s"}`
+      : event.reason,
+  }));
 }
 export async function awardHousePointsForQuizAttempt(input: {
   attemptId: string;

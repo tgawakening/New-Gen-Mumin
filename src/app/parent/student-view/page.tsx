@@ -13,7 +13,6 @@ import {
   FamilyDashboardFrame,
   InfoList,
   SectionCard,
-  formatGrade,
   formatWeekday,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -182,7 +181,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
       />
       <GrowthRecognitionGuide />
 
-      <section className="overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
+      <section id="qabila-team" className="scroll-mt-6 overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
         <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             {qabila ? <Image src={qabila.image} alt={`${qabila.name} Qabila`} width={80} height={80} className="h-20 w-20 shrink-0 rounded-[24px] object-cover shadow-sm"/> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-[#eef2f7] text-2xl">?</span>}

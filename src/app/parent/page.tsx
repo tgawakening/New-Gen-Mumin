@@ -21,7 +21,6 @@ import {
   InfoList,
   MetricGrid,
   SectionCard,
-  formatGrade,
   formatWeekday,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
@@ -184,6 +183,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                 Open student dashboard
               </Link>
             ) : null}
+            {selectedChild ? <Link href={`/parent/student-view?child=${selectedChild.id}#qabila-team`} className="cursor-pointer rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f7fbff]">View Qabila members</Link> : null}
             <Link
               href="/parent?addChild=1"
               className="cursor-pointer rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"

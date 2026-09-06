@@ -1,5 +1,7 @@
 import "server-only";
 
+import { Prisma } from "@prisma/client";
+
 import { db } from "@/lib/db";
 import { awardHousePointsOnce } from "@/lib/community/point-awards";
 import { ensureStudentHouseMembership, getRecentHousePointEvents } from "@/lib/community/house-points";
@@ -10,7 +12,7 @@ export const RECOGNITION_LEVELS = [
   { key: "ROOKIE", title: "Rookie Mumin", min: 0 },
   { key: "RISING", title: "Rising Mumin", min: 200 },
   { key: "MUJAHID", title: "Mujahid of Good", min: 500 },
-  { key: "CHAMPION", title: "House Champion", min: 800 },
+  { key: "CHAMPION", title: "Qabila Champion", min: 800 },
   { key: "ELITE", title: "Mumin Elite", min: 1000 },
 ] as const;
 
@@ -23,17 +25,17 @@ export const CHARACTER_BADGES = [
   { key: "TRUTH_TELLER", title: "The Truth-Teller", category: "CHARACTER", description: "Practises honesty with courage and humility." },
   { key: "CONSISTENT", title: "The Consistent One", category: "CONSISTENCY", description: "Maintains a beneficial practice over time." },
   { key: "LEADER", title: "The Leader", category: "LEADERSHIP", description: "Helps other people succeed." },
-  { key: "HOUSE_BUILDER", title: "House Builder", category: "ALLIANCE", description: "Makes another House stronger through service." },
-  { key: "ALLIANCE_CHAMPION", title: "Alliance Champion", category: "ALLIANCE", description: "Demonstrates exceptional cross-House cooperation." },
+  { key: "HOUSE_BUILDER", title: "Qabila Builder", category: "ALLIANCE", description: "Makes another Qabila stronger through service." },
+  { key: "ALLIANCE_CHAMPION", title: "Alliance Champion", category: "ALLIANCE", description: "Demonstrates exceptional cross-Qabila cooperation." },
 ] as const;
 
 export const HOUSE_UNLOCKS = [
   { milestone: 100, title: "Mystery reward", description: "A small House surprise is ready." },
-  { milestone: 250, title: "House badge", description: "A shared House achievement badge is unlocked." },
-  { milestone: 500, title: "Special House challenge", description: "The House can enter a special team challenge." },
-  { milestone: 750, title: "Custom House poster", description: "A custom House poster is unlocked." },
-  { milestone: 1000, title: "House celebration", description: "The whole House has earned a celebration." },
-  { milestone: 2000, title: "Special experience", description: "A major shared House experience is unlocked." },
+  { milestone: 250, title: "Qabila badge", description: "A shared Qabila achievement badge is unlocked." },
+  { milestone: 500, title: "Special Qabila challenge", description: "The Qabila can enter a special team challenge." },
+  { milestone: 750, title: "Custom Qabila poster", description: "A custom House poster is unlocked." },
+  { milestone: 1000, title: "Qabila celebration", description: "The whole Qabila has earned a celebration." },
+  { milestone: 2000, title: "Special experience", description: "A major shared Qabila experience is unlocked." },
 ] as const;
 
 export function recognitionLevel(points: number) {
@@ -47,23 +49,27 @@ export async function awardRecognition(input: {
   const definition = CHARACTER_BADGES.find((badge) => badge.key === input.badgeKey);
   if (!definition) throw new Error("Choose an approved character badge.");
   const isCrossHouseBadge = ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key);
-  if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another House who benefited from this action.");
-  if (isCrossHouseBadge && input.beneficiaryStudentId) {
+  if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another Qabila who benefited from this action.");
+
+  let award;
+  try {
+    award = await db.recognitionAward.create({
+      data: { studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus ?? 0, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId },
+    });
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
+    if (!existing) throw error;
+    return existing;
   }
-  const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
-  if (existing?.revokedAt) return existing;
-  const award = await db.recognitionAward.upsert({
-    where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } },
-    create: { studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus ?? 0, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId },
-    update: { evidence: input.evidence, featuredWeek: input.featuredWeek },
-  });
+
   if ((input.pointsBonus ?? 0) > 0) await awardHousePointsOnce({ studentId: input.studentId, points: input.pointsBonus!, reason: definition.title + ": " + input.evidence, sourceType: "RECOGNITION_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
-  if (input.beneficiaryStudentId && ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key)) {
+  if (input.beneficiaryStudentId && isCrossHouseBadge) {
     const otherBonus = definition.key === "ALLIANCE_CHAMPION" ? 30 : 20;
-    await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another House helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
+    await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another Qabila helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   }
   const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, parents: { include: { parent: { include: { user: true } } } } } });
-  if (student && !existing) {
+  if (student) {
     const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
     const recipients = [
       { userId: student.userId, email: student.user.email, name: studentName, href: "/student/rewards" },
@@ -76,17 +82,23 @@ export async function awardRecognition(input: {
 }
 
 export async function syncAutomaticRecognition(studentId: string) {
-  const rows = await db.housePointLedger.findMany({ where: { studentId }, select: { sourceType: true, points: true, sourceId: true } });
-  const counts = new Map<string, number>();
-  for (const row of rows) counts.set(row.sourceType, (counts.get(row.sourceType) ?? 0) + 1);
+  const rows = await db.housePointLedger.findMany({
+    where: { studentId, points: { gt: 0 }, sourceType: { in: ["ATTENDANCE_ON_TIME", "SUNNAH_DAILY", "HOMEWORK_SUBMITTED"] } },
+    select: { sourceType: true, sourceId: true },
+  });
+  const uniqueSources = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const sources = uniqueSources.get(row.sourceType) ?? new Set<string>();
+    sources.add(row.sourceId ?? "");
+    uniqueSources.set(row.sourceType, sources);
+  }
   const rules = [
-    { badgeKey: "RELIABLE", met: (counts.get("ATTENDANCE_ON_TIME") ?? 0) >= 4, evidence: "Joined at least four live classes on time." },
-    { badgeKey: "CONSISTENT", met: (counts.get("SUNNAH_DAILY") ?? 0) >= 7, evidence: "Completed seven daily Sunnah tracker submissions." },
-    { badgeKey: "SEEKER", met: (counts.get("HOMEWORK_SUBMITTED") ?? 0) >= 3, evidence: "Submitted at least three learning assignments." },
+    { badgeKey: "RELIABLE", met: (uniqueSources.get("ATTENDANCE_ON_TIME")?.size ?? 0) >= 4, evidence: "Joined at least four live classes on time." },
+    { badgeKey: "CONSISTENT", met: (uniqueSources.get("SUNNAH_DAILY")?.size ?? 0) >= 7, evidence: "Completed seven daily Sunnah tracker submissions." },
+    { badgeKey: "SEEKER", met: (uniqueSources.get("HOMEWORK_SUBMITTED")?.size ?? 0) >= 3, evidence: "Submitted at least three learning assignments." },
   ];
   for (const rule of rules) if (rule.met) await awardRecognition({ studentId, badgeKey: rule.badgeKey, evidence: rule.evidence, sourceType: "AUTOMATIC", sourceId: rule.badgeKey });
 }
-
 export async function getRecognitionDashboard(studentId: string) {
   await syncAutomaticRecognition(studentId);
   const membership = await ensureStudentHouseMembership(studentId);

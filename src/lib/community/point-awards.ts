@@ -100,6 +100,15 @@ export async function awardHousePointsOnce(input: {
     });
   }
 
+  if (["ATTENDANCE_ON_TIME", "SUNNAH_DAILY", "HOMEWORK_SUBMITTED"].includes(input.sourceType)) {
+    try {
+      const { syncAutomaticRecognition } = await import("@/lib/community/recognition");
+      await syncAutomaticRecognition(input.studentId);
+    } catch (error) {
+      console.error("Automatic recognition sync failed after point award", error);
+    }
+  }
+
   return { awarded: true as const, ledger, house: membership.house };
 }
 

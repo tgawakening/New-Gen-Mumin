@@ -202,7 +202,7 @@ export default async function StudentDashboardPage() {
         }}
       />
       <GrowthRecognitionGuide />
-      <section className="overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
+      <section id="qabila-team" className="scroll-mt-6 overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
         <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-4">{qabila ? <Image src={qabila.image} alt={`${qabila.name} Qabila`} width={80} height={80} className="h-20 w-20 shrink-0 rounded-[24px] object-cover shadow-sm"/> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-[24px] bg-[#eef2f7] text-2xl">?</span>}<div><p className="text-xs font-semibold uppercase tracking-[0.2em]" style={{ color: qabila?.color ?? "#617184" }}>My Qabila</p><h2 className="mt-1 text-2xl font-semibold text-[#22304a]">{qabilaName}</h2><p className="mt-1 text-sm text-[#617184]">{qabila ? `${qabila.mentor} supervises this team. Your verified contribution is ${quest.studentTotal} points.` : "Your Qabila will appear here after assignment."}</p></div></div>
           {qabila ? <Link href="/student/community" className="shrink-0 rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Open Qabila chat</Link> : null}
