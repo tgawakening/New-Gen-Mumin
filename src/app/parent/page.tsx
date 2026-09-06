@@ -281,8 +281,8 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                 />
               </SectionCard>
 
-              <SectionCard eyebrow="Learning tasks" title="Quizzes, homework, and journal" icon="sparkles">
-                <div className={`grid gap-4 xl:grid-cols-3 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+              <SectionCard eyebrow="Learning tasks" title="Quizzes and homework" icon="sparkles">
+                <div className={`grid gap-4 xl:grid-cols-2 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
                   <InfoList
                     items={selectedChild.quizzes.slice(0, 4).map((quiz) =>
                       quiz.latestSubmittedAt
@@ -297,12 +297,6 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                         `${assignment.title} - ${assignment.status.replace(/_/g, " ")} - ${assignment.score ?? "Pending"} pts`,
                     )}
                     emptyLabel="Assignments will appear here."
-                  />
-                  <InfoList
-                    items={selectedChild.journals.slice(0, 4).map(
-                      (journal) => `${journal.template.weekLabel} - ${journal.practiceMinutes} min - ${formatGrade(journal.selfRating)}`,
-                    )}
-                    emptyLabel="Journal reflections will appear here."
                   />
                 </div>
               </SectionCard>
@@ -330,22 +324,6 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
             </div>
 
             <div className="space-y-6">
-              <SectionCard eyebrow="Weekly feedback" title="Parent check-in" icon="journal">
-                <div className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
-                  <p className="font-semibold text-[#22304a]">Review and support this week</p>
-                  <p className="mt-1 leading-6">
-                    See the student reflection, teacher comments, and progress trends before submitting parent feedback.
-                  </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Link href={`/parent/journal?child=${selectedChild.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
-                      Open journal
-                    </Link>
-                    <Link href={`/parent/progress?child=${selectedChild.id}`} className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
-                      View progress
-                    </Link>
-                  </div>
-                </div>
-              </SectionCard>
 
               <SectionCard eyebrow="Progress" title="Attendance and reports" icon="chart">
                 <CompactList

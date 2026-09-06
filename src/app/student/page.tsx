@@ -39,24 +39,8 @@ function buildStudentQuestStats(child: StudentChild) {
   const submittedAssignments = child.assignments.filter((assignment) =>
     ["SUBMITTED", "REVIEWED"].includes(assignment.status),
   ).length;
-  const earnedBadges = child.badges.filter((badge) => badge.status === "earned").length;
-  const journalCount = child.journals.length;
-  const totalQuizScore = child.quizzes.reduce((sum, quiz) => sum + (quiz.bestScore ?? quiz.latestScore ?? 0), 0);
-  const completedMissions = quizAttempts + submittedAssignments + journalCount;
-  const housePoints =
-    child.attendanceRate * 5 +
-    totalQuizScore * 4 +
-    submittedAssignments * 45 +
-    journalCount * 35 +
-    earnedBadges * 90;
-
-  return {
-    completedMissions,
-    earnedBadges,
-    housePoints,
-    level: Math.max(1, Math.floor(housePoints / 300) + 1),
-    streak: completedMissions > 0 ? Math.min(30, Math.max(1, journalCount + quizAttempts)) : 0,
-  };
+  const earnedBadges = new Set(child.badges.filter((badge) => badge.status === "earned").map((badge) => badge.title)).size;
+  return { quizAttempts, submittedAssignments, earnedBadges };
 }
 
 function buildDailyMission(child: StudentChild, persistentMission?: { title: string; description: string | null; questions: unknown[]; basePoints: number }) {
@@ -96,12 +80,12 @@ function buildDailyMission(child: StudentChild, persistentMission?: { title: str
   }
 
   return {
-    title: "Weekly reflection",
-    label: "Adab and growth check-in",
-    detail: "Log practice, confidence, and one character win",
-    href: "/student/journal/submit",
-    progress: child.journals.length ? 80 : 20,
-    action: "Submit reflection",
+    title: "Today's Sunnah Tracker",
+    label: "Daily Sunnah practice",
+    detail: "Open today's tracker and submit completed tasks once",
+    href: "/student/missions?type=sunnah",
+    progress: 0,
+    action: "Open tracker",
   };
 }
 
@@ -137,22 +121,16 @@ export default async function StudentDashboardPage() {
   const projectTask = child.assignments[0] ?? null;
   const classCircle = nextClassRoom ?? child.courses[0]?.roomAssignment ?? null;
   const dashboardMetrics = [
-    { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
-    { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
+        { label: "Quizzes completed", value: String(stats.quizAttempts), hint: "Actual submitted quiz attempts." },
+    { label: "Work submitted", value: String(stats.submittedAssignments), hint: "Assignments submitted or reviewed." },
     { label: "Qabila contribution", value: String(quest.studentTotal), hint: `${qabilaName} verified points.` },
     { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
   ];
-  const badgeItems = child.badges.length
-    ? child.badges.slice(0, 4).map((badge, index) => ({
-        label: badge.title,
-        meta: badge.status === "earned" ? "Earned badge" : "In progress",
-        tone: (["coral", "blue", "mint", "violet"] as const)[index % 4],
-      }))
-    : [
-        { label: "Mission Starter", meta: "Complete your first quest", tone: "coral" as const },
-        { label: "Circle Ready", meta: "Join supervised spaces", tone: "blue" as const },
-        { label: "Adab Builder", meta: "Reflect weekly", tone: "mint" as const },
-      ];
+  const badgeItems = child.badges.slice(0, 4).map((badge, index) => ({
+    label: badge.title,
+    meta: badge.status === "earned" ? "Earned badge" : "In progress",
+    tone: (["coral", "blue", "mint", "violet"] as const)[index % 4],
+  }));
   const announcements = notifications.length
     ? notifications
     : [
@@ -161,12 +139,6 @@ export default async function StudentDashboardPage() {
           title: "Safe community spaces",
           body: "Class circles stay supervised and age-aware. Mentor-led spaces will appear as your group opens.",
           href: "/student/schedule",
-        },
-        {
-          id: "weekly-feedback",
-          title: "Weekly feedback",
-          body: "Use your journal reflection to share progress, questions, and confidence for this week.",
-          href: "/student/journal/submit",
         },
       ];
 
@@ -209,7 +181,7 @@ export default async function StudentDashboardPage() {
         badges={badgeItems}
         actions={[
           { label: dailyMission.action, href: dailyMission.href },
-          { label: "Ask mentor", href: "/student/journal/submit", variant: "secondary" },
+          { label: "Ask mentor", href: "/student/feedback", variant: "secondary" },
         ]}
         nextClassLabel={
           child.nextClass
@@ -272,7 +244,7 @@ export default async function StudentDashboardPage() {
                 {dailyMission.action}
               </Link>
               <Link
-                href="/student/journal/submit"
+                href="/student/feedback"
                 className="rounded-full border border-white/15 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15"
               >
                 Ask mentor
@@ -446,19 +418,6 @@ export default async function StudentDashboardPage() {
             )}
           </SectionCard>
 
-          <SectionCard eyebrow="Weekly feedback" title="Reflection check-in" icon="journal">
-            <div className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
-              <p className="font-semibold text-[#22304a]">Share this week&apos;s progress</p>
-              <p className="mt-1 leading-6">Submit practice minutes, confidence, adab growth, and questions for your mentor.</p>
-              <Link
-                href="/student/journal/submit"
-                className="mt-4 inline-flex rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white"
-              >
-                Open feedback form
-              </Link>
-            </div>
-          </SectionCard>
-
           <SectionCard eyebrow="Profile" title="Learner details" icon="profile">
             <div className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#4d5a6b]">
               <p className="font-semibold text-[#22304a]">{child.profile.displayName}</p>
@@ -466,17 +425,6 @@ export default async function StudentDashboardPage() {
               <p className="mt-2">Timezone - {child.profile.timezone ?? "Europe/London"}</p>
               <p>Country - {child.profile.countryName ?? "Pending"}</p>
             </div>
-          </SectionCard>
-
-          <SectionCard eyebrow="Growth" title="Growth summary" icon="star">
-            <CompactList
-              items={[
-                { label: child.journalMonthlySummary.mostConsistentTrait, meta: "Trait", icon: "star" },
-                { label: child.journalMonthlySummary.strongestSkillArea, meta: "Skill", icon: "chart" },
-                { label: `${child.journalMonthlySummary.leadershipDevelopmentScore}/5`, meta: "Leadership", icon: "sparkles" },
-              ]}
-              emptyLabel="Growth summary will appear here."
-            />
           </SectionCard>
 
           <SectionCard eyebrow="Recognition" title="Badges" icon="trophy">

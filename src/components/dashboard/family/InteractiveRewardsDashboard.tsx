@@ -28,6 +28,13 @@ const badgeLooks = [
   "from-[#c69cff] to-[#6f46ba] text-white",
 ];
 
+const badgeCardLooks = [
+  "from-[#fff9e5] to-[#ffe9b8] border-[#f0cf82]",
+  "from-[#edfaf3] to-[#d2f1df] border-[#a5dabd]",
+  "from-[#eff5ff] to-[#dce9ff] border-[#adc8ef]",
+  "from-[#f7efff] to-[#e8d9ff] border-[#c9acec]",
+];
+
 function studentName(data: Data) {
   return data.student?.displayName
     || [data.student?.user.firstName, data.student?.user.lastName].filter(Boolean).join(" ")
@@ -50,9 +57,9 @@ function Character({ data, className = "" }: { data: Data; className?: string })
 }
 
 function BadgeMedallion({ index, earned }: { index: number; earned: boolean }) {
-  const Icon = [Star, HandHeart, Shield, Crown][index % 4];
+  const Icon = [Star, HandHeart, Shield, Crown, Sparkles, Award, Trophy, Users, BookOpen, Medal][index % 10];
   return (
-    <span className={`relative flex h-20 w-20 shrink-0 items-center justify-center rounded-[26px] border-4 border-white bg-gradient-to-br shadow-[0_10px_25px_rgba(34,48,74,0.2)] ${earned ? badgeLooks[index % badgeLooks.length] : "from-[#e8edf3] to-[#b9c4d1] text-white"}`}>
+    <span className={`relative flex h-20 w-20 shrink-0 items-center justify-center rounded-[26px] border-4 border-white bg-gradient-to-br shadow-[0_10px_25px_rgba(34,48,74,0.2)] ${badgeLooks[index % badgeLooks.length]} ${earned ? "scale-105" : "opacity-75 saturate-75"}`}>
       <Icon className="h-10 w-10" strokeWidth={2.2} />
       {earned ? <span className="absolute -bottom-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#2f8b59] text-white ring-4 ring-white"><Check className="h-4 w-4" /></span> : <span className="absolute -bottom-2 -right-2 flex h-7 w-7 items-center justify-center rounded-full bg-[#52647a] text-white ring-4 ring-white"><LockKeyhole className="h-3.5 w-3.5" /></span>}
     </span>
@@ -90,7 +97,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
               {[
                 { icon: Star, value: data.total, label: "My points", tone: "text-[#db7a15] bg-[#fff0d9]" },
                 { icon: Trophy, value: data.level.title, label: "My rank", tone: "text-[#287b55] bg-[#e8f7ed]" },
-                { icon: Medal, value: data.awards.length, label: "Badges earned", tone: "text-[#704bc0] bg-[#f1eafe]" },
+                { icon: Medal, value: earnedByKey.size, label: "Badges earned", tone: "text-[#704bc0] bg-[#f1eafe]" },
                 { icon: Users, value: data.collective, label: "House points", tone: "text-[#226da0] bg-[#e8f5ff]" },
               ].map(({ icon: Icon, value, label, tone }) => (
                 <div key={label} className="group rounded-[22px] border border-[#e9dfd0] bg-white/95 p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
@@ -142,7 +149,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
             <p className="mt-2 text-3xl font-black text-[#132342]">{name}</p>
             <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-[#e9f7ee] px-3 py-2 text-xs font-bold text-[#27734b]"><HandHeart className="h-4 w-4" />{featured?.category ?? "Character growth"}</div>
             <div className="mt-5 rounded-[20px] bg-[#fff7ed] p-4 text-sm font-medium leading-6 text-[#536174]">{spotlightEvidence}</div>
-            <p className="mt-4 text-xs font-semibold text-[#7c8795]">{featured ? "Teacher nominated ? not selected by points alone." : "Your earned recognition will appear here."}</p>
+            <p className="mt-4 text-xs font-semibold text-[#7c8795]">{featured ? "Teacher nominated — not selected by points alone." : "Your earned recognition will appear here."}</p>
           </div>
           <Character data={data} className="absolute -bottom-14 right-0 h-[105%] w-[45%]" />
         </div>
@@ -163,12 +170,12 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
 
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm sm:p-6">
-          <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#d2691e]">Collectible character badges</p><h3 className="mt-2 text-2xl font-black text-[#14233e]">What {name} is becoming</h3></div><span className="rounded-full bg-[#fff2de] px-3 py-2 text-xs font-bold text-[#b9651e]">{data.awards.length} earned</span></div>
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#d2691e]">Collectible character badges</p><h3 className="mt-2 text-2xl font-black text-[#14233e]">What {name} is becoming</h3></div><span className="rounded-full bg-[#fff2de] px-3 py-2 text-xs font-bold text-[#b9651e]">{earnedByKey.size} earned</span></div>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             {data.badgeDefinitions.map((badge, index) => {
               const award = earnedByKey.get(badge.key);
               return (
-                <article key={badge.key} className={`group flex gap-4 rounded-[24px] border p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg ${award ? "border-[#efd09b] bg-[#fff9ed]" : "border-[#e1e6ed] bg-[#f7f9fb]"}`}>
+                <article key={badge.key} className={`group flex gap-4 rounded-[24px] border p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg ${award ? "border-[#e4b75f] bg-gradient-to-br " + badgeCardLooks[index % badgeCardLooks.length] + " shadow-md" : "bg-gradient-to-br " + badgeCardLooks[index % badgeCardLooks.length] + " shadow-sm"}`}>
                   <BadgeMedallion index={index} earned={Boolean(award)} />
                   <div className="min-w-0">
                     <h4 className="font-black text-[#182743]">{badge.title}</h4>

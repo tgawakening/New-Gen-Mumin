@@ -44,24 +44,8 @@ function buildStudentStats(child: ParentChild) {
   const submittedAssignments = child.assignments.filter((assignment) =>
     ["SUBMITTED", "REVIEWED"].includes(assignment.status),
   ).length;
-  const earnedBadges = child.badges.filter((badge) => badge.status === "earned").length;
-  const journalCount = child.journals.length;
-  const totalQuizScore = child.quizzes.reduce((sum, quiz) => sum + (quiz.bestScore ?? quiz.latestScore ?? 0), 0);
-  const completedMissions = quizAttempts + submittedAssignments + journalCount;
-  const housePoints =
-    child.attendanceRate * 5 +
-    totalQuizScore * 4 +
-    submittedAssignments * 45 +
-    journalCount * 35 +
-    earnedBadges * 90;
-
-  return {
-    completedMissions,
-    earnedBadges,
-    housePoints,
-    level: Math.max(1, Math.floor(housePoints / 300) + 1),
-    streak: completedMissions > 0 ? Math.min(30, Math.max(1, journalCount + quizAttempts)) : 0,
-  };
+  const earnedBadges = new Set(child.badges.filter((badge) => badge.status === "earned").map((badge) => badge.title)).size;
+  return { quizAttempts, submittedAssignments, earnedBadges };
 }
 
 function buildDailyMission(child: ParentChild) {
@@ -86,10 +70,10 @@ function buildDailyMission(child: ParentChild) {
   }
 
   return {
-    title: "Weekly reflection",
-    label: "Adab and growth check-in",
-    detail: "Review practice, confidence, and character growth for this week",
-    progress: child.journals.length ? 80 : 20,
+    title: "Today's Sunnah Tracker",
+    label: "Daily Sunnah practice",
+    detail: "Review today's completed Sunnah tasks",
+    progress: 0,
   };
 }
 
@@ -120,22 +104,16 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
   const classCircle = currentCircle(selectedChild);
   const projectTask = selectedChild.assignments[0] ?? null;
   const dashboardMetrics = [
-    { label: "Daily streak", value: `${stats.streak} days`, hint: "Quiz, journal, and task activity." },
-    { label: "Level", value: `Level ${stats.level}`, hint: "Grows with missions, attendance, and badges." },
+    { label: "Quizzes completed", value: String(stats.quizAttempts), hint: "Actual submitted quiz attempts." },
+    { label: "Work submitted", value: String(stats.submittedAssignments), hint: "Assignments submitted or reviewed." },
     { label: "Qabila contribution", value: String(quest.studentTotal), hint: `${qabilaName} verified points.` },
     { label: "Attendance", value: `${selectedChild.attendanceRate}%`, hint: "Recent class presence." },
   ];
-  const badgeItems = selectedChild.badges.length
-    ? selectedChild.badges.slice(0, 4).map((badge, index) => ({
-        label: badge.title,
-        meta: badge.status === "earned" ? "Earned badge" : "In progress",
-        tone: (["coral", "blue", "mint", "violet"] as const)[index % 4],
-      }))
-    : [
-        { label: "Mission Starter", meta: "Complete the first quest", tone: "coral" as const },
-        { label: "Circle Ready", meta: "Mentor-supervised spaces", tone: "blue" as const },
-        { label: "Adab Builder", meta: "Weekly reflection", tone: "mint" as const },
-      ];
+  const badgeItems = selectedChild.badges.slice(0, 4).map((badge, index) => ({
+    label: badge.title,
+    meta: badge.status === "earned" ? "Earned badge" : "In progress",
+    tone: (["coral", "blue", "mint", "violet"] as const)[index % 4],
+  }));
 
   return (
     <FamilyDashboardFrame
@@ -265,7 +243,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
             </div>
             <div className="grid grid-cols-3 gap-2">
               {[
-                ["Missions", stats.completedMissions],
+                ["Quiz attempts", stats.quizAttempts],
                 ["Badges", stats.earnedBadges],
                 ["Courses", selectedChild.courses.length],
               ].map(([label, value]) => (
@@ -427,28 +405,6 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
               <p>Country - {selectedChild.profile.countryName ?? "Pending"}</p>
               <p>Age - {selectedChild.profile.age ?? "Pending"}</p>
             </div>
-          </SectionCard>
-
-          <SectionCard eyebrow="Growth" title="Growth summary" icon="star">
-            <CompactList
-              items={[
-                { label: selectedChild.journalMonthlySummary.mostConsistentTrait, meta: "Trait", icon: "star" },
-                { label: selectedChild.journalMonthlySummary.strongestSkillArea, meta: "Skill", icon: "chart" },
-                { label: `${selectedChild.journalMonthlySummary.leadershipDevelopmentScore}/5`, meta: "Leadership", icon: "sparkles" },
-              ]}
-              emptyLabel="Growth summary will appear here."
-            />
-          </SectionCard>
-
-          <SectionCard eyebrow="Journal" title="Recent reflections" icon="journal">
-            <CompactList
-              items={selectedChild.journals.slice(0, 4).map((journal) => ({
-                label: journal.template.weekLabel,
-                meta: `${journal.practiceMinutes} min - ${formatGrade(journal.selfRating)}`,
-                icon: "journal",
-              }))}
-              emptyLabel="Journal reflections will appear here."
-            />
           </SectionCard>
         </div>
       </div>
