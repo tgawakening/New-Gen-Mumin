@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
+import { GrowthRecognitionGuide } from "@/components/dashboard/family/GrowthRecognitionGuide";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { ParentCalendarSubscribeCard } from "@/components/calendar/ParentCalendarSubscribeCard";
@@ -206,6 +207,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
           basePath="/parent"
         />
 </SectionCard>
+      {selectedChild ? <GrowthRecognitionGuide /> : null}
 
       {selectedChild && activity ? (
         <>

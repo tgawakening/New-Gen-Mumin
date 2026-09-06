@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
+import { GrowthRecognitionGuide } from "@/components/dashboard/family/GrowthRecognitionGuide";
 import { redirect } from "next/navigation";
 
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
@@ -201,6 +202,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
           })),
         }}
       />
+      <GrowthRecognitionGuide />
 
       <section className="overflow-hidden rounded-[30px] border bg-white shadow-sm" style={{ borderColor: qabila?.color ?? "#d8e3ed" }}>
         <div className="flex flex-col gap-5 p-5 md:flex-row md:items-center md:justify-between">
