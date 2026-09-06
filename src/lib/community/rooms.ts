@@ -71,7 +71,7 @@ async function notifyQabilaMessage(input: { messageId: string; flagged: boolean 
     href: recipient.href,
   }));
   await db.notification.createMany({ data: notifications });
-  await Promise.allSettled([...recipients.values()].map((recipient) => sendQabilaMessageEmail({
+  if (input.flagged) await Promise.allSettled([...recipients.values()].map((recipient) => sendQabilaMessageEmail({
     toEmail: recipient.email,
     recipientName: `${recipient.firstName} ${recipient.lastName ?? ""}`.trim() || recipient.email,
     authorName,
@@ -515,7 +515,7 @@ export async function formatQabilaMessage(formData: FormData) {
   let context = "";
   if (replyToId) {
     const reply = await db.communityMessage.findFirst({ where: { id: replyToId, roomId, status: { not: CommunityMessageStatus.HIDDEN } }, include: { author: { select: { firstName: true, lastName: true } } } });
-    if (reply) context = `↪ Replying to ${`${reply.author.firstName} ${reply.author.lastName}`.trim()}: “${reply.body.replace(/\s+/g, " ").slice(0, 90)}${reply.body.length > 90 ? "…" : ""}”\n`;
+    if (reply) context = `\u21AA Replying to ${`${reply.author.firstName} ${reply.author.lastName}`.trim()}: \u201C${reply.body.replace(/\s+/g, " ").slice(0, 90)}${reply.body.length > 90 ? "\u2026" : ""}\u201D\n`;
   }
   return `${context}${mentionName ? `@${mentionName}\n` : ""}${body}`.slice(0, 800);
 }

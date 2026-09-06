@@ -5,7 +5,6 @@ import { MissionKind, MissionQuestionType, MissionStatus, Prisma } from "@prisma
 import { db } from "@/lib/db";
 import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
 import { uploadSunnahTrackerEvidence } from "@/lib/google-drive/materials";
-import { sendSunnahTrackerSubmittedEmail } from "@/lib/email/notifications";
 import { CANONICAL_HOUSES, ensureStudentHouseMembership, getCanonicalHouseIdsForHouseId, getHouseLeaderboard, getHouseTeamMembers } from "@/lib/community/house-points";
 
 const STARTER_MISSIONS = [
@@ -335,14 +334,6 @@ export async function submitMissionAttempt(input: {
         })),
       });
     }
-    await Promise.allSettled(teachers.map((teacher) => sendSunnahTrackerSubmittedEmail({
-      toEmail: teacher.user.email,
-      teacherName: `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim() || teacher.user.email,
-      studentName: input.studentName,
-      trackerTitle: mission.title,
-      pointsAwarded,
-      reviewPath: `/teacher/missions?submission=${attempt.id}`,
-    })));
   }
 
   return { score, pointsAwarded, evidenceCount: evidence.length };

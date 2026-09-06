@@ -7,6 +7,25 @@ type SendEmailInput = {
   html: string;
   template: string;
 };
+// Reserve the final daily sends for access, security, payment, and class-critical mail.
+const ESSENTIAL_TEMPLATES = new Set([
+  "accountCreationConfirmation",
+  "passwordReset",
+  "enrollmentConfirmation",
+  "scholarshipApproved",
+  "scholarshipRejected",
+  "dashboardUnlocked",
+  "liveClassStarted",
+  "teacherZoomMeetingApproved",
+  "studentTaskAssigned",
+  "monthlyPaymentReceipt",
+  "monthlyPaymentPending",
+  "monthlyPaymentReminder",
+  "monthlyPaymentActivated",
+]);
+const STANDARD_EMAIL_RESERVE_LIMIT = 85;
+let reservedStandardSends = 0;
+let reservationWindowStartedAt = Date.now();
 
 function getOptionalEmailConfig() {
   if (!env.success) return null;
@@ -33,6 +52,39 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     return { skipped: true as const };
   }
 
+  const essential = ESSENTIAL_TEMPLATES.has(input.template);
+  if (!essential) {
+    const now = Date.now();
+    if (now - reservationWindowStartedAt >= 24 * 60 * 60 * 1000) {
+      reservationWindowStartedAt = now;
+      reservedStandardSends = 0;
+    }
+    const [sentCount, duplicate] = await Promise.all([
+      db.emailLog.count({ where: { status: "SENT", createdAt: { gte: new Date(now - 24 * 60 * 60 * 1000) } } }),
+      db.emailLog.findFirst({
+        where: {
+          toEmail: input.toEmail,
+          template: input.template,
+          subject: input.subject,
+          status: "SENT",
+          createdAt: { gte: new Date(now - 10 * 60 * 1000) },
+        },
+        select: { id: true },
+      }),
+    ]);
+    const reason = duplicate
+      ? "Duplicate notification suppressed"
+      : sentCount + reservedStandardSends >= STANDARD_EMAIL_RESERVE_LIMIT
+        ? "Daily quota reserve protected"
+        : null;
+    if (reason) {
+      await db.emailLog.create({
+        data: { toEmail: input.toEmail, template: input.template, subject: input.subject, status: "SKIPPED", payload: { reason } },
+      });
+      return { skipped: true as const };
+    }
+    reservedStandardSends += 1;
+  }
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -61,6 +113,8 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
       sentAt: response.ok ? new Date() : null,
     },
   });
+
+  if (!essential) reservedStandardSends = Math.max(0, reservedStandardSends - 1);
 
   if (!response.ok) {
     return {
