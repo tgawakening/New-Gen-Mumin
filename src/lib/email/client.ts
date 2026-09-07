@@ -16,6 +16,7 @@ const ESSENTIAL_TEMPLATES = new Set([
   "scholarshipRejected",
   "dashboardUnlocked",
   "liveClassStarted",
+  "qabilaMention",
   "teacherZoomMeetingApproved",
   "studentTaskAssigned",
   "monthlyPaymentReceipt",

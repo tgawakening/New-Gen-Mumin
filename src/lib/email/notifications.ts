@@ -599,6 +599,30 @@ export async function sendQabilaMessageEmail(input: {
     }),
   });
 }
+export async function sendQabilaMentionEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  authorName: string;
+  qabilaName: string;
+  messagePath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: `${input.authorName} tagged you in Qabila chat`,
+    template: "qabilaMention",
+    html: renderGenMuminsEmailTemplate({
+      heading: "You were tagged in Qabila chat",
+      preview: `${input.authorName} mentioned you in ${input.qabilaName}.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.authorName} tagged you in the ${input.qabilaName} discussion.`,
+      sections: [
+        { label: "Qabila", value: input.qabilaName },
+        { label: "Tagged by", value: input.authorName },
+        { label: "Next step", value: "Open the conversation to read the message and reply." },
+      ],
+      callToAction: { label: "Open tagged message", href: resolveHref(input.messagePath) },
+    }),
+  });
+}
 export async function sendStudentTaskAssignedEmail(input: {
   toEmail: string;
   recipientName: string;

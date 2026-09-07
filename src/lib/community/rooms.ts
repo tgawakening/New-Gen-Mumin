@@ -4,7 +4,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } fr
 
 import { db } from "@/lib/db";
 import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
-import { sendQabilaMessageEmail } from "@/lib/email/notifications";
+import { sendQabilaMentionEmail, sendQabilaMessageEmail } from "@/lib/email/notifications";
 import { uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
 
 const BLOCK_PATTERNS = [
@@ -19,7 +19,7 @@ function detectFlagReason(body: string) {
   return match?.label ?? null;
 }
 
-async function notifyQabilaMessage(input: { messageId: string; flagged: boolean }) {
+async function notifyQabilaMessage(input: { messageId: string; flagged: boolean; mentionedUserId?: string | null }) {
   const message = await db.communityMessage.findUnique({
     where: { id: input.messageId },
     include: {
@@ -71,6 +71,27 @@ async function notifyQabilaMessage(input: { messageId: string; flagged: boolean 
     href: recipient.href,
   }));
   await db.notification.createMany({ data: notifications });
+  if (!input.flagged && input.mentionedUserId && input.mentionedUserId !== message.authorUserId) {
+    const member = message.room.memberships.find((entry) => entry.student.userId === input.mentionedUserId);
+    const supervisor = message.room.supervisors.find((entry) => entry.userId === input.mentionedUserId);
+    const taggedUser = member?.student.user ?? supervisor?.user ?? null;
+    if (taggedUser) {
+      const parentRecipient = member?.student.parents.map((relation) => relation.parent.user).find((user) => !user.email.toLowerCase().endsWith("@genmumin.local"));
+      const emailRecipient = !taggedUser.email.toLowerCase().endsWith("@genmumin.local") ? taggedUser : parentRecipient;
+      if (emailRecipient) {
+        const directPath = member
+          ? (emailRecipient.id === taggedUser.id ? `/student/community?room=${message.room.id}#message-${message.id}` : `/parent/community?child=${member.student.id}&room=${message.room.id}&mode=child#message-${message.id}`)
+          : `/teacher/community?room=${message.room.id}#message-${message.id}`;
+        await sendQabilaMentionEmail({
+          toEmail: emailRecipient.email,
+          recipientName: `${emailRecipient.firstName} ${emailRecipient.lastName ?? ""}`.trim() || emailRecipient.email,
+          authorName,
+          qabilaName: message.room.title,
+          messagePath: directPath,
+        });
+      }
+    }
+  }
   if (input.flagged) await Promise.allSettled([...recipients.values()].map((recipient) => sendQabilaMessageEmail({
     toEmail: recipient.email,
     recipientName: `${recipient.firstName} ${recipient.lastName ?? ""}`.trim() || recipient.email,
@@ -526,19 +547,19 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
 export async function formatQabilaMessage(formData: FormData) {
   const roomId = String(formData.get("roomId") || "");
   const body = String(formData.get("body") || "").trim();
-  const mentionName = String(formData.get("mentionName") || "").trim().replace(/[^a-zA-Z0-9 '\-]/g, "").slice(0, 80);
   const replyToId = String(formData.get("replyToId") || "");
   let context = "";
   if (replyToId) {
     const reply = await db.communityMessage.findFirst({ where: { id: replyToId, roomId, status: { not: CommunityMessageStatus.HIDDEN } }, include: { author: { select: { firstName: true, lastName: true } } } });
     if (reply) context = `\u21AA Replying to ${`${reply.author.firstName} ${reply.author.lastName}`.trim()}: \u201C${reply.body.replace(/\s+/g, " ").slice(0, 90)}${reply.body.length > 90 ? "\u2026" : ""}\u201D\n`;
   }
-  return `${context}${mentionName ? `@${mentionName}\n` : ""}${body}`.slice(0, 800);
+  return `${context}${body}`.slice(0, 800);
 }
 export async function postCommunityMessage(input: {
   userId: string;
   roomId: string;
   body: string;
+  mentionedUserId?: string | null;
 }) {
   const student = await db.studentProfile.findUnique({ where: { userId: input.userId } });
   if (!student) throw new Error("Student profile not found.");
@@ -568,7 +589,7 @@ export async function postCommunityMessage(input: {
   const message = await db.communityMessage.create({
     data: { roomId: input.roomId, authorUserId: input.userId, body, status: CommunityMessageStatus.VISIBLE, flagReason: null },
   });
-  await notifyQabilaMessage({ messageId: message.id, flagged: false });
+  await notifyQabilaMessage({ messageId: message.id, flagged: false, mentionedUserId: input.mentionedUserId });
   return message;
 }
 
@@ -577,13 +598,14 @@ export async function postParentSupervisedCommunityMessage(input: {
   studentId: string;
   roomId: string;
   body: string;
+  mentionedUserId?: string | null;
 }) {
   const relation = await db.parentStudent.findFirst({
     where: { studentId: input.studentId, parent: { userId: input.parentUserId } },
     include: { student: { select: { userId: true } } },
   });
   if (!relation) throw new Error("This learner is not linked to your parent account.");
-  return postCommunityMessage({ userId: relation.student.userId, roomId: input.roomId, body: input.body });
+  return postCommunityMessage({ userId: relation.student.userId, roomId: input.roomId, body: input.body, mentionedUserId: input.mentionedUserId });
 }
 async function resolveParentSupervisedStudentUser(parentUserId: string, studentId: string) {
   const relation = await db.parentStudent.findFirst({
@@ -603,7 +625,7 @@ export async function deleteParentSupervisedCommunityMessage(input: { parentUser
   const studentUserId = await resolveParentSupervisedStudentUser(input.parentUserId, input.studentId);
   return deleteCommunityMessage({ actorUserId: studentUserId, messageId: input.messageId });
 }
-export async function postTeacherCommunityMessage(input: { userId: string; roomId: string; body: string }) {
+export async function postTeacherCommunityMessage(input: { userId: string; roomId: string; body: string; mentionedUserId?: string | null }) {
   const supervision = await db.communityRoomSupervisor.findUnique({
     where: { roomId_userId: { roomId: input.roomId, userId: input.userId } },
     include: { room: true, user: { select: { role: true } } },
@@ -616,7 +638,7 @@ export async function postTeacherCommunityMessage(input: { userId: string; roomI
   const message = await db.communityMessage.create({
     data: { roomId: input.roomId, authorUserId: input.userId, body, status: CommunityMessageStatus.VISIBLE, flagReason: null },
   });
-  await notifyQabilaMessage({ messageId: message.id, flagged: false });
+  await notifyQabilaMessage({ messageId: message.id, flagged: false, mentionedUserId: input.mentionedUserId });
   return message;
 }
 

@@ -67,6 +67,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
         userId: currentSession.user.id,
         roomId,
         body: await formatQabilaMessage(formData),
+        mentionedUserId: String(formData.get("mentionedUserId") || "") || null,
       });
 
       revalidatePath("/student/community");
@@ -210,7 +211,7 @@ export default async function StudentCommunityPage({ searchParams }: PageProps) 
 
                 <div className="space-y-3">
                   {[...membership.room.messages].reverse().map((message) => (
-                    <div key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
+                    <div id={`message-${message.id}`} key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-semibold text-[#22304a]">{displayName(message.author)} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-[#9a651f]">{message.author.role === "TEACHER" ? "Teacher announcement" : membership.room.memberships.find((member)=>member.student.userId===message.author.id)?.role?.replace("_", " ") || "Member"}</span></p>
                         <div className="flex items-center gap-1"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${message.status === "FLAGGED" ? "bg-[#fff7eb] text-[#8a6326]" : "bg-white text-[#2f6b4b]"}`}>{message.status === "FLAGGED" ? "Mentor review" : "Visible"}</span><details className="relative"><summary className="cursor-pointer list-none rounded-full px-2 text-lg font-bold text-[#617184]" aria-label="Message options">⋯</summary><div className="absolute right-0 z-20 min-w-32 rounded-xl border border-[#d8e3ed] bg-white p-1 shadow-lg"><Link href={`/student/community?reply=${message.id}#qabila-composer`} className="block rounded-lg px-3 py-2 text-xs font-semibold text-[#22304a] hover:bg-[#f3f6f9]">↩ Reply{message.author.id===session.user.id?" to yourself":""}</Link>{message.author.id===session.user.id&&Date.now()-message.createdAt.getTime()<=60*60*1000?<form action={manageMessage} className="border-t border-[#e5ebf0] p-1"><input type="hidden" name="messageId" value={message.id}/><textarea name="body" defaultValue={message.body} required maxLength={800} rows={2} className="mt-1 w-56 rounded-lg border border-[#d8e3ed] px-2 py-1 text-xs"/><div className="mt-1 flex gap-1"><button name="intent" value="edit" className="rounded-lg bg-[#0f4d81] px-2 py-1 text-xs text-white">Edit</button><button name="intent" value="delete" formNoValidate className="rounded-lg px-2 py-1 text-xs text-[#b24646]">Delete</button></div></form>:null}</div></details></div>
