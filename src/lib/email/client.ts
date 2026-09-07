@@ -18,7 +18,8 @@ const ESSENTIAL_TEMPLATES = new Set([
   "liveClassStarted",
   "qabilaMention",
   "teacherZoomMeetingApproved",
-  "studentTaskAssigned",\n  "sunnahTrackerPublished",
+  "studentTaskAssigned",
+  "sunnahTrackerPublished",
   "monthlyPaymentReceipt",
   "monthlyPaymentPending",
   "monthlyPaymentReminder",
@@ -127,4 +128,3 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
 
   return { skipped: false as const, failed: false as const };
 }
-\n  "studentTaskAssigned",\n  "sunnahTrackerPublished",

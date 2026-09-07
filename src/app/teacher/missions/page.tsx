@@ -161,8 +161,8 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
     const motivationSource = String(formData.get("motivationSource") || "").trim();
     const taskPrompts = formData.getAll("taskPrompt").map(String);
     const taskIcons = formData.getAll("taskIcon").map(String);
-    const validIconKeys = new Set(SUNNAH_TASK_ICONS.map((icon) => icon.key));
-    const tasks = taskPrompts.map((prompt, index) => ({ prompt: prompt.trim(), iconKey: validIconKeys.has(taskIcons[index]) ? taskIcons[index] : SUNNAH_TASK_ICONS[0].key })).filter((task) => task.prompt);
+    const validIconKeys = new Set<string>(SUNNAH_TASK_ICONS.map((icon) => icon.key));
+    const tasks = taskPrompts.map((prompt, index) => ({ prompt: prompt.trim(), iconKey: validIconKeys.has(taskIcons[index] as (typeof SUNNAH_TASK_ICONS)[number]["key"]) ? taskIcons[index] : SUNNAH_TASK_ICONS[0].key })).filter((task) => task.prompt);
     if (!tasks.length) throw new Error("Add at least one Sunnah task.");
     const taskPoints = 10;
     const basePoints = 5;

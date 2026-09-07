@@ -52,11 +52,11 @@ export function buildSunnahTrackerDescription(
   motivationText?: string | null,
   motivationSource?: string | null,
 ) {
-  return \`\${SUNNAH_TRACKER_PREFIX}\${JSON.stringify({
+  return `${SUNNAH_TRACKER_PREFIX}${JSON.stringify({
     description: description?.trim() || null,
     motivationText: motivationText?.trim() || null,
     motivationSource: motivationSource?.trim() || null,
-  })}\`;
+  })}`;
 }
 
 export function parseSunnahTrackerDescription(description?: string | null) {
@@ -354,4 +354,3 @@ export async function submitMissionAttempt(input: {
 
   return { score, pointsAwarded, evidenceCount: evidence.length };
 }
-\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n  return `${SUNNAH_TRACKER_PREFIX}${JSON.stringify({\n\n\n\n  })}`;
