@@ -66,7 +66,7 @@ export function FardhTrackerBoard({ days, today, start, records, action, locked 
               return <label key={prayer.key} className={`relative flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r p-3 text-white ${colors[prayer.key]} ${disabled && !done ? "cursor-not-allowed" : "cursor-pointer"} ${done ? "ring-2 ring-emerald-300" : "shadow-sm"}`}>
                 <input aria-label={`Mark ${prayer.label} complete for ${prettyDay(day)}`} name="prayer" value={prayer.key} type="checkbox" defaultChecked={done} disabled={disabled} className="peer sr-only"/>
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20">{prayer.icon}</span>
-                <span className="min-w-0 flex-1"><span className="block text-sm font-black">{prayer.label}</span><span className="block text-[10px] text-white/85">+{prayer.points} points - {done ? "Completed" : future ? "Locked" : "Tap to mark"}</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-black">{prayer.label}</span><span className="block text-[10px] text-white/85">{done ? "Completed" : future ? "Locked" : "Tap to mark complete"}</span></span>
                 <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 border-white bg-white/10 text-emerald-700 transition peer-checked:bg-white peer-checked:[&>svg]:opacity-100"><Check className="h-5 w-5 opacity-0 transition"/></span>
               </label>;
             })}
