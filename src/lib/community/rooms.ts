@@ -5,7 +5,7 @@ import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } fr
 import { db } from "@/lib/db";
 import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
 import { sendQabilaMentionEmail, sendQabilaMessageEmail } from "@/lib/email/notifications";
-import { uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
+import { uploadCommunityDiscussionFile, uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
 
 const BLOCK_PATTERNS = [
   { label: "phone number", pattern: /(?:\+?\d[\s-]?){8,}/ },
@@ -648,10 +648,11 @@ export async function postCommunityVoiceMessage(input: {
   studentId?: string | null;
   file: File;
   durationSeconds?: number | null;
+  attachment?: boolean;
 }) {
   const [actor, room] = await Promise.all([
     db.user.findUnique({ where: { id: input.actorUserId }, select: { role: true, studentProfile: { select: { id: true } } } }),
-    db.communityRoom.findUnique({ where: { id: input.roomId }, select: { id: true, type: true, isActive: true, isReadOnly: true } }),
+    db.communityRoom.findUnique({ where: { id: input.roomId }, select: { id: true, title: true, type: true, isActive: true, isReadOnly: true } }),
   ]);
   if (!actor || !room?.isActive || room.isReadOnly || room.type !== CommunityRoomType.PROJECT_TEAM) throw new Error("This Qabila voice chat is not available.");
 
@@ -679,16 +680,18 @@ export async function postCommunityVoiceMessage(input: {
     throw new Error("You cannot post in this Qabila room.");
   }
 
-  const uploaded = await uploadCommunityVoiceFile({ roomId: room.id, file: input.file });
+  const uploaded = input.attachment
+    ? await uploadCommunityDiscussionFile({ roomId: room.id, roomTitle: room.title, contributorId: memberStudentId || authorUserId, file: input.file })
+    : await uploadCommunityVoiceFile({ roomId: room.id, file: input.file });
   const message = await db.communityMessage.create({
     data: {
       roomId: room.id,
       authorUserId,
-      body: "Voice message",
+      body: input.attachment ? ("name" in uploaded ? String(uploaded.name) : input.file.name) : "Voice message",
       status: CommunityMessageStatus.VISIBLE,
       audioDriveFileId: uploaded.id,
       audioMimeType: uploaded.mimeType,
-      audioDurationSeconds: input.durationSeconds ? Math.min(60, Math.max(1, Math.round(input.durationSeconds))) : null,
+      audioDurationSeconds: !input.attachment && input.durationSeconds ? Math.min(60, Math.max(1, Math.round(input.durationSeconds))) : null,
     },
   });
   await notifyQabilaMessage({ messageId: message.id, flagged: false });

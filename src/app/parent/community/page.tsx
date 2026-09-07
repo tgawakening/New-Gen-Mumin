@@ -17,6 +17,8 @@ import {
   SectionCard,
   formatDate,
 } from "@/components/dashboard/family/FamilyDashboardFrame";
+import { CommunityMessageMedia } from "@/components/community/CommunityMessageMedia";
+import { QabilaChatEnhancer } from "@/components/community/QabilaChatEnhancer";
 
 type PageProps = {
   searchParams?: Promise<{ child?: string; section?: string; room?: string; mode?: string; posted?: string; error?: string; reply?: string }>;
@@ -146,17 +148,20 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
                   </div>
                 ))}
 
+                <div className="max-h-[620px] space-y-3 overflow-y-auto overscroll-contain scroll-smooth p-1">
+                <QabilaChatEnhancer />
                 {[...membership.room.messages].reverse().map((message) => (
-                  <div id={`message-${message.id}`} key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
+                  <div data-reply-href={"/parent/community?child=" + selectedChildId + "&room=" + membership.room.id + "&reply=" + message.id + "#qabila-composer"} id={`message-${message.id}`} key={message.id} className={`rounded-[18px] border p-4 text-sm ${message.author.role === "TEACHER" ? "border-[#efbd68] bg-[#fff4d8] shadow-sm" : "border-transparent bg-[#fbf6ef]"}`}>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-semibold text-[#22304a]">{authorName(message.author)} <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[10px] font-bold uppercase text-[#9a651f]">{message.author.role === "TEACHER" ? "Teacher announcement" : membership.room.memberships.find((member)=>member.student.userId===message.author.id)?.role?.replace("_", " ") || "Member"}</span></p>
                       <div className="flex items-center gap-1"><span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#2f6b4b]">Visible</span><details className="relative"><summary className="cursor-pointer list-none rounded-full px-2 text-lg font-bold text-[#617184]" aria-label="Message options">⋯</summary><div className="absolute right-0 z-20 min-w-32 rounded-xl border border-[#d8e3ed] bg-white p-1 shadow-lg"><Link href={`/parent/community?child=${selectedChildId}&room=${membership.room.id}&reply=${message.id}#qabila-composer`} className="block rounded-lg px-3 py-2 text-xs font-semibold text-[#22304a] hover:bg-[#f3f6f9]">↩ Reply{message.author.id===community.selectedChild?.userId?" to yourself":""}</Link>{message.author.id===community.selectedChild?.userId&&Date.now()-message.createdAt.getTime()<=60*60*1000?<form action={manageAsChild} className="border-t border-[#e5ebf0] p-1"><input type="hidden" name="studentId" value={selectedChildId}/><input type="hidden" name="messageId" value={message.id}/><textarea name="body" defaultValue={message.body} required maxLength={800} rows={2} className="mt-1 w-56 rounded-lg border border-[#d8e3ed] px-2 py-1 text-xs"/><div className="mt-1 flex gap-1"><button name="intent" value="edit" className="rounded-lg bg-[#0f4d81] px-2 py-1 text-xs text-white">Edit</button><button name="intent" value="delete" formNoValidate className="rounded-lg px-2 py-1 text-xs text-[#b24646]">Delete</button></div></form>:null}</div></details></div>
                     </div>
-                    <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p>{message.audioDriveFileId ? <audio controls preload="metadata" src={`/api/community/voice/${message.id}`} className="mt-2 h-10 w-full"/> : null}
+                    <p className="mt-2 whitespace-pre-wrap leading-6 text-[#4d5a6b]">{message.body}</p><CommunityMessageMedia message={message} />
                     <p className="mt-2 text-xs text-[#6d7785]">{formatDate(message.createdAt)}</p>
 
                   </div>
                 ))}
+                </div>
                 {!membership.room.messages.length ? (
                   <p className="rounded-2xl bg-[#fbf6ef] px-4 py-4 text-sm leading-7 text-[#6b7482]">
                     No visible room messages yet.

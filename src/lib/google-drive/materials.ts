@@ -202,6 +202,26 @@ export async function uploadCommunityVoiceFile(input: { roomId: string; file: Fi
   });
   return { id: uploaded.id, mimeType: uploaded.mimeType || input.file.type };
 }
+export async function uploadCommunityDiscussionFile(input: {
+  roomId: string;
+  roomTitle: string;
+  contributorId: string;
+  file: File;
+}) {
+  const mimeType = input.file.type.toLowerCase() || "application/octet-stream";
+  const allowed = mimeType.startsWith("image/") || mimeType.startsWith("video/") || mimeType === "application/pdf" || mimeType.startsWith("text/");
+  if (!allowed) throw new Error("Choose an image, video, PDF, or text document.");
+  const limit = mimeType.startsWith("video/") ? 25 * 1024 * 1024 : 10 * 1024 * 1024;
+  if (input.file.size <= 0 || input.file.size > limit) throw new Error(mimeType.startsWith("video/") ? "Videos must be smaller than 25 MB." : "Attachments must be smaller than 10 MB.");
+  const rootFolderId = getDriveRootFolderId();
+  const communityFolderId = await ensureChildFolder(rootFolderId, "Gen-M community");
+  const discussionsFolderId = await ensureChildFolder(communityFolderId, "Discussions");
+  const roomFolderId = await ensureChildFolder(discussionsFolderId, input.roomTitle);
+  const contributorFolderId = await ensureChildFolder(roomFolderId, input.contributorId);
+  const safeName = input.file.name.replace(/[^a-zA-Z0-9._ -]+/g, "-").slice(-120) || "shared-file";
+  const uploaded = await uploadFileToFolder({ folderId: contributorFolderId, file: input.file, name: Date.now() + "-" + safeName, appProperties: { genMumin: "qabila-discussion", roomId: input.roomId, contributorId: input.contributorId } });
+  return { id: uploaded.id, mimeType: uploaded.mimeType || mimeType, name: safeName };
+}
 async function uploadBufferToFolder(input: {
   folderId: string;
   buffer: Buffer;
