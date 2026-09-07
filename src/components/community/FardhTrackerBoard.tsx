@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Check, LockKeyhole, MoonStar, Sparkles } from "lucide-react";
 
@@ -25,14 +26,22 @@ export function FardhTrackerBoard({ days, today, start, records, action, locked 
   };
 
   return <div className="space-y-5">
-    <section className="overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_top,#274d78_0%,#13233d_48%,#081426_100%)] p-5 text-white shadow-xl sm:p-7">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="max-w-3xl">
-          <div className="flex items-center gap-2 text-amber-300"><MoonStar className="h-6 w-6"/><span className="text-xs font-bold uppercase tracking-[0.24em]">My weekly Fardh tracker</span></div>
+    <section className="relative overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_top,#274d78_0%,#13233d_48%,#081426_100%)] p-5 text-white shadow-xl sm:p-7 md:min-h-[290px]">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden md:block">
+        <Image src="/images/fardh/fardh-boy.png" alt="" width={420} height={630} className="absolute -bottom-20 -left-8 h-[300px] w-auto object-contain lg:-left-2 lg:h-[340px]" priority />
+        <Image src="/images/fardh/fardh-girl.png" alt="" width={420} height={630} className="absolute -bottom-20 -right-8 h-[300px] w-auto object-contain lg:-right-2 lg:h-[340px]" priority />
+      </div>
+      <div className="relative z-10 mx-auto flex max-w-3xl flex-col gap-5 text-center md:px-24 lg:px-16">
+        <div>
+          <div className="flex items-center justify-center gap-2 text-amber-300"><MoonStar className="h-6 w-6"/><span className="text-xs font-bold uppercase tracking-[0.24em]">My weekly Fardh tracker</span></div>
           <h2 className="mt-3 text-3xl font-black sm:text-4xl">Five prayers. A stronger you.</h2>
           <p className="mt-3 leading-7 text-slate-200">&ldquo;The first deed for which a person will be brought to account on the Day of Resurrection will be his prayer.&rdquo; <span className="text-amber-300">Jami at-Tirmidhi 413</span></p>
         </div>
-        <div className="rounded-3xl border border-amber-300/30 bg-white/10 p-4 text-sm leading-6"><p className="font-bold text-amber-300">Chase your ajr - not points.</p><p className="text-slate-200">Points celebrate sincerity and consistency; salah brings us closer to Allah.</p></div>
+        <div className="mx-auto max-w-xl rounded-3xl border border-amber-300/30 bg-[#10213b]/85 p-4 text-sm leading-6 backdrop-blur-sm"><p className="font-bold text-amber-300">Chase your ajr - not points.</p><p className="text-slate-200">Points celebrate sincerity and consistency; salah brings us closer to Allah.</p></div>
+      </div>
+      <div aria-hidden="true" className="mt-3 flex h-28 items-end justify-between overflow-hidden md:hidden">
+        <Image src="/images/fardh/fardh-boy.png" alt="" width={420} height={630} className="h-36 w-auto object-contain" />
+        <Image src="/images/fardh/fardh-girl.png" alt="" width={420} height={630} className="h-36 w-auto object-contain" />
       </div>
     </section>
 
