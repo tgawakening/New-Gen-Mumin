@@ -1,6 +1,6 @@
 import Image from "next/image";
 
-import { sunnahTaskIcon } from "@/lib/community/sunnah-icons";
+import { sunnahTaskIcon, sunnahTaskLabel } from "@/lib/community/sunnah-icons";
 
 export function SunnahTaskChecklistItem({ question }: { question: { id: string; prompt: string; meta: unknown } }) {
   const icon = sunnahTaskIcon(question.meta, question.prompt);
@@ -12,7 +12,7 @@ export function SunnahTaskChecklistItem({ question }: { question: { id: string; 
         <Image src={icon.src} alt="" width={92} height={92} className="h-full w-full object-contain" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-base font-bold leading-6 text-[#172744]">{question.prompt}</span>
+        <span className="block text-base font-bold leading-6 text-[#172744]">{sunnahTaskLabel(question.prompt)}</span>
         <span className="mt-1 block text-xs font-semibold uppercase tracking-[0.13em] text-[#617087]">Tap when completed</span>
       </span>
       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full border-2 border-[#b9c8da] bg-white text-transparent transition peer-checked:border-emerald-500 peer-checked:bg-emerald-500 peer-checked:text-white">✓</span>

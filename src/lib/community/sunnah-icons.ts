@@ -16,7 +16,7 @@ export const DEFAULT_SUNNAH_TASKS = [
   { prompt: "Wash your dishes after eating", iconKey: "wash-dishes" },
   { prompt: "Before eating, check everyone is included and serve others first", iconKey: "serve-others" },
   { prompt: "Make someone smile through kindness", iconKey: "make-smile" },
-  { prompt: "Reflect with gratitude before going to bed", iconKey: "bedtime-reflection" },
+  { prompt: "Nighttime Adhkar & Contemplation", iconKey: "bedtime-reflection" },
 ] satisfies Array<{ prompt: string; iconKey: SunnahTaskIconKey }>;
 
 export function sunnahTaskIcon(meta: unknown, prompt = "") {
@@ -30,4 +30,7 @@ export function sunnahTaskIcon(meta: unknown, prompt = "") {
   if (value.includes("food") || value.includes("eat") || value.includes("serve")) return SUNNAH_TASK_ICONS[4];
   if (value.includes("smile") || value.includes("kind")) return SUNNAH_TASK_ICONS[5];
   return SUNNAH_TASK_ICONS[0];
+}
+export function sunnahTaskLabel(prompt: string) {
+  return prompt.trim().toLowerCase() === "reflect with gratitude before going to bed" ? "Nighttime Adhkar & Contemplation" : prompt;
 }

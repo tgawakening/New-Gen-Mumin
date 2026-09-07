@@ -18,7 +18,7 @@ import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { sendSunnahTrackerPublishedEmail } from "@/lib/email/notifications";
-import { SUNNAH_TASK_ICONS } from "@/lib/community/sunnah-icons";
+import { sunnahTaskIcon, sunnahTaskLabel, SUNNAH_TASK_ICONS } from "@/lib/community/sunnah-icons";
 
 function userName(user: { firstName: string; lastName: string | null; email: string }) {
   return `${user.firstName} ${user.lastName ?? ""}`.trim() || user.email;
@@ -37,7 +37,7 @@ function answerEvidence(answer: unknown): SunnahEvidence[] {
   return evidence.filter((item): item is SunnahEvidence => Boolean(item && typeof item === "object" && "id" in item && "name" in item));
 }
 type PageProps = {
-  searchParams?: Promise<{ created?: string; deleted?: string; reviewed?: string; submission?: string }>;
+  searchParams?: Promise<{ created?: string; updated?: string; deleted?: string; reviewed?: string; submission?: string }>;
 };
 
 export default async function TeacherMissionsPage({ searchParams }: PageProps) {
@@ -54,7 +54,7 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
     orderBy: { createdAt: "desc" },
     include: {
       program: true,
-      questions: true,
+      questions: { orderBy: { sortOrder: "asc" } },
       attempts: true,
     },
   });
@@ -226,6 +226,49 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
     revalidatePath("/student/missions");
     revalidatePath("/parent/sunnah-tracker");
     redirect("/teacher/missions?created=1");
+  }
+
+  async function updateSunnahTracker(formData: FormData) {
+    "use server";
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
+    const assignedProgramIds = await getTeacherAssignedProgramIds(currentSession.user.id);
+    const missionId = String(formData.get("missionId") || "");
+    const mission = await db.mission.findUnique({ where: { id: missionId }, include: { questions: true } });
+    if (!mission || !mission.programId || !assignedProgramIds.includes(mission.programId) || !isSunnahTrackerMission(mission)) {
+      throw new Error("This Sunnah tracker is not available for editing.");
+    }
+    const taskIds = formData.getAll("taskId").map(String);
+    const taskPrompts = formData.getAll("taskPrompt").map(String);
+    const taskIcons = formData.getAll("taskIcon").map(String);
+    const validIconKeys = new Set<string>(SUNNAH_TASK_ICONS.map((icon) => icon.key));
+    const tasks = taskPrompts.map((prompt, index) => ({ id: taskIds[index] || "", prompt: prompt.trim(), iconKey: validIconKeys.has(taskIcons[index]) ? taskIcons[index] : SUNNAH_TASK_ICONS[0].key })).filter((task) => task.prompt);
+    if (!tasks.length) throw new Error("Keep at least one Sunnah task.");
+    const details = parseSunnahTrackerDescription(mission.description);
+    await db.$transaction(async (tx) => {
+      await tx.mission.update({
+        where: { id: mission.id },
+        data: {
+          title: String(formData.get("title") || "").trim() || mission.title,
+          description: buildSunnahTrackerDescription(
+            String(formData.get("description") || details?.description || ""),
+            String(formData.get("motivationText") || details?.motivationText || ""),
+            String(formData.get("motivationSource") || details?.motivationSource || ""),
+          ),
+        },
+      });
+      const retainedIds = tasks.map((task) => task.id).filter(Boolean);
+      await tx.missionQuestion.deleteMany({ where: { missionId: mission.id, id: { notIn: retainedIds.length ? retainedIds : ["__none__"] }, answers: { none: {} } } });
+      for (const [index, task] of tasks.entries()) {
+        const data = { prompt: task.prompt, sortOrder: index + 1, meta: { sunnahTask: true, iconKey: task.iconKey } };
+        if (task.id && mission.questions.some((question) => question.id === task.id)) await tx.missionQuestion.update({ where: { id: task.id }, data });
+        else await tx.missionQuestion.create({ data: { missionId: mission.id, type: MissionQuestionType.TRUE_FALSE, points: 10, answerKey: { answer: "true" }, ...data } });
+      }
+    });
+    revalidatePath("/teacher/missions");
+    revalidatePath("/student/missions");
+    revalidatePath("/parent/sunnah-tracker");
+    redirect("/teacher/missions?updated=1");
   }
 
   async function deleteMission(formData: FormData) {
@@ -528,6 +571,22 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
                       <button className="rounded-full border border-[#efb3b3] bg-white px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</button>
                     </form>
                   </div>
+                  {sunnahTracker ? (
+                    <details className="mt-4 rounded-2xl border border-[#d8e3ed] bg-white p-4">
+                      <summary className="cursor-pointer font-semibold text-[#0f4d81]">Edit tracker tasks and artwork</summary>
+                      <form action={updateSunnahTracker} className="mt-4 grid gap-4">
+                        <input type="hidden" name="missionId" value={mission.id} />
+                        <label className="grid gap-2 font-semibold text-[#22304a]">Tracker title<input name="title" defaultValue={mission.title} className="rounded-xl border border-[#d8e3ed] px-3 py-2" /></label>
+                        <label className="grid gap-2 font-semibold text-[#22304a]">Parent note<textarea name="description" rows={2} defaultValue={sunnahDetails?.description || ""} className="rounded-xl border border-[#d8e3ed] px-3 py-2" /></label>
+                        <SunnahTrackerTaskBuilder initialTasks={mission.questions.map((question) => ({ id: question.id, prompt: sunnahTaskLabel(question.prompt), iconKey: sunnahTaskIcon(question.meta, question.prompt).key }))} />
+                        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+                          <label className="grid gap-2 font-semibold text-[#22304a]">Motivational verse or Hadith<textarea name="motivationText" rows={2} defaultValue={sunnahDetails?.motivationText || DEFAULT_SUNNAH_MOTIVATION} className="rounded-xl border border-[#d8e3ed] px-3 py-2" /></label>
+                          <label className="grid gap-2 font-semibold text-[#22304a]">Source<input name="motivationSource" defaultValue={sunnahDetails?.motivationSource || DEFAULT_SUNNAH_SOURCE} className="rounded-xl border border-[#d8e3ed] px-3 py-2" /></label>
+                        </div>
+                        <button className="w-fit rounded-full bg-[#0f4d81] px-5 py-2.5 font-semibold text-white">Save tracker changes</button>
+                      </form>
+                    </details>
+                  ) : null}
                 </div>
               );
             })}
