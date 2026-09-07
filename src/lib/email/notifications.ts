@@ -779,3 +779,36 @@ export async function sendTeacherHoursSubmittedEmail(input: {
     ],
   );
 }
+
+export async function sendFardhTrackerLiveEmail(input: { toEmail: string; recipientName: string; trackerPath: string }) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: "Your weekly Fardh Prayer Tracker is live",
+    template: "fardhTrackerLive",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Your Fardh Prayer Tracker is live",
+      preview: "Build a steady salah habit, one honest prayer at a time.",
+      intro: `Assalamu alaikum ${input.recipientName}, the weekly Fardh Prayer Tracker is now available on your family dashboard.`,
+      sections: [
+        { label: "Reminder", value: "The first deed for which a person will be brought to account on the Day of Resurrection will be his prayer. — Jamiʿ at-Tirmidhi 413" },
+        { label: "Points", value: "Fajr and Isha: 25 each. Dhuhr, Asr and Maghrib: 15 each." },
+        { label: "Purpose", value: "Seek Allah’s reward first. Portal points only celebrate sincerity and consistency." },
+      ],
+      callToAction: { label: "Open Fardh tracker", href: resolveHref(input.trackerPath) },
+    }),
+  });
+}
+export async function sendFardhTrackerSubmittedEmail(input: { toEmail: string; teacherName: string; studentName: string; dayKey: string; points: number }) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: `${input.studentName} updated the Fardh tracker`,
+    template: "fardhTrackerSubmitted",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Fardh tracker updated",
+      preview: `${input.studentName} recorded salah for ${input.dayKey}.`,
+      intro: `Assalamu alaikum ${input.teacherName}, a learner in your assigned programme updated the Fardh tracker.`,
+      sections: [{ label: "Learner", value: input.studentName }, { label: "Date", value: input.dayKey }, { label: "New verified points", value: String(input.points) }],
+      callToAction: { label: "Review weekly tracker", href: resolveHref("/teacher/fardh-tracker") },
+    }),
+  });
+}

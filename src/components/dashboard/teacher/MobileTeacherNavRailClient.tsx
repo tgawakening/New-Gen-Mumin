@@ -6,10 +6,10 @@ import { TeacherNavLinkClient } from "@/components/dashboard/teacher/TeacherNavL
 import type { NavActivity } from "@/lib/notifications/navigation";
 
 type NavItem = { label: string; href: string; icon?: string; activity?: NavActivity };
-const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Live Points & Recognition", "Attendance", "Qabila Community", "Quizzes", "Missions & Sunnah"]);
+const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Live Points & Recognition", "Attendance", "Qabila Community", "Quizzes", "Missions & Sunnah", "Fardh Tracker"]);
 export function MobileTeacherNavRailClient({ navItems }: { navItems: NavItem[] }) {
   const [expanded, setExpanded] = useState(false);
-  const primary = navItems.filter((item) => PRIMARY_LABELS.has(item.label) || /\/community|\/missions/.test(item.href) || item.activity?.count);
+  const primary = navItems.filter((item) => PRIMARY_LABELS.has(item.label) || /\/community|\/missions|fardh/.test(item.href) || item.activity?.count);
   const more = navItems.filter((item) => !primary.includes(item));
   return <div className="mt-5 rounded-[22px] border border-white/10 bg-white/[0.06] p-3">
     <div className="mb-3 flex items-center justify-between gap-3 px-1"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#f2c58f]">Quick teaching actions</p><p className="mt-1 text-xs text-white/65">Live tools and sections with new activity stay visible.</p></div><button type="button" onClick={() => setExpanded((value) => !value)} aria-expanded={expanded} className="inline-flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white"><LayoutGrid className="h-4 w-4"/>{expanded?"Show less":"All sections"}{expanded?<ChevronUp className="h-4 w-4"/>:<ChevronDown className="h-4 w-4"/>}</button></div>

@@ -999,6 +999,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     { key: "hours-log", label: "Hours Log", href: "/admin/hours-log", icon: ClipboardCheck },
     ...(canViewFinance ? [{ key: "monthly-payments", label: "Monthly Payments", href: "/admin/monthly-payments", icon: Banknote }] : []),
     { key: "community", label: "Community", href: "/admin/community", icon: Users },
+    { key: "fardh-tracker", label: "Fardh Tracker", href: "/admin/fardh-tracker", icon: ClipboardCheck },
     { key: "feedback", label: "Feedback", href: "/admin/feedback", icon: FileText },
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
     { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },

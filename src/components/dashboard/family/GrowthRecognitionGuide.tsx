@@ -20,6 +20,8 @@ const pointWays = [
   { icon: Clock3, label: "Arrive ready and on time", points: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.points, note: "Once for each eligible live class", tone: "bg-[#e7f1ff] text-[#2465a5]" },
   { icon: Sun, label: "Submit today’s Sunnah tracker", points: HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.points, note: "Once per learner each day", tone: "bg-[#fff0db] text-[#c27a2c]" },
   { icon: CheckCircle2, label: "Complete a Sunnah task", points: HOUSE_POINT_RULES.SUNNAH_TASK_COMPLETED.points, note: "For each completed tracker task", tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
+  { icon: Sun, label: "Complete Fajr or Isha", points: HOUSE_POINT_RULES.FARDH_FAJR_ISHA.points, note: "For each verified prayer, once per date", tone: "bg-[#e7f1ff] text-[#2465a5]" },
+  { icon: CheckCircle2, label: "Complete Dhuhr, Asr or Maghrib", points: HOUSE_POINT_RULES.FARDH_OTHER_PRAYER.points, note: "For each verified prayer, once per date", tone: "bg-[#f0eaff] text-[#7453b8]" },
   { icon: BookOpenCheck, label: "Submit learning work", points: HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.points, note: "For an eligible homework submission", tone: "bg-[#f0eaff] text-[#7453b8]" },
 ];
 

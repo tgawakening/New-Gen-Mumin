@@ -10,6 +10,7 @@ function matchesNavigation(label: string, href: string, item: NotificationRow) {
   if (nav.includes("live house point") || nav.includes("live points & recognition")) return /class has started|live class|meeting started|house point/.test(value);
   if (nav.includes("live session") || nav.includes("schedule") || nav.includes("live class")) return /live.class|class has started|meeting started|\/schedule|\/live-sessions|\/classes/.test(value);
   if (nav.includes("quiz")) return /quiz|\/quizzes/.test(value);
+  if (nav.includes("fardh")) return /fardh|salah|prayer|\/fardh-tracker/.test(value);
   if (nav.includes("sunnah") || nav.includes("mission")) return /sunnah|mission|\/missions/.test(value);
   if (nav.includes("community") || nav.includes("qabila")) return /community|qabila/.test(value);
   if (nav.includes("reward") || nav.includes("recognition")) return /house point|reward|recognition|badge|\/rewards/.test(value);

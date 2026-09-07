@@ -8,6 +8,8 @@ import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 export const HOUSE_POINT_RULES = {
   SUNNAH_DAILY_SUBMISSION: { points: 5, label: "Daily Sunnah tracker submission" },
   SUNNAH_TASK_COMPLETED: { points: 10, label: "Completed Sunnah tracker task" },
+  FARDH_FAJR_ISHA: { points: 25, label: "Completed Fajr or Isha prayer" },
+  FARDH_OTHER_PRAYER: { points: 15, label: "Completed Dhuhr, Asr or Maghrib prayer" },
   ATTENDANCE_ON_TIME: { points: 25, label: "Joined class on time" },
   HOMEWORK_SUBMITTED: { points: 15, label: "Submitted homework" },
   CAMERA_STUDY_READY: { points: 10, label: "Camera on with a prepared study corner" },
@@ -57,6 +59,7 @@ export async function awardHousePointsOnce(input: {
   sourceType: string;
   sourceId: string;
   notificationHref?: string;
+  notify?: boolean;
 }) {
   if (!input.sourceId.trim()) throw new Error("A point award must have a unique source.");
   if (!Number.isInteger(input.points) || input.points <= 0 || input.points > 100) {
@@ -88,7 +91,7 @@ export async function awardHousePointsOnce(input: {
       parents: { include: { parent: { include: { user: true } } } },
     },
   });
-  if (student) {
+  if (student && input.notify !== false) {
     const userIds = Array.from(new Set([student.userId, ...student.parents.map((link) => link.parent.userId)]));
     await db.notification.createMany({
       data: userIds.map((userId) => ({

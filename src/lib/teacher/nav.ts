@@ -17,6 +17,7 @@ export function getTeacherNavItems() {
     { label: "Journal", href: "/teacher/journal", icon: "journal" },
     { label: "Feedback", href: "/teacher/feedback", icon: "journal" },
     { label: "Missions & Sunnah", href: "/teacher/missions", icon: "quiz" },
+    { label: "Fardh Tracker", href: "/teacher/fardh-tracker", icon: "check" },
     { label: "Reports", href: "/teacher/reports", icon: "reports" },
     { label: "Profile", href: "/teacher/profile", icon: "profile" },
   ];
