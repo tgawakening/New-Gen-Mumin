@@ -234,8 +234,37 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
+async function ensureRequiredZaranRoster(teacherId: string) {
+  const teacher = await db.teacherProfile.findUnique({
+    where: { id: teacherId },
+    include: { user: true, programAssignments: { include: { program: true } } },
+  });
+  if (!teacher?.isActive || teacher.user.status !== "ACTIVE") return;
+
+  const email = teacher.user.email.toLowerCase();
+  const requiredAssignments = teacher.programAssignments.filter((assignment) => {
+    if (email === "abubakar98114@gmail.com") return isArabicTajweedSlug(assignment.program.slug);
+    return ["seerah", "life-lessons"].includes(assignment.program.slug);
+  });
+  if (!requiredAssignments.length) return;
+
+  for (const assignment of requiredAssignments) {
+    const eligible = await getProgramEligibleRosterStudents(assignment.programId);
+    const zaran = eligible.find((student) => {
+      const name = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
+      return name.toLowerCase().replace(/[^a-z0-9]/g, "") === "zarannisar";
+    });
+    if (!zaran) continue;
+    await db.teacherStudentRoster.upsert({
+      where: { teacherId_programId_studentId: { teacherId, programId: assignment.programId, studentId: zaran.id } },
+      update: {},
+      create: { teacherId, programId: assignment.programId, studentId: zaran.id },
+    });
+  }
+}
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
+    await ensureRequiredZaranRoster(teacherId);
     return await db.teacherStudentRoster.findMany({
       where: { teacherId },
       select: { programId: true, studentId: true },
@@ -515,20 +544,23 @@ export async function getProgramEligibleRosterStudents(programId: string) {
   const normalizeIdentityPart = (value: string) => value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
   for (const student of studentsById.values()) {
-    const normalizedName = normalizeIdentityPart(
+    const rawNormalizedName = normalizeIdentityPart(
       student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
     );
+    const normalizedName = ["salaarkhurram", "salarkhurram"].includes(rawNormalizedName) ? "salarkhurram" : rawNormalizedName;
     const parentEmails = [
       ...student.parents.map((entry) => entry.parent.user.email),
       ...student.registrationStudents.map((entry) => entry.registration.parentEmail),
     ].map((email) => email.trim().toLowerCase()).filter(Boolean).sort();
     const parentKey = [...new Set(parentEmails)].join(",");
     const parentIds = student.parents.map((entry) => entry.parentId).sort().join(",");
-    const identityKey = parentKey
-      ? `${parentKey}:${normalizedName}`
-      : parentIds
-        ? `${parentIds}:${normalizedName}`
-        : `user:${student.user.email.toLowerCase()}`;
+    const identityKey = normalizedName === "salarkhurram"
+      ? "canonical:salaar-khurram"
+      : parentKey
+        ? `${parentKey}:${normalizedName}`
+        : parentIds
+          ? `${parentIds}:${normalizedName}`
+          : `user:${student.user.email.toLowerCase()}`;
     const existing = newestStudentByIdentity.get(identityKey);
     if (!existing || latestApprovedRegistrationTime(student) > latestApprovedRegistrationTime(existing)) {
       newestStudentByIdentity.set(identityKey, student);
