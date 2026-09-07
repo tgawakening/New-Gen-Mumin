@@ -3,6 +3,8 @@ import { SunnahAlreadySubmittedError } from "@/lib/community/quest";
 import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { SunnahMotivationBanner } from "@/components/community/SunnahMotivationBanner";
+import { SunnahTaskChecklistItem } from "@/components/community/SunnahTaskChecklistItem";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -129,6 +131,8 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
                     </span>
                   </div>
 
+                  <div className="mt-4"><SunnahMotivationBanner text={details?.motivationText} source={details?.motivationSource} /></div>
+
                   {latestAttempt ? (
                     <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">
                       Latest submission: {latestAttempt.pointsAwarded} points - {formatDate(latestAttempt.submittedAt)}
@@ -138,12 +142,9 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
                   <form action={submitSunnahTracker} encType="multipart/form-data" className="mt-4 space-y-3 rounded-[18px] bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
                     <input type="hidden" name="childId" value={selectedChild.id} />
                     <input type="hidden" name="missionId" value={mission.id} />
-                    {mission.questions.map((question) => (
-                      <label key={question.id} className="flex items-start gap-3 rounded-2xl border border-[#eadfce] bg-[#fffaf4] px-4 py-3 text-sm font-semibold text-[#22304a]">
-                        <input type="checkbox" name={`answer-${question.id}`} value="true" className="mt-1 h-5 w-5 accent-[#2f6b4b]" />
-                        <span>{question.prompt}</span>
-                      </label>
-                    ))}
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {mission.questions.map((question) => <SunnahTaskChecklistItem key={question.id} question={question} />)}
+                    </div>
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Optional note
                       <textarea name="reflection" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Any note for today's tracker?" />

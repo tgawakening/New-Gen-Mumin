@@ -14,6 +14,8 @@ import {
 import { db } from "@/lib/db";
 import { pointDayKey } from "@/lib/community/point-awards";
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { SunnahMotivationBanner } from "@/components/community/SunnahMotivationBanner";
+import { SunnahTaskChecklistItem } from "@/components/community/SunnahTaskChecklistItem";
 import { SunnahSubmitButton } from "@/components/dashboard/family/SunnahSubmitButton";
 import {
   FamilyDashboardFrame,
@@ -130,6 +132,8 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
                       {mission.basePoints} base pts
                     </span>
                   </div>
+
+                  {sunnahTracker ? <div className="mt-4"><SunnahMotivationBanner text={sunnahDetails?.motivationText} source={sunnahDetails?.motivationSource} /></div> : null}
 
                   {latestAttempt ? (
                     <p className="mt-3 rounded-2xl bg-white px-4 py-3 text-sm text-[#4d5a6b]">

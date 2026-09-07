@@ -47,17 +47,33 @@ const STARTER_MISSIONS = [
 export const SUNNAH_TRACKER_PREFIX = "__SUNNAH_TRACKER__:";
 export class SunnahAlreadySubmittedError extends Error {}
 
-export function buildSunnahTrackerDescription(description?: string | null) {
-  return `${SUNNAH_TRACKER_PREFIX}${JSON.stringify({ description: description?.trim() || null })}`;
+export function buildSunnahTrackerDescription(
+  description?: string | null,
+  motivationText?: string | null,
+  motivationSource?: string | null,
+) {
+  return \`\${SUNNAH_TRACKER_PREFIX}\${JSON.stringify({
+    description: description?.trim() || null,
+    motivationText: motivationText?.trim() || null,
+    motivationSource: motivationSource?.trim() || null,
+  })}\`;
 }
 
 export function parseSunnahTrackerDescription(description?: string | null) {
   if (!description?.startsWith(SUNNAH_TRACKER_PREFIX)) return null;
   try {
-    const parsed = JSON.parse(description.slice(SUNNAH_TRACKER_PREFIX.length)) as { description?: unknown };
-    return { description: typeof parsed.description === "string" ? parsed.description : null };
+    const parsed = JSON.parse(description.slice(SUNNAH_TRACKER_PREFIX.length)) as {
+      description?: unknown;
+      motivationText?: unknown;
+      motivationSource?: unknown;
+    };
+    return {
+      description: typeof parsed.description === "string" ? parsed.description : null,
+      motivationText: typeof parsed.motivationText === "string" ? parsed.motivationText : null,
+      motivationSource: typeof parsed.motivationSource === "string" ? parsed.motivationSource : null,
+    };
   } catch {
-    return { description: null };
+    return { description: null, motivationText: null, motivationSource: null };
   }
 }
 
@@ -338,3 +354,4 @@ export async function submitMissionAttempt(input: {
 
   return { score, pointsAwarded, evidenceCount: evidence.length };
 }
+\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n  return `${SUNNAH_TRACKER_PREFIX}${JSON.stringify({\n\n\n\n  })}`;

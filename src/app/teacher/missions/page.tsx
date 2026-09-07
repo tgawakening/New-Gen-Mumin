@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { MissionKind, MissionQuestionType, MissionStatus } from "@prisma/client";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { SunnahTrackerTaskBuilder } from "@/components/community/SunnahTrackerTaskBuilder";
+import { DEFAULT_SUNNAH_MOTIVATION, DEFAULT_SUNNAH_SOURCE } from "@/components/community/SunnahMotivationBanner";
 import {
   TeacherDashboardFrame,
   TeacherMetricGrid,
@@ -16,6 +18,7 @@ import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { sendSunnahTrackerPublishedEmail } from "@/lib/email/notifications";
+import { SUNNAH_TASK_ICONS } from "@/lib/community/sunnah-icons";
 
 function userName(user: { firstName: string; lastName: string | null; email: string }) {
   return `${user.firstName} ${user.lastName ?? ""}`.trim() || user.email;
@@ -154,11 +157,13 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
 
     const title = String(formData.get("title") || "").trim() || "Daily Sunnah Tracker";
     const description = String(formData.get("description") || "").trim();
-    const taskLines = String(formData.get("tasks") || "")
-      .split(/\r?\n/)
-      .map((task) => task.trim())
-      .filter(Boolean);
-    if (!taskLines.length) throw new Error("Add at least one Sunnah task.");
+    const motivationText = String(formData.get("motivationText") || "").trim();
+    const motivationSource = String(formData.get("motivationSource") || "").trim();
+    const taskPrompts = formData.getAll("taskPrompt").map(String);
+    const taskIcons = formData.getAll("taskIcon").map(String);
+    const validIconKeys = new Set(SUNNAH_TASK_ICONS.map((icon) => icon.key));
+    const tasks = taskPrompts.map((prompt, index) => ({ prompt: prompt.trim(), iconKey: validIconKeys.has(taskIcons[index]) ? taskIcons[index] : SUNNAH_TASK_ICONS[0].key })).filter((task) => task.prompt);
+    if (!tasks.length) throw new Error("Add at least one Sunnah task.");
     const taskPoints = 10;
     const basePoints = 5;
     const trackerMonth = String(formData.get("trackerMonth") || "");
@@ -172,20 +177,20 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
       data: {
         programId,
         title,
-        description: buildSunnahTrackerDescription(description),
+        description: buildSunnahTrackerDescription(description, motivationText, motivationSource),
         kind: MissionKind.DAILY,
         status: isPublished ? MissionStatus.PUBLISHED : MissionStatus.DRAFT,
         basePoints,
         opensAt,
         closesAt,
         questions: {
-          create: taskLines.map((task, index) => ({
-            prompt: task,
+          create: tasks.map((task, index) => ({
+            prompt: task.prompt,
             type: MissionQuestionType.TRUE_FALSE,
             points: taskPoints,
             sortOrder: index + 1,
             answerKey: { answer: "true" },
-            meta: { sunnahTask: true },
+            meta: { sunnahTask: true, iconKey: task.iconKey },
           })),
         },
       },
@@ -203,7 +208,9 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
         recipients.set(`${enrollment.parent.userId}:${enrollment.studentId}`, { userId: enrollment.parent.userId, href: `/parent/sunnah-tracker?child=${enrollment.studentId}`, body: `${title} is ready for ${studentName}. Submit once each day.` });
       }
       if (recipients.size) await db.notification.createMany({ data: [...recipients.values()].map((recipient) => ({ ...recipient, title: "New Sunnah tracker available" })) });
-      await Promise.allSettled(enrollments.map((enrollment) => sendSunnahTrackerPublishedEmail({
+      const emailRecipients = new Map<string, (typeof enrollments)[number]>();
+      for (const enrollment of enrollments) emailRecipients.set(enrollment.parent.user.email.toLowerCase() + ":" + enrollment.studentId, enrollment);
+      await Promise.allSettled([...emailRecipients.values()].map((enrollment) => sendSunnahTrackerPublishedEmail({
         toEmail: enrollment.parent.user.email,
         recipientName: userName(enrollment.parent.user),
         studentName: enrollment.student.displayName || userName(enrollment.student.user),
@@ -211,6 +218,8 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
         trackerTitle: tracker.title,
         teacherName: userName(currentSession.user),
         trackerPath: `/parent/sunnah-tracker?child=${enrollment.studentId}`,
+        motivationText,
+        motivationSource,
       })));
     }
     revalidatePath("/teacher/missions");
@@ -474,16 +483,11 @@ export default async function TeacherMissionsPage({ searchParams }: PageProps) {
               Short note for parents
               <textarea name="description" rows={2} placeholder="Tick the tasks completed today. Add a note if needed." className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
             </label>
-            <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-              Sunnah tasks, one per line
-              <textarea
-                name="tasks"
-                required
-                rows={9}
-                defaultValue={`After waking up, read the morning du'a\nMake your bed after you wake up\nWash your own dishes after eating\nHelp your mother organize or clean the house\nRead the daily du'a\nMake or give something to someone\nBefore eating, check everyone is included`}
-                className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm"
-              />
-            </label>
+            <SunnahTrackerTaskBuilder />
+            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px]">
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">Motivational Qur\'an verse or Hadith<textarea name="motivationText" rows={2} defaultValue={DEFAULT_SUNNAH_MOTIVATION} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></label>
+              <label className="grid gap-2 text-sm font-semibold text-[#22304a]">Source<input name="motivationSource" defaultValue={DEFAULT_SUNNAH_SOURCE} placeholder="Qur\'an 3:31 or Hadith source" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" /></label>
+            </div>
             <div className="grid gap-4 sm:grid-cols-[140px_140px_1fr]">
               <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                 Task points

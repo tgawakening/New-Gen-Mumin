@@ -511,7 +511,7 @@ export async function sendSunnahTrackerPublishedEmail(input: {
       intro: `Assalamu alaikum ${input.recipientName}, ${input.teacherName} published a new Sunnah tracker for ${input.studentName}.`,
       sections: [
         { label: "Programme", value: input.programTitle },
-        { label: "Tracker", value: input.trackerTitle },
+        { label: "Tracker", value: input.trackerTitle },\n        ...(input.motivationText ? [{ label: input.motivationSource || "Motivation", value: input.motivationText }] : []),
         { label: "Points", value: "5 points for one daily submission, plus 10 points for each completed Sunnah task." },
         { label: "Next step", value: "Open the tracker, select today's completed tasks, and submit once for this learner." },
       ],
@@ -776,3 +776,4 @@ export async function sendTeacherHoursSubmittedEmail(input: {
     ],
   );
 }
+\n  motivationText?: string;\n  motivationSource?: string;\n        { label: "Tracker", value: input.trackerTitle },\n        ...(input.motivationText ? [{ label: input.motivationSource || "Motivation", value: input.motivationText }] : []),
