@@ -83,7 +83,62 @@ export default async function Page({ searchParams }: Props) {
     };
   });
   const activeSummary = summaries.find((summary) => summary.name === activeQabila)!;
-  const activeLedger = recentLedger.filter((entry) => canonicalQabilaName(entry.student.houseMembership?.qabilaGroup) === activeQabila).slice(0, 40);
+  const qabilaLedgerRows = recentLedger.filter((entry) => canonicalQabilaName(entry.student.houseMembership?.qabilaGroup) === activeQabila);
+  type ActivitySummary = {
+    id: string;
+    student: (typeof recentLedger)[number]["student"];
+    studentId: string;
+    points: number;
+    reason: string;
+    sourceType: string;
+    awardedAt: Date;
+    occurrences: number;
+    sunnahTasks: number;
+    sunnahSubmission: boolean;
+  };
+  const activitySummaries = new Map<string, ActivitySummary>();
+  for (const entry of qabilaLedgerRows) {
+    const day = entry.awardedAt.toISOString().slice(0, 10);
+    const category = entry.sourceType.startsWith("SUNNAH_")
+      ? "SUNNAH_SUMMARY"
+      : entry.sourceType.startsWith("FARDH_")
+        ? "FARDH_SUMMARY"
+        : entry.sourceType;
+    const key = `${entry.studentId}:${category}:${day}`;
+    const existing = activitySummaries.get(key);
+    if (existing) {
+      existing.points += entry.points;
+      existing.occurrences += 1;
+      existing.sunnahTasks += entry.sourceType.includes("TASK") ? 1 : 0;
+      existing.sunnahSubmission ||= entry.sourceType.includes("DAILY");
+      continue;
+    }
+    activitySummaries.set(key, {
+      id: entry.id,
+      student: entry.student,
+      studentId: entry.studentId,
+      points: entry.points,
+      reason: entry.reason,
+      sourceType: category,
+      awardedAt: entry.awardedAt,
+      occurrences: 1,
+      sunnahTasks: entry.sourceType.includes("TASK") ? 1 : 0,
+      sunnahSubmission: entry.sourceType.includes("DAILY"),
+    });
+  }
+  const activeLedger = [...activitySummaries.values()]
+    .sort((left, right) => right.awardedAt.getTime() - left.awardedAt.getTime())
+    .slice(0, 40)
+    .map((entry) => ({
+      ...entry,
+      reason: entry.sourceType === "SUNNAH_SUMMARY"
+        ? `${entry.sunnahSubmission ? "Submitted the daily Sunnah tracker" : "Updated the Sunnah tracker"}${entry.sunnahTasks ? ` and completed ${entry.sunnahTasks} Sunnah task${entry.sunnahTasks === 1 ? "" : "s"}` : ""}`
+        : entry.sourceType === "FARDH_SUMMARY"
+          ? `Recorded ${entry.occurrences} Fardh prayer${entry.occurrences === 1 ? "" : "s"} for the day`
+          : entry.occurrences > 1
+            ? `${entry.reason} · ${entry.occurrences} related point entries combined`
+            : entry.reason,
+    }));
   const activeAwards = awards.filter((award) => canonicalQabilaName(award.student.houseMembership?.qabilaGroup) === activeQabila).slice(0, 24);
   const overallPoints = summaries.reduce((sum, item) => sum + item.points, 0);
   const overallGrowth = summaries.reduce((sum, item) => sum + item.weeklyGrowth, 0);
