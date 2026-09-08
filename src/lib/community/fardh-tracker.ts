@@ -71,8 +71,6 @@ export async function saveFardhDay(input: { studentId: string; dayKey: string; t
       const staffIds = [...teacherLinks.map((link) => link.teacher.userId), ...adminIds];
       const name = student.displayName || student.user.firstName;
       await db.notification.createMany({ data: Array.from(new Set([...familyIds, ...staffIds])).map((userId) => ({ userId, title: "Fardh tracker updated", body: `${name} recorded salah for ${input.dayKey} and earned ${points} verified points.`, href: familyIds.includes(userId) ? (userId === student.userId ? "/student/fardh-tracker" : `/parent/fardh-tracker?child=${student.id}`) : adminIds.includes(userId) ? "/admin/fardh-tracker" : "/teacher/fardh-tracker" })) });
-      const { sendFardhTrackerSubmittedEmail } = await import("@/lib/email/notifications");
-      await Promise.allSettled(teacherLinks.map((link) => sendFardhTrackerSubmittedEmail({ toEmail: link.teacher.user.email, teacherName: link.teacher.user.firstName, studentName: name, dayKey: input.dayKey, points })));
     }
   }
   return { points };
