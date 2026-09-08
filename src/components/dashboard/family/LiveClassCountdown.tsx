@@ -40,7 +40,7 @@ export function LiveClassCountdown({
   }, []);
 
   useEffect(() => {
-    if (millisecondsUntilStart > 15 * 60 * 1000 || millisecondsUntilStart < -6 * 60 * 60 * 1000) return;
+    if (!isLive && millisecondsUntilStart > 15 * 60 * 1000) return;
     const interval = window.setInterval(() => router.refresh(), 30000);
     return () => window.clearInterval(interval);
   }, [isLive, millisecondsUntilStart, router]);

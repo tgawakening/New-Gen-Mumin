@@ -754,7 +754,6 @@ export async function resolveScheduleStudentIds(scheduleId: string) {
   return getScheduleRosterStudentIds(scheduleId);
 }
 
-const LIVE_OCCURRENCE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 export type LiveClassAccessState = "scheduled" | "live" | "ended";
 
 export async function getLiveClassAccessState(scheduleId: string): Promise<LiveClassAccessState> {
@@ -765,7 +764,7 @@ export async function getLiveClassAccessState(scheduleId: string): Promise<LiveC
   });
   if (!latest) return "scheduled";
   if (latest.endedAt) return "ended";
-  return latest.startedAt.getTime() >= Date.now() - LIVE_OCCURRENCE_MAX_AGE_MS ? "live" : "ended";
+  return "live";
 }
 
 export async function syncScheduleRoster(scheduleId: string, studentIds: string[]) {

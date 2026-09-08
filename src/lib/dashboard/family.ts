@@ -603,8 +603,7 @@ function mapScheduleSummary(schedule: any, title: string, category: "CLASS" | "P
     provider: schedule.meetingProvider,
     isLive: Boolean(
       schedule.sessionOccurrences?.some(
-        (occurrence: { startedAt: Date; endedAt?: Date | null }) =>
-          !occurrence.endedAt && occurrence.startedAt.getTime() >= Date.now() - 6 * 60 * 60 * 1000,
+        (occurrence: { endedAt?: Date | null }) => !occurrence.endedAt,
       ),
     ),
   };
