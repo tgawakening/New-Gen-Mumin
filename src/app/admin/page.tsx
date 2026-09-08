@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Banknote, BookOpen, ClipboardCheck, Eye, FileText, GraduationCap, Home, Menu, RefreshCw, Users, UserSquare2 } from "lucide-react";
+import { Banknote, BookOpen, ClipboardCheck, Eye, FileText, GraduationCap, Home, Menu, RefreshCw, Trophy, Users, UserSquare2 } from "lucide-react";
 
 import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { AdminLogoutButton } from "@/components/admin/AdminLogoutButton";
@@ -999,12 +999,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     { key: "hours-log", label: "Hours Log", href: "/admin/hours-log", icon: ClipboardCheck },
     ...(canViewFinance ? [{ key: "monthly-payments", label: "Monthly Payments", href: "/admin/monthly-payments", icon: Banknote }] : []),
     { key: "community", label: "Community", href: "/admin/community", icon: Users },
+    { key: "rewards", label: "House & Rewards", href: "/admin/rewards", icon: Trophy },
     { key: "fardh-tracker", label: "Fardh Tracker", href: "/admin/fardh-tracker", icon: ClipboardCheck },
     { key: "feedback", label: "Feedback", href: "/admin/feedback", icon: FileText },
     { key: "teachers", label: "Teacher Dashboards", href: "/admin/teachers", icon: UserSquare2 },
     { key: "materials", label: "Materials", href: "/admin/materials", icon: GraduationCap },
   ];
-  const adminPriority = ["home", "classes", "students", "community", "orders", "teacher-reports"];
+  const adminPriority = ["home", "classes", "students", "community", "rewards", "orders", "teacher-reports"];
   const adminNavItemsWithActivity = (await getNavigationActivity(session.user.id, adminNavItems)).sort((left, right) => Number(Boolean(right.activity?.count)) - Number(Boolean(left.activity?.count)) || (adminPriority.indexOf(left.key) < 0 ? 99 : adminPriority.indexOf(left.key)) - (adminPriority.indexOf(right.key) < 0 ? 99 : adminPriority.indexOf(right.key)));
   const currentOrderHref = buildReturnHref("orders", {
     orderSearch: params?.orderSearch,
@@ -1054,7 +1055,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     {adminNavItemsWithActivity.map((item) => {
                       const Icon = item.icon;
                       return (
-                        <NavActivityLink key={item.key} href={item.href} title={item.label} activity={item.activity} active={activeTab === item.key} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12">
+                        <NavActivityLink key={item.key} href={item.href} title={item.label} activity={item.activity} active={activeTab === item.key} clearOnOpen={item.key !== "rewards"} className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/12">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#ffd79b]"><Icon className="h-4 w-4" /></span>
                           <span>{item.label}</span>
                         </NavActivityLink>
@@ -1074,6 +1075,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                       title={item.label}
                       activity={item.activity}
                       active={active}
+                      clearOnOpen={item.key !== "rewards"}
                       className={`group/nav inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition ${active ? "bg-[#0f4d81] text-white shadow-sm" : "border border-[#d9e2eb] bg-white text-[#22304a] hover:bg-[#f5f8fb]"}`}
                     >
                       <Icon className="h-4 w-4" />

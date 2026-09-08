@@ -103,6 +103,20 @@ export async function awardHousePointsOnce(input: {
     });
   }
 
+  if (student) {
+    const qabilaName = membership.qabilaGroup || "Unassigned Qabila";
+    const admins = await db.user.findMany({ where: { role: "ADMIN", status: "ACTIVE" }, select: { id: true } });
+    if (admins.length) {
+      await db.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          title: `Qabila points increased · ${qabilaName}`,
+          body: `${student.displayName || student.user.firstName} added +${input.points} points: ${input.reason}.`,
+          href: `/admin/rewards?qabila=${encodeURIComponent(qabilaName)}&activity=${ledger.id}`,
+        })),
+      });
+    }
+  }
   if (["ATTENDANCE_ON_TIME", "SUNNAH_DAILY", "HOMEWORK_SUBMITTED"].includes(input.sourceType)) {
     try {
       const { syncAutomaticRecognition } = await import("@/lib/community/recognition");

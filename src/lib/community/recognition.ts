@@ -68,7 +68,7 @@ export async function awardRecognition(input: {
     const otherBonus = definition.key === "ALLIANCE_CHAMPION" ? 30 : 20;
     await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another Qabila helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   }
-  const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, parents: { include: { parent: { include: { user: true } } } } } });
+  const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } });
   if (student) {
     const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
     const recipients = [
@@ -77,6 +77,18 @@ export async function awardRecognition(input: {
     ];
     await db.notification.createMany({ data: recipients.map((recipient) => ({ userId: recipient.userId, title: "Character recognition earned!", body: `${definition.title}: ${input.evidence}`, href: recipient.href })) });
     await Promise.allSettled(recipients.map((recipient) => sendRecognitionEarnedEmail({ toEmail: recipient.email, recipientName: recipient.name || recipient.email, studentName, badgeTitle: definition.title, evidence: input.evidence, pointsBonus: input.pointsBonus ?? 0, rewardsPath: recipient.href })));
+    const qabilaName = student.houseMembership?.qabilaGroup || "Unassigned Qabila";
+    const admins = await db.user.findMany({ where: { role: "ADMIN", status: "ACTIVE" }, select: { id: true } });
+    if (admins.length) {
+      await db.notification.createMany({
+        data: admins.map((admin) => ({
+          userId: admin.id,
+          title: `Qabila recognition awarded · ${qabilaName}`,
+          body: `${studentName} earned ${definition.title}${input.sourceType === "AUTOMATIC" ? " automatically" : ""}: ${input.evidence}`,
+          href: `/admin/rewards?qabila=${encodeURIComponent(qabilaName)}&award=${award.id}`,
+        })),
+      });
+    }
   }
   return award;
 }
