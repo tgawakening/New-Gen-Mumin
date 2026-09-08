@@ -275,6 +275,16 @@ async function ensureRequiredZaranRoster(teacherId: string) {
 }
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
+    await db.teacherStudentRoster.deleteMany({
+      where: {
+        student: {
+          registrationStudents: {
+            some: { registration: { status: "CANCELLED" } },
+            none: { registration: { status: { in: [...PAID_REGISTRATION_STATUSES] } } },
+          },
+        },
+      },
+    });
     await ensureRequiredZaranRoster(teacherId);
     return await db.teacherStudentRoster.findMany({
       where: { teacherId },
@@ -587,10 +597,12 @@ export async function getProgramEligibleRosterStudents(programId: string) {
         ? registrationStudent.items
         : [],
     );
-    const hasRegistrationOfferEvidence = paidRegistrationItems.length > 0;
+    const hasAnyRegistrationEvidence = student.registrationStudents.some((registrationStudent) =>
+      registrationStudent.items.some((item) => offerIncludesProgram(item.offer, program)),
+    );
     const hasProgramOffer = paidRegistrationItems.some((item) => offerIncludesProgram(item.offer, program));
 
-    if (hasProgramOffer || (activeDirectEnrollment && !hasRegistrationOfferEvidence)) {
+    if (hasProgramOffer || (activeDirectEnrollment && !hasAnyRegistrationEvidence)) {
       studentsById.set(student.id, student);
     }
   }
@@ -621,19 +633,9 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
     );
     const normalizedName = ["salaarkhurram", "salarkhurram"].includes(rawNormalizedName) ? "salarkhurram" : rawNormalizedName;
-    const parentEmails = [
-      ...student.parents.map((entry) => entry.parent.user.email),
-      ...student.registrationStudents.map((entry) => entry.registration.parentEmail),
-    ].map((email) => email.trim().toLowerCase()).filter(Boolean).sort();
-    const parentKey = [...new Set(parentEmails)].join(",");
-    const parentIds = student.parents.map((entry) => entry.parentId).sort().join(",");
-    const identityKey = normalizedName === "salarkhurram"
-      ? "canonical:salaar-khurram"
-      : parentKey
-        ? `${parentKey}:${normalizedName}`
-        : parentIds
-          ? `${parentIds}:${normalizedName}`
-          : `user:${student.user.email.toLowerCase()}`;
+    // Re-registrations can create a fresh generated login or parent link. The learner's
+    // normalized name is the stable roster identity; the newest paid profile wins below.
+    const identityKey = normalizedName || `user:${student.user.email.toLowerCase()}`;
     const existing = newestStudentByIdentity.get(identityKey);
     if (!existing || latestApprovedRegistrationTime(student) > latestApprovedRegistrationTime(existing)) {
       newestStudentByIdentity.set(identityKey, student);
