@@ -647,11 +647,13 @@ export async function getProgramEligibleRosterStudents(programId: string) {
   }
 
   const newestStudentByIdentity = new Map<string, (typeof directEnrollmentStudents)[number]>();
-  const latestApprovedRegistrationTime = (student: (typeof directEnrollmentStudents)[number]) =>
-    student.registrationStudents.reduce((latest, entry) => {
+  const latestApprovedRegistration = (student: (typeof directEnrollmentStudents)[number]) =>
+    student.registrationStudents.reduce<(typeof student.registrationStudents)[number] | null>((latest, entry) => {
       if (!PAID_REGISTRATION_STATUSES.includes(entry.registration.status as (typeof PAID_REGISTRATION_STATUSES)[number])) return latest;
-      return Math.max(latest, entry.registration.createdAt.getTime());
-    }, 0);
+      return !latest || entry.registration.createdAt > latest.registration.createdAt ? entry : latest;
+    }, null);
+  const latestApprovedRegistrationTime = (student: (typeof directEnrollmentStudents)[number]) =>
+    latestApprovedRegistration(student)?.registration.createdAt.getTime() ?? 0;
   const normalizeIdentityPart = (value: string) => value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
   for (const student of studentsById.values()) {
@@ -668,9 +670,17 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     );
     if (belongsToCancelledParent) continue;
     if (MANUALLY_CANCELLED_ROSTER_NAMES.has(normalizedName)) continue;
-    // Re-registrations can create a fresh generated login or parent link. The learner's
-    // normalized name is the stable roster identity; the newest paid profile wins below.
-    const identityKey = normalizedName || `user:${student.user.email.toLowerCase()}`;
+    // A repeat registration may create another generated student login and a slightly
+    // different display name. Parent identity + registration first name remains stable.
+    const latestRegistration = latestApprovedRegistration(student);
+    const registrationFirstName = latestRegistration?.firstName || student.user.firstName || normalizedName;
+    const normalizedFirstName = normalizeIdentityPart(registrationFirstName.trim().split(/\s+/)[0] || registrationFirstName);
+    const registrationParentEmail = latestRegistration?.registration.parentEmail.trim().toLowerCase();
+    const linkedParentEmail = student.parents[0]?.parent.user.email.trim().toLowerCase();
+    const parentIdentity = registrationParentEmail || linkedParentEmail || student.parents[0]?.parentId || "";
+    const identityKey = parentIdentity && normalizedFirstName
+      ? `${parentIdentity}:${normalizedFirstName}`
+      : normalizedName || `user:${student.user.email.toLowerCase()}`;
     const existing = newestStudentByIdentity.get(identityKey);
     if (!existing || latestApprovedRegistrationTime(student) > latestApprovedRegistrationTime(existing)) {
       newestStudentByIdentity.set(identityKey, student);
