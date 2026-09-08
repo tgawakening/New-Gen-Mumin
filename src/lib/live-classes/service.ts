@@ -54,6 +54,11 @@ const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const PAID_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
 const MANUALLY_CANCELLED_ROSTER_NAMES = new Set(["ibrahimsyedhassan", "ibrahimhassan", "sarahsyedhassan", "sarahhassan"]);
+const CANCELLED_ROSTER_PARENT_EMAIL_PARTS = ["s.hassanarif"];
+const ROSTER_NAME_ALIASES = new Map([
+  ["muntahafatima", "muntaha"],
+  ["muntahaparent", "muntaha"],
+]);
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -276,6 +281,14 @@ async function ensureRequiredZaranRoster(teacherId: string) {
 }
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
+    await db.teacherStudentRoster.deleteMany({
+      where: {
+        OR: CANCELLED_ROSTER_PARENT_EMAIL_PARTS.flatMap((emailPart) => [
+          { student: { registrationStudents: { some: { registration: { parentEmail: { contains: emailPart } } } } } },
+          { student: { parents: { some: { parent: { user: { email: { contains: emailPart } } } } } } },
+        ]),
+      },
+    });
     const namedRosterEntries = await db.teacherStudentRoster.findMany({
       select: { id: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
     });
@@ -645,7 +658,15 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     const rawNormalizedName = normalizeIdentityPart(
       student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
     );
-    const normalizedName = ["salaarkhurram", "salarkhurram"].includes(rawNormalizedName) ? "salarkhurram" : rawNormalizedName;
+    const normalizedName = ["salaarkhurram", "salarkhurram"].includes(rawNormalizedName)
+      ? "salarkhurram"
+      : ROSTER_NAME_ALIASES.get(rawNormalizedName) ?? rawNormalizedName;
+    const belongsToCancelledParent = student.parents.some((entry) =>
+      CANCELLED_ROSTER_PARENT_EMAIL_PARTS.some((emailPart) => entry.parent.user.email.toLowerCase().includes(emailPart)),
+    ) || student.registrationStudents.some((entry) =>
+      CANCELLED_ROSTER_PARENT_EMAIL_PARTS.some((emailPart) => entry.registration.parentEmail.toLowerCase().includes(emailPart)),
+    );
+    if (belongsToCancelledParent) continue;
     if (MANUALLY_CANCELLED_ROSTER_NAMES.has(normalizedName)) continue;
     // Re-registrations can create a fresh generated login or parent link. The learner's
     // normalized name is the stable roster identity; the newest paid profile wins below.
