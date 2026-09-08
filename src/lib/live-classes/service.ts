@@ -235,33 +235,7 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
-async function ensureZaranBundleAccess() {
-  const candidates = await db.registrationStudent.findMany({
-    where: {
-      registration: { status: { in: [...PAID_REGISTRATION_STATUSES] } },
-      OR: [
-        { firstName: { contains: "Zaran" } },
-        { displayName: { contains: "Zaran" } },
-      ],
-    },
-    include: {
-      registration: { select: { id: true, createdAt: true } },
-      studentProfile: { include: { enrollments: { where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } }, select: { programId: true } } } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
-  const zaran = candidates.find((candidate) => {
-    const name = candidate.displayName || `${candidate.firstName} ${candidate.lastName ?? ""}`.trim();
-    return name.toLowerCase().replace(/[^a-z0-9]/g, "") === "zarannisar";
-  });
-  if (!zaran) return;
-  if (!zaran.studentProfileId || !zaran.studentProfile?.enrollments.length) {
-    await syncRegistrationAccess(zaran.registration.id, "ACTIVE");
-  }
-}
-
 async function ensureRequiredZaranRoster(teacherId: string) {
-  await ensureZaranBundleAccess();
   const teacher = await db.teacherProfile.findUnique({
     where: { id: teacherId },
     include: { user: true, programAssignments: { include: { program: true } } },
@@ -435,6 +409,46 @@ function offerIncludesProgram(
   return getCatalogOfferProgramSlugs(offer.slug).some((slug) => compatibleSlugs.includes(slug));
 }
 
+async function ensurePaidRegistrationAccessForProgram(program: { id: string; slug: string }) {
+  const compatibleSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
+  const registrationStudents = await db.registrationStudent.findMany({
+    where: { registration: { status: { in: [...PAID_REGISTRATION_STATUSES] } } },
+    include: {
+      registration: { select: { id: true } },
+      items: { include: { offer: { include: { programs: { include: { program: { select: { slug: true } } } } } } } },
+      studentProfile: {
+        include: {
+          enrollments: {
+            where: { program: { slug: { in: compatibleSlugs } } },
+            select: { status: true },
+          },
+        },
+      },
+    },
+  });
+
+  const registrationsToRepair = new Set<string>();
+  for (const registrationStudent of registrationStudents) {
+    const hasProgramme = registrationStudent.items.some((item) => offerIncludesProgram(item.offer, program));
+    if (!hasProgramme) continue;
+    const hasActiveEnrollment = registrationStudent.studentProfile?.enrollments.some((enrollment) =>
+      ACTIVE_ENROLLMENT_STATUSES.includes(enrollment.status as (typeof ACTIVE_ENROLLMENT_STATUSES)[number]),
+    );
+    if (!registrationStudent.studentProfileId || !hasActiveEnrollment) registrationsToRepair.add(registrationStudent.registration.id);
+  }
+
+  for (const registrationId of registrationsToRepair) {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      try {
+        await syncRegistrationAccess(registrationId, "ACTIVE");
+        break;
+      } catch (error) {
+        if (!isRosterWriteConflict(error) || attempt === 3) throw error;
+        await waitForRosterRetry(attempt);
+      }
+    }
+  }
+}
 export async function getProgramEligibleRosterStudents(programId: string) {
   const program = await db.program.findUnique({
     where: { id: programId },
@@ -444,6 +458,8 @@ export async function getProgramEligibleRosterStudents(programId: string) {
   if (!program) {
     return [];
   }
+
+  await ensurePaidRegistrationAccessForProgram(program);
 
   const compatibleProgramSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
   const [directEnrollmentStudents, paidRegistrationStudents] = await Promise.all([
