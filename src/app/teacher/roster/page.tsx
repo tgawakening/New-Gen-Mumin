@@ -94,7 +94,9 @@ export default async function TeacherRosterPage({ searchParams }: PageProps) {
     const studentIds = selectedIds.filter((id) => validStudentIds.has(id));
 
     try {
-      await Promise.all(rosterProgramIds.map((targetProgramId) => syncTeacherProgramRoster(teacherProfile.id, targetProgramId, studentIds)));
+      for (const targetProgramId of rosterProgramIds) {
+        await syncTeacherProgramRoster(teacherProfile.id, targetProgramId, studentIds);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to save roster.";
       redirect(noticeHref(message, "error"));

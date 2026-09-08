@@ -380,26 +380,46 @@ export async function getTeacherProgramRosterStudentIds(teacherId: string, progr
   }
 }
 
-export async function syncTeacherProgramRoster(teacherId: string, programId: string, studentIds: string[]) {
-  try {
-    const uniqueStudentIds = [...new Set(studentIds)];
-    await db.$transaction([
-      db.teacherStudentRoster.deleteMany({ where: { teacherId, programId } }),
-      ...(uniqueStudentIds.length
-        ? [db.teacherStudentRoster.createMany({
-            data: uniqueStudentIds.map((studentId) => ({ teacherId, programId, studentId })),
-            skipDuplicates: true,
-          })]
-        : []),
-    ]);
-  } catch (error) {
-    if (isRosterTableUnavailable(error)) {
-      throw new Error("Roster saving is not ready yet because the roster database tables have not been deployed.");
-    }
-    throw error;
-  }
+function isRosterWriteConflict(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error ? String((error as { code?: unknown }).code ?? "") : "";
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return code === "P2034" || message.includes("deadlock") || message.includes("write conflict") || message.includes("try restarting transaction");
 }
 
+function waitForRosterRetry(attempt: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, 60 * (attempt + 1)));
+}
+
+export async function syncTeacherProgramRoster(teacherId: string, programId: string, studentIds: string[]) {
+  const uniqueStudentIds = [...new Set(studentIds)];
+  const requested = new Set(uniqueStudentIds);
+
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const existing = await db.teacherStudentRoster.findMany({
+        where: { teacherId, programId },
+        select: { id: true, studentId: true },
+      });
+      const existingStudentIds = new Set(existing.map((entry) => entry.studentId));
+      const removeIds = existing.filter((entry) => !requested.has(entry.studentId)).map((entry) => entry.id);
+      const addStudentIds = uniqueStudentIds.filter((studentId) => !existingStudentIds.has(studentId));
+      if (!removeIds.length && !addStudentIds.length) return;
+
+      const operations = [
+        ...(removeIds.length ? [db.teacherStudentRoster.deleteMany({ where: { id: { in: removeIds } } })] : []),
+        ...(addStudentIds.length ? [db.teacherStudentRoster.createMany({ data: addStudentIds.map((studentId) => ({ teacherId, programId, studentId })), skipDuplicates: true })] : []),
+      ];
+      await db.$transaction(operations);
+      return;
+    } catch (error) {
+      if (isRosterTableUnavailable(error)) {
+        throw new Error("Roster saving is not ready yet because the roster database tables have not been deployed.");
+      }
+      if (!isRosterWriteConflict(error) || attempt === 3) throw error;
+      await waitForRosterRetry(attempt);
+    }
+  }
+}
 function offerIncludesProgram(
   offer: {
     slug: string;

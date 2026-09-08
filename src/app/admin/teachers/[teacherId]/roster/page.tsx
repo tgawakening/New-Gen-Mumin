@@ -65,7 +65,9 @@ export default async function AdminTeacherRosterPage({ params }: Props) {
     const eligible = await getProgramEligibleRosterStudents(programId);
     const allowed = new Set(eligible.map((student) => student.id));
     const studentIds = formData.getAll("studentIds").map(String).filter((id) => allowed.has(id));
-    await Promise.all(rosterProgramIds.map((targetProgramId) => syncTeacherProgramRoster(target.id, targetProgramId, studentIds)));
+    for (const targetProgramId of rosterProgramIds) {
+      await syncTeacherProgramRoster(target.id, targetProgramId, studentIds);
+    }
     revalidatePath(`/admin/teachers/${target.id}/roster`);
     revalidatePath("/teacher/roster");
     revalidatePath("/teacher/live-sessions");
