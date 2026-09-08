@@ -53,6 +53,7 @@ export const PARENTAL_SESSION_MARKER = "[Category:PARENTAL]";
 const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const PAID_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
+const MANUALLY_CANCELLED_ROSTER_NAMES = new Set(["ibrahimsyedhassan", "ibrahimhassan", "sarahsyedhassan", "sarahhassan"]);
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -275,6 +276,18 @@ async function ensureRequiredZaranRoster(teacherId: string) {
 }
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
+    const namedRosterEntries = await db.teacherStudentRoster.findMany({
+      select: { id: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
+    });
+    const manuallyCancelledEntryIds = namedRosterEntries
+      .filter((entry) => {
+        const name = entry.student.displayName || `${entry.student.user.firstName} ${entry.student.user.lastName ?? ""}`;
+        return MANUALLY_CANCELLED_ROSTER_NAMES.has(name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""));
+      })
+      .map((entry) => entry.id);
+    if (manuallyCancelledEntryIds.length) {
+      await db.teacherStudentRoster.deleteMany({ where: { id: { in: manuallyCancelledEntryIds } } });
+    }
     await db.teacherStudentRoster.deleteMany({
       where: {
         student: {
@@ -633,6 +646,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
     );
     const normalizedName = ["salaarkhurram", "salarkhurram"].includes(rawNormalizedName) ? "salarkhurram" : rawNormalizedName;
+    if (MANUALLY_CANCELLED_ROSTER_NAMES.has(normalizedName)) continue;
     // Re-registrations can create a fresh generated login or parent link. The learner's
     // normalized name is the stable roster identity; the newest paid profile wins below.
     const identityKey = normalizedName || `user:${student.user.email.toLowerCase()}`;
