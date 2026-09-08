@@ -80,17 +80,19 @@ export async function GET(_request: Request, context: RouteContext) {
       throw new Error(startAsMember ? "Zoom join link is not available for this session yet." : "Zoom host start link is not available for this session yet.");
     }
 
-    await recordLiveClassSessionOccurrence({
-      scheduleId: schedule.id,
-      teacherUserId: session.user.id,
-      meetingId: schedule.meetingId,
-      source: startAsMember ? "teacher-member-start" : "teacher-start",
-    });
+    if (!startAsMember) {
+      await recordLiveClassSessionOccurrence({
+        scheduleId: schedule.id,
+        teacherUserId: session.user.id,
+        meetingId: schedule.meetingId,
+        source: "teacher-start",
+      });
 
-    try {
-      await notifyRosteredUsersClassStarted(schedule.id);
-    } catch (notificationError) {
-      console.error("Unable to notify rostered users that class started", notificationError);
+      try {
+        await notifyRosteredUsersClassStarted(schedule.id);
+      } catch (notificationError) {
+        console.error("Unable to notify rostered users that class started", notificationError);
+      }
     }
     return NextResponse.redirect(zoomUrl);
   } catch (error) {

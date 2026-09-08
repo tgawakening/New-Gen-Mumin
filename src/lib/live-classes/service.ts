@@ -758,7 +758,7 @@ export type LiveClassAccessState = "scheduled" | "live" | "ended";
 
 export async function getLiveClassAccessState(scheduleId: string): Promise<LiveClassAccessState> {
   const latest = await db.liveClassSessionOccurrence.findFirst({
-    where: { scheduleId },
+    where: { scheduleId, source: { not: "teacher-member-start" } },
     orderBy: { startedAt: "desc" },
     select: { startedAt: true, endedAt: true },
   });
