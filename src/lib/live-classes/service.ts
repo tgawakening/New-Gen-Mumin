@@ -58,7 +58,16 @@ const CANCELLED_ROSTER_PARENT_EMAIL_PARTS = ["s.hassanarif"];
 const ROSTER_NAME_ALIASES = new Map([
   ["muntahafatima", "muntaha"],
   ["muntahaparent", "muntaha"],
+  ["salaarkhurram", "salarkhurram"],
+  ["salarkhurram", "salarkhurram"],
+  ["tehreem", "tehreemkhurram"],
+  ["tehreemparent", "tehreemkhurram"],
+  ["tehreemkhurram", "tehreemkhurram"],
+  ["yashermuhammad", "yasher"],
+  ["yasherparent", "yasher"],
+  ["yasher", "yasher"],
 ]);
+const GLOBAL_ROSTER_IDENTITIES = new Set(["muntaha", "salarkhurram", "tehreemkhurram", "yasher"]);
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -312,10 +321,22 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
       },
     });
     await ensureRequiredZaranRoster(teacherId);
-    return await db.teacherStudentRoster.findMany({
+    const rosterEntries = await db.teacherStudentRoster.findMany({
       where: { teacherId },
-      select: { programId: true, studentId: true },
+      select: { id: true, programId: true, studentId: true },
     });
+    const validStudentIdsByProgram = new Map<string, Set<string>>();
+    for (const programId of [...new Set(rosterEntries.map((entry) => entry.programId))]) {
+      const eligible = await getProgramEligibleRosterStudents(programId);
+      validStudentIdsByProgram.set(programId, new Set(eligible.map((student) => student.id)));
+    }
+    const staleEntryIds = rosterEntries
+      .filter((entry) => !validStudentIdsByProgram.get(entry.programId)?.has(entry.studentId))
+      .map((entry) => entry.id);
+    if (staleEntryIds.length) await db.teacherStudentRoster.deleteMany({ where: { id: { in: staleEntryIds } } });
+    return rosterEntries
+      .filter((entry) => !staleEntryIds.includes(entry.id))
+      .map(({ programId, studentId }) => ({ programId, studentId }));
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
@@ -660,9 +681,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     const rawNormalizedName = normalizeIdentityPart(
       student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
     );
-    const normalizedName = ["salaarkhurram", "salarkhurram"].includes(rawNormalizedName)
-      ? "salarkhurram"
-      : ROSTER_NAME_ALIASES.get(rawNormalizedName) ?? rawNormalizedName;
+    const normalizedName = ROSTER_NAME_ALIASES.get(rawNormalizedName) ?? rawNormalizedName;
     const belongsToCancelledParent = student.parents.some((entry) =>
       CANCELLED_ROSTER_PARENT_EMAIL_PARTS.some((emailPart) => entry.parent.user.email.toLowerCase().includes(emailPart)),
     ) || student.registrationStudents.some((entry) =>
@@ -678,9 +697,11 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     const registrationParentEmail = latestRegistration?.registration.parentEmail.trim().toLowerCase();
     const linkedParentEmail = student.parents[0]?.parent.user.email.trim().toLowerCase();
     const parentIdentity = registrationParentEmail || linkedParentEmail || student.parents[0]?.parentId || "";
-    const identityKey = parentIdentity && normalizedFirstName
-      ? `${parentIdentity}:${normalizedFirstName}`
-      : normalizedName || `user:${student.user.email.toLowerCase()}`;
+    const identityKey = GLOBAL_ROSTER_IDENTITIES.has(normalizedName)
+      ? `canonical:${normalizedName}`
+      : parentIdentity && normalizedFirstName
+        ? `${parentIdentity}:${normalizedFirstName}`
+        : normalizedName || `user:${student.user.email.toLowerCase()}`;
     const existing = newestStudentByIdentity.get(identityKey);
     if (!existing || latestApprovedRegistrationTime(student) > latestApprovedRegistrationTime(existing)) {
       newestStudentByIdentity.set(identityKey, student);
