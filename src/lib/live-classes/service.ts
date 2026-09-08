@@ -14,6 +14,7 @@ import {
 } from "@/lib/zoom/client";
 import { DEFAULT_OFFERS, getCatalogOfferProgramSlugs } from "@/lib/registration/catalog";
 import { isArabicTajweedSlug } from "@/lib/genm/curriculum";
+import { syncRegistrationAccess } from "@/lib/enrollment/access";
 
 export const WHOLE_GEN_MUMIN_PROGRAM_ID = "__whole_gen_mumin__";
 export const PENDING_ZOOM_PROVIDER = "Zoom Pending Approval";
@@ -234,21 +235,45 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
+async function ensureZaranBundleAccess() {
+  const candidates = await db.registrationStudent.findMany({
+    where: {
+      registration: { status: { in: [...PAID_REGISTRATION_STATUSES] } },
+      OR: [
+        { firstName: { contains: "Zaran" } },
+        { displayName: { contains: "Zaran" } },
+      ],
+    },
+    include: {
+      registration: { select: { id: true, createdAt: true } },
+      studentProfile: { include: { enrollments: { where: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } }, select: { programId: true } } } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  const zaran = candidates.find((candidate) => {
+    const name = candidate.displayName || `${candidate.firstName} ${candidate.lastName ?? ""}`.trim();
+    return name.toLowerCase().replace(/[^a-z0-9]/g, "") === "zarannisar";
+  });
+  if (!zaran) return;
+  if (!zaran.studentProfileId || !zaran.studentProfile?.enrollments.length) {
+    await syncRegistrationAccess(zaran.registration.id, "ACTIVE");
+  }
+}
+
 async function ensureRequiredZaranRoster(teacherId: string) {
+  await ensureZaranBundleAccess();
   const teacher = await db.teacherProfile.findUnique({
     where: { id: teacherId },
     include: { user: true, programAssignments: { include: { program: true } } },
   });
   if (!teacher?.isActive || teacher.user.status !== "ACTIVE") return;
 
-  const email = teacher.user.email.toLowerCase();
-  const requiredAssignments = teacher.programAssignments.filter((assignment) => {
-    if (email === "abubakar98114@gmail.com") return isArabicTajweedSlug(assignment.program.slug);
-    return ["seerah", "life-lessons"].includes(assignment.program.slug);
-  });
-  if (!requiredAssignments.length) return;
+  const markerTitle = "System: Zaran roster initialized";
+  const initialized = await db.notification.findFirst({ where: { userId: teacher.userId, title: markerTitle }, select: { id: true } });
+  if (initialized) return;
 
-  for (const assignment of requiredAssignments) {
+  let assigned = 0;
+  for (const assignment of teacher.programAssignments) {
     const eligible = await getProgramEligibleRosterStudents(assignment.programId);
     const zaran = eligible.find((student) => {
       const name = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
@@ -259,6 +284,18 @@ async function ensureRequiredZaranRoster(teacherId: string) {
       where: { teacherId_programId_studentId: { teacherId, programId: assignment.programId, studentId: zaran.id } },
       update: {},
       create: { teacherId, programId: assignment.programId, studentId: zaran.id },
+    });
+    assigned += 1;
+  }
+
+  if (assigned) {
+    await db.notification.create({
+      data: {
+        userId: teacher.userId,
+        title: markerTitle,
+        body: `Zaran Nisar was initialized in ${assigned} eligible programme roster${assigned === 1 ? "" : "s"}.`,
+        readAt: new Date(),
+      },
     });
   }
 }
