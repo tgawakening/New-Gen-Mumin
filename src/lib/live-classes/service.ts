@@ -64,6 +64,10 @@ const ROSTER_NAME_ALIASES = new Map([
   ["tehreemparent", "tehreemkhurram"],
   ["tehreemkhurram", "tehreemkhurram"],
   ["yashermuhammad", "yasher"],
+  ["yashermuhammadshahbaz", "yasher"],
+  ["yashur", "yasher"],
+  ["yashurmuhammad", "yasher"],
+  ["yashurmuhammadshahbaz", "yasher"],
   ["yasherparent", "yasher"],
   ["yasher", "yasher"],
 ]);

@@ -8,7 +8,8 @@ import { sendQabilaMentionEmail, sendQabilaMessageEmail } from "@/lib/email/noti
 import { uploadCommunityDiscussionFile, uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
 
 const QABILA_LEARNER_ALIASES = new Map([
-  ["yashermuhammad", "yasher"], ["yasherparent", "yasher"], ["yasher", "yasher"],
+  ["yashermuhammad", "yasher"], ["yashermuhammadshahbaz", "yasher"], ["yasherparent", "yasher"],
+  ["yashur", "yasher"], ["yashurmuhammad", "yasher"], ["yashurmuhammadshahbaz", "yasher"], ["yasher", "yasher"],
   ["muntahafatima", "muntaha"], ["muntahaparent", "muntaha"],
   ["salaarkhurram", "salarkhurram"], ["tehreem", "tehreemkhurram"],
   ["tehreemparent", "tehreemkhurram"], ["tehreemkhurram", "tehreemkhurram"],
@@ -520,7 +521,7 @@ export async function getParentCommunityData(parentUserId: string, selectedChild
   const childrenByName = new Map<string, (typeof parent.students)[number]["student"]>();
   for (const relation of parent.students) {
     const student = relation.student;
-    const identity = (student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const identity = qabilaLearnerIdentity(student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`);
     const existing = childrenByName.get(identity);
     const score = student.enrollments.length * 1_000 + student.createdAt.getTime() / 1_000_000_000_000;
     const existingScore = existing ? existing.enrollments.length * 1_000 + existing.createdAt.getTime() / 1_000_000_000_000 : -1;
