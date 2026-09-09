@@ -655,12 +655,12 @@ export async function getProgramEligibleRosterStudents(programId: string) {
         ? registrationStudent.items
         : [],
     );
-    const hasAnyRegistrationEvidence = student.registrationStudents.some((registrationStudent) =>
-      registrationStudent.items.some((item) => offerIncludesProgram(item.offer, program)),
-    );
     const hasProgramOffer = paidRegistrationItems.some((item) => offerIncludesProgram(item.offer, program));
 
-    if (hasProgramOffer || (activeDirectEnrollment && !hasAnyRegistrationEvidence)) {
+    // Active/confirmed/completed programme access is authoritative. Some older
+    // bundle registrations have incomplete offer-item metadata; excluding those
+    // profiles made valid learners disappear from both default and class rosters.
+    if (hasProgramOffer || activeDirectEnrollment) {
       studentsById.set(student.id, student);
     }
   }
