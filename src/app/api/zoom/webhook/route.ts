@@ -205,6 +205,17 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "meeting.started") {
+    const normalize = (value?: string | null) => (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    const hostEmail = payload.payload?.object?.host_email?.trim().toLowerCase();
+    const topic = normalize(payload.payload?.object?.topic);
+    const hostMatches = hostEmail ? schedules.filter((item) => item.teacher.user.email.trim().toLowerCase() === hostEmail) : [];
+    const topicPool = hostMatches.length ? hostMatches : schedules;
+    const topicMatches = topic ? topicPool.filter((item) => normalize(cleanLiveClassTitle(item.title)) === topic) : [];
+    const startedSchedules = topicMatches.length ? topicMatches : hostMatches.length ? hostMatches : schedules.length === 1 ? schedules : [];
+    if (!startedSchedules.length) {
+      console.warn("Ignored ambiguous Zoom meeting.started event", { meetingId, hostEmail, topic, scheduleCount: schedules.length });
+      return NextResponse.json({ received: true, ignored: "ambiguous-schedule" });
+    }
     const users = new Map<string, "admin" | "teacher" | "student" | "parent">();
 
     const admins = await db.user.findMany({
@@ -213,9 +224,10 @@ export async function POST(request: NextRequest) {
     });
     for (const admin of admins) users.set(admin.id, "admin");
 
-    for (const matchingSchedule of schedules) {
+    for (const matchingSchedule of startedSchedules) {
       await recordLiveClassSessionOccurrence({
         scheduleId: matchingSchedule.id,
+        teacherUserId: matchingSchedule.teacher.user.id,
         meetingId,
         source: "zoom-webhook",
       });
@@ -232,7 +244,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const title = cleanLiveClassTitle(schedule.title);
+    const title = cleanLiveClassTitle(startedSchedules[0].title);
     await db.notification.createMany({
       data: [...users.entries()].map(([userId, role]) => ({
         userId,

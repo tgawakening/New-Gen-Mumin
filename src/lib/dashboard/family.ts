@@ -603,8 +603,11 @@ function mapScheduleSummary(schedule: any, title: string, category: "CLASS" | "P
     provider: schedule.meetingProvider,
     isLive: Boolean(
       schedule.sessionOccurrences?.some(
-        (occurrence: { endedAt?: Date | null; source?: string | null }) =>
-          !occurrence.endedAt && occurrence.source !== "teacher-member-start",
+        (occurrence: { endedAt?: Date | null; source?: string | null; teacherUserId?: string | null; startedAt?: Date | null }) =>
+          !occurrence.endedAt
+          && occurrence.source === "zoom-webhook"
+          && occurrence.teacherUserId === schedule.teacher?.user?.id
+          && Boolean(occurrence.startedAt && occurrence.startedAt.getTime() >= Date.now() - 6 * 60 * 60 * 1000),
       ),
     ),
   };

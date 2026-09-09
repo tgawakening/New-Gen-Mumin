@@ -775,8 +775,19 @@ export async function resolveScheduleStudentIds(scheduleId: string) {
 export type LiveClassAccessState = "scheduled" | "live" | "ended";
 
 export async function getLiveClassAccessState(scheduleId: string): Promise<LiveClassAccessState> {
+  const schedule = await db.classSchedule.findUnique({
+    where: { id: scheduleId },
+    select: { teacher: { select: { userId: true } } },
+  });
+  if (!schedule) return "scheduled";
+
   const latest = await db.liveClassSessionOccurrence.findFirst({
-    where: { scheduleId, source: { not: "teacher-member-start" } },
+    where: {
+      scheduleId,
+      source: "zoom-webhook",
+      teacherUserId: schedule.teacher.userId,
+      startedAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) },
+    },
     orderBy: { startedAt: "desc" },
     select: { startedAt: true, endedAt: true },
   });
