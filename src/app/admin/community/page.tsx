@@ -29,7 +29,7 @@ const GENDER_SCOPES = ["ALL", "BOYS", "GIRLS", "MENTOR_SUPERVISED"] as const;
 const CURRENT_QABILA_DRAFT = [
   ["Amna Ali", "Qabila Banu Makhzum", "CAPTAIN"], ["Muntaha", "Qabila Banu Makhzum", "VICE_CAPTAIN"], ["Tehreem", "Qabila Banu Makhzum", "MEMBER"], ["Anayah", "Qabila Banu Makhzum", "MEMBER"], ["Ameena Ahmadzi", "Qabila Banu Makhzum", "MEMBER"], ["Zainab", "Qabila Banu Makhzum", "MEMBER"], ["Amal", "Qabila Banu Makhzum", "MEMBER"], ["Adan", "Qabila Banu Makhzum", "MEMBER"],
   ["Mishal", "Qabila Banu Zuhra", "CAPTAIN"], ["Rania", "Qabila Banu Zuhra", "VICE_CAPTAIN"], ["Noor", "Qabila Banu Zuhra", "MEMBER"], ["Sara Ali", "Qabila Banu Zuhra", "MEMBER"], ["Halima", "Qabila Banu Zuhra", "MEMBER"], ["Aram Fatma", "Qabila Banu Zuhra", "MEMBER"], ["Huda", "Qabila Banu Zuhra", "MEMBER"], ["Khadija", "Qabila Banu Zuhra", "MEMBER"],
-  ["Musa AH Naveed", "Qabila Banu Hashim", "CAPTAIN"], ["Ibrahim Hassan", "Qabila Banu Hashim", "VICE_CAPTAIN"], ["Talha", "Qabila Banu Hashim", "MEMBER"], ["Mussab", "Qabila Banu Hashim", "MEMBER"], ["TaaHaa", "Qabila Banu Hashim", "MEMBER"], ["Hanzla", "Qabila Banu Hashim", "MEMBER"], ["Ahmad", "Qabila Banu Hashim", "MEMBER"],
+  ["Musa AH Naveed", "Qabila Banu Hashim", "CAPTAIN"], ["Talha", "Qabila Banu Hashim", "MEMBER"], ["Mussab", "Qabila Banu Hashim", "MEMBER"], ["TaaHaa", "Qabila Banu Hashim", "MEMBER"], ["Hanzla", "Qabila Banu Hashim", "MEMBER"], ["Ahmad", "Qabila Banu Hashim", "MEMBER"],
   ["Yashur", "Qabila Banu Asad", "CAPTAIN"], ["Mustafa", "Qabila Banu Asad", "VICE_CAPTAIN"], ["Arham", "Qabila Banu Asad", "MEMBER"], ["Zaran", "Qabila Banu Asad", "MEMBER"], ["Reyhan", "Qabila Banu Asad", "MEMBER"], ["Salar", "Qabila Banu Asad", "MEMBER"],
 ] as const;
 const QABILA_NAME_ALIASES: Record<string, string[]> = {
@@ -37,11 +37,11 @@ const QABILA_NAME_ALIASES: Record<string, string[]> = {
   "Ameena Ahmadzi": ["Ameena", "Emeena", "Amina"],
   "Zainab": ["Zainab Ali"], "Amal": ["Amal Salihah"], "Adan": ["Adan Fakihah"],
   "Mishal": ["Mishal ahmad"], "Rania": ["Rania Osman"], "Noor": ["Noor aftab"],
-  "Sara Ali": ["Sarah Ali", "Sarah Syed Hassan"], "Halima": ["Halimah", "Halimah zeeshan"],
+  "Sara Ali": ["Sarah Ali"], "Halima": ["Halimah", "Halimah zeeshan"],
   "Aram Fatma": ["Aram Fatima"], "Huda": ["Huda Ahsan"],
-  "Musa AH Naveed": ["Moosa AbdulHaadi Naveed"], "Ibrahim Hassan": ["Ibrahim Syed Hassan"],
+  "Musa AH Naveed": ["Moosa AbdulHaadi Naveed"],
   "Salar": ["Salaar", "Salaar Khurram"], "Mussab": ["Musab", "Mohammad Mussab Ashfaq", "Mohammad Mus'ab Ashfaq"],
-  "TaaHaa": ["Taha", "Muhammad Taha"], "Hanzla": ["Hanzala", "Hanzala rehman"],
+  "Talha": ["Muhammad Talha"], "TaaHaa": ["Taha", "Muhammad Taha"], "Hanzla": ["Hanzala", "Hanzala rehman"],
   "Yashur": ["Yasher", "Yasher Muhammad Shahbaz"], "Mustafa": ["Mustafa Asif Mukhtar"],
   "Arham": ["Arham khan"], "Zaran": ["Zaran Nisar"], "Reyhan": ["Rehan", "Rehan Khan"],
   "Ahmad": ["Ahmad Parent"], "Khadija": ["Khadija Parent", "Khadjia Parent"],
