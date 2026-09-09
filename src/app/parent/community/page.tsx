@@ -110,7 +110,7 @@ export default async function ParentCommunityPage({ searchParams }: PageProps) {
         eyebrow="Switch learner"
         title={community.selectedChild ? childName(community.selectedChild) : "Choose learner"}
         icon="star"
-        action={<span className="rounded-full bg-[#fbf6ef] px-3 py-1.5 text-xs font-semibold text-[#617184]">{visibleMessages} messages / {projectCount} projects</span>}
+        action={<div className="flex flex-wrap items-center gap-2">{selectedRoom ? <span className="rounded-full bg-[#e7f6eb] px-3 py-1.5 text-xs font-bold text-[#247044]">✓ Chat active · {selectedRoom.room.title}</span> : <span className="rounded-full bg-[#fff1e8] px-3 py-1.5 text-xs font-bold text-[#a44d24]">Chat setup pending</span>}<span className="rounded-full bg-[#fbf6ef] px-3 py-1.5 text-xs font-semibold text-[#617184]">{visibleMessages} messages / {projectCount} projects</span></div>}
       >
         <ChildSelector
           learners={community.children.map((child) => ({ id: child.id, name: childName(child) }))}

@@ -3,6 +3,7 @@ import "server-only";
 import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
 import { sendQabilaMentionEmail, sendQabilaMessageEmail } from "@/lib/email/notifications";
 import { uploadCommunityDiscussionFile, uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
@@ -293,6 +294,26 @@ export async function ensureStudentQabilaRoom(studentId: string) {
           select: { qabilaGroup: true, role: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
         });
       }
+    }
+  }
+  // Yasher is an approved Boys Qabila B member (now Qabila Banu Asad). If no
+  // historical profile carries the assignment, apply the approved roster here.
+  if (!canonicalQabilaName(membership?.qabilaGroup?.trim())) {
+    const student = await db.studentProfile.findUnique({
+      where: { id: studentId },
+      select: { displayName: true, user: { select: { firstName: true, lastName: true } } },
+    });
+    const identity = qabilaLearnerIdentity(student?.displayName || `${student?.user.firstName || ""} ${student?.user.lastName || ""}`);
+    if (identity === "yasher") {
+      await ensureStudentHouseMembership(studentId);
+      await db.houseMembership.update({
+        where: { studentId },
+        data: { qabilaGroup: "Qabila Banu Asad", role: "CAPTAIN" },
+      });
+      membership = await db.houseMembership.findUnique({
+        where: { studentId },
+        select: { qabilaGroup: true, role: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
+      });
     }
   }
   const qabilaGroup = canonicalQabilaName(membership?.qabilaGroup?.trim());
