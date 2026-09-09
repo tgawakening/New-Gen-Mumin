@@ -94,7 +94,7 @@ function isTeacherEditedTrackedRow(notes?: string | null) {
   return Boolean(notes?.includes("Teacher edited from original:") || notes?.includes("Admin edited from original:") || notes?.includes("Admin reassigned from teacher:"));
 }
 
-function duplicateTrackedOccurrenceIds(occurrences: Array<{
+type TrackedOccurrence = {
   id: string;
   scheduleId: string;
   startedAt: Date;
@@ -102,30 +102,55 @@ function duplicateTrackedOccurrenceIds(occurrences: Array<{
   completedAt: Date | null;
   endedAt: Date | null;
   source: string;
-}>) {
-  const duplicateIds = new Set<string>();
-  const ordered = [...occurrences].sort((left, right) =>
-    left.scheduleId.localeCompare(right.scheduleId) || left.startedAt.getTime() - right.startedAt.getTime(),
-  );
+  schedule: { program: { title: string } };
+};
 
-  for (let index = 0; index < ordered.length; index += 1) {
-    const first = ordered[index];
-    if (duplicateIds.has(first.id)) continue;
-    const sameStart = ordered.filter((candidate) =>
-      candidate.scheduleId === first.scheduleId &&
-      Math.abs(candidate.startedAt.getTime() - first.startedAt.getTime()) <= 2 * 60 * 1000,
-    );
-    if (sameStart.length < 2) continue;
-    const quality = (occurrence: (typeof sameStart)[number]) =>
-      (occurrence.completedAt || occurrence.endedAt ? 100000 : 0) +
-      (occurrence.source === "zoom-recording" ? 10000 : 0) +
-      (occurrence.durationMinutes ?? 0);
-    const canonical = [...sameStart].sort((left, right) => quality(right) - quality(left))[0];
-    for (const occurrence of sameStart) {
-      if (occurrence.id !== canonical.id) duplicateIds.add(occurrence.id);
-    }
+const RESUMED_SESSION_GAP_MS = 30 * 60 * 1000;
+
+function consolidateTrackedOccurrences(occurrences: TrackedOccurrence[]) {
+  const duplicateIds = new Set<string>();
+  const summaries = new Map<string, { startedAt: Date; durationMinutes: number; source: string }>();
+  const payable = occurrences.filter((occurrence) => (occurrence.durationMinutes ?? 0) >= MIN_PAYABLE_TRACKED_SESSION_MINUTES);
+  const dayKey = (date: Date) => date.toISOString().slice(0, 10);
+  const endTime = (occurrence: TrackedOccurrence) =>
+    (occurrence.endedAt ?? occurrence.completedAt)?.getTime()
+    ?? occurrence.startedAt.getTime() + (occurrence.durationMinutes ?? 0) * 60_000;
+  const quality = (occurrence: TrackedOccurrence) =>
+    (occurrence.source === "teacher-start" ? 300_000 : occurrence.source === "teacher-member-start" ? 200_000 : 100_000)
+    + (occurrence.completedAt || occurrence.endedAt ? 10_000 : 0)
+    + (occurrence.durationMinutes ?? 0);
+  const groups = new Map<string, TrackedOccurrence[]>();
+  for (const occurrence of payable) {
+    const key = `${dayKey(occurrence.startedAt)}:${occurrence.schedule.program.title}`;
+    groups.set(key, [...(groups.get(key) ?? []), occurrence]);
   }
-  return duplicateIds;
+
+  for (const group of groups.values()) {
+    const ordered = [...group].sort((left, right) => left.startedAt.getTime() - right.startedAt.getTime());
+    let cluster: TrackedOccurrence[] = [];
+    let clusterEnd = 0;
+    const finishCluster = () => {
+      if (!cluster.length) return;
+      const canonical = [...cluster].sort((left, right) => quality(right) - quality(left))[0];
+      const startedAt = new Date(Math.min(...cluster.map((item) => item.startedAt.getTime())));
+      const endedAt = Math.max(...cluster.map(endTime));
+      summaries.set(canonical.id, {
+        startedAt,
+        durationMinutes: Math.max(MIN_PAYABLE_TRACKED_SESSION_MINUTES, Math.round((endedAt - startedAt.getTime()) / 60_000)),
+        source: canonical.source,
+      });
+      for (const occurrence of cluster) if (occurrence.id !== canonical.id) duplicateIds.add(occurrence.id);
+      cluster = [];
+      clusterEnd = 0;
+    };
+    for (const occurrence of ordered) {
+      if (cluster.length && occurrence.startedAt.getTime() > clusterEnd + RESUMED_SESSION_GAP_MS) finishCluster();
+      cluster.push(occurrence);
+      clusterEnd = Math.max(clusterEnd, endTime(occurrence));
+    }
+    finishCluster();
+  }
+  return { duplicateIds, summaries };
 }
 async function syncTrackedHours(teacher: { id: string; userId: string }, startsAt: Date, endsAt: Date) {
   const occurrences = await db.liveClassSessionOccurrence.findMany({
@@ -143,11 +168,11 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
     },
     orderBy: { startedAt: "asc" },
   });
-  const duplicateOccurrenceIds = duplicateTrackedOccurrenceIds(occurrences);
+  const consolidated = consolidateTrackedOccurrences(occurrences);
 
   for (const occurrence of occurrences) {
     const existing = await db.teacherHoursLogEntry.findUnique({ where: { occurrenceId: occurrence.id } });
-    if (duplicateOccurrenceIds.has(occurrence.id)) {
+    if (consolidated.duplicateIds.has(occurrence.id)) {
       if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
         await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
       }
@@ -162,7 +187,8 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
 
 
     const trackedDuration = occurrence.durationMinutes ?? 0;
-    if (trackedDuration > 0 && trackedDuration < MIN_PAYABLE_TRACKED_SESSION_MINUTES) {
+    const summary = consolidated.summaries.get(occurrence.id);
+    if (!summary || trackedDuration < MIN_PAYABLE_TRACKED_SESSION_MINUTES) {
       if (existing?.source === TeacherHoursLogSource.TRACKED && !isTeacherEditedTrackedRow(existing.notes)) {
         await db.teacherHoursLogEntry.delete({ where: { id: existing.id } });
       }
@@ -171,8 +197,7 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
 
     if (existing?.notes?.includes(HOURS_LOG_EXCLUDED_MARKER) || (existing && isTeacherEditedTrackedRow(existing.notes))) continue;
 
-    const fallbackDuration = trackedDuration > 0 ? trackedDuration : 60;
-    const startTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(occurrence.startedAt);
+    const startTime = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }).format(summary.startedAt);
     const rowData = {
       teacherId: teacher.id,
       scheduleId: occurrence.scheduleId,
@@ -180,10 +205,10 @@ async function syncTrackedHours(teacher: { id: string; userId: string }, startsA
       source: TeacherHoursLogSource.TRACKED,
       title: cleanLiveClassTitle(occurrence.schedule.title),
       programTitle: liveClassCategoryTitle(occurrence.schedule.title, occurrence.schedule.program.title),
-      sessionDate: occurrence.startedAt,
+      sessionDate: summary.startedAt,
       startTime,
-      durationMinutes: fallbackDuration,
-      mode: occurrenceMode(occurrence.source),
+      durationMinutes: summary.durationMinutes,
+      mode: occurrenceMode(summary.source),
       notes: occurrence.completedAt ? "Auto-tracked from website/Zoom." : "Auto-tracked start; please confirm final duration.",
     };
 
