@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { closeOpenZoomAttendanceIntervals, reconcileZoomParticipantReport, recordZoomParticipantJoined, recordZoomParticipantLeft } from "@/lib/live-classes/attendance";
 import { recordLiveClassSessionEnd, recordLiveClassSessionFromRecording, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
+import { notifyRosteredUsersClassStarted } from "@/lib/live-classes/notifications";
 import {
   cleanLiveClassTitle,
   enrollmentMatchesLiveClassAudience,
@@ -232,18 +233,10 @@ export async function POST(request: NextRequest) {
         meetingId,
         source: "zoom-webhook",
       });
+      await notifyRosteredUsersClassStarted(matchingSchedule.id);
       users.set(matchingSchedule.teacher.user.id, "teacher");
 
-      if (!isLiveClassVisibleToStudents(matchingSchedule.title)) continue;
-      const rosterStudentIds = new Set(await getScheduleRosterStudentIds(matchingSchedule.id));
-      const audienceGroup = getLiveClassAudienceGroup(matchingSchedule.title);
-      const hasExplicitClassRoster = matchingSchedule.scheduleRosters.length > 0;
-      for (const enrollment of matchingSchedule.program.enrollments) {
-        if (!hasExplicitClassRoster && !enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
-        if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
-        users.set(enrollment.student.user.id, "student");
-        users.set(enrollment.parent.user.id, "parent");
-      }
+
     }
 
     const title = cleanLiveClassTitle(startedSchedules[0].title);

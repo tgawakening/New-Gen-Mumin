@@ -9,7 +9,9 @@ import {
   countryMatchesLiveClassAudience,
   enrollmentMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
+  getProgramEligibleRosterStudents,
   isLiveClassVisibleToStudents,
+  resolveScheduleStudentIds,
 } from "@/lib/live-classes/service";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 
@@ -278,42 +280,43 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
   const now = new Date();
   const title = cleanLiveClassTitle(schedule.title);
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
-  const scheduleRosterIds = schedule.scheduleRosters.map((entry) => entry.studentId);
-  const defaultRosterIds = schedule.teacher.programRosters
-    .filter((entry) => entry.programId === schedule.programId)
-    .map((entry) => entry.studentId);
-  const visibleRosterIds = new Set(scheduleRosterIds.length ? scheduleRosterIds : defaultRosterIds);
-  const hasRosterFilter = visibleRosterIds.size > 0;
+  const hadExplicitClassRoster = schedule.scheduleRosters.length > 0;
+  const resolvedRosterIds = new Set(await resolveScheduleStudentIds(schedule.id));
+  const hasRosterFilter = resolvedRosterIds.size > 0;
+  const eligibleStudents = await getProgramEligibleRosterStudents(schedule.programId);
   const scheduleLabel = `${WEEKDAY_LABELS[schedule.weekday] ?? "Weekly class"} ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}`;
   const emailRecipients = new Map<string, { toEmail: string; recipientName: string; studentId: string }>();
   const notificationRecipients = new Map<string, { userId: string; href: string }>();
 
-  const hasExplicitClassRoster = scheduleRosterIds.length > 0;
-  for (const enrollment of schedule.program.enrollments) {
-    if (!hasExplicitClassRoster && !enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
-    if (hasRosterFilter && !visibleRosterIds.has(enrollment.studentId)) continue;
+  for (const student of eligibleStudents) {
+    if (!hadExplicitClassRoster) {
+      const matchesAudience = enrollmentMatchesLiveClassAudience({ student }, audienceGroup)
+        || student.parents.some(({ parent }) => enrollmentMatchesLiveClassAudience({ student, parent }, audienceGroup));
+      if (!matchesAudience) continue;
+    }
+    if (hasRosterFilter && !resolvedRosterIds.has(student.id)) continue;
 
-    notificationRecipients.set(`${enrollment.student.user.id}:${enrollment.studentId}`, { userId: enrollment.student.user.id, href: buildTrackedZoomJoinUrl(schedule.id, enrollment.studentId) });
-    if (canSendLiveClassEmail(enrollment.student.user.email)) {
-      emailRecipients.set(`${enrollment.student.user.email.toLowerCase()}:${enrollment.studentId}`, {
-        toEmail: enrollment.student.user.email,
-        recipientName: notificationPersonName(enrollment.student.user),
-        studentId: enrollment.studentId,
+    notificationRecipients.set(`${student.user.id}:${student.id}`, { userId: student.user.id, href: buildTrackedZoomJoinUrl(schedule.id, student.id) });
+    if (canSendLiveClassEmail(student.user.email)) {
+      emailRecipients.set(`${student.user.email.toLowerCase()}:${student.id}`, {
+        toEmail: student.user.email,
+        recipientName: notificationPersonName(student.user),
+        studentId: student.id,
       });
     }
 
-    if (enrollment.parent?.user.id) {
-      notificationRecipients.set(`${enrollment.parent.user.id}:${enrollment.studentId}`, { userId: enrollment.parent.user.id, href: buildTrackedZoomJoinUrl(schedule.id, enrollment.studentId) });
-      if (canSendLiveClassEmail(enrollment.parent.user.email)) {
-        emailRecipients.set(`${enrollment.parent.user.email.toLowerCase()}:${enrollment.studentId}`, {
-          toEmail: enrollment.parent.user.email,
-          recipientName: notificationPersonName(enrollment.parent.user),
-          studentId: enrollment.studentId,
+    for (const { parent } of student.parents) {
+      if (!parent.user.id) continue;
+      notificationRecipients.set(`${parent.user.id}:${student.id}`, { userId: parent.user.id, href: buildTrackedZoomJoinUrl(schedule.id, student.id) });
+      if (canSendLiveClassEmail(parent.user.email)) {
+        emailRecipients.set(`${parent.user.email.toLowerCase()}:${student.id}`, {
+          toEmail: parent.user.email,
+          recipientName: notificationPersonName(parent.user),
+          studentId: student.id,
         });
       }
     }
   }
-
   for (const recipient of notificationRecipients.values()) {
     const userId = recipient.userId;
     const existing = await db.notification.findFirst({

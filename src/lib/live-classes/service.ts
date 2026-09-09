@@ -607,7 +607,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       },
       include: {
         user: true,
-        parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { email: true, phoneCountryCode: true } } } } } },
+        parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { id: true, firstName: true, lastName: true, email: true, phoneCountryCode: true } } } } } },
         enrollments: {
           where: { program: { slug: { in: compatibleProgramSlugs } } },
           select: { status: true },
@@ -653,7 +653,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
         studentProfile: {
           include: {
             user: true,
-            parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { email: true, phoneCountryCode: true } } } } } },
+            parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { id: true, firstName: true, lastName: true, email: true, phoneCountryCode: true } } } } } },
             enrollments: {
               where: { program: { slug: { in: compatibleProgramSlugs } } },
               select: { status: true },
@@ -829,13 +829,46 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
   if (!schedule) return [];
   const defaultStudentIds = await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
   if (scheduleRoster.length) {
-    const defaultSet = new Set(defaultStudentIds);
-    const containsObsoleteProfile = defaultSet.size > 0 && scheduleRoster.some((entry) => !defaultSet.has(entry.studentId));
-    if (!containsObsoleteProfile) return [...new Set(scheduleRoster.map((entry) => entry.studentId))];
+    const eligible = await getProgramEligibleRosterStudents(schedule.programId);
+    const eligibleIds = new Set(eligible.map((student) => student.id));
+    const canonicalByIdentity = new Map(eligible.map((student) => [
+      canonicalRosterIdentity(
+        student.displayName,
+        `${student.user.firstName} ${student.user.lastName ?? ""}`,
+        ...student.registrationStudents.map((entry) => `${entry.firstName} ${entry.lastName ?? ""}`),
+      ),
+      student.id,
+    ]));
+    const staleIds = scheduleRoster.map((entry) => entry.studentId).filter((studentId) => !eligibleIds.has(studentId));
+    if (!staleIds.length) return [...new Set(scheduleRoster.map((entry) => entry.studentId))];
 
-    // Self-heal snapshots that still reference superseded/cancelled generated
-    // profiles. A valid class-specific subset of the current default is preserved.
-    await syncScheduleRoster(scheduleId, defaultStudentIds);
+    const staleStudents = await db.studentProfile.findMany({
+      where: { id: { in: staleIds } },
+      select: {
+        id: true,
+        displayName: true,
+        user: { select: { firstName: true, lastName: true } },
+        registrationStudents: { orderBy: { createdAt: "desc" }, select: { firstName: true, lastName: true } },
+      },
+    });
+    const replacements = new Map(staleStudents.map((student) => [
+      student.id,
+      canonicalByIdentity.get(canonicalRosterIdentity(
+        student.displayName,
+        `${student.user.firstName} ${student.user.lastName ?? ""}`,
+        ...student.registrationStudents.map((entry) => `${entry.firstName} ${entry.lastName ?? ""}`),
+      )),
+    ]));
+    const repairedStudentIds = [...new Set(scheduleRoster.flatMap((entry) => {
+      if (eligibleIds.has(entry.studentId)) return [entry.studentId];
+      const replacementId = replacements.get(entry.studentId);
+      return replacementId ? [replacementId] : [];
+    }))];
+
+    // Preserve valid class-specific choices (including outside-audience learners)
+    // while replacing only superseded registrations and removing cancelled ones.
+    await syncScheduleRoster(scheduleId, repairedStudentIds);
+    return repairedStudentIds;
   }
   return defaultStudentIds;
 }
