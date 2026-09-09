@@ -7,6 +7,18 @@ import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile }
 import { sendQabilaMentionEmail, sendQabilaMessageEmail } from "@/lib/email/notifications";
 import { uploadCommunityDiscussionFile, uploadCommunityVoiceFile } from "@/lib/google-drive/materials";
 
+const QABILA_LEARNER_ALIASES = new Map([
+  ["yashermuhammad", "yasher"], ["yasherparent", "yasher"], ["yasher", "yasher"],
+  ["muntahafatima", "muntaha"], ["muntahaparent", "muntaha"],
+  ["salaarkhurram", "salarkhurram"], ["tehreem", "tehreemkhurram"],
+  ["tehreemparent", "tehreemkhurram"], ["tehreemkhurram", "tehreemkhurram"],
+]);
+
+function qabilaLearnerIdentity(value: string) {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return QABILA_LEARNER_ALIASES.get(normalized) ?? normalized;
+}
+
 const BLOCK_PATTERNS = [
   { label: "phone number", pattern: /(?:\+?\d[\s-]?){8,}/ },
   { label: "external link", pattern: /(https?:\/\/|www\.)/i },
@@ -249,10 +261,39 @@ async function ensureAnnouncementRoom(studentId: string) {
 }
 
 export async function ensureStudentQabilaRoom(studentId: string) {
-  const membership = await db.houseMembership.findUnique({
+  let membership = await db.houseMembership.findUnique({
     where: { studentId },
     select: { qabilaGroup: true, role: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
   });
+  // Repeat paid registrations may create a new generated learner login. Recover
+  // the approved Qabila from the older matching profile so the current login can chat.
+  if (!canonicalQabilaName(membership?.qabilaGroup?.trim())) {
+    const student = await db.studentProfile.findUnique({
+      where: { id: studentId },
+      select: { displayName: true, user: { select: { firstName: true, lastName: true } } },
+    });
+    const identity = qabilaLearnerIdentity(student?.displayName || `${student?.user.firstName || ""} ${student?.user.lastName || ""}`);
+    if (identity) {
+      const assignedMemberships = await db.houseMembership.findMany({
+        where: { studentId: { not: studentId }, qabilaGroup: { not: null } },
+        include: { student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
+      });
+      const source = assignedMemberships.find((entry) =>
+        qabilaLearnerIdentity(entry.student.displayName || `${entry.student.user.firstName} ${entry.student.user.lastName || ""}`) === identity,
+      );
+      if (source?.qabilaGroup) {
+        await db.houseMembership.upsert({
+          where: { studentId },
+          update: { qabilaGroup: source.qabilaGroup, role: source.role },
+          create: { studentId, houseId: source.houseId, qabilaGroup: source.qabilaGroup, role: source.role },
+        });
+        membership = await db.houseMembership.findUnique({
+          where: { studentId },
+          select: { qabilaGroup: true, role: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
+        });
+      }
+    }
+  }
   const qabilaGroup = canonicalQabilaName(membership?.qabilaGroup?.trim());
   if (!qabilaGroup) {
     await db.communityMembership.deleteMany({ where: { studentId, room: { type: CommunityRoomType.PROJECT_TEAM, title: { in: [...QABILA_NAMES, ...LEGACY_QABILA_NAMES] } } } });
@@ -291,7 +332,7 @@ export async function syncAllQabilaRoomMemberships() {
   });
   const canonical = new Map<string, (typeof memberships)[number]>();
   const duplicates: Array<(typeof memberships)[number]> = [];
-  const identityOf = (entry: (typeof memberships)[number]) => (entry.student.displayName || `${entry.student.user.firstName} ${entry.student.user.lastName || ""}`).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const identityOf = (entry: (typeof memberships)[number]) => qabilaLearnerIdentity(entry.student.displayName || `${entry.student.user.firstName} ${entry.student.user.lastName || ""}`);
   const score = (entry: (typeof memberships)[number]) => entry.student.enrollments.length * 10_000_000_000_000 + (entry.student.registrationStudents[0]?.createdAt.getTime() ?? entry.student.createdAt.getTime());
   for (const membership of memberships) {
     const identity = identityOf(membership);

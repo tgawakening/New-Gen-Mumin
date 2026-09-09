@@ -67,7 +67,6 @@ const ROSTER_NAME_ALIASES = new Map([
   ["yasherparent", "yasher"],
   ["yasher", "yasher"],
 ]);
-const GLOBAL_ROSTER_IDENTITIES = new Set(["muntaha", "salarkhurram", "tehreemkhurram", "yasher"]);
 
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
@@ -434,20 +433,32 @@ export async function syncTeacherProgramRoster(teacherId: string, programId: str
       const existingStudentIds = new Set(existing.map((entry) => entry.studentId));
       const removeIds = existing.filter((entry) => !requested.has(entry.studentId)).map((entry) => entry.id);
       const addStudentIds = uniqueStudentIds.filter((studentId) => !existingStudentIds.has(studentId));
-      if (!removeIds.length && !addStudentIds.length) return;
+      if (!removeIds.length && !addStudentIds.length) break;
 
       const operations = [
         ...(removeIds.length ? [db.teacherStudentRoster.deleteMany({ where: { id: { in: removeIds } } })] : []),
         ...(addStudentIds.length ? [db.teacherStudentRoster.createMany({ data: addStudentIds.map((studentId) => ({ teacherId, programId, studentId })), skipDuplicates: true })] : []),
       ];
       await db.$transaction(operations);
-      return;
+      break;
     } catch (error) {
       if (isRosterTableUnavailable(error)) {
         throw new Error("Roster saving is not ready yet because the roster database tables have not been deployed.");
       }
       if (!isRosterWriteConflict(error) || attempt === 3) throw error;
       await waitForRosterRetry(attempt);
+    }
+  }
+
+  // Saving a teacher roster establishes the new default for existing sessions.
+  // A later class-level edit remains independent until this default is saved again.
+  {
+    const schedules = await db.classSchedule.findMany({
+      where: { teacherId, programId },
+      select: { id: true },
+    });
+    for (const schedule of schedules) {
+      await syncScheduleRoster(schedule.id, uniqueStudentIds);
     }
   }
 }
@@ -671,6 +682,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
   const latestApprovedRegistration = (student: (typeof directEnrollmentStudents)[number]) =>
     student.registrationStudents.reduce<(typeof student.registrationStudents)[number] | null>((latest, entry) => {
       if (!PAID_REGISTRATION_STATUSES.includes(entry.registration.status as (typeof PAID_REGISTRATION_STATUSES)[number])) return latest;
+      if (!entry.items.some((item) => offerIncludesProgram(item.offer, program))) return latest;
       return !latest || entry.registration.createdAt > latest.registration.createdAt ? entry : latest;
     }, null);
   const latestApprovedRegistrationTime = (student: (typeof directEnrollmentStudents)[number]) =>
@@ -689,19 +701,14 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     );
     if (belongsToCancelledParent) continue;
     if (MANUALLY_CANCELLED_ROSTER_NAMES.has(normalizedName)) continue;
-    // A repeat registration may create another generated student login and a slightly
-    // different display name. Parent identity + registration first name remains stable.
+    // Repeat purchases can generate a new login and even a different parent link.
+    // The learner name on the newest paid registration is the canonical identity.
     const latestRegistration = latestApprovedRegistration(student);
-    const registrationFirstName = latestRegistration?.firstName || student.user.firstName || normalizedName;
-    const normalizedFirstName = normalizeIdentityPart(registrationFirstName.trim().split(/\s+/)[0] || registrationFirstName);
-    const registrationParentEmail = latestRegistration?.registration.parentEmail.trim().toLowerCase();
-    const linkedParentEmail = student.parents[0]?.parent.user.email.trim().toLowerCase();
-    const parentIdentity = registrationParentEmail || linkedParentEmail || student.parents[0]?.parentId || "";
-    const identityKey = GLOBAL_ROSTER_IDENTITIES.has(normalizedName)
-      ? `canonical:${normalizedName}`
-      : parentIdentity && normalizedFirstName
-        ? `${parentIdentity}:${normalizedFirstName}`
-        : normalizedName || `user:${student.user.email.toLowerCase()}`;
+    const registeredName = latestRegistration
+      ? normalizeIdentityPart(`${latestRegistration.firstName} ${latestRegistration.lastName ?? ""}`)
+      : normalizedName;
+    const canonicalRegisteredName = ROSTER_NAME_ALIASES.get(registeredName) ?? registeredName;
+    const identityKey = `learner:${canonicalRegisteredName || normalizedName || student.user.email.toLowerCase()}`;
     const existing = newestStudentByIdentity.get(identityKey);
     if (!existing || latestApprovedRegistrationTime(student) > latestApprovedRegistrationTime(existing)) {
       newestStudentByIdentity.set(identityKey, student);
@@ -730,10 +737,6 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
     }
   }
 
-  if (scheduleRoster.length) {
-    return scheduleRoster.map((entry) => entry.studentId);
-  }
-
   const schedule = await db.classSchedule.findUnique({
     where: { id: scheduleId },
     select: {
@@ -742,11 +745,18 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
     },
   });
 
-  if (!schedule) {
-    return [];
-  }
+  if (!schedule) return [];
+  const defaultStudentIds = await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
+  if (scheduleRoster.length) {
+    const defaultSet = new Set(defaultStudentIds);
+    const containsObsoleteProfile = defaultSet.size > 0 && scheduleRoster.some((entry) => !defaultSet.has(entry.studentId));
+    if (!containsObsoleteProfile) return [...new Set(scheduleRoster.map((entry) => entry.studentId))];
 
-  return getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
+    // Self-heal snapshots that still reference superseded/cancelled generated
+    // profiles. A valid class-specific subset of the current default is preserved.
+    await syncScheduleRoster(scheduleId, defaultStudentIds);
+  }
+  return defaultStudentIds;
 }
 
 /** The authoritative learner set for live access and automatic attendance. */
@@ -768,36 +778,35 @@ export async function getLiveClassAccessState(scheduleId: string): Promise<LiveC
 }
 
 export async function syncScheduleRoster(scheduleId: string, studentIds: string[]) {
-  try {
-    const existing = await db.classScheduleRoster.findMany({
-      where: { scheduleId },
-      select: { id: true, studentId: true },
-    });
+  const uniqueStudentIds = [...new Set(studentIds)];
+  const requested = new Set(uniqueStudentIds);
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      const existing = await db.classScheduleRoster.findMany({
+        where: { scheduleId },
+        select: { id: true, studentId: true },
+      });
+      const existingIds = new Set(existing.map((entry) => entry.studentId));
+      const toRemove = existing.filter((entry) => !requested.has(entry.studentId)).map((entry) => entry.id);
+      const toAdd = uniqueStudentIds.filter((studentId) => !existingIds.has(studentId));
+      if (!toRemove.length && !toAdd.length) return;
 
-    const existingIds = new Set(existing.map((entry) => entry.studentId));
-    const toRemove = existing.filter((entry) => !studentIds.includes(entry.studentId)).map((entry) => entry.id);
-    const toAdd = studentIds.filter((studentId) => !existingIds.has(studentId));
-
-    const operations = [
-      ...(toRemove.length ? [db.classScheduleRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
-      ...toAdd.map((studentId) =>
-        db.classScheduleRoster.create({
-          data: {
-            scheduleId,
-            studentId,
-          },
-        }),
-      ),
-    ];
-
-    if (operations.length) {
+      const operations = [
+        ...(toRemove.length ? [db.classScheduleRoster.deleteMany({ where: { id: { in: toRemove } } })] : []),
+        ...(toAdd.length ? [db.classScheduleRoster.createMany({
+          data: toAdd.map((studentId) => ({ scheduleId, studentId })),
+          skipDuplicates: true,
+        })] : []),
+      ];
       await db.$transaction(operations);
+      return;
+    } catch (error) {
+      if (isRosterTableUnavailable(error)) {
+        throw new Error("Session roster saving is not ready yet because the roster database tables have not been deployed.");
+      }
+      if (!isRosterWriteConflict(error) || attempt === 3) throw error;
+      await waitForRosterRetry(attempt);
     }
-  } catch (error) {
-    if (isRosterTableUnavailable(error)) {
-      throw new Error("Session roster saving is not ready yet because the roster database tables have not been deployed.");
-    }
-    throw error;
   }
 }
 
