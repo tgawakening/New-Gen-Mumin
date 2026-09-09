@@ -719,7 +719,11 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     }
   }
 
-  return Array.from(newestStudentByIdentity.values()).sort((left, right) => {
+  return Array.from(newestStudentByIdentity.values()).map((student) => {
+    const identity = ROSTER_NAME_ALIASES.get(normalizeIdentityPart(student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`))
+      ?? normalizeIdentityPart(student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`);
+    return identity === "yasher" ? { ...student, displayName: "Yasher Muhammad" } : student;
+  }).sort((left, right) => {
     const leftName = left.displayName || `${left.user.firstName} ${left.user.lastName ?? ""}`.trim() || left.user.email;
     const rightName = right.displayName || `${right.user.firstName} ${right.user.lastName ?? ""}`.trim() || right.user.email;
     return leftName.localeCompare(rightName);

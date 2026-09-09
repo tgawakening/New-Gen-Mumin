@@ -651,9 +651,21 @@ function normalizeChildIdentity(input: {
     input.displayName?.trim() ||
     [input.firstName, input.lastName].filter(Boolean).join(" ").trim();
 
-  return [
-    baseName.toLowerCase().replace(/\s+/g, " "),
-  ].join("|");
+  const normalized = baseName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (["yasher", "yasherparent", "yashermuhammad", "yashermuhammadshahbaz", "yashur", "yashurmuhammad", "yashurmuhammadshahbaz"].includes(normalized)) {
+    return "yasher";
+  }
+  return normalized;
+}
+
+function canonicalChildName(child: any) {
+  const identity = normalizeChildIdentity({
+    displayName: child.displayName,
+    firstName: child.user?.firstName,
+    lastName: child.user?.lastName,
+  });
+  if (identity === "yasher") return "Yasher Muhammad";
+  return child.displayName || `${child.user.firstName} ${child.user.lastName}`.trim() || child.user.firstName;
 }
 
 function childPriorityScore(student: any) {
@@ -1126,10 +1138,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
   );
   return {
     id: child.id,
-    name:
-      child.displayName ||
-      `${child.user.firstName} ${child.user.lastName}`.trim() ||
-      child.user.firstName,
+    name: canonicalChildName(child),
     statusLabel: accessLocked
       ? "Pending payment confirmation"
       : validEnrollments.some((enrollment: any) => enrollment.status === "ACTIVE")
@@ -1157,10 +1166,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     journals,
     journalMonthlySummary,
     profile: {
-      displayName:
-        child.displayName ||
-        `${child.user.firstName} ${child.user.lastName}`.trim() ||
-        child.user.firstName,
+      displayName: canonicalChildName(child),
       firstName: child.user.firstName,
       lastName: child.user.lastName,
       email: child.user.email,
