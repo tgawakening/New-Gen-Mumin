@@ -72,6 +72,19 @@ const ROSTER_NAME_ALIASES = new Map([
   ["yasher", "yasher"],
 ]);
 
+function normalizeRosterName(value: string) {
+  return value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function canonicalRosterIdentity(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    if (!value) continue;
+    const normalized = normalizeRosterName(value);
+    if (normalized) return ROSTER_NAME_ALIASES.get(normalized) ?? normalized;
+  }
+  return "";
+}
+
 function normalizeAudienceGroup(value: unknown): LiveClassAudienceGroup {
   return LIVE_CLASS_AUDIENCE_GROUPS.includes(value as LiveClassAudienceGroup)
     ? (value as LiveClassAudienceGroup)
@@ -402,9 +415,57 @@ export async function getTeacherProgramRosterStudentIds(teacherId: string, progr
       : [programId];
     const rosterEntries = await db.teacherStudentRoster.findMany({
       where: { teacherId, programId: { in: compatibleProgramIds } },
-      select: { studentId: true },
+      include: {
+        student: {
+          select: {
+            displayName: true,
+            user: { select: { firstName: true, lastName: true, email: true } },
+            registrationStudents: { orderBy: { createdAt: "desc" }, select: { firstName: true, lastName: true } },
+          },
+        },
+      },
     });
-    return [...new Set(rosterEntries.map((entry) => entry.studentId))];
+
+    const canonicalByProgram = new Map<string, Map<string, string>>();
+    const eligibleIdsByProgram = new Map<string, Set<string>>();
+    for (const compatibleProgramId of compatibleProgramIds) {
+      const eligible = await getProgramEligibleRosterStudents(compatibleProgramId);
+      eligibleIdsByProgram.set(compatibleProgramId, new Set(eligible.map((student) => student.id)));
+      canonicalByProgram.set(compatibleProgramId, new Map(eligible.map((student) => [
+        canonicalRosterIdentity(
+          student.displayName,
+          `${student.user.firstName} ${student.user.lastName ?? ""}`,
+          ...student.registrationStudents.map((entry) => `${entry.firstName} ${entry.lastName ?? ""}`),
+        ),
+        student.id,
+      ])));
+    }
+
+    const resolvedStudentIds: string[] = [];
+    const staleEntryIds: string[] = [];
+    for (const entry of rosterEntries) {
+      if (eligibleIdsByProgram.get(entry.programId)?.has(entry.studentId)) {
+        resolvedStudentIds.push(entry.studentId);
+        continue;
+      }
+      const identity = canonicalRosterIdentity(
+        entry.student.displayName,
+        `${entry.student.user.firstName} ${entry.student.user.lastName ?? ""}`,
+        ...entry.student.registrationStudents.map((item) => `${item.firstName} ${item.lastName ?? ""}`),
+      );
+      const replacementId = canonicalByProgram.get(entry.programId)?.get(identity);
+      if (replacementId) {
+        await db.teacherStudentRoster.upsert({
+          where: { teacherId_programId_studentId: { teacherId, programId: entry.programId, studentId: replacementId } },
+          update: {},
+          create: { teacherId, programId: entry.programId, studentId: replacementId },
+        });
+        resolvedStudentIds.push(replacementId);
+      }
+      staleEntryIds.push(entry.id);
+    }
+    if (staleEntryIds.length) await db.teacherStudentRoster.deleteMany({ where: { id: { in: staleEntryIds } } });
+    return [...new Set(resolvedStudentIds)];
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
       console.error("Teacher roster tables are not available yet.", error);
@@ -546,7 +607,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
       },
       include: {
         user: true,
-        parents: { select: { parentId: true, parent: { select: { user: { select: { email: true } } } } } },
+        parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { email: true, phoneCountryCode: true } } } } } },
         enrollments: {
           where: { program: { slug: { in: compatibleProgramSlugs } } },
           select: { status: true },
@@ -592,7 +653,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
         studentProfile: {
           include: {
             user: true,
-            parents: { select: { parentId: true, parent: { select: { user: { select: { email: true } } } } } },
+            parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { email: true, phoneCountryCode: true } } } } } },
             enrollments: {
               where: { program: { slug: { in: compatibleProgramSlugs } } },
               select: { status: true },
@@ -728,6 +789,18 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     const rightName = right.displayName || `${right.user.firstName} ${right.user.lastName ?? ""}`.trim() || right.user.email;
     return leftName.localeCompare(rightName);
   });
+}
+
+export async function getScheduleRosterCandidates(programId: string, title: string) {
+  const students = await getProgramEligibleRosterStudents(programId);
+  const audienceGroup = getLiveClassAudienceGroup(title);
+  return students.map((student) => ({
+    ...student,
+    matchesAudience: enrollmentMatchesLiveClassAudience({ student }, audienceGroup)
+      || student.parents.some(({ parent }) =>
+        enrollmentMatchesLiveClassAudience({ student, parent }, audienceGroup),
+      ),
+  }));
 }
 
 export async function getScheduleRosterStudentIds(scheduleId: string) {

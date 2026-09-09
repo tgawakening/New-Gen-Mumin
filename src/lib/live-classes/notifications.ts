@@ -215,8 +215,8 @@ function scheduleVisibleToStudent(
     schedule.teacher?.programRosters
       ?.filter((entry) => entry.programId === programId)
       .map((entry) => entry.studentId) ?? [];
-  const visibleRosterIds = scheduleRosterIds.length ? scheduleRosterIds : teacherRosterIds;
-  if (visibleRosterIds.length && !visibleRosterIds.includes(studentId)) return false;
+  if (scheduleRosterIds.length) return scheduleRosterIds.includes(studentId);
+  if (teacherRosterIds.length && !teacherRosterIds.includes(studentId)) return false;
 
   return countryMatchesLiveClassAudience(countryCodes, getLiveClassAudienceGroup(schedule.title));
 }
@@ -288,8 +288,9 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
   const emailRecipients = new Map<string, { toEmail: string; recipientName: string; studentId: string }>();
   const notificationRecipients = new Map<string, { userId: string; href: string }>();
 
+  const hasExplicitClassRoster = scheduleRosterIds.length > 0;
   for (const enrollment of schedule.program.enrollments) {
-    if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+    if (!hasExplicitClassRoster && !enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
     if (hasRosterFilter && !visibleRosterIds.has(enrollment.studentId)) continue;
 
     notificationRecipients.set(`${enrollment.student.user.id}:${enrollment.studentId}`, { userId: enrollment.student.user.id, href: buildTrackedZoomJoinUrl(schedule.id, enrollment.studentId) });

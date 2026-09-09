@@ -12,8 +12,8 @@ import { db } from "@/lib/db";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import {
-  enrollmentMatchesLiveClassAudience,
-  getLiveClassAudienceGroup,
+  getLiveClassAudienceLabel,
+  getScheduleRosterCandidates,
   getScheduleRosterStudentIds,
   getTeacherProgramRosterStudentIds,
   syncScheduleRoster,
@@ -44,31 +44,7 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
       teacher: {
         include: { user: true },
       },
-      program: {
-        include: {
-          enrollments: {
-            where: { status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
-            include: {
-              parent: {
-                include: {
-                  user: true,
-                },
-              },
-              student: {
-                include: {
-                  user: true,
-                  registrationStudents: {
-                    select: {
-                      countryCode: true,
-                      countryName: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      program: true,
     },
   });
 
@@ -76,6 +52,7 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
     redirect("/teacher/live-sessions");
   }
 
+  const candidates = await getScheduleRosterCandidates(schedule.programId, schedule.title);
   const scheduleRosterIds = new Set(await getScheduleRosterStudentIds(schedule.id));
   const defaultProgramRosterIds = await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
   const selectedIds = scheduleRosterIds.size ? scheduleRosterIds : new Set(defaultProgramRosterIds);
@@ -101,35 +78,9 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
 
     const selected = formData.getAll("studentIds").filter((value): value is string => typeof value === "string");
 
-    const enrollments = await db.enrollment.findMany({
-      where: {
-        programId: scheduleItem.programId,
-        status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] },
-      },
-      include: {
-        parent: {
-          include: {
-            user: true,
-          },
-        },
-        student: {
-          include: {
-            registrationStudents: {
-              select: {
-                countryCode: true,
-                countryName: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    const audienceGroup = getLiveClassAudienceGroup(scheduleItem.title);
+    const eligibleStudents = await getScheduleRosterCandidates(scheduleItem.programId, scheduleItem.title);
     const validStudentIds = new Set(
-      enrollments
-        .filter((entry) => enrollmentMatchesLiveClassAudience(entry, audienceGroup))
-        .map((entry) => entry.studentId),
+      eligibleStudents.map((student) => student.id),
     );
     const studentIds = selected.filter((id) => validStudentIds.has(id));
 
@@ -156,7 +107,7 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
 
       <TeacherSection eyebrow="Session roster" title="Choose students for this live session">
         <p className="text-sm leading-6 text-[#617184]">
-          Use this page to override the default programme roster for this specific session. If no overrides are saved, the default programme roster will be used.
+          All students eligible for this programme are listed, as on the default roster. Students outside the session country group are shown with an explanation. Use this page to override the default programme roster for this specific session. If no overrides are saved, the default programme roster will be used.
         </p>
         <form action={saveScheduleRosterAction} className="mt-6 rounded-3xl border border-[#e5e9ef] bg-[#fbfcff] p-6">
           <input type="hidden" name="scheduleId" value={schedule.id} />
@@ -171,23 +122,24 @@ export default async function TeacherScheduleRosterPage({ params, searchParams }
           </div>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            {schedule.program.enrollments
-              .filter((enrollment) => enrollmentMatchesLiveClassAudience(enrollment, getLiveClassAudienceGroup(schedule.title)))
-              .map((enrollment) => {
-              const studentName = enrollment.student.displayName || `${enrollment.student.user.firstName} ${enrollment.student.user.lastName}`.trim();
+            {candidates.map((student) => {
+              const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim();
               return (
-                <label key={enrollment.student.id} className="flex cursor-pointer flex-col rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm text-[#22304a] transition hover:border-[#9eb2c8]">
+                <label key={student.id} className="flex cursor-pointer flex-col rounded-2xl border border-[#dce4ed] bg-white p-4 text-sm text-[#22304a] transition hover:border-[#9eb2c8]">
                   <span className="flex items-center gap-3">
                     <input
                       type="checkbox"
                       name="studentIds"
-                      value={enrollment.student.id}
-                      defaultChecked={selectedIds.has(enrollment.student.id)}
+                      value={student.id}
+                      defaultChecked={selectedIds.has(student.id)}
                       className="h-4 w-4 rounded border-[#cdd9e4] text-[#0f4d81]"
                     />
                     <span className="font-semibold">{studentName}</span>
                   </span>
-                  <span className="mt-2 text-xs text-[#5f6b7a]">{enrollment.student.user.email}</span>
+                  <span className="mt-2 text-xs text-[#5f6b7a]">{student.user.email}</span>
+                  {!student.matchesAudience ? (
+                    <span className="mt-2 text-xs text-[#8a6327]">Outside the default audience ({getLiveClassAudienceLabel(schedule.title)}). Selecting this learner explicitly includes them in this class.</span>
+                  ) : null}
                 </label>
               );
             })}

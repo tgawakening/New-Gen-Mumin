@@ -744,8 +744,10 @@ function mapScheduleEntries(
                   .filter((entry: any) => entry.programId === enrollment.program.id)
                   .map((entry: any) => entry.studentId)
               : [];
-            const visibleRosterIds = scheduleRosterIds.length ? scheduleRosterIds : teacherRosterIds;
-            if (visibleRosterIds.length && !visibleRosterIds.includes(child.id)) return false;
+            // A class-specific roster is an explicit teacher override, including
+            // students outside the schedule's default country audience.
+            if (scheduleRosterIds.length) return scheduleRosterIds.includes(child.id);
+            if (teacherRosterIds.length && !teacherRosterIds.includes(child.id)) return false;
 
             const registrationCountries = Array.isArray(child.registrationStudents) ? child.registrationStudents : [];
             return countryMatchesLiveClassAudience(

@@ -148,6 +148,7 @@ export async function POST(request: NextRequest) {
       OR: [{ meetingId }, { recurringSeriesId: meetingId }],
     },
     include: {
+      scheduleRosters: { select: { studentId: true } },
       teacher: { include: { user: true } },
       program: {
         include: {
@@ -236,8 +237,9 @@ export async function POST(request: NextRequest) {
       if (!isLiveClassVisibleToStudents(matchingSchedule.title)) continue;
       const rosterStudentIds = new Set(await getScheduleRosterStudentIds(matchingSchedule.id));
       const audienceGroup = getLiveClassAudienceGroup(matchingSchedule.title);
+      const hasExplicitClassRoster = matchingSchedule.scheduleRosters.length > 0;
       for (const enrollment of matchingSchedule.program.enrollments) {
-        if (!enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
+        if (!hasExplicitClassRoster && !enrollmentMatchesLiveClassAudience(enrollment, audienceGroup)) continue;
         if (rosterStudentIds.size && !rosterStudentIds.has(enrollment.studentId)) continue;
         users.set(enrollment.student.user.id, "student");
         users.set(enrollment.parent.user.id, "parent");
