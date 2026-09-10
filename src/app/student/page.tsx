@@ -146,7 +146,7 @@ export default async function StudentDashboardPage() {
       pendingReason={dashboard.pendingReason}
     >
       <FamilyJourneyLinks role="student" />
-      <LiveQuizAutoRefresh intervalMs={15000} enabled />
+      <LiveQuizAutoRefresh intervalMs={60000} enabled />
       {activeLiveQuizzes.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

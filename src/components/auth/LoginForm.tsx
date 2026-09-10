@@ -18,9 +18,9 @@ async function storeBrowserCredential(email: string, password: string) {
 
 async function loginWithRetry(email: string, password: string) {
   let lastError: unknown;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 12000);
+    const timeout = window.setTimeout(() => controller.abort(), 25000);
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -29,10 +29,10 @@ async function loginWithRetry(email: string, password: string) {
         signal: controller.signal,
         body: JSON.stringify({ email, password }),
       });
-      if (response.status !== 503 || attempt === 2) return response;
+      if (response.status !== 503 || attempt === 1) return response;
     } catch (error) {
       lastError = error;
-      if (attempt === 2) throw error;
+      if (attempt === 1) throw error;
     } finally {
       window.clearTimeout(timeout);
     }

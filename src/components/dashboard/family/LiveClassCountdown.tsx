@@ -4,6 +4,25 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+const pageRefreshers = new Set<() => void>();
+let pageRefreshTimer: number | null = null;
+
+function subscribeToPageRefresh(refresh: () => void) {
+  pageRefreshers.add(refresh);
+  if (pageRefreshTimer === null) {
+    pageRefreshTimer = window.setInterval(() => {
+      pageRefreshers.values().next().value?.();
+    }, 30000);
+  }
+  return () => {
+    pageRefreshers.delete(refresh);
+    if (!pageRefreshers.size && pageRefreshTimer !== null) {
+      window.clearInterval(pageRefreshTimer);
+      pageRefreshTimer = null;
+    }
+  };
+}
+
 function formatCountdown(milliseconds: number) {
   if (milliseconds <= 0) return "Starting now";
 
@@ -41,8 +60,7 @@ export function LiveClassCountdown({
 
   useEffect(() => {
     if (!isLive && millisecondsUntilStart > 15 * 60 * 1000) return;
-    const interval = window.setInterval(() => router.refresh(), 30000);
-    return () => window.clearInterval(interval);
+    return subscribeToPageRefresh(() => router.refresh());
   }, [isLive, millisecondsUntilStart, router]);
 
   return (
