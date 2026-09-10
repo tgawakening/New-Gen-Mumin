@@ -19,15 +19,16 @@ import {
 } from "@/lib/teacher/hours-log";
 
 type PageProps = {
-  searchParams?: Promise<{ month?: string; start?: string; end?: string; program?: string; notice?: string; tone?: string; toast?: string }>;
+  searchParams?: Promise<{ month?: string; start?: string; end?: string; program?: string; notice?: string; tone?: string; toast?: string; saved?: string }>;
 };
 
-function noticeHref(filter: { month?: string; start?: string; end?: string }, message: string, tone: "success" | "error" = "success") {
+function noticeHref(filter: { month?: string; start?: string; end?: string }, message: string, tone: "success" | "error" = "success", savedEntryId?: string) {
   const params = new URLSearchParams({ notice: message, tone, toast: Date.now().toString(36) });
   if (filter.month) params.set("month", filter.month);
   if (filter.start) params.set("start", filter.start);
   if (filter.end) params.set("end", filter.end);
-  return `/teacher/hours-log?${params.toString()}`;
+  if (savedEntryId) params.set("saved", savedEntryId);
+  return `/teacher/hours-log?${params.toString()}${savedEntryId ? `#hours-row-${savedEntryId}` : ""}`;
 }
 
 function filterFromForm(formData: FormData) {
@@ -95,6 +96,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     if (!sessionDate || !title || durationMinutes <= 0) redirect(noticeHref(filter, "Add title, date, and duration before saving.", "error"));
 
     let duplicate = false;
+    let savedEntryId = "";
     try {
       const result = await addTeacherHoursEntry({
         teacherUserId: currentSession.user.id,
@@ -107,6 +109,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
         notes: String(formData.get("notes") || "").trim(),
       });
       duplicate = result.duplicate;
+      savedEntryId = result.entry.id;
       revalidatePath("/teacher/hours-log");
     } catch (error) {
       redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to add hours row.", "error"));
@@ -114,6 +117,8 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     redirect(noticeHref(
       { month: monthKey(sessionDate) },
       duplicate ? "This hours row was already added — showing it below." : "Hours added successfully — showing it below.",
+      "success",
+      savedEntryId,
     ));
   }
 
@@ -193,9 +198,15 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
   };
   const programTabs = Array.from(new Set(data.entries.map((entry) => entry.programTitle || "Programme not set"))).sort();
   const activeProgram = params.program && programTabs.includes(params.program) ? params.program : "ALL";
-  const visibleEntries = activeProgram === "ALL"
+  const filteredEntries = activeProgram === "ALL"
     ? data.entries
     : data.entries.filter((entry) => (entry.programTitle || "Programme not set") === activeProgram);
+  const visibleEntries = [...filteredEntries].sort((left, right) => {
+    if (left.id === params.saved) return -1;
+    if (right.id === params.saved) return 1;
+    return left.sessionDate.getTime() - right.sessionDate.getTime()
+      || (left.startTime ?? "").localeCompare(right.startTime ?? "");
+  });
   const programHref = (program: string) => {
     const query = new URLSearchParams();
     if (currentFilter.month) query.set("month", currentFilter.month);
@@ -277,7 +288,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
             </thead>
             <tbody>
               {visibleEntries.map((entry) => (
-                <tr key={entry.id} className="border-t border-[#f0e6d8] align-top">
+                <tr id={`hours-row-${entry.id}`} key={entry.id} className={`border-t align-top ${entry.id === params.saved ? "border-[#f4b942] bg-[#fff8df] ring-2 ring-inset ring-[#f4b942]" : "border-[#f0e6d8]"}`}>
                   <td className="px-4 py-3">{formatDate(entry.sessionDate)}<br /><span className="text-xs text-[#6d7785]">{entry.startTime ?? "Time not set"}</span></td>
                   <td className="px-4 py-3"><span className="font-semibold text-[#22304a]">{entry.title}</span><br /><span className="text-xs text-[#6d7785]">{entry.programTitle ?? "Programme not set"}</span></td>
                   <td className="px-4 py-3">{entry.mode}<br /><span className="text-xs text-[#6d7785]">{entry.source}</span></td>
