@@ -8,7 +8,6 @@ import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentQuestData } from "@/lib/community/quest";
 import { getStudentCommunityData } from "@/lib/community/rooms";
 import { qabilaProfile } from "@/lib/community/qabilas";
-import { db } from "@/lib/db";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
@@ -97,23 +96,19 @@ export default async function StudentDashboardPage() {
   const dashboard = await getStudentDashboardData(session.user.id);
   if (!dashboard) redirect("/auth/login");
 
-  await ensureStudentLiveClassReminders(session.user.id);
-  const [notifications, activeLiveQuizzes] = await Promise.all([
+  const child = dashboard.child;
+  const programIds = [...new Set(child.courses.flatMap((course) => course.programIds))];
+  const [, notifications, activeLiveQuizzes, quest, community] = await Promise.all([
+    ensureStudentLiveClassReminders(session.user.id),
     getUnreadNotifications(session.user.id, 3),
     listStudentActiveLiveQuizzes(session.user.id),
+    getStudentQuestData(child.id, programIds),
+    getStudentCommunityData(session.user.id),
   ]);
-  const child = dashboard.child;
   const nextClassRoom = child.nextClass
     ? child.courses.find((course) => course.title === child.nextClass?.title)?.roomAssignment ?? null
     : null;
-  const stats = buildStudentQuestStats(child);
-  const profile = await db.studentProfile.findUnique({
-    where: { id: child.id },
-    include: { enrollments: { select: { programId: true } } },
-  });
-  const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? []);
-  const community = await getStudentCommunityData(session.user.id);
-  const qabilaRoom = community?.memberships.find((membership) => membership.room.type === "PROJECT_TEAM")?.room ?? null;
+  const stats = buildStudentQuestStats(child);  const qabilaRoom = community?.memberships.find((membership) => membership.room.type === "PROJECT_TEAM")?.room ?? null;
   const qabila = qabilaProfile(quest.membership.qabilaGroup);
   const qabilaName = qabila?.name ?? "Qabila assignment pending";
   const teammates = qabila ? quest.teammates.filter((member) => member.id !== child.id && member.qabilaGroup === qabila.name) : [];
@@ -151,7 +146,7 @@ export default async function StudentDashboardPage() {
       pendingReason={dashboard.pendingReason}
     >
       <FamilyJourneyLinks role="student" />
-      <LiveQuizAutoRefresh intervalMs={3000} enabled />
+      <LiveQuizAutoRefresh intervalMs={15000} enabled />
       {activeLiveQuizzes.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

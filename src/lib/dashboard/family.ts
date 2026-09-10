@@ -1317,7 +1317,7 @@ async function getParentProfile(userId: string) {
 }
 
 export async function getParentDashboardData(userId: string) {
-  const parentProfile = await getParentProfile(userId);
+  const [parentProfile, parentalSchedules] = await Promise.all([getParentProfile(userId), getParentalSessionSchedules()]);
 
   if (!parentProfile) {
     return null;
@@ -1365,7 +1365,6 @@ export async function getParentDashboardData(userId: string) {
   const hasUnlockedAccess =
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
-  const parentalSchedules = await getParentalSessionSchedules();
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked
@@ -1429,7 +1428,7 @@ export async function getParentDashboardData(userId: string) {
 }
 
 export async function getStudentDashboardData(userId: string) {
-  const studentProfile = await db.studentProfile.findUnique({
+  const [studentProfile, parentalSchedules] = await Promise.all([db.studentProfile.findUnique({
     where: { userId },
     include: {
       user: true,
@@ -1531,14 +1530,15 @@ export async function getStudentDashboardData(userId: string) {
         include: { program: true },
       },
     },
-  });
+  }),
+    getParentalSessionSchedules(),
+  ]);
 
   if (!studentProfile) {
     return null;
   }
 
   const latestOrder = studentProfile.parents[0]?.parent.orders[0] ?? null;
-  const parentalSchedules = await getParentalSessionSchedules();
   const accessLocked = !studentProfile.enrollments.some((enrollment) =>
     ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),
   );

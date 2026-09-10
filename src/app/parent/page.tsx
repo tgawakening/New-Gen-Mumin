@@ -149,7 +149,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
-      <LiveQuizAutoRefresh intervalMs={3000} enabled />
+      <LiveQuizAutoRefresh intervalMs={15000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">

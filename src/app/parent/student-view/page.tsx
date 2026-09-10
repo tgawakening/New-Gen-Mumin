@@ -147,7 +147,7 @@ export default async function ParentStudentViewPage({ searchParams }: PageProps)
         />
       </SectionCard>
 
-      <LiveQuizAutoRefresh intervalMs={3000} enabled />
+      <LiveQuizAutoRefresh intervalMs={15000} enabled />
       {activeLiveQuizzes.length ? <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-5 text-white shadow-lg"><p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#f7c56f]">Live quiz started</p><div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="text-2xl font-semibold">Your teacher has opened a quiz.</h2><p className="mt-1 text-sm text-white/75">Go directly to the answer screen for {selectedChild.name}.</p></div><div className="flex flex-wrap gap-2">{activeLiveQuizzes.map((quiz)=><Link key={quiz.quizId} href={`/parent/quizzes/live/${quiz.quizId}?child=${selectedChild.id}`} className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-[#22304a]">Answer live quiz</Link>)}</div></div></section> : null}      <StudentQuestHub
         studentName={selectedChild.name}
         roleLabel="Student Home"
