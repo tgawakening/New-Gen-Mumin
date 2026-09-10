@@ -110,7 +110,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     } catch (error) {
       redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to add hours row.", "error"));
     }
-    redirect(noticeHref(filter, duplicate ? "This hours row was already added — no duplicate was created." : "Hours added successfully."));
+    redirect(noticeHref(filter, duplicate ? "This hours row was already added â€” no duplicate was created." : "Hours added successfully."));
   }
 
   async function updateEntry(formData: FormData) {
