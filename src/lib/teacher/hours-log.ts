@@ -355,6 +355,7 @@ export async function addTeacherHoursEntry(input: {
       startTime: normalizedStartTime,
       durationMinutes: input.durationMinutes,
       mode: input.mode,
+      NOT: { notes: { contains: HOURS_LOG_EXCLUDED_MARKER } },
     },
     orderBy: { createdAt: "desc" },
   });

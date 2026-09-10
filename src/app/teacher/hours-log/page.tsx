@@ -12,6 +12,7 @@ import {
   formatHoursMinutes,
   MIN_PAYABLE_TRACKED_SESSION_MINUTES,
   getTeacherHoursLogData,
+  monthKey,
   parseHoursMonth,
   submitTeacherHours,
   updateTeacherHoursEntry,
@@ -110,7 +111,10 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     } catch (error) {
       redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to add hours row.", "error"));
     }
-    redirect(noticeHref(filter, duplicate ? "This hours row was already added — no duplicate was created." : "Hours added successfully."));
+    redirect(noticeHref(
+      { month: monthKey(sessionDate) },
+      duplicate ? "This hours row was already added — showing it below." : "Hours added successfully — showing it below.",
+    ));
   }
 
   async function updateEntry(formData: FormData) {
