@@ -343,19 +343,37 @@ export async function addTeacherHoursEntry(input: {
   const teacher = await db.teacherProfile.findUnique({ where: { userId: input.teacherUserId } });
   if (!teacher) throw new Error("Teacher profile not found.");
 
-  return db.teacherHoursLogEntry.create({
+  const normalizedProgramTitle = input.programTitle || null;
+  const normalizedStartTime = input.startTime || null;
+  const existing = await db.teacherHoursLogEntry.findFirst({
+    where: {
+      teacherId: teacher.id,
+      source: TeacherHoursLogSource.MANUAL,
+      title: input.title,
+      programTitle: normalizedProgramTitle,
+      sessionDate: input.sessionDate,
+      startTime: normalizedStartTime,
+      durationMinutes: input.durationMinutes,
+      mode: input.mode,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (existing) return { entry: existing, duplicate: true };
+
+  const entry = await db.teacherHoursLogEntry.create({
     data: {
       teacherId: teacher.id,
       source: TeacherHoursLogSource.MANUAL,
       title: input.title,
-      programTitle: input.programTitle || null,
+      programTitle: normalizedProgramTitle,
       sessionDate: input.sessionDate,
-      startTime: input.startTime || null,
+      startTime: normalizedStartTime,
       durationMinutes: input.durationMinutes,
       mode: input.mode,
       notes: input.notes || null,
     },
   });
+  return { entry, duplicate: false };
 }
 
 export async function updateTeacherHoursEntry(input: {

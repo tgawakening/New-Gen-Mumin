@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
@@ -17,11 +18,11 @@ import {
 } from "@/lib/teacher/hours-log";
 
 type PageProps = {
-  searchParams?: Promise<{ month?: string; start?: string; end?: string; program?: string; notice?: string; tone?: string }>;
+  searchParams?: Promise<{ month?: string; start?: string; end?: string; program?: string; notice?: string; tone?: string; toast?: string }>;
 };
 
 function noticeHref(filter: { month?: string; start?: string; end?: string }, message: string, tone: "success" | "error" = "success") {
-  const params = new URLSearchParams({ notice: message, tone });
+  const params = new URLSearchParams({ notice: message, tone, toast: Date.now().toString(36) });
   if (filter.month) params.set("month", filter.month);
   if (filter.start) params.set("start", filter.start);
   if (filter.end) params.set("end", filter.end);
@@ -92,8 +93,9 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
     const durationMinutes = asNumber(formData.get("durationMinutes"));
     if (!sessionDate || !title || durationMinutes <= 0) redirect(noticeHref(filter, "Add title, date, and duration before saving.", "error"));
 
+    let duplicate = false;
     try {
-      await addTeacherHoursEntry({
+      const result = await addTeacherHoursEntry({
         teacherUserId: currentSession.user.id,
         title,
         programTitle: String(formData.get("programTitle") || "").trim(),
@@ -103,11 +105,12 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
         mode: String(formData.get("mode") || "Outside website").trim(),
         notes: String(formData.get("notes") || "").trim(),
       });
+      duplicate = result.duplicate;
       revalidatePath("/teacher/hours-log");
     } catch (error) {
       redirect(noticeHref(filter, error instanceof Error ? error.message : "Unable to add hours row.", "error"));
     }
-    redirect(noticeHref(filter, "Hours row added."));
+    redirect(noticeHref(filter, duplicate ? "This hours row was already added — no duplicate was created." : "Hours added successfully."));
   }
 
   async function updateEntry(formData: FormData) {
@@ -211,7 +214,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
       subtitle="Review payable website-tracked teaching hours, add outside-link classes, and submit weekly/monthly totals for payroll review."
       navItems={getTeacherNavItems()}
     >
-      <ActionToast message={params.notice} tone={params.tone} />
+      <ActionToast key={params.toast ?? params.notice} message={params.notice} tone={params.tone} />
 
       <TeacherMetricGrid
         metrics={[
@@ -329,7 +332,7 @@ export default async function TeacherHoursLogPage({ searchParams }: PageProps) {
               <option>Parent session</option>
             </select>
             <textarea name="notes" rows={3} placeholder="Notes / WhatsApp evidence / student names" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-            <button className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white">Add hours row</button>
+            <FormSubmitButton pendingLabel="Adding hours..." className="w-fit rounded-full bg-[#22304a] px-5 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-70">Add hours row</FormSubmitButton>
           </form>
         </TeacherSection>
 
