@@ -308,6 +308,7 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
     await db.teacherStudentRoster.deleteMany({
       where: {
+        teacherId,
         OR: CANCELLED_ROSTER_PARENT_EMAIL_PARTS.flatMap((emailPart) => [
           { student: { registrationStudents: { some: { registration: { parentEmail: { contains: emailPart } } } } } },
           { student: { parents: { some: { parent: { user: { email: { contains: emailPart } } } } } } },
@@ -315,6 +316,7 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
       },
     });
     const namedRosterEntries = await db.teacherStudentRoster.findMany({
+      where: { teacherId },
       select: { id: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
     });
     const manuallyCancelledEntryIds = namedRosterEntries
@@ -328,6 +330,7 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
     }
     await db.teacherStudentRoster.deleteMany({
       where: {
+        teacherId,
         student: {
           registrationStudents: {
             some: { registration: { status: "CANCELLED" } },

@@ -62,6 +62,5 @@ export const db =
   global.__genMuminsPrisma ??
   new PrismaClient(prismaClientConfig);
 
-if (process.env.NODE_ENV !== "production") {
-  global.__genMuminsPrisma = db;
-}
+// Reuse the same pool across server module bundles in every environment.
+global.__genMuminsPrisma = db;

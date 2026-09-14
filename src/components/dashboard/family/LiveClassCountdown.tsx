@@ -11,8 +11,9 @@ function subscribeToPageRefresh(refresh: () => void) {
   pageRefreshers.add(refresh);
   if (pageRefreshTimer === null) {
     pageRefreshTimer = window.setInterval(() => {
+      if (document.hidden || !navigator.onLine) return;
       pageRefreshers.values().next().value?.();
-    }, 30000);
+    }, 30000 + Math.floor(Math.random() * 5000));
   }
   return () => {
     pageRefreshers.delete(refresh);
@@ -58,10 +59,11 @@ export function LiveClassCountdown({
     return () => window.clearInterval(interval);
   }, []);
 
+  const shouldRefresh = isLive || millisecondsUntilStart <= 15 * 60 * 1000;
   useEffect(() => {
-    if (!isLive && millisecondsUntilStart > 15 * 60 * 1000) return;
+    if (!shouldRefresh) return;
     return subscribeToPageRefresh(() => router.refresh());
-  }, [isLive, millisecondsUntilStart, router]);
+  }, [shouldRefresh, router]);
 
   return (
     <div className={`mt-4 rounded-[20px] border px-4 py-4 shadow-sm ${isLive ? "border-[#f4b85f] bg-[#102544]" : "border-white/10 bg-[#17243a]"}`}>

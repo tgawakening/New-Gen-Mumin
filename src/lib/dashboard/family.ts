@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
 import { db } from "@/lib/db";
@@ -1316,7 +1318,7 @@ async function getParentProfile(userId: string) {
   });
 }
 
-export async function getParentDashboardData(userId: string) {
+export const getParentDashboardData = cache(async function getParentDashboardData(userId: string) {
   const [parentProfile, parentalSchedules] = await Promise.all([getParentProfile(userId), getParentalSessionSchedules()]);
 
   if (!parentProfile) {
@@ -1425,9 +1427,9 @@ export async function getParentDashboardData(userId: string) {
       }
     }),
   } satisfies ParentDashboardData;
-}
+});
 
-export async function getStudentDashboardData(userId: string) {
+export const getStudentDashboardData = cache(async function getStudentDashboardData(userId: string) {
   const [studentProfile, parentalSchedules] = await Promise.all([db.studentProfile.findUnique({
     where: { userId },
     include: {
@@ -1566,7 +1568,7 @@ export async function getStudentDashboardData(userId: string) {
       accessLocked,
     ),
   } satisfies StudentDashboardData;
-}
+});
 
 export function getDashboardHomeForRole(role: UserRole) {
   switch (role) {

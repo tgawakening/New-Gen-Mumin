@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { db } from "@/lib/db";
 import {
   cleanLiveClassTitle,
@@ -134,7 +136,7 @@ export type TeacherDashboardData = {
   }>;
 };
 
-export async function getTeacherDashboardData(userId: string) {
+export const getTeacherDashboardData = cache(async function getTeacherDashboardData(userId: string) {
   const teacherProfile = await db.teacherProfile.findUnique({
     where: { userId },
     include: {
@@ -159,25 +161,6 @@ export async function getTeacherDashboardData(userId: string) {
                         select: {
                           countryCode: true,
                           countryName: true,
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              quizzes: {
-                include: {
-                  questions: true,
-                  attempts: true,
-                },
-              },
-              assignments: {
-                include: {
-                  submissions: {
-                    include: {
-                      student: {
-                        include: {
-                          user: true,
                         },
                       },
                     },
@@ -243,7 +226,7 @@ export async function getTeacherDashboardData(userId: string) {
               },
               quizzes: {
                 include: {
-                  questions: true,
+                  _count: { select: { questions: true } },
                   attempts: {
                     include: {
                       student: {
@@ -423,7 +406,7 @@ export async function getTeacherDashboardData(userId: string) {
       title: quiz.title,
       description: quiz.description,
       type: quiz.type.replace(/_/g, " "),
-      questionCount: quiz.questions.length,
+      questionCount: quiz._count.questions,
       published: quiz.isPublished,
       attempts: quiz.attempts.length,
       pendingManualReview: quiz.attempts.filter(
@@ -595,4 +578,4 @@ export async function getTeacherDashboardData(userId: string) {
       reportPeriod: report.reportPeriod,
     })),
   } satisfies TeacherDashboardData;
-}
+});
