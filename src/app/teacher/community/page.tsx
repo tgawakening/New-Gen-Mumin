@@ -9,7 +9,7 @@ import { CommunityVoiceRecorder } from "@/components/community/CommunityVoiceRec
 import { QabilaMessageComposer } from "@/components/community/QabilaMessageComposer";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { deleteCommunityMessage, editCommunityMessage, postTeacherCommunityMessage, formatQabilaMessage, syncAllQabilaRoomMemberships, syncQabilaSupervisors } from "@/lib/community/rooms";
+import { deleteCommunityMessage, editCommunityMessage, postTeacherCommunityMessage, formatQabilaMessage } from "@/lib/community/rooms";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { CommunityMessageMedia } from "@/components/community/CommunityMessageMedia";
 import { QabilaChatEnhancer } from "@/components/community/QabilaChatEnhancer";
@@ -20,8 +20,6 @@ export default async function TeacherCommunityPage({ searchParams }: PageProps) 
   if (!session) redirect("/auth/login");
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
   const params = searchParams ? await searchParams : {};
-  await syncQabilaSupervisors();
-  await syncAllQabilaRoomMemberships();
   const assignments = await db.communityRoomSupervisor.findMany({
     where: { userId: session.user.id, room: { isActive: true } },
     orderBy: { room: { title: "asc" } },

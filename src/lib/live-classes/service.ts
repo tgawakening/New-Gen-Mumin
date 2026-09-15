@@ -266,95 +266,22 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
-async function ensureRequiredZaranRoster(teacherId: string) {
-  const teacher = await db.teacherProfile.findUnique({
-    where: { id: teacherId },
-    include: { user: true, programAssignments: { include: { program: true } } },
-  });
-  if (!teacher?.isActive || teacher.user.status !== "ACTIVE") return;
-
-  const markerTitle = "System: Zaran roster initialized";
-  const initialized = await db.notification.findFirst({ where: { userId: teacher.userId, title: markerTitle }, select: { id: true } });
-  if (initialized) return;
-
-  let assigned = 0;
-  for (const assignment of teacher.programAssignments) {
-    const eligible = await getProgramEligibleRosterStudents(assignment.programId);
-    const zaran = eligible.find((student) => {
-      const name = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
-      return name.toLowerCase().replace(/[^a-z0-9]/g, "") === "zarannisar";
-    });
-    if (!zaran) continue;
-    await db.teacherStudentRoster.upsert({
-      where: { teacherId_programId_studentId: { teacherId, programId: assignment.programId, studentId: zaran.id } },
-      update: {},
-      create: { teacherId, programId: assignment.programId, studentId: zaran.id },
-    });
-    assigned += 1;
-  }
-
-  if (assigned) {
-    await db.notification.create({
-      data: {
-        userId: teacher.userId,
-        title: markerTitle,
-        body: `Zaran Nisar was initialized in ${assigned} eligible programme roster${assigned === 1 ? "" : "s"}.`,
-        readAt: new Date(),
-      },
-    });
-  }
-}
 export async function getTeacherProgramRosterEntries(teacherId: string) {
   try {
-    await db.teacherStudentRoster.deleteMany({
-      where: {
-        teacherId,
-        OR: CANCELLED_ROSTER_PARENT_EMAIL_PARTS.flatMap((emailPart) => [
-          { student: { registrationStudents: { some: { registration: { parentEmail: { contains: emailPart } } } } } },
-          { student: { parents: { some: { parent: { user: { email: { contains: emailPart } } } } } } },
-        ]),
-      },
-    });
-    const namedRosterEntries = await db.teacherStudentRoster.findMany({
-      where: { teacherId },
-      select: { id: true, student: { select: { displayName: true, user: { select: { firstName: true, lastName: true } } } } },
-    });
-    const manuallyCancelledEntryIds = namedRosterEntries
-      .filter((entry) => {
-        const name = entry.student.displayName || `${entry.student.user.firstName} ${entry.student.user.lastName ?? ""}`;
-        return MANUALLY_CANCELLED_ROSTER_NAMES.has(name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ""));
-      })
-      .map((entry) => entry.id);
-    if (manuallyCancelledEntryIds.length) {
-      await db.teacherStudentRoster.deleteMany({ where: { id: { in: manuallyCancelledEntryIds } } });
-    }
-    await db.teacherStudentRoster.deleteMany({
-      where: {
-        teacherId,
-        student: {
-          registrationStudents: {
-            some: { registration: { status: "CANCELLED" } },
-            none: { registration: { status: { in: [...PAID_REGISTRATION_STATUSES] } } },
-          },
-        },
-      },
-    });
-    await ensureRequiredZaranRoster(teacherId);
     const rosterEntries = await db.teacherStudentRoster.findMany({
       where: { teacherId },
       select: { id: true, programId: true, studentId: true },
     });
-    const validStudentIdsByProgram = new Map<string, Set<string>>();
-    for (const programId of [...new Set(rosterEntries.map((entry) => entry.programId))]) {
-      const eligible = await getProgramEligibleRosterStudents(programId);
-      validStudentIdsByProgram.set(programId, new Set(eligible.map((student) => student.id)));
-    }
-    const staleEntryIds = rosterEntries
-      .filter((entry) => !validStudentIdsByProgram.get(entry.programId)?.has(entry.studentId))
-      .map((entry) => entry.id);
-    if (staleEntryIds.length) await db.teacherStudentRoster.deleteMany({ where: { id: { in: staleEntryIds } } });
+    const programIds = [...new Set(rosterEntries.map((entry) => entry.programId))];
+    const eligibleByProgram = await Promise.all(
+      programIds.map(async (programId) => {
+        const eligible = await getProgramEligibleRosterStudents(programId);
+        return [programId, new Set(eligible.map((student) => student.id))] as const;
+      }),
+    );
+    const validStudentIdsByProgram = new Map(eligibleByProgram);
     return rosterEntries
-      .filter((entry) => !staleEntryIds.includes(entry.id))
+      .filter((entry) => validStudentIdsByProgram.get(entry.programId)?.has(entry.studentId))
       .map(({ programId, studentId }) => ({ programId, studentId }));
   } catch (error) {
     if (isRosterTableUnavailable(error)) {
@@ -364,7 +291,6 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
     throw error;
   }
 }
-
 type TeacherRosterAssignment = {
   programId: string;
   program: { slug: string; title: string };
@@ -429,45 +355,36 @@ export async function getTeacherProgramRosterStudentIds(teacherId: string, progr
       },
     });
 
-    const canonicalByProgram = new Map<string, Map<string, string>>();
-    const eligibleIdsByProgram = new Map<string, Set<string>>();
-    for (const compatibleProgramId of compatibleProgramIds) {
-      const eligible = await getProgramEligibleRosterStudents(compatibleProgramId);
-      eligibleIdsByProgram.set(compatibleProgramId, new Set(eligible.map((student) => student.id)));
-      canonicalByProgram.set(compatibleProgramId, new Map(eligible.map((student) => [
-        canonicalRosterIdentity(
-          student.displayName,
-          `${student.user.firstName} ${student.user.lastName ?? ""}`,
-          ...student.registrationStudents.map((entry) => `${entry.firstName} ${entry.lastName ?? ""}`),
-        ),
-        student.id,
-      ])));
-    }
+    const eligibility = await Promise.all(
+      compatibleProgramIds.map(async (compatibleProgramId) => {
+        const eligible = await getProgramEligibleRosterStudents(compatibleProgramId);
+        return {
+          programId: compatibleProgramId,
+          ids: new Set(eligible.map((student) => student.id)),
+          canonical: new Map(eligible.map((student) => [
+            canonicalRosterIdentity(
+              student.displayName,
+              `${student.user.firstName} ${student.user.lastName ?? ""}`,
+              ...student.registrationStudents.map((item) => `${item.firstName} ${item.lastName ?? ""}`),
+            ),
+            student.id,
+          ])),
+        };
+      }),
+    );
+    const eligibleIdsByProgram = new Map(eligibility.map((entry) => [entry.programId, entry.ids]));
+    const canonicalByProgram = new Map(eligibility.map((entry) => [entry.programId, entry.canonical]));
 
-    const resolvedStudentIds: string[] = [];
-    const staleEntryIds: string[] = [];
-    for (const entry of rosterEntries) {
-      if (eligibleIdsByProgram.get(entry.programId)?.has(entry.studentId)) {
-        resolvedStudentIds.push(entry.studentId);
-        continue;
-      }
+    const resolvedStudentIds = rosterEntries.flatMap((entry) => {
+      if (eligibleIdsByProgram.get(entry.programId)?.has(entry.studentId)) return [entry.studentId];
       const identity = canonicalRosterIdentity(
         entry.student.displayName,
         `${entry.student.user.firstName} ${entry.student.user.lastName ?? ""}`,
         ...entry.student.registrationStudents.map((item) => `${item.firstName} ${item.lastName ?? ""}`),
       );
       const replacementId = canonicalByProgram.get(entry.programId)?.get(identity);
-      if (replacementId) {
-        await db.teacherStudentRoster.upsert({
-          where: { teacherId_programId_studentId: { teacherId, programId: entry.programId, studentId: replacementId } },
-          update: {},
-          create: { teacherId, programId: entry.programId, studentId: replacementId },
-        });
-        resolvedStudentIds.push(replacementId);
-      }
-      staleEntryIds.push(entry.id);
-    }
-    if (staleEntryIds.length) await db.teacherStudentRoster.deleteMany({ where: { id: { in: staleEntryIds } } });
+      return replacementId ? [replacementId] : [];
+    });
     return [...new Set(resolvedStudentIds)];
   } catch (error) {
     if (isRosterTableUnavailable(error)) {

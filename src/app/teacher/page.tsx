@@ -7,7 +7,6 @@ import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDas
 import { TeacherHomeDashboard } from "@/components/dashboard/teacher/TeacherHomeDashboard";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { db } from "@/lib/db";
-import { syncAllQabilaRoomMemberships, syncQabilaSupervisors } from "@/lib/community/rooms";
 
 export default async function TeacherDashboardPage() {
   const session = await getCurrentSession();
@@ -16,8 +15,6 @@ export default async function TeacherDashboardPage() {
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
-  await syncQabilaSupervisors();
-  await syncAllQabilaRoomMemberships();
   const qabilas = await db.communityRoomSupervisor.findMany({
     where: { userId: session.user.id, room: { isActive: true, type: "PROJECT_TEAM" } },
     orderBy: { room: { title: "asc" } },

@@ -67,4 +67,16 @@ function render() { effectIndex = 0; effects = []; quizExports.LiveQuizAutoRefre
 render(); quizTimer(); assert.equal(polls, 1);
 render(); quizTimer(); quizTimer(); assert.equal(polls, 1);
 pending = false; render(); quizTimer(); assert.equal(polls, 2);
-console.log('PASS: production pool reuse, shared countdown timer, hidden/offline polling, and slow quiz refresh backpressure.');
+const teacherHome = fs.readFileSync('src/app/teacher/page.tsx', 'utf8');
+const teacherCommunity = fs.readFileSync('src/app/teacher/community/page.tsx', 'utf8');
+assert.doesNotMatch(teacherHome, /syncAllQabilaRoomMemberships|syncQabilaSupervisors/);
+assert.doesNotMatch(teacherCommunity, /syncAllQabilaRoomMemberships|syncQabilaSupervisors/);
+const rosterService = fs.readFileSync('src/lib/live-classes/service.ts', 'utf8');
+for (const functionName of ['getTeacherProgramRosterEntries', 'getTeacherProgramRosterStudentIds']) {
+  const start = rosterService.indexOf(`export async function ${functionName}`);
+  const end = rosterService.indexOf('\nexport ', start + 1);
+  const source = rosterService.slice(start, end < 0 ? undefined : end);
+  assert.doesNotMatch(source, /deleteMany|createMany|\.upsert|\$transaction/, `${functionName} must remain read-only`);
+}
+
+console.log('PASS: pool reuse, refresh backpressure, and read-only teacher dashboard/roster paths.');
