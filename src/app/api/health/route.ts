@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 export function GET() {
   return NextResponse.json(
-    { status: "ok" },
+    { status: "ok", release: "teacher-read-path-v1" },
     {
       status: 200,
       headers: {
