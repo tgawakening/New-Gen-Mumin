@@ -1,7 +1,6 @@
-const CACHE_NAME = "gen-mumin-pwa-v1";
-const APP_SHELL = [
+const CACHE_NAME = "gen-mumin-pwa-v3-20260915";
+const OFFLINE_SHELL = [
   "/",
-  "/auth/login",
   "/manifest.webmanifest",
   "/images/logo.png",
   "/gen-mumin-chars/ali-superhero.png",
@@ -10,7 +9,7 @@ const APP_SHELL = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined)
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(OFFLINE_SHELL)).catch(() => undefined)
   );
   self.skipWaiting();
 });
@@ -26,32 +25,29 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET") return;
-
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin || request.method !== "GET") return;
+
+  // Authentication and dashboard data must always come from the network.
+  if (url.pathname.startsWith("/api/") || url.pathname.startsWith("/auth/")) return;
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/auth/login").then((cached) => cached || Response.error()))
+      fetch(request).catch(() => caches.match("/").then((cached) => cached || Response.error()))
     );
     return;
   }
 
-  if (url.pathname.startsWith("/_next/") || url.pathname.startsWith("/icons/") || url.pathname.startsWith("/images/") || url.pathname.startsWith("/gen-mumin-chars/")) {
+  // Only immutable build assets and public images are safe to cache.
+  if (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname.startsWith("/images/") || url.pathname.startsWith("/gen-mumin-chars/")) {
     event.respondWith(
-      caches.match(request).then((cached) => {
-        const fresh = fetch(request)
-          .then((response) => {
-            if (response.ok) {
-              const copy = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-            }
-            return response;
-          })
-          .catch(() => cached);
-        return cached || fresh;
-      })
+      caches.match(request).then((cached) => cached || fetch(request).then((response) => {
+        if (response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+        }
+        return response;
+      }))
     );
   }
 });

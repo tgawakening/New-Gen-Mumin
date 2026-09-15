@@ -26,10 +26,10 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-source-sans-3), var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-serif: var(--font-playfair), Georgia, serif;
-  --font-heading: var(--font-quicksand);
+  --font-sans: "Segoe UI", Arial, Helvetica, sans-serif;
+  --font-mono: "Cascadia Mono", "Courier New", monospace;
+  --font-serif: Georgia, "Times New Roman", serif;
+  --font-heading: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
   --color-kidsa-orange-50: var(--kidsa-orange-50);
   --color-kidsa-orange-100: var(--kidsa-orange-100);
   --color-kidsa-orange-200: var(--kidsa-orange-200);
@@ -185,9 +185,9 @@ body {
   font-family: var(--font-playful);
 }
 
-/* Quicksand for banner/section titles */
+/* Friendly system heading stack for banner/section titles */
 .font-heading {
-  font-family: var(--font-quicksand), var(--font-sans);
+  font-family: var(--font-heading);
 }
 
 /* TopBar: wavy pattern from header-top-shape.png (live site) */

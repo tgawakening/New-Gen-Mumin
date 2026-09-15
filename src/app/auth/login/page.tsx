@@ -1,6 +1,7 @@
 import { LoginForm } from "@/components/auth/LoginForm";
 
-export default function LoginPage() {
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
+  const params = searchParams ? await searchParams : {};
   return (
     <div className="min-h-[70vh] bg-[#FDF6EF] py-16">
       <div className="section-container">
@@ -12,7 +13,7 @@ export default function LoginPage() {
             Use your parent or teacher account to review registration drafts, continue payment, open the family dashboard, or publish course content from the teacher workspace.
           </p>
           </div>
-          <LoginForm />
+          <LoginForm initialError={params.error} />
         </div>
       </div>
     </div>
