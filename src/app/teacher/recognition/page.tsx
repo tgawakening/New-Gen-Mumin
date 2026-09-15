@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Award, CalendarDays, FileText, Sparkles } from "lucide-react";
+import { Award, CalendarDays, FileText, Sparkles, Trash2 } from "lucide-react";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
@@ -10,12 +10,13 @@ import { awardRecognition, CHARACTER_BADGES } from "@/lib/community/recognition"
 import { pointDayKey } from "@/lib/community/point-awards";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
+import { db } from "@/lib/db";
 
 const WEEKLY_BADGE_KEY = "MUMIN_OF_WEEK";
 const MANUAL = CHARACTER_BADGES.filter((badge) => !["RELIABLE", "CONSISTENT", "SEEKER", WEEKLY_BADGE_KEY].includes(badge.key));
 const BONUS: Record<string, number> = { MUMIN_OF_WEEK: 25, HELPER: 10, COURAGEOUS: 10, NOTICER: 10, TRUTH_TELLER: 10, LEADER: 15, HOUSE_BUILDER: 30, ALLIANCE_CHAMPION: 40 };
 
-type Props = { searchParams?: Promise<{ awarded?: string; error?: string; certificate?: string }> };
+type Props = { searchParams?: Promise<{ awarded?: string; removed?: string; error?: string; certificate?: string }> };
 
 function weekKey(value = new Date()) {
   const [year, month, day] = pointDayKey(value).split("-").map(Number);
@@ -34,6 +35,12 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const students = Array.from(new Map(dashboard.rosters.flatMap((roster) => roster.students).map((student) => [student.id, student])).values()).sort((a, b) => a.name.localeCompare(b.name));
+  const recentAwards = await db.recognitionAward.findMany({
+    where: { awardedByUserId: session.user.id, sourceType: { in: ["WEEKLY_NOMINATION", "TEACHER_NOMINATION"] }, isPublic: true, revokedAt: null },
+    orderBy: { awardedAt: "desc" },
+    take: 20,
+    include: { student: { include: { user: true } } },
+  });
 
   async function nominate(formData: FormData) {
     "use server";
@@ -73,9 +80,31 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     redirect(`/teacher/recognition?awarded=1${weekly ? `&certificate=${award.certificateCode}` : ""}`);
   }
 
+  async function removeAward(formData: FormData) {
+    "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "TEACHER") redirect("/auth/login");
+    const awardId = String(formData.get("awardId") || "");
+    const award = await db.recognitionAward.findFirst({ where: { id: awardId, awardedByUserId: current.user.id, sourceType: { in: ["WEEKLY_NOMINATION", "TEACHER_NOMINATION"] }, revokedAt: null } });
+    if (!award) redirect("/teacher/recognition?error=Award%20not%20found%20or%20you%20do%20not%20have%20permission%20to%20remove%20it.");
+    await db.$transaction(async (tx) => {
+      await tx.recognitionAward.update({ where: { id: award.id }, data: { isPublic: false, revokedAt: new Date(), revokedByUserId: current.user.id } });
+      const original = await tx.housePointLedger.findFirst({ where: { studentId: award.studentId, sourceId: award.id, sourceType: `RECOGNITION_${award.badgeKey}` } });
+      const reversed = await tx.housePointLedger.findFirst({ where: { studentId: award.studentId, sourceId: award.id, sourceType: "RECOGNITION_REVERSAL" } });
+      if (original && !reversed && original.points > 0) await tx.housePointLedger.create({ data: { houseId: original.houseId, studentId: original.studentId, points: -original.points, reason: `Removed teacher award: ${award.title}`, sourceType: "RECOGNITION_REVERSAL", sourceId: award.id } });
+      if (award.beneficiaryStudentId) {
+        const other = await tx.housePointLedger.findFirst({ where: { studentId: award.beneficiaryStudentId, sourceId: award.id, sourceType: { startsWith: "CROSS_HOUSE_" } } });
+        const undone = await tx.housePointLedger.findFirst({ where: { studentId: award.beneficiaryStudentId, sourceId: award.id, sourceType: "CROSS_HOUSE_REVERSAL" } });
+        if (other && !undone && other.points > 0) await tx.housePointLedger.create({ data: { houseId: other.houseId, studentId: other.studentId, points: -other.points, reason: `Removed cross-Qabila award: ${award.title}`, sourceType: "CROSS_HOUSE_REVERSAL", sourceId: award.id } });
+      }
+      await tx.notification.deleteMany({ where: { href: `/certificates/${award.certificateCode}` } });
+    });
+    revalidatePath("/teacher/recognition"); revalidatePath("/student/rewards"); revalidatePath("/parent/rewards"); revalidatePath(`/certificates/${award.certificateCode}`);
+    redirect("/teacher/recognition?removed=1");
+  }
   return (
     <TeacherDashboardFrame title="Live Points & Recognition" subtitle="Award fair live-class points, character badges, and a printable Mumin of the Week certificate from one workspace." navItems={getTeacherNavItems()}>
-      <ActionToast message={params.awarded ? "Recognition awarded, certificate created, House points added, and the learner's family notified." : params.error} tone={params.error ? "error" : "success"} />
+      <ActionToast message={params.awarded ? "Recognition awarded, certificate created, House points added, and the learner's family notified." : params.removed ? "Test award removed, certificate hidden, and its House points safely reversed." : params.error} tone={params.error ? "error" : "success"} />
       <TeacherRewardWorkspaceTabs active="recognition" />
       <TeacherMetricGrid metrics={[
         { label: "Roster students", value: String(students.length), hint: "Unique eligible learners." },
@@ -112,6 +141,16 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
           </label>
           <button className="inline-flex w-fit items-center gap-2 rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white"><Sparkles className="h-4 w-4" />Award badge</button>
         </form>
+      </TeacherSection>
+      <TeacherSection eyebrow="Teacher award history" title="My recent certificates and badges">
+        <p className="mb-4 text-sm leading-6 text-[#617184]">You can remove an award you created while testing. Its certificate will be hidden and its awarded House points will be safely reversed.</p>
+        <div className="grid gap-3">
+          {recentAwards.map((award) => {
+            const learnerName = award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
+            return <article key={award.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dce4ed] bg-[#f8fafc] p-4"><div><p className="font-black text-[#22304a]">{award.title} · {learnerName}</p><p className="mt-1 text-sm text-[#617184]">{award.evidence}</p><p className="mt-1 text-xs text-[#8793a3]">{award.awardedAt.toLocaleDateString("en-GB")} · {award.pointsBonus} points</p></div><div className="flex items-center gap-2"><a href={`/certificates/${award.certificateCode}`} className="rounded-full border border-[#c8d5e3] bg-white px-4 py-2 text-xs font-bold text-[#24466e]">Open certificate</a><details className="relative"><summary className="cursor-pointer list-none rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-xs font-bold text-[#b24646]">Remove</summary><form action={removeAward} className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-[#efb3b3] bg-white p-4 shadow-xl"><input type="hidden" name="awardId" value={award.id}/><p className="text-xs leading-5 text-[#617184]">Remove this certificate and reverse its awarded points?</p><button className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#b24646] px-4 py-2 text-xs font-bold text-white"><Trash2 className="h-3.5 w-3.5"/>Yes, remove award</button></form></details></div></article>;
+          })}
+          {!recentAwards.length ? <p className="rounded-2xl bg-[#f8fafc] p-5 text-sm text-[#617184]">You have not assigned any certificates or badges yet.</p> : null}
+        </div>
       </TeacherSection>
     </TeacherDashboardFrame>
   );
