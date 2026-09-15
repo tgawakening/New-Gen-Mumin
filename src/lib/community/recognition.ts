@@ -17,6 +17,7 @@ export const RECOGNITION_LEVELS = [
 ] as const;
 
 export const CHARACTER_BADGES = [
+  { key: "MUMIN_OF_WEEK", title: "Mumin of the Week", category: "WEEKLY_CHARACTER", description: "Recognises exceptional character, effort, service, or growth observed this week." },
   { key: "RELIABLE", title: "The Reliable One", category: "RELIABILITY", description: "Shows up and can be counted on." },
   { key: "HELPER", title: "The Helper", category: "SERVICE", description: "Helps others with kindness and sincerity." },
   { key: "COURAGEOUS", title: "The Courageous One", category: "COURAGE", description: "Does what is right even when it is difficult." },
@@ -71,12 +72,20 @@ export async function awardRecognition(input: {
   const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } });
   if (student) {
     const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
+    const certificateHref = `/certificates/${award.certificateCode}`;
+    const isWeeklyCertificate = Boolean(input.featuredWeek);
     const recipients = [
-      { userId: student.userId, email: student.user.email, name: studentName, href: "/student/rewards" },
-      ...student.parents.map((link) => ({ userId: link.parent.userId, email: link.parent.user.email, name: `${link.parent.user.firstName} ${link.parent.user.lastName ?? ""}`.trim(), href: `/parent/rewards?child=${student.id}` })),
+      { userId: student.userId, email: student.user.email, name: studentName, href: isWeeklyCertificate ? certificateHref : "/student/rewards" },
+      ...student.parents.map((link) => ({ userId: link.parent.userId, email: link.parent.user.email, name: `${link.parent.user.firstName} ${link.parent.user.lastName ?? ""}`.trim(), href: isWeeklyCertificate ? certificateHref : `/parent/rewards?child=${student.id}` })),
     ];
-    await db.notification.createMany({ data: recipients.map((recipient) => ({ userId: recipient.userId, title: "Character recognition earned!", body: `${definition.title}: ${input.evidence}`, href: recipient.href })) });
-    await Promise.allSettled(recipients.map((recipient) => sendRecognitionEarnedEmail({ toEmail: recipient.email, recipientName: recipient.name || recipient.email, studentName, badgeTitle: definition.title, evidence: input.evidence, pointsBonus: input.pointsBonus ?? 0, rewardsPath: recipient.href })));
+    await db.notification.createMany({ data: recipients.map((recipient) => ({
+      userId: recipient.userId,
+      title: isWeeklyCertificate ? "Mumin of the Week certificate awarded!" : "Character recognition earned!",
+      body: isWeeklyCertificate ? `${studentName} is Mumin of the Week: ${input.evidence}` : `${definition.title}: ${input.evidence}`,
+      href: recipient.href,
+    })) });
+    const emailRecipients = recipients.filter((recipient) => !recipient.email.toLowerCase().endsWith("@genmumin.local"));
+    await Promise.allSettled(emailRecipients.map((recipient) => sendRecognitionEarnedEmail({ toEmail: recipient.email, recipientName: recipient.name || recipient.email, studentName, badgeTitle: definition.title, evidence: input.evidence, pointsBonus: input.pointsBonus ?? 0, rewardsPath: recipient.href })));
     const qabilaName = student.houseMembership?.qabilaGroup || "Unassigned Qabila";
     const admins = await db.user.findMany({ where: { role: "ADMIN", status: "ACTIVE" }, select: { id: true } });
     if (admins.length) {
