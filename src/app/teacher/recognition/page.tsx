@@ -51,9 +51,10 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
 
     const studentId = String(formData.get("studentId") || "");
     const badgeKey = String(formData.get("badgeKey") || "");
-    const evidence = String(formData.get("evidence") || "").trim().slice(0, 500);
+    const certificateAward = formData.get("awardKind") === "certificate";
+    const evidence = String(formData.get("evidence") || "").trim().slice(0, certificateAward ? 240 : 500);
     const beneficiaryStudentId = String(formData.get("beneficiaryStudentId") || "") || undefined;
-    const weekly = badgeKey === WEEKLY_BADGE_KEY;
+    const weekly = certificateAward;
     const permittedBadges = new Set([...MANUAL.map((badge) => badge.key), WEEKLY_BADGE_KEY]);
     const eligible = new Set(currentDashboard.rosters.flatMap((roster) => roster.students.map((student) => student.id)));
 
@@ -67,7 +68,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       evidence,
       awardedByUserId: current.user.id,
       sourceType: weekly ? "WEEKLY_NOMINATION" : "TEACHER_NOMINATION",
-      sourceId: weekly ? `${current.user.id}:${weekKey()}` : `${current.user.id}:${badgeKey}:${pointDayKey()}`,
+      sourceId: weekly ? `${current.user.id}:${badgeKey}:${weekKey()}` : `${current.user.id}:${badgeKey}:${pointDayKey()}`,
       pointsBonus: BONUS[badgeKey] ?? 10,
       featuredWeek: weekly ? weekKey() : undefined,
       beneficiaryStudentId: weekly ? undefined : beneficiaryStudentId,
@@ -119,14 +120,18 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
           <div><p className="font-black text-[#22304a]">Celebrate character—not points alone.</p><p className="mt-1 text-sm leading-6 text-[#617184]">Choose a learner you directly observed this week and write the exact reason. Their named certificate will appear immediately on the student and parent rewards dashboards.</p></div>
         </div>
         <form action={nominate} className="grid gap-4 lg:grid-cols-2">
-          <input type="hidden" name="badgeKey" value={WEEKLY_BADGE_KEY} />
-          <label className="grid gap-2 text-sm font-bold text-[#22304a]">Mumin of the Week
+          <input type="hidden" name="awardKind" value="certificate" />
+          <label className="grid gap-2 text-sm font-bold text-[#22304a]">Certificate recipient
             <select name="studentId" required className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Choose roster student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
           </label>
-          <label className="grid gap-2 text-sm font-bold text-[#22304a] lg:row-span-2">Reason printed on the certificate
-            <textarea name="evidence" required minLength={12} maxLength={500} rows={5} placeholder="Example: For consistently helping classmates, preparing thoughtfully, and showing excellent adab throughout this week's sessions." className="h-full rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal" />
+          <label className="grid gap-2 text-sm font-bold text-[#22304a]">Badge shown on certificate
+            <select name="badgeKey" required defaultValue={WEEKLY_BADGE_KEY} className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value={WEEKLY_BADGE_KEY}>Mumin of the Week — default</option>{MANUAL.map((badge) => <option key={badge.key} value={badge.key}>{badge.title}</option>)}</select>
           </label>
-          <button className="inline-flex w-fit items-center gap-2 rounded-full bg-[#172b49] px-6 py-3 text-sm font-bold text-white"><FileText className="h-4 w-4" />Award certificate</button>
+          <label className="grid gap-2 text-sm font-bold text-[#22304a] lg:col-span-2">Short reason printed on the certificate
+            <textarea name="evidence" required minLength={12} maxLength={240} rows={4} placeholder="Example: For consistently helping classmates and showing excellent adab throughout this week's sessions." className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal" />
+            <span className="text-xs font-normal text-[#7a8797]">Keep it clear and concise (maximum 240 characters). This exact reason appears on the learner&apos;s dashboard and certificate.</span>
+          </label>
+          <button className="inline-flex w-fit items-center gap-2 rounded-full bg-[#172b49] px-6 py-3 text-sm font-bold text-white"><FileText className="h-4 w-4" />Award badge & certificate</button>
         </form>
         {params.certificate ? <a href={`/certificates/${params.certificate}`} className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#d8a657] bg-[#fff8e8] px-5 py-3 text-sm font-bold text-[#172b49]"><CalendarDays className="h-4 w-4" />Open, print or save the awarded certificate</a> : null}
       </TeacherSection>
