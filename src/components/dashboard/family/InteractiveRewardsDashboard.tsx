@@ -44,14 +44,16 @@ function studentName(data: Data) {
 function Character({ data, className = "" }: { data: Data; className?: string }) {
   const gender = data.resolvedGender?.toLowerCase() ?? "";
   const isGirl = gender.includes("girl") || gender.includes("female");
+  const isBoy = gender.includes("boy") || gender.includes("male");
+  if (!isGirl && !isBoy) return null;
   return (
     <Image
-      src={isGirl ? "/gen-mumin-chars/rania-superhero.png" : "/gen-mumin-chars/ali-superhero.png"}
+      src={isGirl ? "/gen-mumin-chars/girl-certificate-v2.png" : "/gen-mumin-chars/boy-certificate-v2.png"}
       alt={isGirl ? "Gen-Mumin girl character" : "Gen-Mumin boy character"}
       width={620}
       height={820}
       priority
-      className={`object-cover object-[50%_12%] ${className}`}
+      className={`object-contain object-bottom ${className}`}
     />
   );
 }
@@ -141,7 +143,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
         </div>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1fr_1.08fr]">
+      <section id="weekly-certificate" className="scroll-mt-6 grid gap-5 xl:grid-cols-[1fr_1.08fr]">
         <div className="relative overflow-hidden rounded-[30px] border border-[#eadfce] bg-white p-6 shadow-sm">
           <div className="relative z-10 max-w-[62%]">
             <p className="text-xs font-bold uppercase tracking-[0.22em] text-[#d2691e]">Recognition spotlight</p>

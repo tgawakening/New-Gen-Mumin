@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { db } from "@/lib/db";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { getStudentQuestData } from "@/lib/community/quest";
@@ -13,6 +14,7 @@ import { listStudentActiveLiveQuizzes } from "@/lib/quizzes/live";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { GrowthRecognitionGuide } from "@/components/dashboard/family/GrowthRecognitionGuide";
+import { ChildCertificateSpotlight } from "@/components/dashboard/family/ChildCertificateSpotlight";
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
@@ -105,6 +107,7 @@ export default async function StudentDashboardPage() {
     getStudentQuestData(child.id, programIds),
     getStudentCommunityData(session.user.id),
   ]);
+  const latestChildAward = await db.recognitionAward.findFirst({ where: { studentId: child.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true } });
   const nextClassRoom = child.nextClass
     ? child.courses.find((course) => course.title === child.nextClass?.title)?.roomAssignment ?? null
     : null;
@@ -146,6 +149,7 @@ export default async function StudentDashboardPage() {
       pendingReason={dashboard.pendingReason}
     >
       <FamilyJourneyLinks role="student" />
+      {latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={dashboard.studentName} childId={child.id} gender={child.profile.gender} /> : null}
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
       {activeLiveQuizzes.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">

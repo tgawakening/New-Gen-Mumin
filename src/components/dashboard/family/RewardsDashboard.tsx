@@ -12,7 +12,7 @@ export function LegacyRewardsDashboard({ data, parentView = false }: { data: Dat
   const name = data.student?.displayName || [data.student?.user.firstName, data.student?.user.lastName].filter(Boolean).join(" ") || "Student";
   const featured = data.awards.find((award) => award.featuredWeek);
   const gender = data.student?.registrationStudents[0]?.gender?.toLowerCase() ?? "";
-  const characterSrc = gender.includes("girl") || gender.includes("female") ? "/gen-mumin-chars/rania-superhero.png" : "/gen-mumin-chars/ali-superhero.png";
+  const characterSrc = gender.includes("girl") || gender.includes("female") ? "/gen-mumin-chars/girl-certificate-v2.png" : "/gen-mumin-chars/boy-certificate-v2.png";
   return <div className="space-y-5">
     <section className="relative overflow-hidden rounded-[28px] border border-[#eadfce] bg-gradient-to-br from-white via-white to-[#fff2dc] p-5 shadow-sm lg:min-h-64 lg:pr-64">
       <div className="flex flex-wrap items-start justify-between gap-4">
