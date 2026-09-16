@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function AdminLoginModal() {
+export function AdminLoginModal({ returnTo }: { returnTo?: "/admin/rewards" }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,6 +27,10 @@ export function AdminLoginModal() {
         throw new Error(payload.error ?? "Unable to log in.");
       }
 
+      if (returnTo) {
+        window.location.assign(returnTo);
+        return;
+      }
       router.refresh();
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to log in.");

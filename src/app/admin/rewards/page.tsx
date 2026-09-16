@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Award, ChevronDown, Clock3, Sparkles, TrendingUp, Trophy } from "lucide-react";
 
+import { AdminLoginModal } from "@/components/admin/AdminLoginModal";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { ActivityShortcutLink } from "@/components/dashboard/family/ActivityShortcutLink";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -28,7 +29,9 @@ function sourceLabel(source: string) {
 
 export default async function Page({ searchParams }: Props) {
   const session = await getCurrentSession();
-  if (!session || session.user.role !== "ADMIN") redirect("/admin");
+  if (!session || session.user.role !== "ADMIN") {
+    return <AdminLoginModal returnTo="/admin/rewards" />;
+  }
   const params = searchParams ? await searchParams : {};
   const requestedQabila = canonicalQabilaName(params.qabila);
   const activeQabila = requestedQabila || QABILA_NAMES[0];
@@ -36,11 +39,16 @@ export default async function Page({ searchParams }: Props) {
   const weekStart = new Date(now.getTime() - 7 * dayMs);
   const dayStart = new Date(now.getTime() - dayMs);
 
-  const totals = await db.housePointLedger.groupBy({ by: ["houseId"], _sum: { points: true } });
-  for (const row of totals) {
-    for (const item of HOUSE_UNLOCKS.filter((entry) => (row._sum.points ?? 0) >= entry.milestone)) {
-      await db.houseUnlock.upsert({ where: { houseId_milestone: { houseId: row.houseId, milestone: item.milestone } }, create: { houseId: row.houseId, ...item, unlockedAt: new Date() }, update: {} });
-    }
+  const [totals, existingUnlocks] = await Promise.all([
+    db.housePointLedger.groupBy({ by: ["houseId"], _sum: { points: true } }),
+    db.houseUnlock.findMany({ select: { houseId: true, milestone: true } }),
+  ]);
+  const existingKeys = new Set(existingUnlocks.map((item) => JSON.stringify([item.houseId, item.milestone])));
+  const missingUnlocks = totals.flatMap((row) => HOUSE_UNLOCKS
+    .filter((item) => (row._sum.points ?? 0) >= item.milestone && !existingKeys.has(JSON.stringify([row.houseId, item.milestone])))
+    .map((item) => ({ houseId: row.houseId, ...item, unlockedAt: now })));
+  if (missingUnlocks.length) {
+    await db.houseUnlock.createMany({ data: missingUnlocks, skipDuplicates: true });
   }
 
   const [studentPointTotals, memberships, recentLedger, awards, unlocks, rewardNotifications] = await Promise.all([
