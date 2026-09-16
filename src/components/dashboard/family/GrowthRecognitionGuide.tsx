@@ -16,7 +16,7 @@ import {
   Users,
 } from "lucide-react";
 
-import { HOUSE_POINT_RULES } from "@/lib/community/point-awards";
+import { HOUSE_POINT_RULES } from "@/lib/community/point-rules";
 
 const pointWays = [
   { icon: Clock3, label: "Arrive ready and on time", points: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.points, note: "Once for each eligible live class", tone: "bg-[#e7f1ff] text-[#2465a5]" },
