@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { Award, CalendarDays, FileText, Sparkles, Trash2 } from "lucide-react";
 
 import { ActionToast } from "@/components/dashboard/ActionToast";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import { TeacherDashboardFrame, TeacherMetricGrid, TeacherSection } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { TeacherRewardWorkspaceTabs } from "@/components/dashboard/teacher/TeacherRewardWorkspaceTabs";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -131,7 +132,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
             <textarea name="evidence" required minLength={12} maxLength={240} rows={4} placeholder="Example: For consistently helping classmates and showing excellent adab throughout this week's sessions." className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal" />
             <span className="text-xs font-normal text-[#7a8797]">Keep it clear and concise (maximum 240 characters). This exact reason appears on the learner&apos;s dashboard and certificate.</span>
           </label>
-          <button className="inline-flex w-fit items-center gap-2 rounded-full bg-[#172b49] px-6 py-3 text-sm font-bold text-white"><FileText className="h-4 w-4" />Award badge & certificate</button>
+          <FormSubmitButton pendingLabel="Awarding certificate..." className="inline-flex w-fit items-center gap-2 rounded-full bg-[#172b49] px-6 py-3 text-sm font-bold text-white disabled:cursor-wait disabled:opacity-60"><FileText className="h-4 w-4" />Award badge & certificate</FormSubmitButton>
         </form>
         {params.certificate ? <a href={`/certificates/${params.certificate}`} className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#d8a657] bg-[#fff8e8] px-5 py-3 text-sm font-bold text-[#172b49]"><CalendarDays className="h-4 w-4" />Open, print or save the awarded certificate</a> : null}
       </TeacherSection>
@@ -144,7 +145,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
           <label className="grid gap-2 text-sm font-semibold text-[#22304a] lg:col-span-2">Learner helped in another Qabila (required for Qabila Builder / Alliance Champion)
             <select name="beneficiaryStudentId" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 font-normal"><option value="">Not a cross-Qabila award</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
           </label>
-          <button className="inline-flex w-fit items-center gap-2 rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white"><Sparkles className="h-4 w-4" />Award badge</button>
+          <FormSubmitButton pendingLabel="Awarding badge..." className="inline-flex w-fit items-center gap-2 rounded-full bg-[#22304a] px-6 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-60"><Sparkles className="h-4 w-4" />Award badge</FormSubmitButton>
         </form>
       </TeacherSection>
       <TeacherSection eyebrow="Teacher award history" title="My recent certificates and badges">
