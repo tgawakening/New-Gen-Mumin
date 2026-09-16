@@ -120,7 +120,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : {};
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
-  const latestChildAward = selectedChild ? await db.recognitionAward.findFirst({ where: { studentId: selectedChild.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true } }) : null;
+  const latestChildAward = selectedChild ? await db.recognitionAward.findFirst({ where: { studentId: selectedChild.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } }) : null;
   const showAddChildModal = params?.addChild === "1";
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && selectedChild && !hasFullGenM(selectedChild);
   const activity = selectedChild ? buildParentActivity(selectedChild) : null;
@@ -155,7 +155,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     >
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
       {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={dashboard.parentName} /> : null}
-      {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={selectedChild.profile.gender} parentView /> : null}
+      {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={latestChildAward.student.registrationStudents[0]?.gender} parentView /> : null}
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (
