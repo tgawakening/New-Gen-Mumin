@@ -116,7 +116,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     redirect("/registration");
   }
 
-  const latestParentAward = await db.parentRecognitionAward.findFirst({ where: { parentId: dashboard.parentProfile.id, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true } });
+  const latestParentAward = await db.parentRecognitionAward.findFirst({ where: { parentId: dashboard.parentProfile.id, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true, recipientName: true } });
   const params = searchParams ? await searchParams : {};
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
@@ -154,7 +154,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
-      {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={dashboard.parentName} /> : null}
+      {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={latestParentAward.recipientName || dashboard.parentName} /> : null}
       {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={latestChildAward.student.registrationStudents[0]?.gender} parentView /> : null}
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />

@@ -1193,6 +1193,7 @@ model ParentRecognitionAward {
   title             String
   description       String
   evidence          String
+  recipientName     String?
   awardedByUserId   String
   sourceId          String
   featuredWeek      String?

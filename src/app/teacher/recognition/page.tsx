@@ -90,23 +90,16 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     const award = await db.recognitionAward.findFirst({ where: { id: awardId, awardedByUserId: current.user.id, sourceType: { in: ["WEEKLY_NOMINATION", "TEACHER_NOMINATION"] }, revokedAt: null } });
     if (!award) redirect("/teacher/recognition?error=Award%20not%20found%20or%20you%20do%20not%20have%20permission%20to%20remove%20it.");
     await db.$transaction(async (tx) => {
-      await tx.recognitionAward.update({ where: { id: award.id }, data: { isPublic: false, revokedAt: new Date(), revokedByUserId: current.user.id } });
-      const original = await tx.housePointLedger.findFirst({ where: { studentId: award.studentId, sourceId: award.id, sourceType: `RECOGNITION_${award.badgeKey}` } });
-      const reversed = await tx.housePointLedger.findFirst({ where: { studentId: award.studentId, sourceId: award.id, sourceType: "RECOGNITION_REVERSAL" } });
-      if (original && !reversed && original.points > 0) await tx.housePointLedger.create({ data: { houseId: original.houseId, studentId: original.studentId, points: -original.points, reason: `Removed teacher award: ${award.title}`, sourceType: "RECOGNITION_REVERSAL", sourceId: award.id } });
-      if (award.beneficiaryStudentId) {
-        const other = await tx.housePointLedger.findFirst({ where: { studentId: award.beneficiaryStudentId, sourceId: award.id, sourceType: { startsWith: "CROSS_HOUSE_" } } });
-        const undone = await tx.housePointLedger.findFirst({ where: { studentId: award.beneficiaryStudentId, sourceId: award.id, sourceType: "CROSS_HOUSE_REVERSAL" } });
-        if (other && !undone && other.points > 0) await tx.housePointLedger.create({ data: { houseId: other.houseId, studentId: other.studentId, points: -other.points, reason: `Removed cross-Qabila award: ${award.title}`, sourceType: "CROSS_HOUSE_REVERSAL", sourceId: award.id } });
-      }
       await tx.notification.deleteMany({ where: { href: `/certificates/${award.certificateCode}` } });
+      await tx.housePointLedger.deleteMany({ where: { sourceId: award.id, studentId: { in: [award.studentId, ...(award.beneficiaryStudentId ? [award.beneficiaryStudentId] : [])] } } });
+      await tx.recognitionAward.delete({ where: { id: award.id } });
     });
-    revalidatePath("/teacher/recognition"); revalidatePath("/student/rewards"); revalidatePath("/parent/rewards"); revalidatePath(`/certificates/${award.certificateCode}`);
+    revalidatePath("/teacher/recognition"); revalidatePath("/student"); revalidatePath("/student/rewards"); revalidatePath("/parent"); revalidatePath("/parent/rewards"); revalidatePath(`/certificates/${award.certificateCode}`);
     redirect("/teacher/recognition?removed=1");
   }
   return (
     <TeacherDashboardFrame title="Live Points & Recognition" subtitle="Award fair live-class points, character badges, and a printable Mumin of the Week certificate from one workspace." navItems={getTeacherNavItems()}>
-      <ActionToast message={params.awarded ? "Recognition awarded, certificate created, House points added, and the learner's family notified." : params.removed ? "Test award removed, certificate hidden, and its House points safely reversed." : params.error} tone={params.error ? "error" : "success"} />
+      <ActionToast message={params.awarded ? "Recognition awarded, certificate created, House points added, and the learner's family notified." : params.removed ? "Award, certificate, and its related House points removed." : params.error} tone={params.error ? "error" : "success"} />
       <TeacherRewardWorkspaceTabs active="recognition" />
       <TeacherMetricGrid metrics={[
         { label: "Roster students", value: String(students.length), hint: "Unique eligible learners." },

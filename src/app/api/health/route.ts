@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 
 export function GET() {
   return NextResponse.json(
-    { status: "ok", release: "professional-certificates-dashboard-v2", performance: "teacher-read-path-v1" },
+    { status: "ok", release: "mum-certificate-personalisation-v3", performance: "teacher-read-path-v1" },
     {
       status: 200,
       headers: {
