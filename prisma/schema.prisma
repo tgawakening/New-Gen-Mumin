@@ -58,6 +58,7 @@ model ParentProfile {
   students           ParentStudent[]
   registrations      Registration[]
   monthlyPayments    MonthlyPaymentRecord[]
+  recognitionAwards  ParentRecognitionAward[]
 }
 
 model ParentStudent {
@@ -1185,6 +1186,28 @@ model RecognitionAward {
   @@index([featuredWeek, isPublic])
 }
 
+model ParentRecognitionAward {
+  id                String        @id @default(cuid())
+  parentId          String
+  badgeKey          String
+  title             String
+  description       String
+  evidence          String
+  awardedByUserId   String
+  sourceId          String
+  featuredWeek      String?
+  isPublic          Boolean       @default(true)
+  revokedAt         DateTime?
+  revokedByUserId   String?
+  certificateCode   String        @unique @default(cuid())
+  awardedAt         DateTime      @default(now())
+  parent             ParentProfile @relation(fields: [parentId], references: [id], onDelete: Cascade)
+
+  @@unique([parentId, badgeKey, sourceId], map: "ParentRecognition_parent_badge_source_key")
+  @@index([parentId, awardedAt])
+  @@index([featuredWeek, isPublic])
+  @@index([awardedByUserId, awardedAt])
+}
 model HouseUnlock {
   id          String   @id @default(cuid())
   houseId     String
@@ -1661,6 +1684,3 @@ enum ModerationFlagStatus {
   ESCALATED
   DISMISSED
 }
-
-
-

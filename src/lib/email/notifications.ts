@@ -576,6 +576,30 @@ export async function sendRecognitionEarnedEmail(input: {
     }),
   });
 }
+export async function sendParentRecognitionEmail(input: {
+  toEmail: string;
+  recipientName: string;
+  badgeTitle: string;
+  evidence: string;
+  certificatePath: string;
+}) {
+  await sendTransactionalEmail({
+    toEmail: input.toEmail,
+    subject: `${input.recipientName} earned ${input.badgeTitle}`,
+    template: "parentRecognitionEarned",
+    html: renderGenMuminsEmailTemplate({
+      heading: "Mum of the Week recognition!",
+      preview: `${input.recipientName} earned the ${input.badgeTitle} badge.`,
+      intro: `Assalamu alaikum ${input.recipientName}, Gen-Mumin faculty is delighted to recognise your positive example and support.`,
+      sections: [
+        { label: "Recognition", value: input.badgeTitle },
+        { label: "Why it was awarded", value: input.evidence },
+        { label: "With appreciation", value: "Your character and support help our children and community grow." },
+      ],
+      callToAction: { label: "View and print certificate", href: resolveHref(input.certificatePath) },
+    }),
+  });
+}
 export async function sendQabilaMessageEmail(input: {
   toEmail: string;
   recipientName: string;

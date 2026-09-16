@@ -1,0 +1,23 @@
+CREATE TABLE `ParentRecognitionAward` (
+  `id` VARCHAR(191) NOT NULL,
+  `parentId` VARCHAR(191) NOT NULL,
+  `badgeKey` VARCHAR(191) NOT NULL,
+  `title` VARCHAR(191) NOT NULL,
+  `description` TEXT NOT NULL,
+  `evidence` TEXT NOT NULL,
+  `awardedByUserId` VARCHAR(191) NOT NULL,
+  `sourceId` VARCHAR(191) NOT NULL,
+  `featuredWeek` VARCHAR(191) NULL,
+  `isPublic` BOOLEAN NOT NULL DEFAULT true,
+  `revokedAt` DATETIME(3) NULL,
+  `revokedByUserId` VARCHAR(191) NULL,
+  `certificateCode` VARCHAR(191) NOT NULL,
+  `awardedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE INDEX `ParentRecognitionAward_certificateCode_key`(`certificateCode`),
+  UNIQUE INDEX `ParentRecognition_parent_badge_source_key`(`parentId`, `badgeKey`, `sourceId`),
+  INDEX `ParentRecognitionAward_parentId_awardedAt_idx`(`parentId`, `awardedAt`),
+  INDEX `ParentRecognitionAward_featuredWeek_isPublic_idx`(`featuredWeek`, `isPublic`),
+  INDEX `ParentRecognitionAward_awardedByUserId_awardedAt_idx`(`awardedByUserId`, `awardedAt`),
+  PRIMARY KEY (`id`),
+  CONSTRAINT `ParentRecognitionAward_parentId_fkey` FOREIGN KEY (`parentId`) REFERENCES `ParentProfile`(`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

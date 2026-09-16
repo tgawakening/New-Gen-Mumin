@@ -7,6 +7,7 @@ import { GrowthRecognitionGuide } from "@/components/dashboard/family/GrowthReco
 import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { ParentCalendarSubscribeCard } from "@/components/calendar/ParentCalendarSubscribeCard";
+import { ParentRecognitionSpotlight } from "@/components/dashboard/family/ParentRecognitionSpotlight";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
@@ -14,6 +15,7 @@ import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import { buildParentCalendarUrls } from "@/lib/calendar/tokens";
+import { db } from "@/lib/db";
 import {
   ChildSelector,
   CompactList,
@@ -113,6 +115,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     redirect("/registration");
   }
 
+  const latestParentAward = await db.parentRecognitionAward.findFirst({ where: { parentId: dashboard.parentProfile.id, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true } });
   const params = searchParams ? await searchParams : {};
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
@@ -149,6 +152,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
+      {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={dashboard.parentName} /> : null}
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (
