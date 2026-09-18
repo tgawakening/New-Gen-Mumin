@@ -155,9 +155,44 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
+      {selectedChild ? (
+        <SectionCard
+                    eyebrow="Live sessions"
+                    title="Next scheduled class"
+                    icon="calendar"
+                    action={<Link href={`/parent/schedule?child=${selectedChild.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open full schedule</Link>}
+                  >
+                    {selectedChild.nextClass ? (
+                      <div className={`grid gap-4 rounded-[24px] bg-[#22304a] p-5 text-white lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
+                        <div>
+                          <p className="text-lg font-semibold">{selectedChild.nextClass.title}</p>
+                          <p className="mt-2 text-sm text-white/80">
+                            {formatWeekday(selectedChild.nextClass.weekday)} - {selectedChild.nextClass.startTime} - {selectedChild.nextClass.endTime}
+                          </p>
+                          <p className="mt-2 text-sm text-white/75">
+                            Teacher: {selectedChild.nextClass.teacherName ?? "Assigned soon"}
+                          </p>
+                          <p className="mt-2 text-sm text-white/75">
+                            {selectedChild.nextClass.provider ?? "Live class"} - {selectedChild.nextClass.timezone}
+                          </p>
+                        </div>
+                        <LiveClassCountdown
+                          startsAt={selectedChild.nextClass.nextStartsAt.toISOString()}
+                          meetingUrl={selectedChild.nextClass.meetingUrl ? `/api/live-classes/${selectedChild.nextClass.id}/join?student=${encodeURIComponent(selectedChild.id)}` : null}
+                          accessLocked={selectedChild.accessLocked}
+                          isLive={selectedChild.nextClass.isLive}
+                        />
+                      </div>
+                    ) : (
+                      <p className="text-sm leading-7 text-[#5f6b7a]">
+                        Weekly live session timing will appear here after admin or teachers assign the schedule.
+                      </p>
+                    )}
+                  </SectionCard>
+      ) : null}
+      <QabilaLeaderboardOverview audience="parent" />
       {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={latestParentAward.recipientName || dashboard.parentName} /> : null}
       {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={latestChildAward.student.registrationStudents[0]?.gender} parentView /> : null}
-      <QabilaLeaderboardOverview audience="parent" />
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (
@@ -220,40 +255,6 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
 
       {selectedChild && activity ? (
         <>
-          <SectionCard
-            eyebrow="Live sessions"
-            title="Next scheduled class"
-            icon="calendar"
-            action={<Link href={`/parent/schedule?child=${selectedChild.id}`} className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open full schedule</Link>}
-          >
-            {selectedChild.nextClass ? (
-              <div className={`grid gap-4 rounded-[24px] bg-[#22304a] p-5 text-white lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
-                <div>
-                  <p className="text-lg font-semibold">{selectedChild.nextClass.title}</p>
-                  <p className="mt-2 text-sm text-white/80">
-                    {formatWeekday(selectedChild.nextClass.weekday)} - {selectedChild.nextClass.startTime} - {selectedChild.nextClass.endTime}
-                  </p>
-                  <p className="mt-2 text-sm text-white/75">
-                    Teacher: {selectedChild.nextClass.teacherName ?? "Assigned soon"}
-                  </p>
-                  <p className="mt-2 text-sm text-white/75">
-                    {selectedChild.nextClass.provider ?? "Live class"} - {selectedChild.nextClass.timezone}
-                  </p>
-                </div>
-                <LiveClassCountdown
-                  startsAt={selectedChild.nextClass.nextStartsAt.toISOString()}
-                  meetingUrl={selectedChild.nextClass.meetingUrl ? `/api/live-classes/${selectedChild.nextClass.id}/join?student=${encodeURIComponent(selectedChild.id)}` : null}
-                  accessLocked={selectedChild.accessLocked}
-                  isLive={selectedChild.nextClass.isLive}
-                />
-              </div>
-            ) : (
-              <p className="text-sm leading-7 text-[#5f6b7a]">
-                Weekly live session timing will appear here after admin or teachers assign the schedule.
-              </p>
-            )}
-          </SectionCard>
-
           <MetricGrid
             metrics={[
               { label: "Children", value: String(dashboard.children.length), hint: "Linked learner profiles in your family account." },

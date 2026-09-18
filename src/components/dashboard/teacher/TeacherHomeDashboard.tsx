@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 
 import {
   TeacherInfoList,
@@ -13,15 +14,65 @@ export function TeacherHomeDashboard({
   dashboard,
   adminPreview = false,
   qabilas = [],
+  leaderboard,
 }: {
   dashboard: TeacherDashboardData;
   adminPreview?: boolean;
   qabilas?: Array<{ id: string; title: string; members: Array<{ id: string; name: string; role: string; active: boolean }>; recentActivity: number }>;
+  leaderboard?: ReactNode;
 }) {
   const linkClass = "text-sm font-semibold text-[#2a76aa]";
 
   return (
     <>
+      <TeacherSection
+                  eyebrow="Teaching load"
+                  title="Upcoming classes"
+                  action={!adminPreview ? <Link href="/teacher/schedule" className={linkClass}>Open schedule</Link> : null}
+                >
+                  {dashboard.classes.length ? (
+                    <div className="space-y-3">
+                      {dashboard.classes.slice(0, 5).map((entry) => (
+                        <div key={entry.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b]">
+                          <p className="font-semibold text-[#22304a]">{entry.title}</p>
+                          <p className="mt-1">
+                            {formatWeekday(entry.weekday)} - {entry.startTime}-{entry.endTime} - {entry.activeEnrollments} active learners
+                          </p>
+                          {!adminPreview && entry.meetingUrl ? (
+                            <div className="mt-3 flex flex-wrap gap-2">
+                              <a
+                                href={`/teacher/live-sessions/${entry.id}/start`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
+                              >
+                          Start as host
+                        </a>
+                        <a
+                          href={`/teacher/live-sessions/${entry.id}/start?mode=member`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full bg-[#eef6ff] px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
+                        >
+                          Join as member
+                        </a>
+                        <Link
+                          href={entry.meetingUrl}
+                                target="_blank"
+                                className="rounded-full border border-[#cdd9e4] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
+                              >
+                                Open Zoom link
+                        </Link>
+                            </div>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <TeacherInfoList items={[]} emptyLabel="Assigned classes will appear here after teacher onboarding." />
+                  )}
+                </TeacherSection>
+      {leaderboard}
       <TeacherMetricGrid
         metrics={[
           { label: "Assigned classes", value: String(dashboard.metrics.assignedClasses), hint: "Weekly teaching timetable." },
@@ -58,54 +109,6 @@ export function TeacherHomeDashboard({
       </TeacherSection> : null}
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(300px,0.75fr)]">
         <div className="space-y-6">
-          <TeacherSection
-            eyebrow="Teaching load"
-            title="Upcoming classes"
-            action={!adminPreview ? <Link href="/teacher/schedule" className={linkClass}>Open schedule</Link> : null}
-          >
-            {dashboard.classes.length ? (
-              <div className="space-y-3">
-                {dashboard.classes.slice(0, 5).map((entry) => (
-                  <div key={entry.id} className="rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm text-[#4d5a6b]">
-                    <p className="font-semibold text-[#22304a]">{entry.title}</p>
-                    <p className="mt-1">
-                      {formatWeekday(entry.weekday)} - {entry.startTime}-{entry.endTime} - {entry.activeEnrollments} active learners
-                    </p>
-                    {!adminPreview && entry.meetingUrl ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <a
-                          href={`/teacher/live-sessions/${entry.id}/start`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-full bg-[#0f4d81] px-3 py-1.5 text-xs font-semibold text-white"
-                        >
-                          Start as host
-                        </a>
-                        <a
-                          href={`/teacher/live-sessions/${entry.id}/start?mode=member`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="rounded-full bg-[#eef6ff] px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
-                        >
-                          Join as member
-                        </a>
-                        <Link
-                          href={entry.meetingUrl}
-                          target="_blank"
-                          className="rounded-full border border-[#cdd9e4] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
-                        >
-                          Open Zoom link
-                        </Link>
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <TeacherInfoList items={[]} emptyLabel="Assigned classes will appear here after teacher onboarding." />
-            )}
-          </TeacherSection>
-
           <TeacherSection
             eyebrow="Assessment"
             title="Quiz and journal review queue"

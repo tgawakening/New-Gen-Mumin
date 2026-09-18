@@ -29,8 +29,7 @@ export default async function TeacherDashboardPage() {
       navItems={getTeacherNavItems()}
     >
       <FamilyJourneyLinks role="teacher" />
-      <QabilaLeaderboardOverview audience="teacher" />
-      <TeacherHomeDashboard dashboard={dashboard} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
+      <TeacherHomeDashboard dashboard={dashboard} leaderboard={<QabilaLeaderboardOverview audience="teacher" />} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
     </TeacherDashboardFrame>
   );
 }
