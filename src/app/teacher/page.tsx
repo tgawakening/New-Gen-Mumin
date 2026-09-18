@@ -6,6 +6,7 @@ import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { TeacherDashboardFrame } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 import { TeacherHomeDashboard } from "@/components/dashboard/teacher/TeacherHomeDashboard";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
+import { QabilaLeaderboardOverview } from "@/components/dashboard/family/QabilaLeaderboardOverview";
 import { db } from "@/lib/db";
 
 export default async function TeacherDashboardPage() {
@@ -28,6 +29,7 @@ export default async function TeacherDashboardPage() {
       navItems={getTeacherNavItems()}
     >
       <FamilyJourneyLinks role="teacher" />
+      <QabilaLeaderboardOverview audience="teacher" />
       <TeacherHomeDashboard dashboard={dashboard} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
     </TeacherDashboardFrame>
   );

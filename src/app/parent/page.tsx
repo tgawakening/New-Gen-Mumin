@@ -9,6 +9,7 @@ import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrol
 import { ParentCalendarSubscribeCard } from "@/components/calendar/ParentCalendarSubscribeCard";
 import { ParentRecognitionSpotlight } from "@/components/dashboard/family/ParentRecognitionSpotlight";
 import { ChildCertificateSpotlight } from "@/components/dashboard/family/ChildCertificateSpotlight";
+import { QabilaLeaderboardOverview } from "@/components/dashboard/family/QabilaLeaderboardOverview";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
@@ -156,6 +157,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
       {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={latestParentAward.recipientName || dashboard.parentName} /> : null}
       {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={latestChildAward.student.registrationStudents[0]?.gender} parentView /> : null}
+      <QabilaLeaderboardOverview audience="parent" />
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       {liveQuizEntries.length ? (
