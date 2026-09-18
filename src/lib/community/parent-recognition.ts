@@ -21,8 +21,20 @@ export async function awardParentRecognition(input: { parentId: string; badgeKey
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     const existing = await db.parentRecognitionAward.findUnique({ where: { parentId_badgeKey_sourceId: { parentId: input.parentId, badgeKey: badge.key, sourceId: input.sourceId } } });
     if (!existing) throw error;
-    if (input.recipientName && existing.recipientName !== input.recipientName) return db.parentRecognitionAward.update({ where: { id: existing.id }, data: { recipientName: input.recipientName } });
-    return existing;
+    award = await db.parentRecognitionAward.update({
+      where: { id: existing.id },
+      data: {
+        title: badge.title,
+        description: badge.description,
+        evidence: input.evidence,
+        recipientName: input.recipientName,
+        featuredWeek: input.featuredWeek,
+        isPublic: true,
+        revokedAt: null,
+        revokedByUserId: null,
+        awardedAt: new Date(),
+      },
+    });
   }
   const parent = await db.parentProfile.findUnique({ where: { id: input.parentId }, include: { user: true } });
   if (parent) {
