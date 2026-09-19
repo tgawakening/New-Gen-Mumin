@@ -7,6 +7,18 @@ function safeFilename(value: string) {
   return value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "gen-mumin-certificate";
 }
 
+async function imageUrlToDataUrl(url: string) {
+  const response = await fetch(url, { credentials: "same-origin" });
+  if (!response.ok) throw new Error("A certificate image could not be loaded for PNG export.");
+  const blob = await response.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("A certificate image could not be prepared for PNG export."));
+    reader.readAsDataURL(blob);
+  });
+}
+
 async function downloadCertificatePng(filename: string) {
   const source = document.querySelector<HTMLElement>("[data-certificate-artwork]");
   if (!source) throw new Error("Certificate artwork was not found.");
@@ -21,6 +33,16 @@ async function downloadCertificatePng(filename: string) {
     const computed = window.getComputedStyle(element);
     for (const property of Array.from(computed)) target.style.setProperty(property, computed.getPropertyValue(property), computed.getPropertyPriority(property));
   });
+  const sourceImages = Array.from(source.querySelectorAll<HTMLImageElement>("img"));
+  const clonedImages = Array.from(clone.querySelectorAll<HTMLImageElement>("img"));
+  await Promise.all(sourceImages.map(async (sourceImage, index) => {
+    const clonedImage = clonedImages[index];
+    if (!clonedImage) return;
+    const imageUrl = sourceImage.currentSrc || sourceImage.src;
+    clonedImage.removeAttribute("srcset");
+    clonedImage.removeAttribute("sizes");
+    clonedImage.src = await imageUrlToDataUrl(imageUrl);
+  }));
   clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
   clone.style.width = `${bounds.width}px`;
   clone.style.height = `${bounds.height}px`;
