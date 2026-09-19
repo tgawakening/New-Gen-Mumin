@@ -15,7 +15,7 @@ import { db } from "@/lib/db";
 
 const WEEKLY_BADGE_KEY = "MUMIN_OF_WEEK";
 const MANUAL = CHARACTER_BADGES.filter((badge) => !["RELIABLE", "CONSISTENT", "SEEKER", WEEKLY_BADGE_KEY].includes(badge.key));
-const BONUS: Record<string, number> = { MUMIN_OF_WEEK: 25, HELPER: 10, COURAGEOUS: 10, NOTICER: 10, TRUTH_TELLER: 10, LEADER: 15, HOUSE_BUILDER: 30, ALLIANCE_CHAMPION: 40 };
+const BONUS: Record<string, number> = { MUMIN_OF_WEEK: 150, HELPER: 10, COURAGEOUS: 10, NOTICER: 10, TRUTH_TELLER: 10, LEADER: 15, HOUSE_BUILDER: 30, ALLIANCE_CHAMPION: 40 };
 
 type Props = { searchParams?: Promise<{ awarded?: string; removed?: string; error?: string; certificate?: string }> };
 
@@ -103,7 +103,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       <TeacherRewardWorkspaceTabs active="recognition" />
       <TeacherMetricGrid metrics={[
         { label: "Roster students", value: String(students.length), hint: "Unique eligible learners." },
-        { label: "Weekly certificate", value: "Ready", hint: "Reason is required and printed." },
+        { label: "Weekly Qabila bonus", value: "150 pts", hint: "Added with the certificate and its reason." },
         { label: "Family alert", value: "Automatic", hint: "Portal notification and deliverable email." },
         { label: "Print / PDF", value: "Included", hint: "Open after awarding." },
       ]} />

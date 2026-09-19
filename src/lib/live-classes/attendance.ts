@@ -152,14 +152,14 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
     }
   }
 
-  const joinedOnTime = Boolean(occurrence && joinedAt.getTime() <= occurrence.startedAt.getTime());
-  if (joinedOnTime) {
+  if (occurrence) {
+    const attendanceRule = late ? HOUSE_POINT_RULES.ATTENDANCE_LATE : HOUSE_POINT_RULES.ATTENDANCE_ON_TIME;
     await awardHousePointsOnce({
       studentId,
-      points: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.points,
-      reason: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.label,
-      sourceType: "ATTENDANCE_ON_TIME",
-      sourceId: scheduleId + ":" + pointDayKey(occurrence!.startedAt),
+      points: attendanceRule.points,
+      reason: attendanceRule.label,
+      sourceType: late ? "ATTENDANCE_LATE" : "ATTENDANCE_ON_TIME",
+      sourceId: scheduleId + ":" + pointDayKey(occurrence.startedAt),
       notificationHref: "/student/attendance",
     });
   }

@@ -20,6 +20,7 @@ import { HOUSE_POINT_RULES } from "@/lib/community/point-rules";
 
 const pointWays = [
   { icon: Clock3, label: "Arrive ready and on time", points: HOUSE_POINT_RULES.ATTENDANCE_ON_TIME.points, note: "Once for each eligible live class", tone: "bg-[#e7f1ff] text-[#2465a5]" },
+  { icon: Clock3, label: "Join after the on-time window", points: HOUSE_POINT_RULES.ATTENDANCE_LATE.points, note: "Attendance still contributes when a learner joins late", tone: "bg-[#fff0db] text-[#c27a2c]" },
   { icon: Sun, label: "Submit today’s Sunnah tracker", points: HOUSE_POINT_RULES.SUNNAH_DAILY_SUBMISSION.points, note: "Once per learner each day", tone: "bg-[#fff0db] text-[#c27a2c]" },
   { icon: CheckCircle2, label: "Complete a Sunnah task", points: HOUSE_POINT_RULES.SUNNAH_TASK_COMPLETED.points, note: "For each completed tracker task", tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
   { icon: Sun, label: "Complete Fajr or Isha", points: HOUSE_POINT_RULES.FARDH_FAJR_ISHA.points, note: "For each verified prayer, once per date", tone: "bg-[#e7f1ff] text-[#2465a5]" },

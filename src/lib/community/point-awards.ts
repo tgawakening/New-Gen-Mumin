@@ -53,8 +53,8 @@ export async function awardHousePointsOnce(input: {
   notify?: boolean;
 }) {
   if (!input.sourceId.trim()) throw new Error("A point award must have a unique source.");
-  if (!Number.isInteger(input.points) || input.points <= 0 || input.points > 100) {
-    throw new Error("House point award must be between 1 and 100 points.");
+  if (!Number.isInteger(input.points) || input.points <= 0 || input.points > 500) {
+    throw new Error("House point award must be between 1 and 500 points.");
   }
 
   const membership = await ensureStudentHouseMembership(input.studentId);

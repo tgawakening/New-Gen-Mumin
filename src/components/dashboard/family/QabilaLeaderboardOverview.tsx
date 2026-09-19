@@ -11,9 +11,12 @@ const weekMs = 7 * 24 * 60 * 60 * 1000;
 function contributionLabel(sourceType: string, reason: string) {
   if (sourceType.startsWith("SUNNAH")) return "Sunnah tracker progress";
   if (sourceType.startsWith("FARDH")) return "Daily Salah progress";
-  if (sourceType.includes("ATTENDANCE")) return "On-time attendance";
+  if (sourceType === "ATTENDANCE_LATE") return "Joined live class late";
+  if (sourceType.includes("ATTENDANCE")) return "Early/on-time attendance";
   if (sourceType.includes("HOMEWORK")) return "Learning work completed";
   if (sourceType.includes("QUIZ")) return "Quiz contribution";
+  if (sourceType === "RECOGNITION_MUMIN_OF_WEEK") return "Mumin of the Week certificate";
+  if (sourceType === "PARENT_RECOGNITION_MUM_OF_WEEK") return "Mum of the Week certificate contribution";
   if (sourceType.includes("RECOGNITION") || sourceType.includes("CROSS_HOUSE")) return "Character recognition";
   return reason || "Verified contribution";
 }

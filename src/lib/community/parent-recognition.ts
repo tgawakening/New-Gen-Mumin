@@ -1,6 +1,7 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { awardHousePointsOnce } from "@/lib/community/point-awards";
 import { sendParentRecognitionEmail } from "@/lib/email/notifications";
 
 export const MUM_CHARACTER_BADGES = [
@@ -11,7 +12,7 @@ export const MUM_CHARACTER_BADGES = [
   { key: "CONSISTENT_SUPPORTER_MUM", title: "The Consistent Supporter", description: "Reliably supports learning, attendance, communication, and steady growth." },
 ] as const;
 
-export async function awardParentRecognition(input: { parentId: string; badgeKey: string; evidence: string; recipientName?: string; awardedByUserId: string; sourceId: string; featuredWeek?: string }) {
+export async function awardParentRecognition(input: { parentId: string; badgeKey: string; evidence: string; recipientName?: string; awardedByUserId: string; sourceId: string; featuredWeek?: string; studentIdForPoints?: string }) {
   const badge = MUM_CHARACTER_BADGES.find((item) => item.key === input.badgeKey);
   if (!badge) throw new Error("Choose an approved Mum character badge.");
   let award;
@@ -35,6 +36,9 @@ export async function awardParentRecognition(input: { parentId: string; badgeKey
         awardedAt: new Date(),
       },
     });
+  }
+  if (badge.key === "MUM_OF_WEEK" && input.studentIdForPoints) {
+    await awardHousePointsOnce({ studentId: input.studentIdForPoints, points: 150, reason: `Mum of the Week — ${input.recipientName || "parent recognition"}: ${input.evidence}`, sourceType: "PARENT_RECOGNITION_MUM_OF_WEEK", sourceId: award.id, notificationHref: "/parent/rewards" });
   }
   const parent = await db.parentProfile.findUnique({ where: { id: input.parentId }, include: { user: true } });
   if (parent) {
