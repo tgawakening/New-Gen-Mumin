@@ -1,80 +1,47 @@
 "use client";
 
 import { useState } from "react";
+import { toPng } from "html-to-image";
 import { Download, ImageDown, LoaderCircle, Printer } from "lucide-react";
 
 function safeFilename(value: string) {
   return value.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "gen-mumin-certificate";
 }
 
-async function imageUrlToDataUrl(url: string) {
-  const response = await fetch(url, { credentials: "same-origin" });
-  if (!response.ok) throw new Error("A certificate image could not be loaded for PNG export.");
-  const blob = await response.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("A certificate image could not be prepared for PNG export."));
-    reader.readAsDataURL(blob);
-  });
-}
-
 async function downloadCertificatePng(filename: string) {
   const source = document.querySelector<HTMLElement>("[data-certificate-artwork]");
   if (!source) throw new Error("Certificate artwork was not found.");
-  await Promise.all(Array.from(source.querySelectorAll("img")).map((image) => image.complete ? Promise.resolve() : image.decode().catch(() => undefined)));
+
+  await Promise.all(
+    Array.from(source.querySelectorAll("img")).map((image) =>
+      image.complete ? image.decode().catch(() => undefined) : image.decode().catch(() => undefined),
+    ),
+  );
+
   const bounds = source.getBoundingClientRect();
-  const clone = source.cloneNode(true) as HTMLElement;
-  const originals = [source, ...Array.from(source.querySelectorAll<HTMLElement>("*"))];
-  const clones = [clone, ...Array.from(clone.querySelectorAll<HTMLElement>("*"))];
-  originals.forEach((element, index) => {
-    const target = clones[index];
-    if (!target) return;
-    const computed = window.getComputedStyle(element);
-    for (const property of Array.from(computed)) target.style.setProperty(property, computed.getPropertyValue(property), computed.getPropertyPriority(property));
+  const pixelRatio = Math.max(2, Math.min(3, 2400 / bounds.width));
+  const dataUrl = await toPng(source, {
+    cacheBust: true,
+    backgroundColor: "#fffaf0",
+    pixelRatio,
+    width: bounds.width,
+    height: bounds.height,
+    canvasWidth: Math.round(bounds.width * pixelRatio),
+    canvasHeight: Math.round(bounds.height * pixelRatio),
+    preferredFontFormat: "woff2",
+    fetchRequestInit: { credentials: "same-origin" },
+    style: {
+      margin: "0",
+      transform: "none",
+    },
   });
-  const sourceImages = Array.from(source.querySelectorAll<HTMLImageElement>("img"));
-  const clonedImages = Array.from(clone.querySelectorAll<HTMLImageElement>("img"));
-  await Promise.all(sourceImages.map(async (sourceImage, index) => {
-    const clonedImage = clonedImages[index];
-    if (!clonedImage) return;
-    const imageUrl = sourceImage.currentSrc || sourceImage.src;
-    clonedImage.removeAttribute("srcset");
-    clonedImage.removeAttribute("sizes");
-    clonedImage.src = await imageUrlToDataUrl(imageUrl);
-  }));
-  clone.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
-  clone.style.width = `${bounds.width}px`;
-  clone.style.height = `${bounds.height}px`;
-  clone.style.margin = "0";
-  clone.style.transform = "none";
-  const markup = new XMLSerializer().serializeToString(clone);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${bounds.width}" height="${bounds.height}" viewBox="0 0 ${bounds.width} ${bounds.height}"><foreignObject width="100%" height="100%">${markup}</foreignObject></svg>`;
-  const objectUrl = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml;charset=utf-8" }));
-  try {
-    const image = new Image();
-    image.decoding = "async";
-    image.src = objectUrl;
-    await image.decode();
-    const scale = Math.max(2, Math.min(3, 2400 / bounds.width));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bounds.width * scale);
-    canvas.height = Math.round(bounds.height * scale);
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("PNG rendering is not supported by this browser.");
-    context.scale(scale, scale);
-    context.drawImage(image, 0, 0, bounds.width, bounds.height);
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png", 1));
-    if (!blob) throw new Error("The PNG file could not be created.");
-    const downloadUrl = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = downloadUrl;
-    link.download = `${safeFilename(filename)}.png`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
-  } finally {
-    URL.revokeObjectURL(objectUrl);
-  }
+
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = `${safeFilename(filename)}.png`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export function CertificateActions({ filename = "Gen-Mumin certificate" }: { filename?: string }) {
