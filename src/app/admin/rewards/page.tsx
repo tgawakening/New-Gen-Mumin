@@ -11,6 +11,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { QABILA_NAMES, canonicalQabilaName, qabilaProfile } from "@/lib/community/qabilas";
 import { HOUSE_UNLOCKS } from "@/lib/community/recognition";
 import { db } from "@/lib/db";
+import { getAdminQabilaMemberships, groupQabilaMembers } from "@/lib/admin/qabila-members";
 
 type Props = { searchParams?: Promise<{ notice?: string; tone?: string; qabila?: string }> };
 const go = (notice: string, tone: "success" | "error" = "success") => "/admin/rewards?" + new URLSearchParams({ notice, tone });
@@ -53,13 +54,14 @@ export default async function Page({ searchParams }: Props) {
 
   const [studentPointTotals, memberships, recentLedger, awards, unlocks, rewardNotifications] = await Promise.all([
     db.housePointLedger.groupBy({ by: ["studentId"], _sum: { points: true } }),
-    db.houseMembership.findMany({ where: { qabilaGroup: { not: null } }, select: { studentId: true, qabilaGroup: true } }),
+    getAdminQabilaMemberships(),
     db.housePointLedger.findMany({ orderBy: { awardedAt: "desc" }, take: 300, include: { student: { include: { user: true, houseMembership: true } } } }),
     db.recognitionAward.findMany({ orderBy: { awardedAt: "desc" }, take: 150, include: { student: { include: { user: true, houseMembership: { include: { house: true } } } } } }),
     db.houseUnlock.findMany({ orderBy: [{ claimedAt: "asc" }, { unlockedAt: "desc" }], include: { house: true } }),
     db.notification.findMany({ where: { userId: session.user.id, readAt: null, href: { startsWith: "/admin/rewards" } }, orderBy: { createdAt: "desc" }, take: 200, select: { id: true, title: true, body: true, href: true } }),
   ]);
 
+  const memberGroups = groupQabilaMembers(memberships);
   const membershipByStudent = new Map(memberships.map((membership) => [membership.studentId, canonicalQabilaName(membership.qabilaGroup)]));
   const qabilaTotals = new Map(QABILA_NAMES.map((qabila) => [qabila, 0]));
   for (const row of studentPointTotals) {
@@ -210,6 +212,18 @@ export default async function Page({ searchParams }: Props) {
     <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{[
       ["Current points", activeSummary.points, "Verified collective total"], ["Seven-day growth", `+${activeSummary.weeklyGrowth}`, "Net ledger movement"], ["Qabila members", activeSummary.members, "Current team membership"], ["Recognition earned", activeSummary.badges, "Active badges and awards"],
     ].map(([label, value, hint]) => <div key={String(label)} className="rounded-[22px] border border-[#dce4ed] bg-white p-5"><p className="text-3xl font-black text-[#22304a]">{String(value)}</p><p className="mt-1 font-bold text-[#46566a]">{String(label)}</p><p className="mt-1 text-xs text-[#7a8797]">{String(hint)}</p></div>)}</section>
+
+    <section id="qabila-members" className="rounded-[26px] border border-[#dce4ed] bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div><h2 className="text-xl font-black text-[#22304a]">Qabila member lists</h2><p className="mt-2 max-w-3xl text-sm text-[#617184]">All assigned learner records, including learners with no points. These are the records counted on the leaderboard; inactive or test accounts are not automatically excluded.</p></div>
+        <a href="/api/admin/rewards/members/export" className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-bold text-white">Download all members (CSV)</a>
+      </div>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">{memberGroups.map((group) => <details key={group.name} open={group.name === activeQabila} className="min-w-0 rounded-2xl border border-[#dce4ed] p-4">
+        <summary className="cursor-pointer font-bold text-[#22304a]">{group.name} ? {group.members.length} learners ? View members</summary>
+        <ol className="mt-4 list-decimal space-y-3 pl-5">{group.members.map((member) => <li key={member.studentId} className="text-sm text-[#22304a]"><span className="break-words font-semibold">{member.name}</span><span className="block text-xs text-[#617184]">{member.role} ? Account: {member.accountStatus}</span><span className="block break-all text-xs text-[#617184]">Learner ID: {member.studentId}</span></li>)}</ol>
+        {!group.members.length ? <p className="mt-3 text-sm text-[#617184]">No learners assigned yet.</p> : null}
+      </details>)}</div>
+    </section>
 
     <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
       <section className="rounded-[26px] border border-[#dce4ed] bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b66922]">Point ledger</p><h2 className="mt-1 text-xl font-black text-[#22304a]">Recent student contributions</h2></div><Clock3 className="h-7 w-7 text-[#d28738]"/></div><div className="mt-4 space-y-3">{activeLedger.map((entry) => <article id={`activity-${entry.id}`} key={entry.id} className="rounded-2xl border border-[#e4e9ef] bg-[#fbfcfe] p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-black text-[#22304a]">{studentName(entry.student)}</p><p className="mt-1 text-sm leading-5 text-[#617184]">{entry.reason}</p><div className="mt-2 flex flex-wrap gap-2 text-[11px]"><span className="rounded-full bg-[#eef4fa] px-2.5 py-1 font-bold text-[#41607d]">{sourceLabel(entry.sourceType)}</span><span className="px-1 py-1 text-[#8994a2]">{entry.awardedAt.toLocaleString("en-GB")}</span></div></div><span className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-black ${entry.points >= 0 ? "bg-[#e9f7ee] text-[#2f7a4f]" : "bg-[#fff0f0] text-[#b34242]"}`}>{entry.points >= 0 ? "+" : ""}{entry.points}</span></div></article>)}{!activeLedger.length ? <p className="rounded-2xl bg-[#fbf6ef] p-5 text-sm text-[#617184]">No verified point activity for this Qabila yet.</p> : null}</div></section>
