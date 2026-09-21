@@ -17,13 +17,20 @@ export async function loadQabilaCandidates() {
     select: {
       studentId: true, qabilaGroup: true, role: true,
       student: { select: {
-        displayName: true, user: { select: { firstName: true, lastName: true } },
-        parents: { select: { parentId: true } },
+        displayName: true, createdAt: true, user: { select: { firstName: true, lastName: true } },
+        parents: { select: { parentId: true, parent: { select: { user: { select: { email: true, firstName: true, lastName: true } } } } } },
+        enrollments: { select: { orderItems: { select: { order: { select: {
+          id: true, parentId: true, createdAt: true, status: true,
+          parent: { select: { user: { select: { email: true, firstName: true, lastName: true } } } },
+          registration: { select: { status: true } },
+          payments: { where: { status: "SUCCEEDED" }, take: 1, select: { id: true } },
+        } } } } } },
         registrationStudents: {
           orderBy: { createdAt: "desc" },
           select: { firstName: true, lastName: true, dateOfBirth: true,
-            registration: { select: { parentProfileId: true, parentEmail: true, status: true,
+            registration: { select: { parentProfileId: true, parentEmail: true, parentFirstName: true, parentLastName: true, status: true,
               order: { select: { id: true, parentId: true, createdAt: true, status: true,
+                parent: { select: { user: { select: { email: true, firstName: true, lastName: true } } } },
                 payments: { where: { status: "SUCCEEDED" }, take: 1, select: { id: true } },
               } },
             } },
@@ -35,16 +42,64 @@ export async function loadQabilaCandidates() {
 }
 
 type Candidate = Awaited<ReturnType<typeof loadQabilaCandidates>>[number];
+function completedOrders(candidate: Candidate) {
+  const registrationOrders = candidate.student.registrationStudents.flatMap(({ registration }) => {
+    const order = registration.order;
+    return order && (order.status === "SUCCEEDED" || order.payments.length > 0 || ["PAID", "CONVERTED"].includes(registration.status)) ? [order] : [];
+  });
+  const enrollmentOrders = candidate.student.enrollments.flatMap((entry) => entry.orderItems.map((item) => item.order))
+    .filter((order) => order.status === "SUCCEEDED" || order.payments.length > 0 || ["PAID", "CONVERTED"].includes(order.registration?.status ?? ""));
+  return [...registrationOrders, ...enrollmentOrders];
+}
+
 export function planQabilaDuplicates(candidates: Candidate[]) {
+  // Bridge historic parent IDs to the same email, rather than comparing IDs to emails.
+  const parentEmails = new Map<string, string>();
+  const email = (value?: string | null) => value?.trim().toLowerCase() || "";
+  for (const candidate of candidates) {
+    for (const link of candidate.student.parents) {
+      const address = email(link.parent.user.email);
+      if (address) parentEmails.set(link.parentId, address);
+    }
+    for (const { registration } of candidate.student.registrationStudents) {
+      const address = email(registration.order?.parent.user.email) || email(registration.parentEmail);
+      const id = registration.order?.parentId || registration.parentProfileId;
+      if (id && address && !parentEmails.has(id)) parentEmails.set(id, address);
+    }
+    for (const order of completedOrders(candidate)) {
+      const address = email(order.parent.user.email);
+      if (address) parentEmails.set(order.parentId, address);
+    }
+  }
+  const familyKey = (id: string | null, fallback?: string) => (id && parentEmails.get(id)) || email(fallback) || (id ? "id:" + id : "");
+  const confirmedTestFamilies = new Set<string>();
+  for (const candidate of candidates) {
+    for (const link of candidate.student.parents) {
+      if (normalize([link.parent.user.firstName, link.parent.user.lastName].filter(Boolean).join(" ")) === "areejirshad") confirmedTestFamilies.add(familyKey(link.parentId));
+    }
+    for (const { registration } of candidate.student.registrationStudents) {
+      if (normalize([registration.parentFirstName, registration.parentLastName].filter(Boolean).join(" ")) === "areejirshad") confirmedTestFamilies.add(familyKey(registration.order?.parentId || registration.parentProfileId, registration.parentEmail));
+    }
+  }
+  const confirmedTestIds = new Set<string>();
   const groups = new Map<string, Candidate[]>();
   for (const candidate of candidates) {
     const registrations = candidate.student.registrationStudents;
-    const families = new Set(registrations.map((entry) => entry.registration.order?.parentId || entry.registration.parentProfileId || entry.registration.parentEmail.trim().toLowerCase()).filter(Boolean));
-    if (!families.size && candidate.student.parents.length === 1) families.add(candidate.student.parents[0].parentId);
+    const families = new Set([
+      ...registrations.map((entry) => familyKey(entry.registration.order?.parentId || entry.registration.parentProfileId, entry.registration.parentEmail)),
+      ...candidate.student.parents.map((entry) => familyKey(entry.parentId)),
+      ...completedOrders(candidate).map((order) => familyKey(order.parentId)),
+    ].filter(Boolean));
     if (families.size !== 1) continue;
+    const displayIdentity = learnerIdentity(candidate.student.displayName || [candidate.student.user.firstName, candidate.student.user.lastName].filter(Boolean).join(" "));
+    // The owner explicitly identified these two as repeated test learners.
+    const confirmedTest = ["ahmad", "khadija"].includes(displayIdentity) && confirmedTestFamilies.has([...families][0]);
+    if (confirmedTest) confirmedTestIds.add(candidate.studentId);
     const names = new Set(registrations.map((entry) => learnerIdentity([entry.firstName, entry.lastName].filter(Boolean).join(" "))).filter(Boolean));
-    if (!names.size) names.add(learnerIdentity(candidate.student.displayName || [candidate.student.user.firstName, candidate.student.user.lastName].filter(Boolean).join(" ")));
+    if (confirmedTest) { names.clear(); names.add(displayIdentity); }
+    if (!names.size) names.add(displayIdentity);
     if (names.size !== 1 || ![...names][0]) continue;
+    if (!confirmedTest && displayIdentity && displayIdentity !== [...names][0]) continue;
     const key = JSON.stringify([[...families][0], [...names][0]]);
     groups.set(key, [...(groups.get(key) ?? []), candidate]);
   }
@@ -54,14 +109,12 @@ export function planQabilaDuplicates(candidates: Candidate[]) {
     const assigned = group.filter((entry) => canonicalQabilaName(entry.qabilaGroup));
     const qabilas = new Set(assigned.map((entry) => canonicalQabilaName(entry.qabilaGroup)!));
     if (qabilas.size !== 1) continue;
+    const confirmedTest = group.every((entry) => confirmedTestIds.has(entry.studentId));
     const birthDates = new Set(group.flatMap((entry) => entry.student.registrationStudents.flatMap((registration) => registration.dateOfBirth ? [registration.dateOfBirth.toISOString().slice(0, 10)] : [])));
-    if (birthDates.size > 1) continue;
-    const latest = (entry: Candidate) => Math.max(-1, ...entry.student.registrationStudents.map(({ registration }) => {
-      const order = registration.order;
-      return order && (order.status === "SUCCEEDED" || order.payments.length > 0 || ["PAID", "CONVERTED"].includes(registration.status)) ? order.createdAt.getTime() : -1;
-    }));
-    const ranked = [...group].sort((a, b) => latest(b) - latest(a));
-    if (latest(ranked[0]) < 0 || latest(ranked[0]) === latest(ranked[1])) continue;
+    if (!confirmedTest && birthDates.size > 1) continue;
+    const latest = (entry: Candidate) => Math.max(-1, ...completedOrders(entry).map((order) => order.createdAt.getTime()));
+    const ranked = [...group].sort((a, b) => latest(b) - latest(a) || b.student.createdAt.getTime() - a.student.createdAt.getTime() || a.studentId.localeCompare(b.studentId));
+    if (latest(ranked[0]) < 0 || (!confirmedTest && latest(ranked[0]) === latest(ranked[1]))) continue;
     const keep = ranked[0];
     const remove = group.filter((entry) => entry.studentId !== keep.studentId);
     const role = assigned.some((entry) => entry.role === "CAPTAIN") ? "CAPTAIN" : assigned.some((entry) => entry.role === "VICE_CAPTAIN") ? "VICE_CAPTAIN" : keep.role;
