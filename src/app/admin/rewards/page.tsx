@@ -11,6 +11,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { QABILA_NAMES, canonicalQabilaName, qabilaProfile } from "@/lib/community/qabilas";
 import { HOUSE_UNLOCKS } from "@/lib/community/recognition";
 import { db } from "@/lib/db";
+import { repairQabilaDuplicates } from "@/lib/community/qabila-duplicates";
 import { getAdminQabilaMemberships, groupQabilaMembers } from "@/lib/admin/qabila-members";
 
 type Props = { searchParams?: Promise<{ notice?: string; tone?: string; qabila?: string }> };
@@ -33,6 +34,7 @@ export default async function Page({ searchParams }: Props) {
   if (!session || session.user.role !== "ADMIN") {
     return <AdminLoginModal returnTo="/admin/rewards" />;
   }
+  await repairQabilaDuplicates();
   const params = searchParams ? await searchParams : {};
   const requestedQabila = canonicalQabilaName(params.qabila);
   const activeQabila = requestedQabila || QABILA_NAMES[0];

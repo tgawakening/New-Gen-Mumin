@@ -1,3 +1,4 @@
+import { repairQabilaDuplicates } from "@/lib/community/qabila-duplicates";
 import { getCurrentSession } from "@/lib/auth/session";
 import { getAdminQabilaMemberships, groupQabilaMembers, qabilaMembersCsv } from "@/lib/admin/qabila-members";
 
@@ -8,6 +9,7 @@ export async function GET() {
   if (!session || session.user.role !== "ADMIN") {
     return Response.json({ error: "Admin access required." }, { status: session ? 403 : 401, headers: { "Cache-Control": "private, no-store" } });
   }
+  await repairQabilaDuplicates();
   const groups = groupQabilaMembers(await getAdminQabilaMemberships());
   return new Response(qabilaMembersCsv(groups), {
     headers: {

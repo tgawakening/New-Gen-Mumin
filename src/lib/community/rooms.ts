@@ -3,6 +3,7 @@ import "server-only";
 import { CommunityMessageStatus, CommunityRoomType, CommunityRoomVisibility } from "@prisma/client";
 
 import { db } from "@/lib/db";
+import { isSupersededQabilaLearner } from "@/lib/community/qabila-duplicates";
 import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 import { canonicalQabilaName, LEGACY_QABILA_NAMES, QABILA_NAMES, qabilaProfile } from "@/lib/community/qabilas";
 import { sendQabilaMentionEmail, sendQabilaMessageEmail } from "@/lib/email/notifications";
@@ -270,6 +271,7 @@ export async function ensureStudentQabilaRoom(studentId: string) {
   // Repeat paid registrations may create a new generated learner login. Recover
   // the approved Qabila from the older matching profile so the current login can chat.
   if (!canonicalQabilaName(membership?.qabilaGroup?.trim())) {
+    if (await isSupersededQabilaLearner(studentId)) return;
     const student = await db.studentProfile.findUnique({
       where: { id: studentId },
       select: { displayName: true, user: { select: { firstName: true, lastName: true } } },
