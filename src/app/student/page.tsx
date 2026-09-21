@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { buildTrackedZoomJoinUrl } from "@/lib/live-classes/attendance";
 import { db } from "@/lib/db";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
@@ -398,7 +399,7 @@ export default async function StudentDashboardPage() {
                 </p>
                 <LiveClassCountdown
                   startsAt={child.nextClass.nextStartsAt.toISOString()}
-                  meetingUrl={child.nextClass.meetingUrl ? `/api/live-classes/${child.nextClass.id}/join?student=${encodeURIComponent(child.id)}` : null}
+                  meetingUrl={child.nextClass.meetingUrl ? buildTrackedZoomJoinUrl(child.nextClass.id, child.id) : null}
                   accessLocked={child.accessLocked}
                   isLive={child.nextClass.isLive}
                 />

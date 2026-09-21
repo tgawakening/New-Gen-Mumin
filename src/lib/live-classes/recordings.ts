@@ -13,6 +13,7 @@ import {
   isParentalLiveClass,
 } from "@/lib/live-classes/service";
 import { downloadZoomRecordingRange, findZoomRecordingDownloadUrl, getZoomUserRecordings } from "@/lib/zoom/client";
+import { createRecordingShareToken } from "@/lib/live-classes/recording-share";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const RECORDING_PROCESSING_PROVIDER = "processing";
@@ -131,6 +132,11 @@ function isAdvancedArabicRecording(recording: any) {
   return value.includes("advanced arabic") || (value.includes("abdul") && value.includes("badee"));
 }
 
+function signedRecordingMediaUrl(recordingId: string) {
+  const { expiresAt, token } = createRecordingShareToken(recordingId);
+  return `/api/shared/recordings/${recordingId}/media?expires=${expiresAt}&token=${encodeURIComponent(token)}`;
+}
+
 function mapRecording(recording: any): LiveClassRecordingSummary {
   const processingState = recordingProcessingState(recording);
   const collaborators = recordingCollaboratorNames(recording);
@@ -151,7 +157,7 @@ function mapRecording(recording: any): LiveClassRecordingSummary {
     teacherNames: collaborators,
     isCollaborative: collaborators.length > 1,
     watchUrl: recording.driveViewUrl || recording.downloadUrl ? `/recordings/${recording.id}/watch` : null,
-    playbackUrl: recording.driveFileId && recording.storageProvider === "google-drive" ? `/api/recordings/${recording.id}/media` : null,
+    playbackUrl: recording.driveFileId && recording.storageProvider === "google-drive" ? signedRecordingMediaUrl(recording.id) : null,
     isReadyForPlayback: Boolean(recording.driveFileId && recording.storageProvider === "google-drive"),
     ...processingState,
     processingProgressLabel: recording.driveUploadTotal
@@ -1189,12 +1195,13 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
     driveViewUrl: recording.driveViewUrl,
     driveFileId: recording.driveFileId,
     isReadyForPlayback: Boolean(recording.driveFileId && recording.storageProvider === "google-drive"),
+    playbackUrl: recording.driveFileId && recording.storageProvider === "google-drive" ? signedRecordingMediaUrl(recording.id) : null,
     fileType: recording.fileType,
   };
 }
 
 export async function getSharedRecordingPlaybackDetails(recordingId: string) {
-  const recording = await db.liveClassRecording.findFirst({ where: { id: recordingId, deletedAt: null }, include: includeRecordingRelations() });
+  const recording = await db.liveClassRecording.findFirst({ where: { id: recordingId, deletedAt: null }, select: { id: true, topic: true, recordingStart: true, availableAt: true, driveFileId: true, storageProvider: true, schedule: { select: { title: true, teacherId: true, program: { select: { title: true } }, teacher: { select: { user: { select: { firstName: true, lastName: true, email: true } } } } } } } });
   if (!recording || !recording.driveFileId || recording.storageProvider !== "google-drive") return null;
   return {
     id: recording.id,

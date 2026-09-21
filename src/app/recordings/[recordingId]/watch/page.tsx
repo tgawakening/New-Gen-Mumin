@@ -70,7 +70,7 @@ export default async function RecordingWatchPage({ params }: PageProps) {
         <div className="rounded-[28px] border border-[#eadfce] bg-white p-4 shadow-sm">
           {recording.isReadyForPlayback ? (
             <>
-              <RecordingPlayer src={`/api/recordings/${recording.id}/media`} title={recording.title} />
+              <RecordingPlayer src={recording.playbackUrl!} title={recording.title} />
               <p className="mt-4 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm leading-6 text-[#617184]">
                 The recording plays through the Gen-Mumins dashboard. Download controls are hidden from the player.
               </p>

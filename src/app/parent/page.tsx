@@ -11,6 +11,7 @@ import { ParentRecognitionSpotlight } from "@/components/dashboard/family/Parent
 import { ChildCertificateSpotlight } from "@/components/dashboard/family/ChildCertificateSpotlight";
 import { QabilaLeaderboardOverview } from "@/components/dashboard/family/QabilaLeaderboardOverview";
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { buildTrackedZoomJoinUrl } from "@/lib/live-classes/attendance";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
@@ -178,7 +179,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                         </div>
                         <LiveClassCountdown
                           startsAt={selectedChild.nextClass.nextStartsAt.toISOString()}
-                          meetingUrl={selectedChild.nextClass.meetingUrl ? `/api/live-classes/${selectedChild.nextClass.id}/join?student=${encodeURIComponent(selectedChild.id)}` : null}
+                          meetingUrl={selectedChild.nextClass.meetingUrl ? buildTrackedZoomJoinUrl(selectedChild.nextClass.id, selectedChild.id) : null}
                           accessLocked={selectedChild.accessLocked}
                           isLive={selectedChild.nextClass.isLive}
                         />

@@ -1,7 +1,8 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
+import { buildTrackedZoomJoinUrl } from "@/lib/live-classes/attendance";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
@@ -98,7 +99,7 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
               <p className="mt-2 text-sm text-[#5f6b7a]">
                 Teacher: {entry.teacherName ?? "Assigned soon"}
               </p>
-              <LiveClassCountdown startsAt={entry.nextStartsAt.toISOString()} meetingUrl={entry.meetingUrl ? `/api/live-classes/${entry.id}/join?student=${encodeURIComponent(child.id)}` : null} accessLocked={child.accessLocked} isLive={entry.isLive} />
+              <LiveClassCountdown startsAt={entry.nextStartsAt.toISOString()} meetingUrl={entry.meetingUrl ? buildTrackedZoomJoinUrl(entry.id, child.id) : null} accessLocked={child.accessLocked} isLive={entry.isLive} />
             </div>
           ))}
           {!visibleSessions.length ? (
