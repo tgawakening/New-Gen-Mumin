@@ -219,6 +219,7 @@ export default async function Page({ searchParams }: Props) {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div><h2 className="text-xl font-black text-[#22304a]">Qabila member lists</h2><p className="mt-2 max-w-3xl text-sm text-[#617184]">All assigned learner records, including learners with no points. These are the records counted on the leaderboard; inactive or test accounts are not automatically excluded.</p></div>
         <a href="/api/admin/rewards/members/export" className="rounded-full bg-[#22304a] px-5 py-3 text-sm font-bold text-white">Download all members (CSV)</a>
+        <a href="/api/admin/rewards/members/diagnostics" className="rounded-full border border-[#dce4ed] px-5 py-3 text-sm font-bold text-[#22304a]">Download duplicate check</a>
       </div>
       <div className="mt-4 grid gap-4 lg:grid-cols-2">{memberGroups.map((group) => <details key={group.name} open={group.name === activeQabila} className="min-w-0 rounded-2xl border border-[#dce4ed] p-4">
         <summary className="cursor-pointer font-bold text-[#22304a]">{group.name} ? {group.members.length} learners ? View members</summary>
