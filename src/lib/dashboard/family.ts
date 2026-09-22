@@ -565,7 +565,6 @@ function computeAttendanceBreakdown(attendances: Array<{ status: string }>, tota
     attendanceRate,
     attendanceBreakdown: [
       { label: "Present", value: breakdown.PRESENT },
-      { label: "Late", value: breakdown.LATE },
       { label: "Absent", value: breakdown.ABSENT },
       { label: "Excused", value: breakdown.EXCUSED },
     ],

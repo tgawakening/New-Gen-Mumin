@@ -60,7 +60,7 @@ async function listStudentAttendance(studentId: string) {
   });
   // Rebuild historical Zoom duration from connection intervals as well as new records.
   const intervals = await db.zoomAttendanceInterval.findMany({
-    where: { studentId, leftAt: { not: null } },
+    where: { studentId },
     select: { scheduleId: true, joinedAt: true, leftAt: true },
   });
   const bySession = new Map<string, typeof intervals>();
@@ -78,7 +78,7 @@ async function listStudentAttendance(studentId: string) {
       byRequirement.set(key, [...(byRequirement.get(key) ?? []), ...group]);
     }
     return record.source === "zoom" && group?.length
-      ? { ...record, durationMinutes: connectedMinutes(group) } : record;
+      ? { ...record, status: "PRESENT" as const, joinedAt: group[0].joinedAt, durationMinutes: connectedMinutes(group) } : record;
   });
   return deduplicateAttendance(corrected).map((record) => {
     const group = byRequirement.get(attendanceRequirementKey(record));
@@ -86,7 +86,7 @@ async function listStudentAttendance(studentId: string) {
       ...record,
       durationMinutes: connectedMinutes(group),
       joinedAt: new Date(Math.min(...group.map((item) => item.joinedAt.getTime()))),
-      leftAt: new Date(Math.max(...group.map((item) => item.leftAt!.getTime()))),
+      leftAt: group.some((item) => item.leftAt) ? new Date(Math.max(...group.flatMap((item) => item.leftAt ? [item.leftAt.getTime()] : []))) : null,
     } : record);
   });
 }

@@ -18,6 +18,7 @@ type Attendance = {
   lessonDate: Date;
   status: string;
   durationMinutes: number | null;
+  joinedAt?: Date | null;
   schedule?: { title: string } | null;
   enrollment?: { program: { title: string } };
 };
@@ -33,7 +34,9 @@ export function attendanceRequirementKey(record: Attendance) {
 export function deduplicateAttendance<T extends Attendance>(records: T[]): T[] {
   const rank: Record<string, number> = { PRESENT: 4, LATE: 3, EXCUSED: 2, ABSENT: 1 };
   const unique = new Map<string, T>();
-  for (const record of records) {
+  for (const original of records) {
+    const record = original.status === "LATE" || original.joinedAt || (original.durationMinutes ?? 0) > 0
+      ? { ...original, status: "PRESENT" } : original;
     const key = attendanceRequirementKey(record);
     const current = unique.get(key);
     if (!current || (rank[record.status] ?? 0) > (rank[current.status] ?? 0)

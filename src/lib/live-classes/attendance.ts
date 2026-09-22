@@ -135,7 +135,7 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
     scheduleId,
     lessonDate: occurrence?.startedAt ?? joinedAt,
     attendanceDay,
-    status: late ? "LATE" as const : "PRESENT" as const,
+    status: "PRESENT" as const,
     note: `Automatically tracked from Zoom (${durationMinutes} minutes).`,
     joinedAt,
     leftAt,
@@ -177,8 +177,7 @@ export async function recordZoomParticipantJoined(scheduleId: string, event: Par
       joinedAt: { gte: new Date(event.occurredAt.getTime() - 2000), lte: new Date(event.occurredAt.getTime() + 2000) },
     },
   });
-  if (existing) return existing;
-  return db.zoomAttendanceInterval.create({
+  const interval = existing ?? await db.zoomAttendanceInterval.create({
     data: {
       scheduleId,
       studentId: matched.studentId,
@@ -191,6 +190,8 @@ export async function recordZoomParticipantJoined(scheduleId: string, event: Par
       matchMethod: matched.method,
     },
   });
+  if (interval.studentId) await syncAttendanceRecord(scheduleId, interval.studentId, interval.joinedAt);
+  return interval;
 }
 
 export async function recordZoomParticipantLeft(scheduleId: string, event: ParticipantEvent & { durationSeconds?: number | null; joinedAt?: Date }) {

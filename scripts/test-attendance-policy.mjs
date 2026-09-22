@@ -13,7 +13,7 @@ test('either Saturday Seerah slot fulfils the day, irrespective of order', () =>
     for (const input of [rows, [...rows].reverse()]) {
       const result = deduplicateAttendance(input);
       assert.equal(result.length, 1);
-      assert.ok(['PRESENT', 'LATE'].includes(result[0].status));
+      assert.equal(result[0].status, 'PRESENT');
     }
   }
 });
@@ -31,7 +31,7 @@ test('subjects, students, dates and ordinary classes remain separate', () => {
 });
 test('historical duplicate schedule records count once', () => {
   const present = row('schedule', 'PRESENT', 'Arabic');
-  const absent = { ...present, id: 'duplicate', status: 'ABSENT' };
+  const absent = { ...present, id: 'duplicate', status: 'ABSENT', durationMinutes: null };
   assert.deepEqual(deduplicateAttendance([absent, present]), [present]);
 });
 test('Pakistan day boundaries group timestamps across UTC midnight', () => {
@@ -51,4 +51,14 @@ test('Life Lessons & Leadership uses the Life Skills attendance rule', () => {
 test('historical manual subject records use programme title when no schedule exists', () => {
   const manual = { ...row('manual', 'PRESENT'), scheduleId: null, schedule: null, enrollment: { program: { title: "The Prophet's Seerah" } } };
   assert.equal(deduplicateAttendance([manual, row('slot', 'ABSENT')]).length, 1);
+});
+test('historical late arrivals always display as present without changing raw records', () => {
+  const late = row('late', 'LATE', 'Arabic');
+  assert.equal(deduplicateAttendance([late])[0].status, 'PRESENT');
+  assert.equal(late.status, 'LATE');
+});
+test('verified join overrides absence even before any minutes are recorded', () => {
+  const joined = { ...row('joined', 'ABSENT', 'Arabic'), joinedAt: new Date('2026-09-19T09:59:00Z'), durationMinutes: 0 };
+  assert.equal(deduplicateAttendance([joined])[0].status, 'PRESENT');
+  assert.equal(deduplicateAttendance([row('missed', 'ABSENT', 'Arabic')])[0].status, 'ABSENT');
 });
