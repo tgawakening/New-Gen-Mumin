@@ -7,7 +7,7 @@ import type { FamilyNavIcon } from "@/lib/dashboard/family-nav";
 import type { NavActivity } from "@/lib/notifications/navigation";
 
 type NavItem = { label: string; href: string; icon?: FamilyNavIcon; activity?: NavActivity };
-const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Attendance", "House & Rewards", "Community", "Qabila Chat", "Quizzes", "Sunnah Tracker", "Fardh Tracker"]);
+const PRIMARY_LABELS = new Set(["Dashboard", "Live Sessions", "Join Classes", "Attendance", "House & Rewards", "Community", "Qabila Chat", "Quizzes", "Sunnah Tracker", "Fardh Tracker"]);
 export function MobileFamilyNavRailClient({ navItems }: { navItems: NavItem[] }) {
   const [expanded, setExpanded] = useState(false);
   const primary = navItems.filter((item) => PRIMARY_LABELS.has(item.label) || /\/community|sunnah|fardh/.test(item.href) || item.activity?.count);

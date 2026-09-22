@@ -2,6 +2,7 @@ import "server-only";
 import { deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
 
 import { cache } from "react";
+import { loadDashboardScheduleRosters, isStudentInDashboardRoster } from "@/lib/live-classes/dashboard-rosters";
 
 import { PaymentStatus, SubmissionStatus, UserRole } from "@prisma/client";
 
@@ -9,6 +10,7 @@ import { db } from "@/lib/db";
 import {
   countryMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
+  resolveScheduleStudentIds,
   isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
@@ -729,6 +731,7 @@ function studentHasDashboardAccess(student: any) {
 function mapScheduleEntries(
   enrollments: any[],
   child: { id: string; countryCode?: string | null; countryName?: string | null; registrationStudents?: Array<{ countryCode?: string | null; countryName?: string | null }> | null },
+  resolvedRosters: ReadonlyMap<string, readonly string[]>,
   fallbackCountryCodes: Array<string | null | undefined> = [],
 ): ChildScheduleSummary[] {
   const parentalSchedules = Array.isArray((child as any).parentalSchedules) ? (child as any).parentalSchedules : [];
@@ -739,27 +742,17 @@ function mapScheduleEntries(
           (schedule: any) => {
             if (!isLiveClassVisibleToStudents(schedule.title)) return false;
 
-            const scheduleRosterIds = Array.isArray(schedule.scheduleRosters)
-              ? schedule.scheduleRosters.map((entry: any) => entry.studentId)
-              : [];
-            const teacherRosterIds = Array.isArray(schedule.teacher?.programRosters)
-              ? schedule.teacher.programRosters
-                  .filter((entry: any) => entry.programId === enrollment.program.id)
-                  .map((entry: any) => entry.studentId)
-              : [];
-            // A class-specific roster is an explicit teacher override, including
-            // students outside the schedule's default country audience.
-            if (scheduleRosterIds.length) return scheduleRosterIds.includes(child.id);
-            if (teacherRosterIds.length && !teacherRosterIds.includes(child.id)) return false;
+            const hasRoster = (resolvedRosters.get(schedule.id)?.length ?? 0) > 0
+              || schedule.scheduleRosters?.length > 0
+              || schedule.teacher?.programRosters?.some((entry: { programId: string }) => entry.programId === enrollment.program.id);
+            if (hasRoster) return isStudentInDashboardRoster(schedule.id, child.id, resolvedRosters);
 
-            const registrationCountries = Array.isArray(child.registrationStudents) ? child.registrationStudents : [];
+            // Keep the existing country audience for classes with no roster configured.
+            const registrationCountries = child.registrationStudents ?? [];
             return countryMatchesLiveClassAudience(
-              [
-                child.countryCode,
-                child.countryName,
+              [child.countryCode, child.countryName,
                 ...registrationCountries.flatMap((entry) => [entry.countryCode, entry.countryName]),
-                ...fallbackCountryCodes,
-              ],
+                ...fallbackCountryCodes],
               getLiveClassAudienceGroup(schedule.title),
             );
           },
@@ -1000,7 +993,7 @@ function buildChildBadges({
   return badges;
 }
 
-function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
+function mapChildSummary(child: any, accessLocked: boolean, resolvedRosters: ReadonlyMap<string, readonly string[]>): ChildSummary {
   const enrollments = Array.isArray(child.enrollments) ? child.enrollments : [];
   const validEnrollments = enrollments.filter((enrollment: any) => enrollment?.program);
   const attendances = Array.isArray(child.attendances) ? child.attendances : [];
@@ -1014,7 +1007,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
     validEnrollments.length,
   );
 
-  const schedule = mapScheduleEntries(validEnrollments, child, child.parentAudienceCountryCodes ?? []);
+  const schedule = mapScheduleEntries(validEnrollments, child, resolvedRosters, child.parentAudienceCountryCodes ?? []);
   const programQuizzes = validEnrollments.flatMap((enrollment: any) => enrollment.program.quizzes ?? []);
   const quizzes = mapQuizSummaries(programQuizzes, quizAttempts);
   const assignments = mapAssignmentSummaries(validEnrollments, assignmentSubmissions);
@@ -1368,6 +1361,7 @@ export const getParentDashboardData = cache(async function getParentDashboardDat
   const hasUnlockedAccess =
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
+  const resolvedRosters = await loadDashboardScheduleRosters(resolvedChildren, resolveScheduleStudentIds);
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked
@@ -1416,6 +1410,7 @@ export const getParentDashboardData = cache(async function getParentDashboardDat
               parentalSchedules,
             },
             accessLocked,
+            resolvedRosters,
           ),
         ];
       } catch (error) {
@@ -1541,6 +1536,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
     return null;
   }
 
+  const resolvedRosters = await loadDashboardScheduleRosters([studentProfile], resolveScheduleStudentIds);
   const latestOrder = studentProfile.parents[0]?.parent.orders[0] ?? null;
   const accessLocked = !studentProfile.enrollments.some((enrollment) =>
     ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),
@@ -1567,6 +1563,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
         parentalSchedules,
       },
       accessLocked,
+      resolvedRosters,
     ),
   } satisfies StudentDashboardData;
 });

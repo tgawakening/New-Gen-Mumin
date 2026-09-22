@@ -50,8 +50,8 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
   return (
     <FamilyDashboardFrame
       roleLabel="Parent Dashboard"
-      title="Schedule"
-      subtitle="Follow each child's weekly timetable, timezone, teacher assignment, and meeting details."
+      title="Join Classes"
+      subtitle="Choose your child and find their classes below. Join now appears when the teacher starts the class."
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
@@ -75,8 +75,8 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
             metrics={[
               { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
               { label: "Parental sessions", value: String(parentalSessions.length), hint: "Shared parent sessions by Ustadh Mehran / Ustadha Saba." },
-              { label: "Teacher linked", value: selectedChild.schedule.some((entry) => entry.teacherName) ? "Yes" : "Pending", hint: "Teacher assignment visibility." },
-              { label: "Meeting links", value: selectedChild.schedule.some((entry) => entry.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom access." },
+              { label: "Teacher linked", value: classSessions.some((entry) => entry.teacherName) ? "Yes" : "Pending", hint: "Teacher assignment visibility." },
+              { label: "Meeting links", value: classSessions.some((entry) => entry.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom access." },
             ]}
           />
 
@@ -122,7 +122,7 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
               ))}
               {!visibleSessions.length ? (
                 <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
-                  {activeTab === "parental" ? "Parental sessions by Ustadh Mehran / Ustadha Saba will appear here when scheduled." : "Weekly live classes will appear here after admin or teachers assign the schedule."}
+                  {activeTab === "parental" ? "Parental sessions by Ustadh Mehran / Ustadha Saba will appear here when scheduled." : "No classes are currently linked to this learner. Please contact your teacher or admin to check the class roster for this child."}
                 </p>
               ) : null}
             </div>
