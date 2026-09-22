@@ -1,5 +1,7 @@
 import "server-only";
 
+import { attendanceDayKey, attendanceRequirementKey, connectedMinutes, deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
+
 import { db } from "@/lib/db";
 import { cleanLiveClassTitle, resolveScheduleStudentIds } from "@/lib/live-classes/service";
 
@@ -20,20 +22,6 @@ function personName(user: { firstName: string; lastName: string | null }) {
   return `${user.firstName} ${user.lastName ?? ""}`.trim();
 }
 
-function attendanceDay(record: { attendanceDay?: string | null; lessonDate: Date }) {
-  return record.attendanceDay ?? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi", year: "numeric", month: "2-digit", day: "2-digit" }).format(record.lessonDate);
-}
-
-function deduplicateAttendance<T extends { id: string; scheduleId: string | null; studentId: string; attendanceDay?: string | null; lessonDate: Date; status: string; durationMinutes: number | null }>(records: T[]) {
-  const statusRank: Record<string, number> = { PRESENT: 4, LATE: 3, EXCUSED: 2, ABSENT: 1 };
-  const unique = new Map<string, T>();
-  for (const record of records) {
-    const key = record.scheduleId ? record.scheduleId + ":" + record.studentId + ":" + attendanceDay(record) : "manual:" + record.id;
-    const current = unique.get(key);
-    if (!current || (statusRank[record.status] ?? 0) > (statusRank[current.status] ?? 0) || ((statusRank[record.status] ?? 0) === (statusRank[current.status] ?? 0) && (record.durationMinutes ?? 0) > (current.durationMinutes ?? 0))) unique.set(key, record);
-  }
-  return [...unique.values()];
-}
 function mapAttendance(record: { id: string; lessonDate: Date; status: string; joinedAt: Date | null; leftAt: Date | null; durationMinutes: number | null; source: string | null; enrollment: { program: { title: string } }; schedule: { title: string; teacher: { user: { firstName: string; lastName: string | null } } | null } | null }): AttendanceHistoryEntry {
   return {
     id: record.id,
@@ -69,9 +57,38 @@ async function listStudentAttendance(studentId: string) {
     where: { studentId },
     include: historyInclude,
     orderBy: { lessonDate: "desc" },
-    take: 120,
   });
-  return deduplicateAttendance(records).map(mapAttendance);
+  // Rebuild historical Zoom duration from connection intervals as well as new records.
+  const intervals = await db.zoomAttendanceInterval.findMany({
+    where: { studentId, leftAt: { not: null } },
+    select: { scheduleId: true, joinedAt: true, leftAt: true },
+  });
+  const bySession = new Map<string, typeof intervals>();
+  for (const interval of intervals) {
+    const key = interval.scheduleId + ":" + attendanceDayKey(interval.joinedAt);
+    const group = bySession.get(key) ?? [];
+    group.push(interval);
+    bySession.set(key, group);
+  }
+  const byRequirement = new Map<string, typeof intervals>();
+  const corrected = records.map((record) => {
+    const group = bySession.get(record.scheduleId + ":" + attendanceDayKey(record.lessonDate));
+    if (record.source === "zoom" && group?.length) {
+      const key = attendanceRequirementKey(record);
+      byRequirement.set(key, [...(byRequirement.get(key) ?? []), ...group]);
+    }
+    return record.source === "zoom" && group?.length
+      ? { ...record, durationMinutes: connectedMinutes(group) } : record;
+  });
+  return deduplicateAttendance(corrected).map((record) => {
+    const group = byRequirement.get(attendanceRequirementKey(record));
+    return mapAttendance(group?.length ? {
+      ...record,
+      durationMinutes: connectedMinutes(group),
+      joinedAt: new Date(Math.min(...group.map((item) => item.joinedAt.getTime()))),
+      leftAt: new Date(Math.max(...group.map((item) => item.leftAt!.getTime()))),
+    } : record);
+  });
 }
 
 export async function getTeacherAttendanceReport(userId: string, range: "week" | "month") {

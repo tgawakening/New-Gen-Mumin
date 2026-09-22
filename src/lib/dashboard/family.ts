@@ -1,4 +1,5 @@
 import "server-only";
+import { deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
 
 import { cache } from "react";
 
@@ -556,7 +557,7 @@ function computeAttendanceBreakdown(attendances: Array<{ status: string }>, tota
   }
 
   const totalRecords = attendances.length || totalEnrollments || 1;
-  const attendanceRate = Math.round((breakdown.PRESENT / totalRecords) * 100);
+  const attendanceRate = Math.round(((breakdown.PRESENT + breakdown.LATE) / totalRecords) * 100);
 
   return {
     attendanceRate,
@@ -1009,7 +1010,7 @@ function mapChildSummary(child: any, accessLocked: boolean): ChildSummary {
   const progressReports = Array.isArray(child.progressReports) ? child.progressReports : [];
 
   const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
-    attendances,
+    deduplicateAttendance(attendances),
     validEnrollments.length,
   );
 
@@ -1286,7 +1287,7 @@ async function getParentProfile(userId: string) {
               },
               attendances: {
                 orderBy: { lessonDate: "desc" },
-                take: 18,
+                include: { schedule: { select: { title: true } }, enrollment: { include: { program: { select: { title: true } } } } },
               },
               quizAttempts: {
                 orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
@@ -1511,7 +1512,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
       },
       attendances: {
         orderBy: { lessonDate: "desc" },
-        take: 18,
+        include: { schedule: { select: { title: true } }, enrollment: { include: { program: { select: { title: true } } } } },
       },
       quizAttempts: {
         orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],

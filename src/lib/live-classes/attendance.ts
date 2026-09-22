@@ -1,4 +1,5 @@
 import "server-only";
+import { attendanceDayKey, connectedMinutes } from "@/lib/live-classes/attendance-policy";
 
 import { createHmac, timingSafeEqual } from "crypto";
 import { Prisma } from "@prisma/client";
@@ -97,8 +98,7 @@ async function matchParticipantToStudent(scheduleId: string, event: ParticipantE
 }
 
 async function syncAttendanceRecord(scheduleId: string, studentId: string, sessionDate: Date) {
-  const dayStart = new Date(sessionDate);
-  dayStart.setUTCHours(0, 0, 0, 0);
+  const dayStart = new Date(attendanceDayKey(sessionDate) + "T00:00:00+05:00");
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
   const attendanceDay = pointDayKey(sessionDate);
@@ -117,8 +117,8 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
   if (!enrollment) return;
   const joinedAt = intervals[0].joinedAt;
   const closed = intervals.filter((item) => item.leftAt);
-  const leftAt = closed.length ? closed[closed.length - 1].leftAt : null;
-  const durationMinutes = Math.max(0, Math.round(intervals.reduce((sum, item) => sum + item.durationSeconds, 0) / 60));
+  const leftAt = closed.length ? new Date(Math.max(...closed.map((item) => item.leftAt!.getTime()))) : null;
+  const durationMinutes = connectedMinutes(intervals);
   const occurrence = await db.liveClassSessionOccurrence.findFirst({
     where: { scheduleId, startedAt: { gte: dayStart, lt: dayEnd } },
     orderBy: { startedAt: "asc" },
@@ -171,7 +171,9 @@ export async function recordZoomParticipantJoined(scheduleId: string, event: Par
     where: {
       scheduleId,
       meetingId: event.meetingId,
-      zoomParticipantId: event.participantId ?? null,
+      ...(event.participantId ? { zoomParticipantId: event.participantId }
+        : event.email ? { participantEmail: normalize(event.email) }
+        : { participantName: event.name?.trim() || null }),
       joinedAt: { gte: new Date(event.occurredAt.getTime() - 2000), lte: new Date(event.occurredAt.getTime() + 2000) },
     },
   });
@@ -191,15 +193,16 @@ export async function recordZoomParticipantJoined(scheduleId: string, event: Par
   });
 }
 
-export async function recordZoomParticipantLeft(scheduleId: string, event: ParticipantEvent & { durationSeconds?: number | null }) {
+export async function recordZoomParticipantLeft(scheduleId: string, event: ParticipantEvent & { durationSeconds?: number | null; joinedAt?: Date }) {
   const interval = await db.zoomAttendanceInterval.findFirst({
     where: {
       scheduleId,
       meetingId: event.meetingId,
-      leftAt: null,
+      ...(event.joinedAt ? { joinedAt: event.joinedAt } : { leftAt: null }),
       OR: [
         ...(event.participantId ? [{ zoomParticipantId: event.participantId }] : []),
-        ...(event.email ? [{ participantEmail: normalize(event.email) }] : []),
+        ...(!event.participantId && event.email ? [{ participantEmail: normalize(event.email) }] : []),
+        ...(!event.participantId && !event.email && event.name ? [{ participantName: event.name.trim() }] : []),
       ],
     },
     orderBy: { joinedAt: "desc" },
@@ -240,8 +243,8 @@ export async function reconcileZoomParticipantReport(scheduleId: string, meeting
     const joinedAt = participant.join_time ? new Date(participant.join_time) : null;
     const leftAt = participant.leave_time ? new Date(participant.leave_time) : null;
     if (!joinedAt) continue;
-    await recordZoomParticipantJoined(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: joinedAt });
-    if (leftAt) await recordZoomParticipantLeft(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: leftAt, durationSeconds: participant.duration });
+    const joined = await recordZoomParticipantJoined(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: joinedAt });
+    if (leftAt) await recordZoomParticipantLeft(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: leftAt, joinedAt: joined.joinedAt, durationSeconds: participant.duration });
   }
   return participants.length;
 }

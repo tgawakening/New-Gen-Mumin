@@ -1,3 +1,4 @@
+import { PointsHistory } from "@/components/dashboard/family/PointsHistory";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -101,13 +102,20 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
                 { icon: Trophy, value: data.level.title, label: "My rank", tone: "text-[#287b55] bg-[#e8f7ed]" },
                 { icon: Medal, value: earnedByKey.size, label: "Badges earned", tone: "text-[#704bc0] bg-[#f1eafe]" },
                 { icon: Users, value: data.collective, label: "Qabila points", tone: "text-[#226da0] bg-[#e8f5ff]" },
-              ].map(({ icon: Icon, value, label, tone }) => (
-                <div key={label} className="group rounded-[22px] border border-[#e9dfd0] bg-white/95 p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg">
+              ].map(({ icon: Icon, value, label, tone }) => {
+                const className = "group rounded-[22px] border border-[#e9dfd0] bg-white/95 p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg";
+                const content = <>
                   <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${tone}`}><Icon className="h-6 w-6" /></span>
                   <p className="mt-3 break-words text-xl font-black text-[#152440]">{value}</p>
                   <p className="mt-1 text-xs font-semibold text-[#697789]">{label}</p>
-                </div>
-              ))}
+                </>;
+                return label === "My points" ? (
+                  <a key={label} href="#points-history" className={className + " cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#c66d1f]"}>
+                    {content}
+                    <span className="mt-2 block text-xs font-bold text-[#a65315] underline underline-offset-4">View points history &rarr;</span>
+                  </a>
+                ) : <div key={label} className={className}>{content}</div>;
+              })}
             </div>
 
             <div className="mt-5 overflow-hidden rounded-[28px] bg-[#102544] p-5 text-white shadow-[0_18px_35px_rgba(16,37,68,0.25)]">
@@ -168,6 +176,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
           </div>
         </div>      </section>
 
+      <PointsHistory entries={data.pointsHistory} />
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#d2691e]">Collectible character badges</p><h3 className="mt-2 text-2xl font-black text-[#14233e]">What {name} is becoming</h3></div><span className="rounded-full bg-[#fff2de] px-3 py-2 text-xs font-bold text-[#b9651e]">{earnedByKey.size} earned</span></div>

@@ -133,7 +133,7 @@ export async function getRecognitionDashboard(studentId: string) {
     db.housePointLedger.aggregate({ where: { studentId }, _sum: { points: true } }),
     db.housePointLedger.aggregate({ where: { studentId: { in: collectiveStudentIds } }, _sum: { points: true } }),
     getRecentHousePointEvents(membership.houseId, 8, membership.qabilaGroup),
-    db.housePointLedger.findMany({ where: { studentId }, select: { sourceType: true, points: true } }),
+    db.housePointLedger.findMany({ where: { studentId }, select: { id: true, sourceType: true, points: true, reason: true, awardedAt: true }, orderBy: [{ awardedAt: "desc" }, { id: "desc" }] }),
   ]);
   const total = studentPoints._sum.points ?? 0;
   const collective = housePoints._sum.points ?? 0;
@@ -158,5 +158,5 @@ export async function getRecognitionDashboard(studentId: string) {
     const key: keyof typeof pointBreakdown = row.sourceType.includes("ATTENDANCE") ? "attendance" : row.sourceType.includes("SUNNAH") ? "sunnah" : row.sourceType.includes("HOMEWORK") ? "homework" : row.sourceType.includes("RECOGNITION") || row.sourceType.includes("CROSS_HOUSE") ? "recognition" : row.sourceType.includes("QUIZ") ? "quizzes" : "other";
     pointBreakdown[key] += row.points;
   }
-  return { student, resolvedGender, membership, awards, total, collective, level, nextLevel, nextUnlock, unlocks, pointBreakdown, activity, badgeDefinitions: CHARACTER_BADGES, recognitionLevels: RECOGNITION_LEVELS };
+  return { student, resolvedGender, membership, awards, total, collective, level, nextLevel, nextUnlock, unlocks, pointBreakdown, pointsHistory: pointRows, activity, badgeDefinitions: CHARACTER_BADGES, recognitionLevels: RECOGNITION_LEVELS };
 }
