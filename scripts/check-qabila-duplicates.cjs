@@ -52,3 +52,22 @@ const realA = candidate("real-a", "Ahmad", "01", { birth: "2010-01-01" });
 const realB = candidate("real-b", "Ahmad", "10", { birth: "2018-01-01" });
 for (const entry of [realA, realB]) entry.student.parents[0].parent.user.firstName = "Another";
 assert.equal(planQabilaDuplicates([realA, realB]).length, 0, "test-account exception is restricted to the identified parent");
+
+// Reproduce the uploaded report: two parent profiles, one completed order,
+// an older failed/cancelled order and a newer unpaid Khadija order.
+for (const name of ["Ahmad", "Khadija"]) {
+  const failed = candidate("failed-" + name, name, "01", { parent: "cmoe23dch00010p0ub0iwcn6l", pending: true });
+  failed.student.registrationStudents[0].registration.status = "CANCELLED";
+  failed.student.registrationStudents[0].registration.order.status = "FAILED";
+  const paid = candidate("paid-" + name, name, "03", { parent: "cmoikjldg00011h0tujmr9pt5" });
+  const unpaid = candidate("unpaid-" + name, name, "17", { parent: "cmoe23dch00010p0ub0iwcn6l", pending: true });
+  const group = name === "Ahmad" ? [failed, paid] : [failed, paid, unpaid];
+  const plans = planQabilaDuplicates(group);
+  assert.equal(plans.length, 1);
+  assert.equal(plans[0].keep.studentId, "paid-" + name);
+  assert.equal(plans[0].remove.length, group.length - 1);
+  for (const entry of plans[0].remove) entry.qabilaGroup = null;
+  assert.equal(planQabilaDuplicates(group)[0].keep.studentId, "paid-" + name, "old logins remain blocked from restoring membership");
+}
+assert.equal(planQabilaDuplicates([candidate("one", "Another learner", "01", {parent:"cmoe23dch00010p0ub0iwcn6l"}), candidate("two", "Another learner", "03", {parent:"cmoikjldg00011h0tujmr9pt5"})]).length, 0);
+console.log("PASS: reported cross-parent Ahmad/Khadija duplicates select the completed order; unrelated learners remain separate.");

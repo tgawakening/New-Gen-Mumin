@@ -81,6 +81,9 @@ export function planQabilaDuplicates(candidates: Candidate[]) {
       if (normalize([registration.parentFirstName, registration.parentLastName].filter(Boolean).join(" ")) === "areejirshad") confirmedTestFamilies.add(familyKey(registration.order?.parentId || registration.parentProfileId, registration.parentEmail));
     }
   }
+  // Owner-confirmed test siblings span these two parent records (diagnostic report 2026-09-22).
+  // Do not merge the parents or apply this exception to any other learner identity.
+  const verifiedTestParents = new Set(["cmoikjldg00011h0tujmr9pt5", "cmoe23dch00010p0ub0iwcn6l"]);
   const confirmedTestIds = new Set<string>();
   const groups = new Map<string, Candidate[]>();
   for (const candidate of candidates) {
@@ -90,17 +93,23 @@ export function planQabilaDuplicates(candidates: Candidate[]) {
       ...candidate.student.parents.map((entry) => familyKey(entry.parentId)),
       ...completedOrders(candidate).map((order) => familyKey(order.parentId)),
     ].filter(Boolean));
-    if (families.size !== 1) continue;
     const displayIdentity = learnerIdentity(candidate.student.displayName || [candidate.student.user.firstName, candidate.student.user.lastName].filter(Boolean).join(" "));
+    const linkedParentIds = new Set([
+      ...candidate.student.parents.map((entry) => entry.parentId),
+      ...registrations.map((entry) => entry.registration.order?.parentId || entry.registration.parentProfileId),
+      ...completedOrders(candidate).map((order) => order.parentId),
+    ].filter((id): id is string => Boolean(id)));
+    const verifiedTestSibling = ["ahmad", "khadija"].includes(displayIdentity) && linkedParentIds.size > 0 && [...linkedParentIds].every((id) => verifiedTestParents.has(id));
+    if (!verifiedTestSibling && families.size !== 1) continue;
     // The owner explicitly identified these two as repeated test learners.
-    const confirmedTest = ["ahmad", "khadija"].includes(displayIdentity) && confirmedTestFamilies.has([...families][0]);
+    const confirmedTest = verifiedTestSibling || (["ahmad", "khadija"].includes(displayIdentity) && confirmedTestFamilies.has([...families][0]));
     if (confirmedTest) confirmedTestIds.add(candidate.studentId);
     const names = new Set(registrations.map((entry) => learnerIdentity([entry.firstName, entry.lastName].filter(Boolean).join(" "))).filter(Boolean));
     if (confirmedTest) { names.clear(); names.add(displayIdentity); }
     if (!names.size) names.add(displayIdentity);
     if (names.size !== 1 || ![...names][0]) continue;
     if (!confirmedTest && displayIdentity && displayIdentity !== [...names][0]) continue;
-    const key = JSON.stringify([[...families][0], [...names][0]]);
+    const key = JSON.stringify([verifiedTestSibling ? "verified-test-siblings-20260922" : [...families][0], [...names][0]]);
     groups.set(key, [...(groups.get(key) ?? []), candidate]);
   }
   const plans: Array<{ keep: Candidate; remove: Candidate[]; qabila: string; role: string }> = [];
