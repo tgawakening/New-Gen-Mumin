@@ -20,9 +20,8 @@ function contributionLabel(sourceType: string, reason: string) {
   return reason || "Verified contribution";
 }
 
-export async function QabilaLeaderboardOverview({ audience }: { audience: "parent" | "teacher" }) {
+async function renderQabilaLeaderboard({ audience }: { audience: "parent" | "teacher" }) {
   // Server-rendered live leaderboard: this moving seven-day window is intentionally request-time data.
-  // eslint-disable-next-line react-hooks/purity
   const since = new Date(Date.now() - weekMs);
   const [totals, memberships, recent] = await Promise.all([
     db.housePointLedger.groupBy({ by: ["studentId"], _sum: { points: true } }),
@@ -49,4 +48,12 @@ export async function QabilaLeaderboardOverview({ audience }: { audience: "paren
       </div>
     </article>)}</div>    <footer className="flex items-center justify-center gap-2 border-t border-[#e3e9ef] bg-[#fffaf2] px-5 py-3 text-center text-xs font-bold text-[#6c604f]"><Sparkles className="h-4 w-4 text-[#c37a27]"/>We compete in good deeds, support one another, and grow together.</footer>
   </section>;
+}
+export async function QabilaLeaderboardOverview(props: { audience: "parent" | "teacher" }) {
+  try {
+    return await renderQabilaLeaderboard(props);
+  } catch (error) {
+    console.error("Qabila leaderboard unavailable", error);
+    return <section role="status" className="rounded-2xl border border-[#d7e1eb] bg-white p-5"><h2 className="font-bold text-[#22304a]">Qabila leaderboard temporarily unavailable</h2><p className="mt-2 text-sm text-[#617184]">Your dashboard and class links are still available. Please refresh to reload the leaderboard.</p></section>;
+  }
 }

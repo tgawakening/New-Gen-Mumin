@@ -19,6 +19,7 @@ import { listStudentActiveLiveQuizzesByStudentId } from "@/lib/quizzes/live";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import { buildParentCalendarUrls } from "@/lib/calendar/tokens";
 import { db } from "@/lib/db";
+import { loadOptionalDashboardSection } from "@/lib/dashboard/optional-section";
 import {
   ChildSelector,
   CompactList,
@@ -118,11 +119,14 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     redirect("/registration");
   }
 
-  const latestParentAward = await db.parentRecognitionAward.findFirst({ where: { parentId: dashboard.parentProfile.id, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true, recipientName: true } });
+  const parentProfileId = dashboard.parentProfile.id;
+  const parentAwardResult = await loadOptionalDashboardSection("parent recognition", () => db.parentRecognitionAward.findFirst({ where: { parentId: parentProfileId, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true, recipientName: true } }), null);
+  const latestParentAward = parentAwardResult.data;
   const params = searchParams ? await searchParams : {};
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
-  const latestChildAward = selectedChild ? await db.recognitionAward.findFirst({ where: { studentId: selectedChild.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } }) : null;
+  const childAwardResult = await loadOptionalDashboardSection("child recognition", async () => selectedChild ? await db.recognitionAward.findFirst({ where: { studentId: selectedChild.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } }) : null, null);
+  const latestChildAward = childAwardResult.data;
   const showAddChildModal = params?.addChild === "1";
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && selectedChild && !hasFullGenM(selectedChild);
   const activity = selectedChild ? buildParentActivity(selectedChild) : null;
@@ -130,11 +134,13 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
     await Promise.all(
       dashboard.children.map(async (child) => ({
         child,
-        quizzes: await listStudentActiveLiveQuizzesByStudentId(child.id),
+        quizzes: await loadOptionalDashboardSection("live quizzes", () => listStudentActiveLiveQuizzesByStudentId(child.id), []),
       })),
     )
-  ).flatMap((entry) => entry.quizzes.map((quiz) => ({ child: entry.child, quiz })));
-  const liveQuizEntries = [...new Map(liveQuizRows.map((entry) => [`${entry.child.id}-${entry.quiz.quizId}`, entry])).values()];
+  );
+  const quizzesUnavailable = liveQuizRows.some((entry) => entry.quizzes.unavailable);
+  const loadedLiveQuizzes = liveQuizRows.flatMap((entry) => entry.quizzes.data.map((quiz) => ({ child: entry.child, quiz })));
+  const liveQuizEntries = [...new Map(loadedLiveQuizzes.map((entry) => [`${entry.child.id}-${entry.quiz.quizId}`, entry])).values()];
 
   let options = { offers: [], countries: [] } as Awaited<ReturnType<typeof getRegistrationOptions>>;
   if (showAddChildModal || showProgramEnrollmentModal) {
@@ -155,6 +161,11 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       navItems={getParentNavItems(selectedChild?.id)}
       pendingReason={dashboard.pendingReason}
     >
+      {parentAwardResult.unavailable || childAwardResult.unavailable || quizzesUnavailable ? (
+        <div role="status" className="rounded-2xl border border-[#e5cda1] bg-[#fffaf0] px-4 py-3 text-sm text-[#654a25]">
+          Some {[(parentAwardResult.unavailable || childAwardResult.unavailable) && "awards", quizzesUnavailable && "live quiz updates"].filter(Boolean).join(" and ")} could not be loaded. You can still use your dashboard and class links. Please refresh to try again.
+        </div>
+      ) : null}
       {selectedChild ? <FamilyJourneyLinks role="parent" childId={selectedChild.id} /> : null}
       {selectedChild ? (
         <SectionCard

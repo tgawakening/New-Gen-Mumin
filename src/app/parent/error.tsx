@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 
-export default function ParentError({ error, reset }: { error: Error; reset: () => void }) {
+export default function ParentError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("Parent route error boundary caught:", error);
   }, [error]);
@@ -15,6 +15,7 @@ export default function ParentError({ error, reset }: { error: Error; reset: () 
         <p className="mt-4 text-sm leading-7 text-[#5f6b7a]">
           We could not load your parent dashboard right now. Please try again or contact support if the issue persists.
         </p>
+        {error.digest ? <p className="mt-3 text-xs text-[#5f6b7a]">Support reference: {error.digest}</p> : null}
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
           <button
             type="button"
