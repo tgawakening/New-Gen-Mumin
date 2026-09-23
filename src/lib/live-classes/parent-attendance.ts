@@ -9,7 +9,7 @@ import { cleanLiveClassTitle, isLiveClassVisibleToStudents, isParentalLiveClass,
 export const ATTENDANCE_RECOVERY_START = new Date("2026-09-01T00:00:00+05:00");
 export class AttendanceConfirmationError extends Error {}
 type Slot = { scheduleId: string; enrollmentId: string; date: Date; schedule: AttendancePointSchedule };
-type RecoveryGroup = { key: string; day: string; title: string; slots: Slot[]; status: string; locked: boolean };
+type RecoveryGroup = { key: string; day: string; title: string; teacherNames: string[]; slots: Slot[]; status: string; locked: boolean };
 
 async function loadRecoveryGroups(parentUserId: string, studentId: string, now = new Date()) {
   const relation = await db.parentStudent.findFirst({ where: { studentId, parent: { userId: parentUserId } }, select: { id: true } });
@@ -18,6 +18,7 @@ async function loadRecoveryGroups(parentUserId: string, studentId: string, now =
     where: { studentId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
     include: { program: { include: { schedules: {
       include: {
+        teacher: { select: { user: { select: { firstName: true, lastName: true } } } },
         sessionOccurrences: { where: { startedAt: { gte: ATTENDANCE_RECOVERY_START, lte: now }, OR: [{ endedAt: { lte: now } }, { completedAt: { lte: now } }] }, orderBy: { startedAt: "asc" } },
         attendances: { where: { studentId, lessonDate: { gte: ATTENDANCE_RECOVERY_START, lte: now } }, orderBy: { lessonDate: "asc" } },
       },
@@ -45,7 +46,9 @@ async function loadRecoveryGroups(parentUserId: string, studentId: string, now =
           record.source !== "parent-confirmed" && (record.status === "PRESENT" || record.status === "LATE" || record.joinedAt || (record.durationMinutes ?? 0) > 0));
         const effective = deduplicateAttendance(records.map((record) => ({ ...record, schedule: pointSchedule, enrollment: { program: pointSchedule.program } })))[0];
         const status = verified ? "PRESENT" : effective?.status ?? "NEEDS_CONFIRMATION";
-        const group = groups.get(key) ?? { key, day, title: cleanLiveClassTitle(schedule.title), slots: [], status, locked: false };
+        const group = groups.get(key) ?? { key, day, title: cleanLiveClassTitle(schedule.title), teacherNames: [], slots: [], status, locked: false };
+        const teacherName = [schedule.teacher?.user.firstName, schedule.teacher?.user.lastName].filter(Boolean).join(" ").trim();
+        if (teacherName && !group.teacherNames.includes(teacherName)) group.teacherNames.push(teacherName);
         group.slots.push({ scheduleId: schedule.id, enrollmentId: enrollment.id, date, schedule: pointSchedule });
         group.locked ||= Boolean(verified);
         if (verified || status === "PRESENT") group.status = "PRESENT";
@@ -62,7 +65,7 @@ export async function getParentAttendanceRecovery(parentUserId: string, studentI
   const audit = await db.attendanceConfirmationAudit.findMany({ where: { studentId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 30 });
   const actors = await db.user.findMany({ where: { id: { in: [...new Set(audit.map((entry) => entry.parentUserId))] } }, select: { id: true, firstName: true, lastName: true } });
   return {
-    rows: groups.map(({ key, day, title, status, locked, slots }) => ({ key, day, title, status, locked, alternatives: slots.length })),
+    rows: groups.map(({ key, day, title, teacherNames, status, locked, slots }) => ({ key, day, title, teacherNames, status, locked, alternatives: slots.length })),
     audit: audit.map((entry) => ({ id: entry.id, title: groups.find((group) => group.key === entry.requirementKey)?.title ?? "Class attendance", confirmedBy: actors.filter((actor) => actor.id === entry.parentUserId).map((actor) => `${actor.firstName} ${actor.lastName ?? ""}`.trim())[0] ?? "Parent", day: entry.attendanceDay, status: entry.status, pointsDelta: entry.pointsDelta, createdAt: entry.createdAt.toISOString() })),
   };
 }

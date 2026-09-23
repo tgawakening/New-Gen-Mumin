@@ -29,7 +29,7 @@ function matches(row, where = {}) {
 }
 function harness() {
  const day = new Date('2026-09-05T09:00:00Z');
- const schedules = ['day','evening'].map(id => ({ id, title: 'Mehran Urdu Seerah', program: { title: 'Seerah' }, sessionOccurrences: [{ startedAt: day, endedAt: new Date('2026-09-05T10:00:00Z') }] }));
+ const schedules = ['day','evening'].map(id => ({ id, title: 'Mehran Urdu Seerah', teacher: { user: { firstName: id === 'day' ? 'Mehran' : 'Sabah', lastName: null } }, program: { title: 'Seerah' }, sessionOccurrences: [{ startedAt: day, endedAt: new Date('2026-09-05T10:00:00Z') }] }));
  const records = schedules.map((schedule,index) => ({ id: 'record'+index, studentId: 'child', enrollmentId: 'enrollment', scheduleId: schedule.id, lessonDate: day, attendanceDay: '2026-09-05', status: 'ABSENT', source: 'zoom', joinedAt: null, leftAt: null, durationMinutes: null }));
  const ledger = [], audit = [], intervals = [];
  let failLedger = false;
@@ -76,7 +76,7 @@ function harness() {
 }
 test('date list groups alternate sessions and labels missing Zoom matches unconfirmed',async()=>{
  const h=harness();const result=await h.service.getParentAttendanceRecovery('parent','child');
- assert.equal(result.rows.length,1);assert.equal(result.rows[0].alternatives,2);assert.equal(result.rows[0].status,'NEEDS_CONFIRMATION');
+ assert.deepEqual(Array.from(result.rows[0].teacherNames),['Mehran','Sabah']);assert.equal(result.rows.length,1);assert.equal(result.rows[0].alternatives,2);assert.equal(result.rows[0].status,'NEEDS_CONFIRMATION');
 });
 test('parent confirmation updates both slots, awards five once, and preserves unknown minutes',async()=>{
  const h=harness();const changes=[{key:h.key,status:'PRESENT'}];

@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveAttendanceConfirmations } from "@/app/parent/attendance/actions";
 
-type RecoveryRow = { key: string; day: string; title: string; status: string; locked: boolean; alternatives: number };
+type RecoveryRow = { key: string; day: string; title: string; teacherNames: string[]; status: string; locked: boolean; alternatives: number };
 type AuditEntry = { id: string; title: string; confirmedBy: string; day: string; status: string; pointsDelta: number; createdAt: string };
 const PAGE_SIZE = 20;
 
@@ -29,7 +29,7 @@ export function ParentAttendanceRecovery({ studentId, rows, audit }: { studentId
       <input type="hidden" name="changes" value={JSON.stringify(selections)} />
       <fieldset disabled={pending} className="space-y-3 disabled:opacity-60">
         {visible.map((row) => <div key={row.key} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fbf6ef] p-4">
-          <div><p className="font-semibold text-[#22304a]">{row.title}</p><p className="text-sm text-[#617184]">{row.day} (PKT){row.alternatives > 1 ? " · Attend either time slot" : ""}</p><p className="text-xs text-[#617184]">{row.locked ? "Verified present" : row.status === "NEEDS_CONFIRMATION" ? "Needs confirmation" : `Currently ${row.status.toLowerCase()}`}</p></div>
+          <div><p className="font-semibold text-[#22304a]">{row.title}</p><p className="text-sm text-[#617184]">Teacher: {row.teacherNames.length ? row.teacherNames.join(", ") : "Not recorded"}</p><p className="text-sm text-[#617184]">{row.day} (PKT){row.alternatives > 1 ? " · Attend either time slot" : ""}</p><p className="text-xs text-[#617184]">{row.locked ? "Verified present" : row.status === "NEEDS_CONFIRMATION" ? "Needs confirmation" : `Currently ${row.status.toLowerCase()}`}</p></div>
           {row.locked ? <span className="rounded-full bg-green-100 px-3 py-1 text-sm text-green-800">Present · verified</span> : <label className="text-sm">Attendance <select aria-label={`Attendance for ${row.title} on ${row.day}`} value={changes[row.key] ?? (["PRESENT", "ABSENT"].includes(row.status) ? row.status : "")} onChange={(event) => { const value = event.target.value; setChanges((current) => { const next = { ...current }; if (value === "PRESENT" || value === "ABSENT") next[row.key] = value; else delete next[row.key]; return next; }); }} className="ml-2 rounded-lg border bg-white p-2"><option value="">Choose…</option><option value="PRESENT">Present</option><option value="ABSENT">Absent</option></select></label>}
         </div>)}
         {!visible.length ? <p className="rounded-xl bg-[#fbf6ef] p-4 text-sm">No completed class dates are available for this selection. If a date is missing, please ask the teacher to check the session record.</p> : null}

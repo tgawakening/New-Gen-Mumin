@@ -15,10 +15,10 @@ function load(file,deps){
 const {ParentAttendanceRecovery}=load('../src/components/dashboard/family/ParentAttendanceRecovery.tsx',{'@/app/parent/attendance/actions':{saveAttendanceConfirmations:async()=>({message:'',error:''})}});
 test('parent recovery screen distinguishes selectable missing attendance from protected verification',()=>{
  const html=renderToStaticMarkup(React.createElement(ParentAttendanceRecovery,{studentId:'child',audit:[],rows:[
-  {key:'pending',day:'2026-09-05',title:'Seerah',status:'NEEDS_CONFIRMATION',locked:false,alternatives:2},
-  {key:'verified',day:'2026-09-06',title:'Arabic',status:'PRESENT',locked:true,alternatives:1},
+  {key:'pending',day:'2026-09-05',title:'Seerah',teacherNames:['Mehran','Sabah'],status:'NEEDS_CONFIRMATION',locked:false,alternatives:2},
+  {key:'verified',day:'2026-09-06',title:'Arabic',teacherNames:['Abdul Badee'],status:'PRESENT',locked:true,alternatives:1},
  ]}));
- assert.match(html,/Confirm past attendance/);assert.match(html,/5 points/);assert.match(html,/Needs confirmation/);
+ assert.match(html,/Teacher: Mehran, Sabah/);assert.match(html,/Teacher: Abdul Badee/);assert.match(html,/Confirm past attendance/);assert.match(html,/5 points/);assert.match(html,/Needs confirmation/);
  assert.match(html,/Present · verified/);assert.equal((html.match(/<select/g)||[]).length,1);assert.match(html,/Attend either time slot/);
 });
 test('empty session lists explain missing dates without inventing classes',()=>{
