@@ -53,6 +53,8 @@ export const PARENTAL_SESSION_MARKER = "[Category:PARENTAL]";
 const WEEKDAY_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 const PAID_REGISTRATION_STATUSES = ["PAID", "CONVERTED"] as const;
+// Parent-only test profile explicitly excluded from learner rosters. Keep the parent account and children intact.
+const EXCLUDED_ROSTER_STUDENT_IDS = new Set(["cmoinnqvd001sx70ukb2qhrfk"]);
 const MANUALLY_CANCELLED_ROSTER_NAMES = new Set(["ibrahimsyedhassan", "ibrahimhassan", "sarahsyedhassan", "sarahhassan"]);
 const CANCELLED_ROSTER_PARENT_EMAIL_PARTS = ["s.hassanarif"];
 const ROSTER_NAME_ALIASES = new Map([
@@ -680,6 +682,7 @@ export async function getProgramEligibleRosterStudents(programId: string, repair
   const normalizeIdentityPart = (value: string) => value.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 
   for (const student of studentsById.values()) {
+    if (EXCLUDED_ROSTER_STUDENT_IDS.has(student.id)) continue;
     const rawNormalizedName = normalizeIdentityPart(
       student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim() || student.user.email,
     );
