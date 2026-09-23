@@ -1,3 +1,4 @@
+import { pointActivityReason } from "@/lib/community/point-display";
 import "server-only";
 
 import { db } from "@/lib/db";
@@ -249,7 +250,7 @@ export async function getRecentHousePointEvents(houseId: string, take = 8, qabil
       ? { key: "SUNNAH", reason: "Completed the daily Sunnah Tracker" }
       : row.sourceType.startsWith("QUIZ_LIVE_")
         ? { key: "LIVE_QUIZ", reason: "Participated successfully in a live quiz" }
-        : { key: row.sourceType, reason: row.reason };
+        : { key: row.sourceType, reason: pointActivityReason(row.sourceType, row.reason) };
     const activityDay = row.sourceType.startsWith("SUNNAH_") && row.sourceId?.match(/^\d{4}-\d{2}-\d{2}/u)?.[0] || day;
     const key = `${row.studentId}:${activity.key}:${activityDay}`;
     const existing = grouped.get(key);

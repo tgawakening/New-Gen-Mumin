@@ -11,8 +11,7 @@ const weekMs = 7 * 24 * 60 * 60 * 1000;
 function contributionLabel(sourceType: string, reason: string) {
   if (sourceType.startsWith("SUNNAH")) return "Sunnah tracker progress";
   if (sourceType.startsWith("FARDH")) return "Daily Salah progress";
-  if (sourceType === "ATTENDANCE_LATE") return "Joined live class late";
-  if (sourceType.includes("ATTENDANCE")) return "Early/on-time attendance";
+  if (sourceType.includes("ATTENDANCE")) return sourceType === "ATTENDANCE_PARENT" ? "Attendance confirmed by parent" : "Attended live class";
   if (sourceType.includes("HOMEWORK")) return "Learning work completed";
   if (sourceType.includes("QUIZ")) return "Quiz contribution";
   if (sourceType === "RECOGNITION_MUMIN_OF_WEEK") return "Mumin of the Week certificate";
@@ -35,7 +34,8 @@ export async function QabilaLeaderboardOverview({ audience }: { audience: "paren
   for (const row of totals) { const name = qabilaByStudent.get(row.studentId); if (name) scores.set(name, (scores.get(name) ?? 0) + (row._sum.points ?? 0)); }
   const rows = QABILA_NAMES.map((name) => {
     const activity = recent.filter((item) => canonicalQabilaName(item.student.houseMembership?.qabilaGroup) === name);
-    const unique = [...new Map(activity.map((item) => [item.studentId, item])).values()].slice(0, 2);
+    // Activity is newest first; keep the first entry for each learner.
+    const unique = activity.filter((item, index) => activity.findIndex((entry) => entry.studentId === item.studentId) === index).slice(0, 2);
     return { name, profile: qabilaProfile(name)!, points: scores.get(name) ?? 0, weekly: activity.filter((item) => item.awardedAt >= since).reduce((sum, item) => sum + item.points, 0), members: memberships.filter((item) => canonicalQabilaName(item.qabilaGroup) === name).length, activity: unique };
   }).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
   const max = Math.max(1, ...rows.map((row) => row.points));

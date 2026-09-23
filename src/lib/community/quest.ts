@@ -1,3 +1,4 @@
+import { pointActivityReason } from "@/lib/community/point-display";
 import "server-only";
 
 import { MissionKind, MissionQuestionType, MissionStatus, Prisma } from "@prisma/client";
@@ -188,7 +189,7 @@ export async function getStudentQuestData(studentId: string, programIds: string[
   return {
     membership,
     missions,
-    pointLedger,
+    pointLedger: pointLedger.map((entry) => ({ ...entry, reason: pointActivityReason(entry.sourceType, entry.reason) })),
     leaderboard: leaderboardWithMine,
     teammates,
     houseTotal: houseTotal._sum.points ?? 0,
