@@ -1,14 +1,23 @@
 ﻿"use client";
 
 import { useActionState, useState } from "react";
-import { saveAttendanceConfirmations } from "@/app/parent/attendance/actions";
+import { saveAttendanceConfirmations, type AttendanceConfirmationState } from "@/app/parent/attendance/actions";
 
 type RecoveryRow = { key: string; day: string; title: string; teacherNames: string[]; status: string; locked: boolean; alternatives: number };
 type AuditEntry = { id: string; title: string; confirmedBy: string; day: string; status: string; pointsDelta: number; createdAt: string };
 const PAGE_SIZE = 20;
 
+async function saveWithoutLeavingPage(previous: AttendanceConfirmationState, form: FormData): Promise<AttendanceConfirmationState> {
+  try {
+    return await saveAttendanceConfirmations(previous, form);
+  } catch (error) {
+    console.error("Attendance save request failed", error);
+    return { message: "", error: "The save request was interrupted. Your selections are still here. Please try saving again. If this continues, refresh the page and check your attendance before retrying; points will not be duplicated." };
+  }
+}
+
 export function ParentAttendanceRecovery({ studentId, rows, audit }: { studentId: string; rows: RecoveryRow[]; audit: AuditEntry[] }) {
-  const [state, action, pending] = useActionState(saveAttendanceConfirmations, { message: "", error: "" });
+  const [state, action, pending] = useActionState(saveWithoutLeavingPage, { message: "", error: "" });
   const [changes, setChanges] = useState<Record<string, "PRESENT" | "ABSENT">>({});
   const [month, setMonth] = useState("");
   const [page, setPage] = useState(0);
@@ -29,7 +38,7 @@ export function ParentAttendanceRecovery({ studentId, rows, audit }: { studentId
       <input type="hidden" name="changes" value={JSON.stringify(selections)} />
       <fieldset disabled={pending} className="space-y-3 disabled:opacity-60">
         {visible.map((row) => <div key={row.key} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#fbf6ef] p-4">
-          <div><p className="font-semibold text-[#22304a]">{row.title}</p><p className="text-sm text-[#617184]">Teacher: {row.teacherNames.length ? row.teacherNames.join(", ") : "Not recorded"}</p><p className="text-sm text-[#617184]">{row.day} (PKT){row.alternatives > 1 ? " · Attend either time slot" : ""}</p><p className="text-xs text-[#617184]">{row.locked ? "Verified present" : row.status === "NEEDS_CONFIRMATION" ? "Needs confirmation" : `Currently ${row.status.toLowerCase()}`}</p></div>
+          <div><p className="font-semibold text-[#22304a]">{row.title}</p><p className="text-sm text-[#617184]">Teacher: {row.teacherNames?.length ? row.teacherNames.join(", ") : "Not recorded"}</p><p className="text-sm text-[#617184]">{row.day} (PKT){row.alternatives > 1 ? " · Attend either time slot" : ""}</p><p className="text-xs text-[#617184]">{row.locked ? "Verified present" : row.status === "NEEDS_CONFIRMATION" ? "Needs confirmation" : `Currently ${row.status.toLowerCase()}`}</p></div>
           {row.locked ? <span className="rounded-full bg-green-100 px-3 py-1 text-sm text-green-800">Present · verified</span> : <label className="text-sm">Attendance <select aria-label={`Attendance for ${row.title} on ${row.day}`} value={changes[row.key] ?? (["PRESENT", "ABSENT"].includes(row.status) ? row.status : "")} onChange={(event) => { const value = event.target.value; setChanges((current) => { const next = { ...current }; if (value === "PRESENT" || value === "ABSENT") next[row.key] = value; else delete next[row.key]; return next; }); }} className="ml-2 rounded-lg border bg-white p-2"><option value="">Choose…</option><option value="PRESENT">Present</option><option value="ABSENT">Absent</option></select></label>}
         </div>)}
         {!visible.length ? <p className="rounded-xl bg-[#fbf6ef] p-4 text-sm">No completed class dates are available for this selection. If a date is missing, please ask the teacher to check the session record.</p> : null}

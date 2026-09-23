@@ -126,3 +126,20 @@ test('a later Zoom report sees the parent reward and must not award again',async
  const state=await ledgerModule.attendancePointState(h.db,'child',h.schedules[1],new Date('2026-09-05T14:00:00Z'));
  assert.equal(state.parentBalance+state.verifiedBalance,5);
 });
+
+test('batch save reads attendance and point history once under the learner lock',async()=>{
+ const h=harness();
+ h.schedules[0].title='Arabic';h.schedules[1].title='Tajweed';
+ h.schedules.forEach(s=>s.program.title='Arabic');
+ // Distinct dates avoid grouping by the fixture enrollment's Seerah programme.
+ h.records[1].lessonDate=new Date('2026-09-12T09:00:00Z');
+ h.schedules[1].sessionOccurrences=[{startedAt:new Date('2026-09-12T09:00:00Z'),endedAt:new Date('2026-09-12T10:00:00Z')}];
+ const data=await h.service.getParentAttendanceRecovery('parent','child');
+ let attendanceReads=0,pointReads=0;
+ const readAttendance=h.db.attendanceRecord.findMany,readPoints=h.db.housePointLedger.findMany;
+ h.db.attendanceRecord.findMany=async args=>{attendanceReads++;return readAttendance(args);};
+ h.db.housePointLedger.findMany=async args=>{pointReads++;return readPoints(args);};
+ const result=await h.service.confirmParentAttendance('parent','child',data.rows.map(r=>({key:r.key,status:'PRESENT'})));
+ assert.equal(result.saved,2);assert.equal(result.pointsDelta,10);
+ assert.equal(attendanceReads,1);assert.equal(pointReads,1);
+});

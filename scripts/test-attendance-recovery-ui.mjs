@@ -40,3 +40,14 @@ test('server action blocks non-parents and validates confirmation and payload',a
  form.set('changes',JSON.stringify([{key:'a'.repeat(64),status:'PRESENT'}]));
  assert.match((await saveAttendanceConfirmations({},form)).message,/\+5 points/);assert.equal(called,1);
 });
+
+test('interrupted save requests stay inside the form instead of throwing to the portal boundary', async () => {
+ let submit;
+ const {ParentAttendanceRecovery: Recovery}=load('../src/components/dashboard/family/ParentAttendanceRecovery.tsx',{
+  react:{...React,useActionState:(action,initial)=>{submit=action;return React.useActionState(action,initial);}},
+  '@/app/parent/attendance/actions':{saveAttendanceConfirmations:async()=>{throw Error('Network interrupted');}},
+ });
+ renderToStaticMarkup(React.createElement(Recovery,{studentId:'child',audit:[],rows:[]}));
+ const result=await submit({message:'',error:''},new FormData());
+ assert.equal(result.message,'');assert.match(result.error,/selections are still here/);
+});
