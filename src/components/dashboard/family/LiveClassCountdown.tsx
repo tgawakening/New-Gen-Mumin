@@ -24,6 +24,15 @@ function subscribeToPageRefresh(refresh: () => void) {
   };
 }
 
+export function LiveClassUpdates({ enabled }: { enabled: boolean }) {
+  const router = useRouter();
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeToPageRefresh(() => router.refresh());
+  }, [enabled, router]);
+  return null;
+}
+
 function formatCountdown(milliseconds: number) {
   if (milliseconds <= 0) return "Starting now";
 
@@ -59,7 +68,8 @@ export function LiveClassCountdown({
     return () => window.clearInterval(interval);
   }, []);
 
-  const shouldRefresh = isLive || millisecondsUntilStart <= 15 * 60 * 1000;
+  // Teachers may start early, reschedule, or create a class while this page is open.
+  const shouldRefresh = Boolean(meetingUrl) && !accessLocked;
   useEffect(() => {
     if (!shouldRefresh) return;
     return subscribeToPageRefresh(() => router.refresh());

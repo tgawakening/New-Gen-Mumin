@@ -78,3 +78,9 @@ test('ended class and parental schedules are excluded while future schedules rem
   ]}}],child,new Map());
   assert.deepEqual(Array.from(result, row=>row.id).sort(),['current','ongoing','parent-current']);
 });
+
+test('verified live classes survive an old timetable end date for assigned learners only', () => {
+ const source=schedules({id:'live',title:'Seerah',endsOn:new Date(Date.now()-86400000),isLive:true,scheduleRosters:[{studentId:'current'}]});
+ assert.equal(exports.map(source,{id:'current'},new Map([['live',['current']]])).length,1);
+ assert.equal(exports.map(source,{id:'other'},new Map([['live',['current']]])).length,0);
+});

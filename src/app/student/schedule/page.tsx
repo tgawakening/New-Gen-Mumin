@@ -7,7 +7,7 @@ import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { FamilyDashboardFrame, MetricGrid, SectionCard, formatWeekday } from "@/components/dashboard/family/FamilyDashboardFrame";
-import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
+import { LiveClassCountdown, LiveClassUpdates } from "@/components/dashboard/family/LiveClassCountdown";
 
 type PageProps = {
   searchParams?: Promise<{ tab?: string; join?: string }>;
@@ -43,6 +43,7 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
       pendingReason={dashboard.pendingReason}
     >
 
+      <LiveClassUpdates enabled={!child.accessLocked} />
       {params?.join ? (
         <div role="alert" className="rounded-[20px] border border-[#f0d3aa] bg-[#fff7eb] px-5 py-4 text-sm font-semibold text-[#7a531c]">
           {params.join === "ended" ? "This Zoom class has already ended." : "This class has not started on Zoom yet. Join now will appear after the teacher starts it."}

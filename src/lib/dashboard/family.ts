@@ -635,7 +635,7 @@ async function getParentalSessionSchedules() {
     include: {
       teacher: { include: { user: true } },
       sessionOccurrences: {
-        where: { endedAt: null },
+        where: { source: "zoom-webhook" },
         orderBy: { startedAt: "desc" },
         take: 1,
       },
@@ -742,7 +742,8 @@ function mapScheduleEntries(
         .filter(
           (schedule: any) => {
             if (!isLiveClassVisibleToStudents(schedule.title)) return false;
-            if (schedule.endsOn && new Date(schedule.endsOn).getTime() < Date.now()) return false;
+            if (schedule.endsOn && new Date(schedule.endsOn).getTime() < Date.now()
+              && !mapScheduleSummary(schedule, enrollment.program.title).isLive) return false;
 
             const hasRoster = (resolvedRosters.get(schedule.id)?.length ?? 0) > 0
               || schedule.scheduleRosters?.length > 0
@@ -763,7 +764,7 @@ function mapScheduleEntries(
     );
 
   const parentalEntries = parentalSchedules
-    .filter((schedule: any) => !schedule.endsOn || new Date(schedule.endsOn).getTime() >= Date.now())
+    .filter((schedule: any) => !schedule.endsOn || new Date(schedule.endsOn).getTime() >= Date.now() || mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL").isLive)
     .map((schedule: any) => mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL"));
   const allEntries = [...entries, ...parentalEntries];
 
@@ -1245,7 +1246,7 @@ async function getParentProfile(userId: string) {
                             },
                           },
                           sessionOccurrences: {
-                            where: { endedAt: null },
+                            where: { source: "zoom-webhook" },
                             orderBy: { startedAt: "desc" },
                             take: 1,
                           },
@@ -1472,7 +1473,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
                     },
                   },
                   sessionOccurrences: {
-                    where: { endedAt: null },
+                    where: { source: "zoom-webhook" },
                     orderBy: { startedAt: "desc" },
                     take: 1,
                   },
