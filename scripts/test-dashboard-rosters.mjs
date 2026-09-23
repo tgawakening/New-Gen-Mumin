@@ -64,3 +64,17 @@ test('unconfigured classes retain their existing country audience', () => {
   assert.equal(exports.map(source, { id: 'current', countryCode: 'PK' }, new Map([['class', []]])).length, 1);
   assert.equal(exports.map(source, { id: 'current', countryCode: 'US' }, new Map([['class', []]])).length, 0);
 });
+
+test('ended class and parental schedules are excluded while future schedules remain visible', () => {
+  const ended = new Date(Date.now() - 86400000);
+  const future = new Date(Date.now() + 86400000);
+  const child = { id: 'current', countryCode: 'PK', parentalSchedules: [
+    {id:'parent-ended', endsOn:ended}, {id:'parent-current', endsOn:future},
+  ] };
+  const result = exports.map([{program:{id:'program',title:'Seerah',schedules:[
+    {id:'ended',title:'Ended',endsOn:ended},
+    {id:'current',title:'Current',endsOn:future},
+    {id:'ongoing',title:'Ongoing',endsOn:null},
+  ]}}],child,new Map());
+  assert.deepEqual(Array.from(result, row=>row.id).sort(),['current','ongoing','parent-current']);
+});

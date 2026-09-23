@@ -742,6 +742,7 @@ function mapScheduleEntries(
         .filter(
           (schedule: any) => {
             if (!isLiveClassVisibleToStudents(schedule.title)) return false;
+            if (schedule.endsOn && new Date(schedule.endsOn).getTime() < Date.now()) return false;
 
             const hasRoster = (resolvedRosters.get(schedule.id)?.length ?? 0) > 0
               || schedule.scheduleRosters?.length > 0
@@ -761,7 +762,9 @@ function mapScheduleEntries(
         .map((schedule: any) => mapScheduleSummary(schedule, enrollment.program.title)),
     );
 
-  const parentalEntries = parentalSchedules.map((schedule: any) => mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL"));
+  const parentalEntries = parentalSchedules
+    .filter((schedule: any) => !schedule.endsOn || new Date(schedule.endsOn).getTime() >= Date.now())
+    .map((schedule: any) => mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL"));
   const allEntries = [...entries, ...parentalEntries];
 
   const deduped = new Map<string, ChildScheduleSummary>();
