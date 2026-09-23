@@ -10,7 +10,7 @@ import { db } from "@/lib/db";
 import {
   countryMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
-  resolveScheduleStudentIds,
+  createReadOnlyRosterResolver,
   isLiveClassVisibleToStudents,
 } from "@/lib/live-classes/service";
 import { getStudentRoomAssignment, type StudentRoomAssignment } from "@/lib/live-classes/rooms";
@@ -1361,7 +1361,7 @@ export const getParentDashboardData = cache(async function getParentDashboardDat
   const hasUnlockedAccess =
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
-  const resolvedRosters = await loadDashboardScheduleRosters(resolvedChildren, resolveScheduleStudentIds);
+  const resolvedRosters = await loadDashboardScheduleRosters(resolvedChildren, createReadOnlyRosterResolver());
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked
@@ -1536,7 +1536,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
     return null;
   }
 
-  const resolvedRosters = await loadDashboardScheduleRosters([studentProfile], resolveScheduleStudentIds);
+  const resolvedRosters = await loadDashboardScheduleRosters([studentProfile], createReadOnlyRosterResolver());
   const latestOrder = studentProfile.parents[0]?.parent.orders[0] ?? null;
   const accessLocked = !studentProfile.enrollments.some((enrollment) =>
     ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),

@@ -10,8 +10,14 @@ export async function loadDashboardScheduleRosters(
   const scheduleIds = new Set(students.flatMap((student) =>
     student.enrollments.flatMap((enrollment) => enrollment.program.schedules.map((schedule) => schedule.id)),
   ));
-  const entries = await Promise.all([...scheduleIds].map(async (id) => [id, await resolveRoster(id)] as const));
-  return new Map(entries);
+  const rosters = new Map<string, readonly string[]>();
+  const pending = [...scheduleIds];
+  // Bound database fan-out on pages with many class schedules.
+  await Promise.all(Array.from({ length: Math.min(2, pending.length) }, async () => {
+    let id: string | undefined;
+    while ((id = pending.shift()) !== undefined) rosters.set(id, await resolveRoster(id));
+  }));
+  return rosters;
 }
 
 export function isStudentInDashboardRoster(

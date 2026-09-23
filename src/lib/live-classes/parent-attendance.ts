@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 import { attendanceDayKey, deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
 import { attendancePointKey, attendancePointState, lockAttendanceStudent, parentAttendancePointDelta, type AttendancePointSchedule } from "@/lib/live-classes/attendance-ledger";
-import { cleanLiveClassTitle, isLiveClassVisibleToStudents, isParentalLiveClass, resolveScheduleStudentIds } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, isLiveClassVisibleToStudents, isParentalLiveClass, createReadOnlyRosterResolver } from "@/lib/live-classes/service";
 
 export const ATTENDANCE_RECOVERY_START = new Date("2026-09-01T00:00:00+05:00");
 export class AttendanceConfirmationError extends Error {}
@@ -26,6 +26,7 @@ async function loadRecoveryGroups(parentUserId: string, studentId: string, now =
   const intervals = await db.zoomAttendanceInterval.findMany({ where: { studentId, joinedAt: { gte: ATTENDANCE_RECOVERY_START, lte: now } }, select: { scheduleId: true, joinedAt: true } });
   const joined = new Set(intervals.map((entry) => `${entry.scheduleId}:${attendanceDayKey(entry.joinedAt)}`));
   const groups = new Map<string, RecoveryGroup>();
+  const resolveScheduleStudentIds = createReadOnlyRosterResolver();
   for (const enrollment of enrollments) {
     for (const schedule of enrollment.program.schedules) {
       if (!isLiveClassVisibleToStudents(schedule.title) || isParentalLiveClass(schedule.title)) continue;

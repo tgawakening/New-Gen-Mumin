@@ -331,7 +331,12 @@ export function getTeacherRosterProgramIds(
     .filter((assignment) => isArabicTajweedSlug(assignment.program.slug))
     .map((assignment) => assignment.programId);
 }
-export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string) {
+type RosterReadContext = {
+  eligible: (programId: string) => ReturnType<typeof getProgramEligibleRosterStudents>;
+  teacher: (teacherId: string, programId: string) => Promise<string[]>;
+};
+
+export async function getTeacherProgramRosterStudentIds(teacherId: string, programId: string, read?: RosterReadContext) {
   try {
     const program = await db.program.findUnique({ where: { id: programId }, select: { slug: true } });
     const compatibleProgramIds = program && isArabicTajweedSlug(program.slug)
@@ -357,7 +362,7 @@ export async function getTeacherProgramRosterStudentIds(teacherId: string, progr
 
     const eligibility = await Promise.all(
       compatibleProgramIds.map(async (compatibleProgramId) => {
-        const eligible = await getProgramEligibleRosterStudents(compatibleProgramId);
+        const eligible = await (read ? read.eligible(compatibleProgramId) : getProgramEligibleRosterStudents(compatibleProgramId));
         return {
           programId: compatibleProgramId,
           ids: new Set(eligible.map((student) => student.id)),
@@ -502,7 +507,7 @@ async function ensurePaidRegistrationAccessForProgram(program: { id: string; slu
     }
   }
 }
-export async function getProgramEligibleRosterStudents(programId: string) {
+export async function getProgramEligibleRosterStudents(programId: string, repairAccess = true) {
   const program = await db.program.findUnique({
     where: { id: programId },
     select: { id: true, slug: true },
@@ -512,7 +517,7 @@ export async function getProgramEligibleRosterStudents(programId: string) {
     return [];
   }
 
-  await ensurePaidRegistrationAccessForProgram(program);
+  if (repairAccess) await ensurePaidRegistrationAccessForProgram(program);
 
   const compatibleProgramSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
   const [directEnrollmentStudents, paidRegistrationStudents] = await Promise.all([
@@ -723,7 +728,7 @@ export async function getScheduleRosterCandidates(programId: string, title: stri
   }));
 }
 
-export async function getScheduleRosterStudentIds(scheduleId: string) {
+export async function getScheduleRosterStudentIds(scheduleId: string, read?: RosterReadContext) {
   let scheduleRoster: Array<{ studentId: string }> = [];
   try {
     scheduleRoster = await db.classScheduleRoster.findMany({
@@ -747,9 +752,9 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
   });
 
   if (!schedule) return [];
-  const defaultStudentIds = await getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
+
   if (scheduleRoster.length) {
-    const eligible = await getProgramEligibleRosterStudents(schedule.programId);
+    const eligible = await (read ? read.eligible(schedule.programId) : getProgramEligibleRosterStudents(schedule.programId));
     const eligibleIds = new Set(eligible.map((student) => student.id));
     const canonicalByIdentity = new Map(eligible.map((student) => [
       canonicalRosterIdentity(
@@ -787,10 +792,32 @@ export async function getScheduleRosterStudentIds(scheduleId: string) {
 
     // Preserve valid class-specific choices (including outside-audience learners)
     // while replacing only superseded registrations and removing cancelled ones.
-    await syncScheduleRoster(scheduleId, repairedStudentIds);
+    if (!read) await syncScheduleRoster(scheduleId, repairedStudentIds);
     return repairedStudentIds;
   }
-  return defaultStudentIds;
+  return read ? read.teacher(schedule.teacherId, schedule.programId) : getTeacherProgramRosterStudentIds(schedule.teacherId, schedule.programId);
+}
+
+/** Request-local caches: portal reads must never repair registrations or write rosters. */
+export function createReadOnlyRosterResolver() {
+  const programs = new Map<string, ReturnType<typeof getProgramEligibleRosterStudents>>();
+  const teachers = new Map<string, Promise<string[]>>();
+  const schedules = new Map<string, Promise<string[]>>();
+  const read: RosterReadContext = {
+    eligible(programId) {
+      if (!programs.has(programId)) programs.set(programId, getProgramEligibleRosterStudents(programId, false));
+      return programs.get(programId)!;
+    },
+    teacher(teacherId, programId) {
+      const key = JSON.stringify([teacherId, programId]);
+      if (!teachers.has(key)) teachers.set(key, getTeacherProgramRosterStudentIds(teacherId, programId, read));
+      return teachers.get(key)!;
+    },
+  };
+  return (scheduleId: string) => {
+    if (!schedules.has(scheduleId)) schedules.set(scheduleId, getScheduleRosterStudentIds(scheduleId, read));
+    return schedules.get(scheduleId)!;
+  };
 }
 
 /** The authoritative learner set for live access and automatic attendance. */

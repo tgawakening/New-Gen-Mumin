@@ -69,7 +69,7 @@ function harness() {
   'server-only': {}, '@prisma/client': {Prisma}, '@/lib/db': {db},
   '@/lib/community/house-points': {ensureStudentHouseMembership:async()=>({houseId:'house'})},
   '@/lib/live-classes/attendance-policy':policy, '@/lib/live-classes/attendance-ledger':ledgerModule,
-  '@/lib/live-classes/service': {cleanLiveClassTitle:s=>s,isLiveClassVisibleToStudents:()=>true,isParentalLiveClass:()=>false,resolveScheduleStudentIds:async()=>['child']},
+  '@/lib/live-classes/service': {cleanLiveClassTitle:s=>s,isLiveClassVisibleToStudents:()=>true,isParentalLiveClass:()=>false,createReadOnlyRosterResolver:()=>async()=>['child']},
  });
  const key=ledgerModule.attendancePointKey('child',schedules[0],day);
  return {service,db,records,ledger,audit,intervals,schedules,key,setFailLedger:value=>{failLedger=value;}};
