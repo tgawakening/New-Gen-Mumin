@@ -62,3 +62,10 @@ test('verified join overrides absence even before any minutes are recorded', () 
   assert.equal(deduplicateAttendance([joined])[0].status, 'PRESENT');
   assert.equal(deduplicateAttendance([row('missed', 'ABSENT', 'Arabic')])[0].status, 'ABSENT');
 });
+test('unmatched Zoom attendance needs confirmation rather than counting as absent', () => {
+  const old = { ...row('old', 'ABSENT', 'Arabic'), source: 'zoom' };
+  const current = { ...row('current', 'EXCUSED', 'Arabic'), source: 'zoom-unverified', durationMinutes: null };
+  assert.equal(deduplicateAttendance([old])[0].status, 'NEEDS_CONFIRMATION');
+  assert.equal(deduplicateAttendance([current])[0].status, 'NEEDS_CONFIRMATION');
+  assert.equal(deduplicateAttendance([{ ...old, source: 'parent-confirmed' }])[0].status, 'ABSENT');
+});

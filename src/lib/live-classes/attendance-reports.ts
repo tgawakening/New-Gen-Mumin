@@ -73,7 +73,7 @@ async function listStudentAttendance(studentId: string) {
   const byRequirement = new Map<string, typeof intervals>();
   const corrected = records.map((record) => {
     const group = bySession.get(record.scheduleId + ":" + attendanceDayKey(record.lessonDate));
-    if (record.source === "zoom" && group?.length) {
+    if ((record.source === "zoom" || record.source === "zoom-unverified") && group?.length) {
       const key = attendanceRequirementKey(record);
       byRequirement.set(key, [...(byRequirement.get(key) ?? []), ...group]);
     }
@@ -93,7 +93,7 @@ async function listStudentAttendance(studentId: string) {
 
 export async function getTeacherAttendanceReport(userId: string, range: "week" | "month") {
   const teacher = await db.teacherProfile.findUnique({ where: { userId }, select: { id: true } });
-  if (!teacher) return { schedules: [], records: [], summary: { present: 0, late: 0, absent: 0, excused: 0, averageMinutes: 0 } };
+  if (!teacher) return { schedules: [], records: [], summary: { present: 0, late: 0, absent: 0, excused: 0, needsConfirmation: 0, averageMinutes: 0 } };
   const from = new Date();
   from.setUTCHours(0, 0, 0, 0);
   if (range === "month") from.setUTCDate(1);
@@ -121,11 +121,12 @@ export async function getTeacherAttendanceReport(userId: string, range: "week" |
     return rosterBySchedule.get(record.scheduleId)?.has(record.studentId) ?? false;
   });
   const uniqueRecords = deduplicateAttendance(rosterScopedRecords);
-  const counts = { present: 0, late: 0, absent: 0, excused: 0 };
+  const counts = { present: 0, late: 0, absent: 0, excused: 0, needsConfirmation: 0 };
   let durationTotal = 0;
   let durationCount = 0;
   const mapped = uniqueRecords.map((record) => {
-    counts[record.status.toLowerCase() as keyof typeof counts] += 1;
+    if (record.status === "NEEDS_CONFIRMATION") counts.needsConfirmation += 1;
+    else counts[record.status.toLowerCase() as keyof typeof counts] += 1;
     if (record.durationMinutes != null) { durationTotal += record.durationMinutes; durationCount += 1; }
     return {
       id: record.id,

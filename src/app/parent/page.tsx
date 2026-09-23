@@ -340,7 +340,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                 <CompactList
                   items={[
                     {
-                      label: `${selectedChild.attendanceRate}% attendance`,
+                      label: selectedChild.attendanceBreakdown.some((entry) => entry.label !== "Needs confirmation" && entry.value > 0) ? `${selectedChild.attendanceRate}% attendance` : "Attendance awaiting confirmation",
                       meta: "Overall attendance",
                       icon: "check",
                     },

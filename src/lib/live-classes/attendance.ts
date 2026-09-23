@@ -2,16 +2,16 @@ import "server-only";
 import { attendanceDayKey, connectedMinutes } from "@/lib/live-classes/attendance-policy";
 
 import { createHmac, timingSafeEqual } from "crypto";
-import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
-import { awardHousePointsOnce, HOUSE_POINT_RULES, pointDayKey } from "@/lib/community/point-awards";
+import { pointDayKey } from "@/lib/community/point-awards";
+import { ensureStudentHouseMembership } from "@/lib/community/house-points";
+import { attendancePointState, lockAttendanceStudent } from "@/lib/live-classes/attendance-ledger";
 import { env } from "@/lib/env";
 import { getZoomPastMeetingParticipants } from "@/lib/zoom/client";
-import { resolveScheduleStudentIds } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, resolveScheduleStudentIds } from "@/lib/live-classes/service";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
-const JOIN_MATCH_WINDOW_MS = 4 * 60 * 60 * 1000;
 
 function normalize(value?: string | null) {
   return (value ?? "").trim().toLowerCase().replace(/\s+/g, " ");
@@ -57,43 +57,20 @@ async function matchParticipantToStudent(scheduleId: string, event: ParticipantE
   const studentIds = await resolveScheduleStudentIds(scheduleId);
   if (!studentIds.length) return { studentId: null, method: null };
   const email = normalize(event.email);
-  if (email) {
-    const student = await db.studentProfile.findFirst({
-      where: {
-        id: { in: studentIds },
-        OR: [
-          { user: { email } },
-          { parents: { some: { parent: { user: { email } } } } },
-        ],
-      },
-      select: { id: true },
-    });
-    if (student) return { studentId: student.id, method: "zoom-email" };
-  }
-
-  const intent = await db.zoomJoinIntent.findFirst({
-    where: {
-      scheduleId,
-      studentId: { in: studentIds },
-      clickedAt: { gte: new Date(event.occurredAt.getTime() - JOIN_MATCH_WINDOW_MS), lte: new Date(event.occurredAt.getTime() + 10 * 60 * 1000) },
-    },
-    orderBy: { clickedAt: "desc" },
-    select: { studentId: true },
-  });
-  if (intent) return { studentId: intent.studentId, method: "tracked-link" };
-
   const participantName = normalize(event.name);
-  if (participantName) {
-    const students = await db.studentProfile.findMany({
-      where: { id: { in: studentIds } },
-      include: { user: { select: { firstName: true, lastName: true } } },
-    });
-    const matches = students.filter((student) => {
-      const names = [student.displayName, `${student.user.firstName} ${student.user.lastName}`].map(normalize).filter(Boolean);
-      return names.some((name) => participantName === name || participantName.includes(name) || name.includes(participantName));
-    });
-    if (matches.length === 1) return { studentId: matches[0].id, method: "display-name" };
+  const students = await db.studentProfile.findMany({
+    where: { id: { in: studentIds } },
+    include: { user: { select: { firstName: true, lastName: true, email: true } }, parents: { include: { parent: { include: { user: { select: { email: true } } } } } } },
+  });
+  const named = students.filter((student) => [student.displayName, `${student.user.firstName} ${student.user.lastName ?? ""}`].map(normalize).filter(Boolean).includes(participantName));
+  const emailed = email ? students.filter((student) => normalize(student.user.email) === email || student.parents.some((link) => normalize(link.parent.user.email) === email)) : [];
+  if (emailed.length === 1) return { studentId: emailed[0].id, method: "zoom-email" };
+  if (emailed.length > 1) {
+    const exact = emailed.filter((student) => named.some((entry) => entry.id === student.id));
+    if (exact.length === 1) return { studentId: exact[0].id, method: "zoom-email-and-name" };
+    return { studentId: null, method: null };
   }
+  if (named.length === 1) return { studentId: named[0].id, method: "display-name" };
   return { studentId: null, method: null };
 }
 
@@ -103,7 +80,7 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
   const attendanceDay = pointDayKey(sessionDate);
   const [schedule, intervals] = await Promise.all([
-    db.classSchedule.findUnique({ where: { id: scheduleId }, select: { programId: true } }),
+    db.classSchedule.findUnique({ where: { id: scheduleId }, select: { id: true, title: true, programId: true, program: { select: { title: true } } } }),
     db.zoomAttendanceInterval.findMany({
       where: { scheduleId, studentId, joinedAt: { gte: dayStart, lt: dayEnd } },
       orderBy: { joinedAt: "asc" },
@@ -124,45 +101,28 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
     orderBy: { startedAt: "asc" },
     select: { startedAt: true },
   });
-  const late = occurrence ? joinedAt.getTime() > occurrence.startedAt.getTime() + 10 * 60 * 1000 : false;
-  const existing = await db.attendanceRecord.findFirst({
-    where: { scheduleId, studentId, attendanceDay },
-    orderBy: { updatedAt: "desc" },
-  });
-  const data = {
-    enrollmentId: enrollment.id,
-    studentId,
-    scheduleId,
-    lessonDate: occurrence?.startedAt ?? joinedAt,
-    attendanceDay,
-    status: "PRESENT" as const,
-    note: `Automatically tracked from Zoom (${durationMinutes} minutes).`,
-    joinedAt,
-    leftAt,
-    durationMinutes,
-    source: "zoom",
-  };
-  if (existing) await db.attendanceRecord.update({ where: { id: existing.id }, data });
-  else {
-    try {
-      await db.attendanceRecord.create({ data });
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-      await db.attendanceRecord.updateMany({ where: { scheduleId, studentId, attendanceDay }, data });
+  const membership = await ensureStudentHouseMembership(studentId);
+  await db.$transaction(async (tx) => {
+    await lockAttendanceStudent(tx, studentId);
+    const existing = await tx.attendanceRecord.findFirst({ where: { scheduleId, studentId, attendanceDay }, orderBy: { updatedAt: "desc" } });
+    const data = {
+      enrollmentId: enrollment.id, studentId, scheduleId,
+      lessonDate: occurrence?.startedAt ?? joinedAt, attendanceDay,
+      status: "PRESENT" as const,
+      note: `Automatically tracked from Zoom (${durationMinutes} minutes).`,
+      joinedAt, leftAt, durationMinutes, source: "zoom", markedByUserId: null,
+    };
+    if (existing) await tx.attendanceRecord.update({ where: { id: existing.id }, data });
+    else await tx.attendanceRecord.create({ data });
+    if (occurrence) {
+      const state = await attendancePointState(tx, studentId, schedule, occurrence.startedAt);
+      if (state.parentBalance + state.verifiedBalance <= 0) await tx.housePointLedger.create({ data: {
+        studentId, houseId: membership.houseId, points: 5,
+        reason: `Attended class: ${cleanLiveClassTitle(schedule.title)} (${attendanceDay})`,
+        sourceType: "ATTENDANCE_VERIFIED", sourceId: `${state.key}:zoom`,
+      } });
     }
-  }
-
-  if (occurrence) {
-    const attendanceRule = late ? HOUSE_POINT_RULES.ATTENDANCE_LATE : HOUSE_POINT_RULES.ATTENDANCE_ON_TIME;
-    await awardHousePointsOnce({
-      studentId,
-      points: attendanceRule.points,
-      reason: attendanceRule.label,
-      sourceType: late ? "ATTENDANCE_LATE" : "ATTENDANCE_ON_TIME",
-      sourceId: scheduleId + ":" + pointDayKey(occurrence.startedAt),
-      notificationHref: "/student/attendance",
-    });
-  }
+  }, { maxWait: 10000, timeout: 30000 });
 }
 
 export async function recordZoomParticipantJoined(scheduleId: string, event: ParticipantEvent) {
@@ -177,7 +137,10 @@ export async function recordZoomParticipantJoined(scheduleId: string, event: Par
       joinedAt: { gte: new Date(event.occurredAt.getTime() - 2000), lte: new Date(event.occurredAt.getTime() + 2000) },
     },
   });
-  const interval = existing ?? await db.zoomAttendanceInterval.create({
+  const interval = existing
+    ? (!existing.studentId && matched.studentId
+      ? await db.zoomAttendanceInterval.update({ where: { id: existing.id }, data: { studentId: matched.studentId, matchMethod: matched.method } }) : existing)
+    : await db.zoomAttendanceInterval.create({
     data: {
       scheduleId,
       studentId: matched.studentId,
@@ -235,16 +198,16 @@ async function markRosterAbsences(scheduleId: string, endedAt: Date) {
   ]);
   const recorded = new Set(existing.map((item) => item.studentId));
   const missing = enrollments.filter((item) => !recorded.has(item.studentId));
-  if (missing.length) await db.attendanceRecord.createMany({ data: missing.map((item) => ({ enrollmentId: item.id, studentId: item.studentId, scheduleId, lessonDate: endedAt, attendanceDay, status: "ABSENT" as const, note: "No verified Zoom attendance was detected.", source: "zoom" })), skipDuplicates: true });
+  if (missing.length) await db.attendanceRecord.createMany({ data: missing.map((item) => ({ enrollmentId: item.id, studentId: item.studentId, scheduleId, lessonDate: endedAt, attendanceDay, status: "EXCUSED" as const, note: "Attendance needs confirmation because no matched Zoom attendance was detected.", source: "zoom-unverified" })), skipDuplicates: true });
 }
 
-export async function reconcileZoomParticipantReport(scheduleId: string, meetingId: string) {
-  const participants = await getZoomPastMeetingParticipants(meetingId);
+export async function reconcileZoomParticipantReport(scheduleId: string, meetingId: string, meetingUuid?: string) {
+  const participants = await getZoomPastMeetingParticipants(meetingUuid || meetingId);
   for (const participant of participants) {
     const joinedAt = participant.join_time ? new Date(participant.join_time) : null;
     const leftAt = participant.leave_time ? new Date(participant.leave_time) : null;
     if (!joinedAt) continue;
-    const joined = await recordZoomParticipantJoined(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: joinedAt });
+    const joined = await recordZoomParticipantJoined(scheduleId, { meetingId, meetingUuid, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: joinedAt });
     if (leftAt) await recordZoomParticipantLeft(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: leftAt, joinedAt: joined.joinedAt, durationSeconds: participant.duration });
   }
   return participants.length;

@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
@@ -266,12 +266,15 @@ export async function POST(request: NextRequest) {
       });
     }
     await closeOpenZoomAttendanceIntervals(schedule.id, meetingId, endedAt);
+    after(async () => {
+      await reconcileZoomParticipantReport(schedule.id, meetingId, payload.payload?.object?.uuid).catch((error) => console.error("Post-meeting attendance reconciliation failed", error));
+    });
 
     return NextResponse.json({ received: true });
   }
 
   if (payload.event === "recording.completed") {
-    await reconcileZoomParticipantReport(schedule.id, meetingId).catch((error) => console.error("Unable to reconcile Zoom attendance", error));
+    await reconcileZoomParticipantReport(schedule.id, meetingId, payload.payload?.object?.uuid).catch((error) => console.error("Unable to reconcile Zoom attendance", error));
     const primaryFile = choosePrimaryRecordingFile(payload.payload?.object?.recording_files ?? []);
     if (!primaryFile) {
       return NextResponse.json({ received: true, recordings: 0 });

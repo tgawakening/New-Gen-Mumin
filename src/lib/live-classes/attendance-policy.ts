@@ -19,6 +19,7 @@ type Attendance = {
   status: string;
   durationMinutes: number | null;
   joinedAt?: Date | null;
+  source?: string | null;
   schedule?: { title: string } | null;
   enrollment?: { program: { title: string } };
 };
@@ -31,12 +32,14 @@ export function attendanceRequirementKey(record: Attendance) {
     : record.scheduleId ? `${record.studentId}:${record.scheduleId}:${day}` : `manual:${record.id}`;
 }
 
-export function deduplicateAttendance<T extends Attendance>(records: T[]): T[] {
-  const rank: Record<string, number> = { PRESENT: 4, LATE: 3, EXCUSED: 2, ABSENT: 1 };
-  const unique = new Map<string, T>();
+export function deduplicateAttendance<T extends Attendance>(records: T[]): Array<Omit<T, "status"> & { status: string }> {
+  const rank: Record<string, number> = { PRESENT: 4, LATE: 3, EXCUSED: 2, ABSENT: 1, NEEDS_CONFIRMATION: 0 };
+  const unique = new Map<string, Omit<T, "status"> & { status: string }>();
   for (const original of records) {
-    const record = original.status === "LATE" || original.joinedAt || (original.durationMinutes ?? 0) > 0
-      ? { ...original, status: "PRESENT" } : original;
+    const record: Omit<T, "status"> & { status: string } = original.status === "LATE" || original.joinedAt || (original.durationMinutes ?? 0) > 0
+      ? { ...original, status: "PRESENT" }
+      : original.source === "zoom-unverified" || (original.source === "zoom" && original.status === "ABSENT")
+        ? { ...original, status: "NEEDS_CONFIRMATION" } : original;
     const key = attendanceRequirementKey(record);
     const current = unique.get(key);
     if (!current || (rank[record.status] ?? 0) > (rank[current.status] ?? 0)

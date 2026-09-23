@@ -544,12 +544,13 @@ function buildJournalMonthlySummary(journals: ChildJournalSummary[]): ChildJourn
   };
 }
 
-function computeAttendanceBreakdown(attendances: Array<{ status: string }>, totalEnrollments: number) {
+function computeAttendanceBreakdown(attendances: Array<{ status: string }>) {
   const breakdown = {
     PRESENT: 0,
     ABSENT: 0,
     LATE: 0,
     EXCUSED: 0,
+    NEEDS_CONFIRMATION: 0,
   };
 
   for (const attendance of attendances) {
@@ -558,7 +559,7 @@ function computeAttendanceBreakdown(attendances: Array<{ status: string }>, tota
     }
   }
 
-  const totalRecords = attendances.length || totalEnrollments || 1;
+  const totalRecords = attendances.filter((entry) => entry.status !== "NEEDS_CONFIRMATION").length || 1;
   const attendanceRate = Math.round(((breakdown.PRESENT + breakdown.LATE) / totalRecords) * 100);
 
   return {
@@ -567,6 +568,7 @@ function computeAttendanceBreakdown(attendances: Array<{ status: string }>, tota
       { label: "Present", value: breakdown.PRESENT },
       { label: "Absent", value: breakdown.ABSENT },
       { label: "Excused", value: breakdown.EXCUSED },
+      { label: "Needs confirmation", value: breakdown.NEEDS_CONFIRMATION },
     ],
   };
 }
@@ -1003,7 +1005,6 @@ function mapChildSummary(child: any, accessLocked: boolean, resolvedRosters: Rea
 
   const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
     deduplicateAttendance(attendances),
-    validEnrollments.length,
   );
 
   const schedule = mapScheduleEntries(validEnrollments, child, resolvedRosters, child.parentAudienceCountryCodes ?? []);

@@ -1685,3 +1685,18 @@ enum ModerationFlagStatus {
   ESCALATED
   DISMISSED
 }
+model AttendanceConfirmationAudit {
+  id               String   @id @default(cuid())
+  studentId        String
+  parentUserId     String
+  requirementKey   String   @db.VarChar(191)
+  scheduleId       String
+  attendanceDay    String   @db.VarChar(10)
+  previousStatus   String   @db.VarChar(32)
+  status           String   @db.VarChar(32)
+  pointsDelta      Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  @@index([studentId, createdAt])
+  @@index([requirementKey, createdAt])
+}

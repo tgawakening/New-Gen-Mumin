@@ -123,7 +123,7 @@ export default async function StudentDashboardPage() {
         { label: "Quizzes completed", value: String(stats.quizAttempts), hint: "Actual submitted quiz attempts." },
     { label: "Work submitted", value: String(stats.submittedAssignments), hint: "Assignments submitted or reviewed." },
     { label: "Qabila contribution", value: String(quest.studentTotal), hint: `${qabilaName} verified points.` },
-    { label: "Attendance", value: `${child.attendanceRate}%`, hint: "Recent class presence." },
+    { label: "Attendance", value: child.attendanceBreakdown.some((entry) => entry.label !== "Needs confirmation" && entry.value > 0) ? `${child.attendanceRate}%` : "Pending", hint: "Confirmed class attendance." },
   ];
   const badgeItems = child.badges.slice(0, 4).map((badge, index) => ({
     label: badge.title,
