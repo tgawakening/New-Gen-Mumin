@@ -18,12 +18,12 @@ test('parent recovery screen distinguishes selectable missing attendance from pr
   {key:'pending',day:'2026-09-05',title:'Seerah',teacherNames:['Mehran','Sabah'],status:'NEEDS_CONFIRMATION',locked:false,alternatives:2},
   {key:'verified',day:'2026-09-06',title:'Arabic',teacherNames:['Abdul Badee'],status:'PRESENT',locked:true,alternatives:1},
  ]}));
- assert.match(html,/Teacher: Mehran, Sabah/);assert.match(html,/Teacher: Abdul Badee/);assert.match(html,/Confirm past attendance/);assert.match(html,/5 points/);assert.match(html,/Needs confirmation/);
- assert.match(html,/Present · verified/);assert.equal((html.match(/<select/g)||[]).length,1);assert.match(html,/Attend either time slot/);
+ assert.match(html,/Teacher: Mehran, Sabah/);assert.doesNotMatch(html,/Teacher: Abdul Badee/);assert.match(html,/Confirm past attendance/);assert.match(html,/5 points/);assert.match(html,/Needs confirmation/);
+ assert.doesNotMatch(html,/Present .*verified/);assert.equal((html.match(/<select/g)||[]).length,1);assert.match(html,/Attend either time slot/);
 });
 test('empty session lists explain missing dates without inventing classes',()=>{
  const html=renderToStaticMarkup(React.createElement(ParentAttendanceRecovery,{studentId:'child',audit:[],rows:[]}));
- assert.match(html,/No completed class dates/);assert.match(html,/teacher to check the session record/);
+ assert.match(html,/No sessions need confirmation/);assert.match(html,/teacher to check the session record/);
 });
 test('server action blocks non-parents and validates confirmation and payload',async()=>{
  let role='STUDENT',called=0;

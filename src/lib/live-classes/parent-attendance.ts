@@ -68,7 +68,7 @@ export async function getParentAttendanceRecovery(parentUserId: string, studentI
   const audit = await db.attendanceConfirmationAudit.findMany({ where: { studentId }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 30 });
   const actors = await db.user.findMany({ where: { id: { in: [...new Set(audit.map((entry) => entry.parentUserId))] } }, select: { id: true, firstName: true, lastName: true } });
   return {
-    rows: groups.map(({ key, day, title, teacherNames, status, locked, slots }) => ({ key, day, title, teacherNames, status, locked, alternatives: slots.length })),
+    rows: groups.filter((group) => !group.locked && group.status === "NEEDS_CONFIRMATION").map(({ key, day, title, teacherNames, status, locked, slots }) => ({ key, day, title, teacherNames, status, locked, alternatives: slots.length })),
     audit: audit.map((entry) => ({ id: entry.id, title: groups.find((group) => group.key === entry.requirementKey)?.title ?? "Class attendance", confirmedBy: actors.filter((actor) => actor.id === entry.parentUserId).map((actor) => `${actor.firstName} ${actor.lastName ?? ""}`.trim())[0] ?? "Parent", day: entry.attendanceDay, status: entry.status, pointsDelta: entry.pointsDelta, createdAt: entry.createdAt.toISOString() })),
   };
 }

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getCurrentSession } from "@/lib/auth/session";
 import { AttendanceConfirmationError, confirmParentAttendance } from "@/lib/live-classes/parent-attendance";
 
-export type AttendanceConfirmationState = { message: string; error: string };
+export type AttendanceConfirmationState = { message: string; error: string; confirmedKeys?: string[] };
 const inputSchema = z.object({
   studentId: z.string().min(1).max(191),
   changes: z.array(z.object({ key: z.string().regex(/^[a-f0-9]{64}$/), status: z.enum(["PRESENT", "ABSENT"]) })).min(1).max(100),
@@ -27,7 +27,7 @@ export async function saveAttendanceConfirmations(_previous: AttendanceConfirmat
     revalidatePath("/student", "layout");
     revalidatePath("/teacher/attendance");
     revalidatePath("/admin/rewards");
-    return { error: "", message: `${result.saved} class date(s) saved. ${result.pointsDelta > 0 ? "+" : ""}${result.pointsDelta} points. Attendance and points history are updated.` };
+    return { error: "", confirmedKeys: input.changes.map((change) => change.key), message: `${result.saved} class date(s) saved. ${result.pointsDelta > 0 ? "+" : ""}${result.pointsDelta} points. Attendance and points history are updated.` };
   } catch (error) {
     if (error instanceof AttendanceConfirmationError) return { message: "", error: error.message };
     console.error("Parent attendance confirmation failed", error);

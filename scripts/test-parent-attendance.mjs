@@ -143,3 +143,13 @@ test('batch save reads attendance and point history once under the learner lock'
  assert.equal(result.saved,2);assert.equal(result.pointsDelta,10);
  assert.equal(attendanceReads,1);assert.equal(pointReads,1);
 });
+
+test('confirmation list excludes verified attendance and saved parent Present or Absent, retaining audit history',async()=>{
+ for(const status of ['PRESENT','ABSENT']){
+  const h=harness();await h.service.confirmParentAttendance('parent','child',[{key:h.key,status}]);
+  const result=await h.service.getParentAttendanceRecovery('parent','child');
+  assert.equal(result.rows.length,0);assert.equal(result.audit.length,1);
+ }
+ const h=harness();h.records[0].status='PRESENT';
+ assert.equal((await h.service.getParentAttendanceRecovery('parent','child')).rows.length,0);
+});
