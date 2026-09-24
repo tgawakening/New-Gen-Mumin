@@ -467,6 +467,7 @@ export async function sendLiveClassScheduledEmail(input: {
 
 export async function sendLiveClassStartedEmail(input: {
   toEmail: string;
+  deduplicationKey: string;
   recipientName: string;
   programTitle: string;
   sessionTitle: string;
@@ -474,10 +475,11 @@ export async function sendLiveClassStartedEmail(input: {
   schedule: string;
   joinUrl: string;
 }) {
-  await sendTransactionalEmail({
+  return sendTransactionalEmail({
     toEmail: input.toEmail,
     subject: "Zoom class has started",
     template: "liveClassStarted",
+    deduplicationKey: input.deduplicationKey,
     html: renderGenMuminsEmailTemplate({
       heading: "Zoom class has started",
       preview: `${input.sessionTitle} is now open on Zoom.`,

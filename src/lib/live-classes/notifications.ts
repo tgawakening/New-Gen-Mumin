@@ -11,7 +11,7 @@ import {
   getLiveClassAudienceGroup,
   getProgramEligibleRosterStudents,
   isLiveClassVisibleToStudents,
-  resolveScheduleStudentIds,
+  createReadOnlyRosterResolver,
 } from "@/lib/live-classes/service";
 import { nextWeeklyOccurrence } from "@/lib/live-classes/time";
 
@@ -281,15 +281,15 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
   const title = cleanLiveClassTitle(schedule.title);
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
   const hadExplicitClassRoster = schedule.scheduleRosters.length > 0;
-  const resolvedRosterIds = new Set(await resolveScheduleStudentIds(schedule.id));
-  const hasRosterFilter = resolvedRosterIds.size > 0;
-  const eligibleStudents = await getProgramEligibleRosterStudents(schedule.programId);
+  const resolvedRosterIds = new Set(await createReadOnlyRosterResolver()(schedule.id));
+  const hasRosterFilter = hadExplicitClassRoster || resolvedRosterIds.size > 0 || schedule.teacher.programRosters.some((entry) => entry.programId === schedule.programId);
+  const eligibleStudents = await getProgramEligibleRosterStudents(schedule.programId, false);
   const scheduleLabel = `${WEEKDAY_LABELS[schedule.weekday] ?? "Weekly class"} ${schedule.startTime}-${schedule.endTime} ${schedule.timezone}`;
   const emailRecipients = new Map<string, { toEmail: string; recipientName: string; studentId: string }>();
   const notificationRecipients = new Map<string, { userId: string; href: string }>();
 
   for (const student of eligibleStudents) {
-    if (!hadExplicitClassRoster) {
+    if (!hasRosterFilter) {
       const matchesAudience = enrollmentMatchesLiveClassAudience({ student }, audienceGroup)
         || student.parents.some(({ parent }) => enrollmentMatchesLiveClassAudience({ student, parent }, audienceGroup));
       if (!matchesAudience) continue;
@@ -339,21 +339,12 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
     });
   }
 
-  const recentEmailLogs = await db.emailLog.findMany({
-    where: {
-      template: "liveClassStarted",
-      toEmail: { in: [...emailRecipients.values()].map((recipient) => recipient.toEmail) },
-      createdAt: { gte: new Date(now.getTime() - 60 * 60 * 1000) },
-    },
-    select: { toEmail: true },
-  });
-  const recentlyEmailed = new Set(recentEmailLogs.map((log) => log.toEmail.toLowerCase()));
   const emailResults = await Promise.allSettled(
     [...emailRecipients.values()]
-      .filter((recipient) => !recentlyEmailed.has(recipient.toEmail.toLowerCase()))
       .map((recipient) =>
         sendLiveClassStartedEmail({
           ...recipient,
+          deduplicationKey: `live-class:${schedule.id}:${recipient.studentId}`,
           programTitle: schedule.program.title,
           sessionTitle: title,
           teacherName: teacherName(schedule.teacher),
@@ -364,6 +355,9 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
   );
 
   for (const result of emailResults) {
+    if (result.status === "fulfilled" && result.value.failed) {
+      console.error("Live class started email provider failure", result.value.error);
+    }
     if (result.status === "rejected") {
       console.error("Unable to send live class started email", result.reason);
     }

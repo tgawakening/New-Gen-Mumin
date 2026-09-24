@@ -6,6 +6,7 @@ type SendEmailInput = {
   subject: string;
   html: string;
   template: string;
+  deduplicationKey?: string;
 };
 // Keep quota capacity for mail that grants access, protects an account, or confirms money.
 // Routine engagement mail must never consume the final daily reserve.
@@ -27,6 +28,7 @@ const STANDARD_DAILY_LIMIT = 60;
 const TIME_SENSITIVE_DAILY_LIMIT = 75;
 const CRITICAL_DAILY_LIMIT = 95;
 const TEMPLATE_COOLDOWN_MS: Record<string, number> = {
+  liveClassStarted: 60 * 60 * 1000,
   fardhTrackerSubmitted: 12 * 60 * 60 * 1000,
   qabilaMention: 2 * 60 * 60 * 1000,
   qabilaMessagePosted: 2 * 60 * 60 * 1000,
@@ -77,7 +79,9 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
           where: {
             toEmail: input.toEmail,
             template: input.template,
-            subject: input.subject,
+            ...(input.deduplicationKey
+              ? { payload: { path: "$.deduplicationKey", equals: input.deduplicationKey } }
+              : { subject: input.subject }),
             status: "SENT",
             createdAt: { gte: new Date(now - cooldownMs) },
           },
@@ -124,7 +128,7 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
       status: response.ok ? "SENT" : "FAILED",
       providerId: typeof payload?.id === "string" ? payload.id : null,
       error: response.ok ? null : JSON.stringify(payload),
-      payload,
+      payload: { ...payload, ...(input.deduplicationKey ? { deduplicationKey: input.deduplicationKey } : {}) },
       sentAt: response.ok ? new Date() : null,
     },
   });
