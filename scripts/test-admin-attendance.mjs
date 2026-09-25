@@ -49,3 +49,19 @@ test('admin form exposes multiple learners and defaults to August without saving
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']},{id:'b',name:'Child B',parents:'Parent B',teachers:['Sabah']}]}));
  assert.match(html,/2026-08-01/);assert.match(html,/Mustafa/);assert.match(html,/Child B/);assert.equal((html.match(/type="checkbox"/g)||[]).length,2);assert.match(html,/Parent report/);
 });
+
+test('selected learner shows all attendance radio choices before preview',()=>{
+ const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');
+ for(const mode of ['all','count','dates']){
+  const exports={};let hook=0;
+  const fakeReact={...React,useState(initial){const index=hook++;return [index===1?['a']:index===6?{a:{mode,missedCount:2,missedKeys:[],teacherId:'',parentName:'Nida'}}:initial,()=>{}];}};
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?fakeReact:id==='@/app/admin/attendance/actions'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
+  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']}]}));
+  assert.equal((html.match(/type="radio"/g)||[]).length,3);
+  assert.match(html,/Attended all classes/);assert.match(html,/Missed some classes - number only/);assert.match(html,/Missed specific class dates/);
+  assert.match(html,/Preview below to load sessions/);
+  if(mode==='count')assert.match(html,/type="number"[^>]*value="2"/);
+  if(mode==='dates')assert.match(html,/select the missed dates/);
+  assert.doesNotMatch(html,/Save attendance and points/);
+ }
+});
