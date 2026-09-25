@@ -15,7 +15,7 @@ export default function AdminLayout({
           >
             Main site
           </Link>
-          <Link href="/admin/attendance" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Attendance recovery</Link>
+          <Link href="/admin/attendance" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Student attendance & recovery</Link>
         </div>
       </div>
       <main>{children}</main>

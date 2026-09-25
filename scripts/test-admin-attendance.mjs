@@ -45,7 +45,7 @@ test('admin-recorded attendance cannot be overwritten by a stale parent confirma
 test('admin form exposes multiple learners and defaults to August without saving on render',()=>{
  const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');const exports={};
  const source=fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8');
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/app/admin/attendance/actions'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']},{id:'b',name:'Child B',parents:'Parent B',teachers:['Sabah']}]}));
  assert.match(html,/2026-08-01/);assert.match(html,/Mustafa/);assert.match(html,/Child B/);assert.equal((html.match(/type="checkbox"/g)||[]).length,2);assert.match(html,/Parent report/);
 });
@@ -55,7 +55,7 @@ test('selected learner shows all attendance radio choices before preview',()=>{
  for(const mode of ['all','count','dates']){
   const exports={};let hook=0;
   const fakeReact={...React,useState(initial){const index=hook++;return [index===1?['a']:index===6?{a:{mode,missedCount:2,missedKeys:[],teacherId:'',parentName:'Nida'}}:initial,()=>{}];}};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?fakeReact:id==='@/app/admin/attendance/actions'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='react'?fakeReact:id==='@/app/admin/attendance/actions'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
   const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']}]}));
   assert.equal((html.match(/type="radio"/g)||[]).length,3);
   assert.match(html,/Attended all classes/);assert.match(html,/Missed some classes - number only/);assert.match(html,/Missed specific class dates/);
@@ -64,4 +64,13 @@ test('selected learner shows all attendance radio choices before preview',()=>{
   if(mode==='dates')assert.match(html,/select the missed dates/);
   assert.doesNotMatch(html,/Save attendance and points/);
  }
+});
+
+test('batch attendance reader keeps learners and Zoom intervals separate',async()=>{
+ const records=['a','b'].map(studentId=>({id:studentId,studentId,scheduleId:'class',lessonDate:new Date('2026-09-05T09:00:00Z'),status:'ABSENT',source:'zoom',joinedAt:null,leftAt:null,durationMinutes:null,enrollment:{program:{title:'Arabic'}},schedule:{title:'Arabic',teacher:null}}));
+ const reports=load('src/lib/live-classes/attendance-reports.ts',{'server-only':{},'@/lib/db':{db:{attendanceRecord:{findMany:async()=>records},zoomAttendanceInterval:{findMany:async()=>[{studentId:'a',scheduleId:'class',joinedAt:new Date('2026-09-05T09:00:00Z'),leftAt:new Date('2026-09-05T09:30:00Z')}]}}},'@/lib/live-classes/attendance-policy':policy,'@/lib/live-classes/service':{cleanLiveClassTitle:s=>s}});
+ const result=await reports.listAttendanceForStudents(['a','b','c']);
+ assert.equal(result.get('a')[0].status,'PRESENT');assert.equal(result.get('a')[0].durationMinutes,30);
+ assert.equal(result.get('b')[0].status,'NEEDS_CONFIRMATION');assert.equal(result.get('b')[0].durationMinutes,null);
+ assert.equal(result.get('c').length,0);
 });

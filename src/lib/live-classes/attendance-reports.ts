@@ -53,26 +53,31 @@ export async function listParentChildAttendance(parentUserId: string, studentId:
 }
 
 async function listStudentAttendance(studentId: string) {
+  return (await listAttendanceForStudents([studentId])).get(studentId) ?? [];
+}
+
+/** Server-only batch reader; callers must authorize access before requesting student IDs. */
+export async function listAttendanceForStudents(studentIds: string[]) {
   const records = await db.attendanceRecord.findMany({
-    where: { studentId },
+    where: { studentId: { in: studentIds } },
     include: historyInclude,
     orderBy: { lessonDate: "desc" },
   });
   // Rebuild historical Zoom duration from connection intervals as well as new records.
   const intervals = await db.zoomAttendanceInterval.findMany({
-    where: { studentId },
-    select: { scheduleId: true, joinedAt: true, leftAt: true },
+    where: { studentId: { in: studentIds } },
+    select: { studentId: true, scheduleId: true, joinedAt: true, leftAt: true },
   });
   const bySession = new Map<string, typeof intervals>();
   for (const interval of intervals) {
-    const key = interval.scheduleId + ":" + attendanceDayKey(interval.joinedAt);
+    const key = interval.studentId + ":" + interval.scheduleId + ":" + attendanceDayKey(interval.joinedAt);
     const group = bySession.get(key) ?? [];
     group.push(interval);
     bySession.set(key, group);
   }
   const byRequirement = new Map<string, typeof intervals>();
   const corrected = records.map((record) => {
-    const group = bySession.get(record.scheduleId + ":" + attendanceDayKey(record.lessonDate));
+    const group = bySession.get(record.studentId + ":" + record.scheduleId + ":" + attendanceDayKey(record.lessonDate));
     if ((record.source === "zoom" || record.source === "zoom-unverified") && group?.length) {
       const key = attendanceRequirementKey(record);
       byRequirement.set(key, [...(byRequirement.get(key) ?? []), ...group]);
@@ -80,15 +85,17 @@ async function listStudentAttendance(studentId: string) {
     return record.source === "zoom" && group?.length
       ? { ...record, status: "PRESENT" as const, joinedAt: group[0].joinedAt, durationMinutes: connectedMinutes(group) } : record;
   });
-  return deduplicateAttendance(corrected).map((record) => {
+  const result = new Map<string, AttendanceHistoryEntry[]>(studentIds.map(id => [id, []]));
+  for (const record of deduplicateAttendance(corrected)) {
     const group = byRequirement.get(attendanceRequirementKey(record));
-    return mapAttendance(group?.length ? {
+    result.get(record.studentId)!.push(mapAttendance(group?.length ? {
       ...record,
       durationMinutes: connectedMinutes(group),
       joinedAt: new Date(Math.min(...group.map((item) => item.joinedAt.getTime()))),
       leftAt: group.some((item) => item.leftAt) ? new Date(Math.max(...group.flatMap((item) => item.leftAt ? [item.leftAt.getTime()] : []))) : null,
-    } : record);
-  });
+    } : record));
+  }
+  return result;
 }
 
 export async function getTeacherAttendanceReport(userId: string, range: "week" | "month") {

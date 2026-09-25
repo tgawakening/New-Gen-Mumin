@@ -1,11 +1,13 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { previewRecovery, saveRecovery } from "@/app/admin/attendance/actions";
 import type { RecoveryInput } from "@/lib/live-classes/admin-attendance";
 type Learner = { id: string; name: string; parents: string; teachers: string[] };
 type Preview = NonNullable<Awaited<ReturnType<typeof previewRecovery>>['data']>;
 type Choice = { mode: RecoveryInput['mode']; missedCount: number; missedKeys: string[]; teacherId: string; parentName: string };
 export function AdminAttendanceRecovery({ learners, today }: { learners: Learner[]; today: string }) {
+  const router=useRouter();
   const [search,setSearch]=useState('');
   const [ids,setIds]=useState<string[]>([]);
   const [from,setFrom]=useState(`${today.slice(0,4)}-08-01` > today ? `${Number(today.slice(0,4))-1}-08-01` : `${today.slice(0,4)}-08-01`);
@@ -35,7 +37,7 @@ export function AdminAttendanceRecovery({ learners, today }: { learners: Learner
     try {for(const id of ids){
       const result=await saveRecovery({studentId:id,from,to,note,fingerprint:previews[id].fingerprint,...choices[id]});
       setResults(current=>({...current,[id]:result.data?`Saved: ${result.data.attended}/${result.data.sessions} attended; ${result.data.missed} missed. Points adjustment: ${result.data.pointsDelta>0?'+':''}${result.data.pointsDelta}.`:result.error}));
-    }}catch{setResults(current=>({...current,general:'Request interrupted. Some learners may already be saved. Refresh reports or retry; duplicate points are prevented.'}));}finally{setBusy(false);setConfirmed(false);}
+    }}catch{setResults(current=>({...current,general:'Request interrupted. Some learners may already be saved. Refresh reports or retry; duplicate points are prevented.'}));}finally{setBusy(false);setConfirmed(false);router.refresh();}
   }
   return <div className="space-y-5"><fieldset disabled={busy} className="space-y-5 disabled:opacity-70">
     <p>Record what a parent remembers. Preview lists completed sessions with historical attendance or current roster membership; it does not invent dates from the weekly timetable.</p>
