@@ -8,23 +8,29 @@ import { cleanLiveClassTitle, isLiveClassVisibleToStudents, isParentalLiveClass,
 
 export const ATTENDANCE_RECOVERY_START = new Date("2026-09-01T00:00:00+05:00");
 export class AttendanceConfirmationError extends Error {}
-type Slot = { scheduleId: string; enrollmentId: string; date: Date; schedule: AttendancePointSchedule };
+type Slot = { scheduleId: string; enrollmentId: string; date: Date; schedule: AttendancePointSchedule; teacherId: string };
 type RecoveryGroup = { key: string; day: string; title: string; teacherNames: string[]; slots: Slot[]; status: string; locked: boolean };
 
-async function loadRecoveryGroups(parentUserId: string, studentId: string, now = new Date()) {
-  const relation = await db.parentStudent.findFirst({ where: { studentId, parent: { userId: parentUserId } }, select: { id: true } });
-  if (!relation) throw new AttendanceConfirmationError("You can only confirm attendance for your own child.");
+export async function loadRecoveryGroups(parentUserId: string, studentId: string, now = new Date(), options?: { admin: true; from: Date }) {
+  const from = options?.from ?? ATTENDANCE_RECOVERY_START;
+  if (options?.admin) {
+    const actor = await db.user.findUnique({ where: { id: parentUserId }, select: { role: true } });
+    if (actor?.role !== "ADMIN") throw new AttendanceConfirmationError("Administrator access required.");
+  } else {
+    const relation = await db.parentStudent.findFirst({ where: { studentId, parent: { userId: parentUserId } }, select: { id: true } });
+    if (!relation) throw new AttendanceConfirmationError("You can only confirm attendance for your own child.");
+  }
   const enrollments = await db.enrollment.findMany({
     where: { studentId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
     include: { program: { include: { schedules: {
       include: {
         teacher: { select: { user: { select: { firstName: true, lastName: true } } } },
-        sessionOccurrences: { where: { startedAt: { gte: ATTENDANCE_RECOVERY_START, lte: now }, OR: [{ endedAt: { lte: now } }, { completedAt: { lte: now } }] }, orderBy: { startedAt: "asc" } },
-        attendances: { where: { studentId, lessonDate: { gte: ATTENDANCE_RECOVERY_START, lte: now } }, orderBy: { lessonDate: "asc" } },
+        sessionOccurrences: { where: { startedAt: { gte: from, lte: now }, OR: [{ endedAt: { lte: now } }, { completedAt: { lte: now } }] }, orderBy: { startedAt: "asc" } },
+        attendances: { where: { studentId, lessonDate: { gte: from, lte: now } }, orderBy: { lessonDate: "asc" } },
       },
     } } } },
   });
-  const intervals = await db.zoomAttendanceInterval.findMany({ where: { studentId, joinedAt: { gte: ATTENDANCE_RECOVERY_START, lte: now } }, select: { scheduleId: true, joinedAt: true } });
+  const intervals = await db.zoomAttendanceInterval.findMany({ where: { studentId, joinedAt: { gte: from, lte: now } }, select: { scheduleId: true, joinedAt: true } });
   const joined = new Set(intervals.map((entry) => `${entry.scheduleId}:${attendanceDayKey(entry.joinedAt)}`));
   const groups = new Map<string, RecoveryGroup>();
   const resolveScheduleStudentIds = createReadOnlyRosterResolver();
@@ -41,19 +47,19 @@ async function loadRecoveryGroups(parentUserId: string, studentId: string, now =
         for (const occurrence of missingOccurrences) dates.set(attendanceDayKey(occurrence.startedAt), occurrence.startedAt);
       }
       for (const [day, date] of dates) {
-        if (enrollment.startedAt && date < enrollment.startedAt) continue;
+        if (!options?.admin && enrollment.startedAt && date < enrollment.startedAt) continue;
         const pointSchedule = { id: schedule.id, title: schedule.title, program: { title: enrollment.program.title } };
         const key = attendancePointKey(studentId, pointSchedule, date);
         const records = schedule.attendances.filter((record) => attendanceDayKey(record.lessonDate) === day);
         const verified = joined.has(`${schedule.id}:${day}`) || records.some((record) =>
-          record.source !== "parent-confirmed" && (record.status === "PRESENT" || record.status === "LATE" || record.joinedAt || (record.durationMinutes ?? 0) > 0));
+          record.source !== "parent-confirmed" && !record.source?.startsWith("admin-recovery") && (record.status === "PRESENT" || record.status === "LATE" || record.joinedAt || (record.durationMinutes ?? 0) > 0));
         const effective = deduplicateAttendance(records.map((record) => ({ ...record, schedule: pointSchedule, enrollment: { program: pointSchedule.program } })))[0];
         const status = verified ? "PRESENT" : effective?.status ?? "NEEDS_CONFIRMATION";
         const group = groups.get(key) ?? { key, day, title: cleanLiveClassTitle(schedule.title), teacherNames: [], slots: [], status, locked: false };
         const teacherName = [schedule.teacher?.user.firstName, schedule.teacher?.user.lastName].filter(Boolean).join(" ").trim();
         if (teacherName && !group.teacherNames.includes(teacherName)) group.teacherNames.push(teacherName);
-        group.slots.push({ scheduleId: schedule.id, enrollmentId: enrollment.id, date, schedule: pointSchedule });
-        group.locked ||= Boolean(verified);
+        group.slots.push({ scheduleId: schedule.id, enrollmentId: enrollment.id, date, schedule: pointSchedule, teacherId: schedule.teacherId });
+        group.locked ||= Boolean(verified) || (!options?.admin && records.some(record => record.source?.startsWith("admin-recovery")));
         if (verified || status === "PRESENT") group.status = "PRESENT";
         else if (group.status !== "PRESENT" && status !== "NEEDS_CONFIRMATION") group.status = status;
         groups.set(key, group);
@@ -109,7 +115,7 @@ export async function confirmParentAttendance(parentUserId: string, studentId: s
           const end = new Date(start.getTime() + 86400000);
           const records = allRecords.filter(record => record.scheduleId && scheduleIds.includes(record.scheduleId) && record.lessonDate >= start && record.lessonDate < end);
           const verifiedInterval = allIntervals.some(interval => scheduleIds.includes(interval.scheduleId) && interval.joinedAt >= start && interval.joinedAt < end);
-          if (verifiedInterval || records.some((record) => record.source !== "parent-confirmed" && (record.status === "PRESENT" || record.status === "LATE" || record.joinedAt || (record.durationMinutes ?? 0) > 0))) {
+          if (records.some(record => record.source?.startsWith("admin-recovery")) || verifiedInterval || records.some((record) => record.source !== "parent-confirmed" && (record.status === "PRESENT" || record.status === "LATE" || record.joinedAt || (record.durationMinutes ?? 0) > 0))) {
             throw new AttendanceConfirmationError("Zoom or a teacher has now verified this class. Refresh the page to see the update.");
           }
           const slot = group.slots[0];

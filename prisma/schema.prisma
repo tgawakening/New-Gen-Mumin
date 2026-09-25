@@ -75,6 +75,7 @@ model ParentStudent {
 }
 
 model StudentProfile {
+  attendanceRecoveryReports AdminAttendanceRecovery[]
   id                      String                   @id @default(cuid())
   userId                  String                   @unique
   displayName             String?
@@ -1699,4 +1700,22 @@ model AttendanceConfirmationAudit {
 
   @@index([studentId, createdAt])
   @@index([requirementKey, createdAt])
+}
+
+model AdminAttendanceRecovery {
+  id String @id @default(cuid())
+  studentId String
+  fromDay String @db.VarChar(10)
+  toDay String @db.VarChar(10)
+  parentName String
+  note String @db.Text
+  missedCount Int @default(0)
+  teacherId String?
+  sessions Json
+  revisions Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  @@unique([studentId, fromDay, toDay])
+  @@index([studentId])
 }

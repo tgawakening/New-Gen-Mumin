@@ -29,6 +29,7 @@ function roleItems(role: Role, childId?: string): Item[] {
     { key: "reviews", label: "Student reviews", description: "Check submitted learning work.", href: "/teacher/quizzes", icon: BookOpen, tone: "bg-[#fff0db] text-[#c27a2c]" },
   ];
   if (role === "admin") return [
+    { key: "attendance", label: "Attendance recovery", description: "Correct parent-reported attendance and points.", href: "/admin/attendance", icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
     { key: "classes", label: "Live Classes", description: "Monitor current and upcoming classes.", href: "/admin/classes", icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
     { key: "community", label: "Community", description: "Monitor Qabilas and flagged messages.", href: "/admin/community", icon: MessageCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
     { key: "rewards", label: "Rewards", description: "Review points, badges and recognition.", href: "/admin/rewards", icon: Trophy, tone: "bg-[#fff0db] text-[#c27a2c]" },

@@ -29,3 +29,19 @@ The development checkout has no database credentials. Production migration, real
 `npm run typecheck`
 
 Transaction tests use a serialized in-memory adapter and rollback snapshots; they do not substitute for running the migration and concurrency checks against MySQL.
+
+## Admin recovery and monthly summaries
+
+Open **Admin > Attendance recovery** (`/admin/attendance`). Search learner, parent or teacher, select multiple children, and choose a date range (default 1 August). Paste the parent's report, preview, then configure each child:
+
+- Attended all: every eligible completed requirement is present, preserving verified timestamps.
+- Specific missed dates: select class/date entries; verified attendance cannot be changed to absent.
+- Count only: enter the missed count and optionally its teacher. Records are labeled as reported/uncertain, with a period-level deduction rather than arbitrarily assigning absent dates. Monthly percentages are withheld when a count spans multiple months without a known monthly split.
+
+Only recorded completed occurrences and historical attendance dates are candidates. The historical admin range may precede the current enrollment's start because re-registrations and roster changes should not erase historical participation. The preview lists the exact candidates; missing session records require separate schedule administration.
+
+Each learner saves atomically under the same student lock used by Zoom. A multi-learner run reports success/failure per learner; successful learners are retained if another fails. Retry is safe. Reusing the same range revises that report with an appended audit; different overlapping ranges are rejected. Revisions preserve parent name, report text, admin actor, exact missed keys or estimated count, and reward adjustment.
+
+Five points are targeted for newly reported attended requirements, preserving previously awarded verified points and adjusting existing parent confirmation awards rather than stacking them. Unknown missed counts subtract five points each in a separately labeled adjustment. Same-day Seerah/Life Skills alternatives count once. Admin-recovered records are not offered again in parent confirmations. Percentages for unrelated periods are unchanged.
+
+Deploy migration `20260925120000_admin_attendance_recovery` **before** the code. No parent report is applied merely by opening the page or previewing it. The Mustafa/Nida message is an example for admin entry; it is not automatically committed.

@@ -1,4 +1,5 @@
 import "server-only";
+import { attendanceTotals } from "@/lib/live-classes/attendance-summary";
 import { deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
 
 import { cache } from "react";
@@ -544,7 +545,7 @@ function buildJournalMonthlySummary(journals: ChildJournalSummary[]): ChildJourn
   };
 }
 
-function computeAttendanceBreakdown(attendances: Array<{ status: string }>) {
+function computeAttendanceBreakdown(attendances: Array<{ status: string }>, reports: Array<{ missedCount: number }> = []) {
   const breakdown = {
     PRESENT: 0,
     ABSENT: 0,
@@ -559,8 +560,11 @@ function computeAttendanceBreakdown(attendances: Array<{ status: string }>) {
     }
   }
 
-  const totalRecords = attendances.filter((entry) => entry.status !== "NEEDS_CONFIRMATION").length || 1;
-  const attendanceRate = Math.round(((breakdown.PRESENT + breakdown.LATE) / totalRecords) * 100);
+  const totals = attendanceTotals(attendances, reports);
+  const attendanceRate = totals.rate ?? 0;
+  breakdown.PRESENT = totals.present;
+  breakdown.LATE = 0;
+  breakdown.ABSENT = totals.absent;
 
   return {
     attendanceRate,
@@ -1008,7 +1012,7 @@ function mapChildSummary(child: any, accessLocked: boolean, resolvedRosters: Rea
   const progressReports = Array.isArray(child.progressReports) ? child.progressReports : [];
 
   const { attendanceRate, attendanceBreakdown } = computeAttendanceBreakdown(
-    deduplicateAttendance(attendances),
+    deduplicateAttendance(attendances), child.attendanceRecoveryReports ?? [],
   );
 
   const schedule = mapScheduleEntries(validEnrollments, child, resolvedRosters, child.parentAudienceCountryCodes ?? []);
@@ -1282,6 +1286,7 @@ async function getParentProfile(userId: string) {
                   },
                 },
               },
+              attendanceRecoveryReports: { select: { missedCount: true } },
               attendances: {
                 orderBy: { lessonDate: "desc" },
                 include: { schedule: { select: { title: true } }, enrollment: { include: { program: { select: { title: true } } } } },
@@ -1509,6 +1514,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
           },
         },
       },
+      attendanceRecoveryReports: { select: { missedCount: true } },
       attendances: {
         orderBy: { lessonDate: "desc" },
         include: { schedule: { select: { title: true } }, enrollment: { include: { program: { select: { title: true } } } } },

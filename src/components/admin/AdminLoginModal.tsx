@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export function AdminLoginModal({ returnTo }: { returnTo?: "/admin/rewards" }) {
+export function AdminLoginModal({ returnTo }: { returnTo?: "/admin/rewards" | "/admin/attendance" }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

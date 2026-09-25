@@ -18,7 +18,7 @@ export async function lockAttendanceStudent(tx: Prisma.TransactionClient, studen
 export async function attendancePointState(tx: Prisma.TransactionClient, studentId: string, schedule: AttendancePointSchedule, date: Date, snapshot?: { schedules: AttendancePointSchedule[]; rows: Array<{ points: number; sourceType: string; sourceId: string | null }> }) {
   const key = attendancePointKey(studentId, schedule, date);
   const subject = alternativeAttendanceSubject(schedule.title) ?? alternativeAttendanceSubject(schedule.program.title);
-  const schedules = snapshot?.schedules ?? (subject ? await tx.classSchedule.findMany({ select: { id: true, title: true, program: { select: { title: true } } } }) : [schedule]);
+  const schedules = subject ? (snapshot?.schedules ?? await tx.classSchedule.findMany({ select: { id: true, title: true, program: { select: { title: true } } } })) : [schedule];
   const legacyIds = schedules.filter((entry) => !subject || (alternativeAttendanceSubject(entry.title) ?? alternativeAttendanceSubject(entry.program.title)) === subject)
     .map((entry) => `${entry.id}:${attendanceDayKey(date)}`);
   const rows = snapshot ? snapshot.rows.filter((row) => row.sourceId?.startsWith(`${key}:`) || legacyIds.includes(row.sourceId ?? "")) : await tx.housePointLedger.findMany({
