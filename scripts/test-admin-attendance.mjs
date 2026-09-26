@@ -7,7 +7,7 @@ import { createRequire } from 'node:module';
 import { harness } from './test-parent-attendance.mjs';
 const require=createRequire(import.meta.url);
 const policy=await import('../src/lib/live-classes/attendance-policy.ts');
-function load(file,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:id=>id in deps?deps[id]:require(id),Date,console});return exports;}
+function load(file,deps){const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id in deps?deps[id]:require(id),Date,console});return exports;}
 const ledger=load('src/lib/live-classes/attendance-ledger.ts',{'server-only':{},'@/lib/live-classes/attendance-policy':policy});
 function setup(){
  const h=harness();let role='ADMIN';const reports=[];
@@ -45,7 +45,7 @@ test('admin-recorded attendance cannot be overwritten by a stale parent confirma
 test('admin form exposes multiple learners and defaults to August without saving on render',()=>{
  const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');const exports={};
  const source=fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8');
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']},{id:'b',name:'Child B',parents:'Parent B',teachers:['Sabah']}]}));
  assert.match(html,/2026-08-01/);assert.match(html,/Mustafa/);assert.match(html,/Child B/);assert.equal((html.match(/type="checkbox"/g)||[]).length,2);assert.match(html,/Parent report/);
 });
@@ -55,7 +55,7 @@ test('selected learner shows all attendance radio choices before preview',()=>{
  for(const mode of ['all','count','dates']){
   const exports={};let hook=0;
   const fakeReact={...React,useState(initial){const index=hook++;return [index===1?['a']:index===6?{a:{mode,missedCount:2,missedKeys:[],teacherId:'',parentName:'Nida'}}:initial,()=>{}];}};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='react'?fakeReact:id==='@/app/admin/attendance/actions'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='react'?fakeReact:id==='@/app/admin/attendance/actions'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
   const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']}]}));
   assert.equal((html.match(/type="radio"/g)||[]).length,3);
   assert.match(html,/Attended all classes/);assert.match(html,/Missed some classes - number only/);assert.match(html,/Missed specific class dates/);
@@ -86,7 +86,7 @@ test('admin all-attended save clears parent pending list and repairs stale Zoom-
 test('previewed form explains unsaved percentage and missing save requirements',()=>{
  const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');const exports={};let hook=0;
  const state={1:['a'],5:{a:{fingerprint:'test',sessions:[{key:'one',teacherIds:[],teachers:[],verified:false,day:'2026-09-05',title:'Arabic'}]}},6:{a:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:''}},10:'2026-08-01:2026-09-26'};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,()=>{}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{}:require(id)});
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,()=>{}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{}:require(id)});
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-26',learners:[{id:'a',name:'Mustafa',parents:'',teachers:[]}]}));
  assert.match(html,/Preview only - attendance after saving/);assert.match(html,/Attendance has not been saved/);assert.match(html,/Enter a parent report/);assert.match(html,/Enter the reporting parent for/);assert.match(html,/Tick the review checkbox/);assert.doesNotMatch(html,/disabled=""[^>]*>Save attendance and points/);
 });

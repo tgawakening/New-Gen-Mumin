@@ -1,10 +1,11 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { previewRecovery, saveRecovery } from "@/app/admin/attendance/actions";
+import { saveRecovery } from "@/app/admin/attendance/actions";
+import { requestAttendancePreview } from "@/lib/live-classes/attendance-preview-client";
 import type { RecoveryInput } from "@/lib/live-classes/admin-attendance";
 type Learner = { id: string; name: string; parents: string; teachers: string[] };
-type Preview = NonNullable<Awaited<ReturnType<typeof previewRecovery>>['data']>;
+type Preview = NonNullable<Awaited<ReturnType<typeof requestAttendancePreview>>['data']>;
 type Choice = { mode: RecoveryInput['mode']; missedCount: number; missedKeys: string[]; teacherId: string; programId?: string; parentName: string };
 export function AdminAttendanceRecovery({ learners, today }: { learners: Learner[]; today: string }) {
   const router=useRouter();
@@ -25,12 +26,13 @@ export function AdminAttendanceRecovery({ learners, today }: { learners: Learner
   function defaultChoice(id:string):Choice{return {mode:'all',missedCount:0,missedKeys:[],teacherId:'',programId:'',parentName:learners.find(s=>s.id===id)?.parents||''};}
   function change(id:string,patch:Partial<Choice>){setChoices(current=>({...current,[id]:{...(current[id]??defaultChoice(id)),...patch}}));setConfirmed(false);}
   async function preview(){
-    setBusy(true);setConfirmed(false);setResults({});setPreviews({});
+    setBusy(true);setConfirmed(false);setResults({});if(rangePreviewed!==rangeKey)setPreviews({});
     try {for(const id of ids){
-      const result=await previewRecovery(id,from,to);
+      if(rangePreviewed===rangeKey&&ids.some(key=>!previews[key])&&previews[id])continue;
+      const result=await requestAttendancePreview(id,from,to);
       if(result.data){setPreviews(current=>({...current,[id]:result.data!}));setChoices(current=>{const choice=current[id]??defaultChoice(id);return {...current,[id]:{...choice,missedKeys:choice.missedKeys.filter(key=>result.data!.sessions.some(s=>s.key===key&&!s.verified))}};});}
       else setResults(current=>({...current,[id]:result.error}));
-    }setRangePreviewed(rangeKey);}catch{setResults({general:'Preview was interrupted. Please try again.'});}finally{setBusy(false);}
+    }setRangePreviewed(rangeKey);}catch{setRangePreviewed(rangeKey);setResults(current=>({...current,general:'Preview could not finish. Successfully loaded learners are retained. Retry Preview to load the remaining learners.'}));}finally{setBusy(false);}
   }
   async function save(){
     if(busy)return;
@@ -77,5 +79,5 @@ export function AdminAttendanceRecovery({ learners, today }: { learners: Learner
     </section>;})}
     <button type="button" disabled={!ids.length} onClick={preview} className="rounded-full bg-slate-800 px-5 py-3 text-white disabled:opacity-40">{busy?'Working...':`Preview ${ids.length} learner(s)`}</button>
     {ready?<><div className="rounded border border-amber-300 bg-amber-50 p-3" role="status"><strong>Preview loaded. Attendance has not been saved by this preview.</strong><ul className="mt-2 list-disc pl-5">{!note.trim()?<li>Enter a parent report / evidence above (for example: Parent confirms all classes attended in this period).</li>:null}{ids.filter(id=>!choices[id]?.parentName.trim()).map(id=><li key={id}>Enter the reporting parent for {learners.find(s=>s.id===id)?.name}.</li>)}{!confirmed?<li>Tick the review checkbox below before saving.</li>:null}</ul></div><label className="flex gap-2"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)}/>I reviewed the dates and parent reports. Apply these attendance and points corrections.</label><button type="button" disabled={busy} onClick={save} className="rounded-full bg-green-800 px-5 py-3 text-white disabled:opacity-40">{busy?'Saving...':'Save attendance and points'}</button><p className="text-sm">Saved independently for each learner. Existing awards are retained; only the difference is added or reversed. A report with all classes attended makes this period 100%; other periods retain their own attendance.</p></>:null}
-  </fieldset><div role="status" className="space-y-2">{Object.entries(results).map(([id,message])=><p key={id} className="rounded border bg-white p-3">{learners.find(s=>s.id===id)?.name}: {message}</p>)}</div></div>;
+  </fieldset><div role="status" className="space-y-2">{Object.entries(results).map(([id,message])=><p key={id} className="rounded border bg-white p-3">{id==='general'?'':`${learners.find(s=>s.id===id)?.name??'Learner'}: `}{message}</p>)}</div></div>;
 }
