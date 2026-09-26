@@ -16,7 +16,7 @@ export const recoveryInput = z.object({
   studentId: z.string().min(1), from: day, to: day,
   parentName: z.string().trim().min(1).max(191), note: z.string().trim().min(1).max(4000),
   mode: z.enum(["all", "dates", "count"]), missedKeys: z.array(z.string()).max(500),
-  missedCount: z.number().int().min(0).max(500), teacherId: z.string().optional(), fingerprint: z.string(),
+  missedCount: z.number().int().min(0).max(500), teacherId: z.string().optional(), programId: z.string().optional(), fingerprint: z.string(),
 });
 export type RecoveryInput = z.infer<typeof recoveryInput>;
 async function requireAdmin(userId: string) {
@@ -41,6 +41,7 @@ export async function previewAdminAttendance(userId: string, studentId: string, 
   if (groups.length > 500) throw new Error("This range contains too many classes. Choose a shorter range.");
   return { fingerprint: fingerprint(groups), sessions: groups.map(group => ({
     key: group.key, day: group.day, title: group.title, teachers: group.teacherNames,
+    programs: [...new Map(group.slots.map(slot => [slot.programId, { id: slot.programId, title: slot.programTitle }])).values()],
     teacherIds: [...new Set(group.slots.map(slot => slot.teacherId))], verified: group.locked, status: group.status,
   })) };
 }
@@ -81,8 +82,8 @@ export async function saveAdminAttendance(userId: string, raw: RecoveryInput) {
       if (verified && missed.has(group.key)) throw new Error(`Verified attendance cannot be marked absent: ${group.title}, ${group.day}.`);
       return { group, matched, verified, status: missed.has(group.key) ? "ABSENT" as const : "PRESENT" as const };
     });
-    const estimatePool = plans.filter(plan => !plan.verified && (!input.teacherId || plan.group.slots.some(slot => slot.teacherId === input.teacherId)));
-    if (estimatedMissed > estimatePool.length) throw new Error("Missed count exceeds the unverified classes for this learner/teacher. Verified attendance is protected.");
+    const estimatePool = plans.filter(plan => !plan.verified && plan.group.slots.some(slot => (!input.teacherId || slot.teacherId === input.teacherId) && (!input.programId || slot.programId === input.programId)));
+    if (estimatedMissed > estimatePool.length) throw new Error("Missed count exceeds the unverified classes for this learner/programme/teacher. Verified attendance is protected.");
     const credits: Prisma.HousePointLedgerCreateManyInput[] = [];
     const newRecords: Prisma.AttendanceRecordCreateManyInput[] = [];
     const updates = new Map<string, { ids: string[]; data: Prisma.AttendanceRecordUpdateManyMutationInput }>();
@@ -117,7 +118,7 @@ export async function saveAdminAttendance(userId: string, raw: RecoveryInput) {
     if (newRecords.length) await tx.attendanceRecord.createMany({ data: newRecords });
     if (credits.length) await tx.housePointLedger.createMany({ data: credits });
     const sessions = plans.map(plan => ({ key: plan.group.key, day: plan.group.day, title: plan.group.title, status: plan.status, verified: plan.verified }));
-    const revision = { id: revisionId, adminUserId: userId, savedAt: new Date().toISOString(), parentName: input.parentName, note: input.note, mode: input.mode, missedCount: estimatedMissed, teacherId: input.teacherId ?? null, missedKeys: [...missed], pointsDelta, sessionCount: groups.length };
+    const revision = { id: revisionId, adminUserId: userId, savedAt: new Date().toISOString(), parentName: input.parentName, note: input.note, mode: input.mode, missedCount: estimatedMissed, teacherId: input.teacherId ?? null, programId: input.programId || null, programme: groups.flatMap(group => group.slots).find(slot => slot.programId === input.programId)?.programTitle ?? null, missedKeys: [...missed], pointsDelta, sessionCount: groups.length };
     const history = Array.isArray(existing?.revisions) ? existing.revisions : [];
     const data = { parentName: input.parentName, note: input.note, missedCount: estimatedMissed, teacherId: input.teacherId || null, sessions, revisions: [...history, revision] };
     await tx.adminAttendanceRecovery.upsert({ where: { studentId_fromDay_toDay: { studentId: input.studentId, fromDay: input.from, toDay: input.to } }, create: { id: reportId, studentId: input.studentId, fromDay: input.from, toDay: input.to, ...data }, update: data });

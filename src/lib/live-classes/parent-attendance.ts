@@ -8,7 +8,7 @@ import { cleanLiveClassTitle, isLiveClassVisibleToStudents, isParentalLiveClass,
 
 export const ATTENDANCE_RECOVERY_START = new Date("2026-09-01T00:00:00+05:00");
 export class AttendanceConfirmationError extends Error {}
-type Slot = { scheduleId: string; enrollmentId: string; date: Date; schedule: AttendancePointSchedule; teacherId: string };
+type Slot = { scheduleId: string; enrollmentId: string; date: Date; schedule: AttendancePointSchedule; teacherId: string; programId: string; programTitle: string };
 type RecoveryGroup = { key: string; day: string; title: string; teacherNames: string[]; slots: Slot[]; status: string; locked: boolean };
 
 export async function loadRecoveryGroups(parentUserId: string, studentId: string, now = new Date(), options?: { admin: true; from: Date }) {
@@ -58,7 +58,7 @@ export async function loadRecoveryGroups(parentUserId: string, studentId: string
         const group = groups.get(key) ?? { key, day, title: cleanLiveClassTitle(schedule.title), teacherNames: [], slots: [], status, locked: false };
         const teacherName = [schedule.teacher?.user.firstName, schedule.teacher?.user.lastName].filter(Boolean).join(" ").trim();
         if (teacherName && !group.teacherNames.includes(teacherName)) group.teacherNames.push(teacherName);
-        group.slots.push({ scheduleId: schedule.id, enrollmentId: enrollment.id, date, schedule: pointSchedule, teacherId: schedule.teacherId });
+        group.slots.push({ scheduleId: schedule.id, enrollmentId: enrollment.id, date, schedule: pointSchedule, teacherId: schedule.teacherId, programId: enrollment.programId, programTitle: enrollment.program.title });
         group.locked ||= Boolean(verified) || (!options?.admin && records.some(record => record.source?.startsWith("admin-recovery")));
         if (verified || status === "PRESENT") group.status = "PRESENT";
         else if (group.status !== "PRESENT" && status !== "NEEDS_CONFIRMATION") group.status = status;

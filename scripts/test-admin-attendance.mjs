@@ -90,3 +90,16 @@ test('previewed form explains unsaved percentage and missing save requirements',
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-26',learners:[{id:'a',name:'Mustafa',parents:'',teachers:[]}]}));
  assert.match(html,/Preview only - attendance after saving/);assert.match(html,/Attendance has not been saved/);assert.match(html,/Enter a parent report/);assert.match(html,/Enter the reporting parent for/);assert.match(html,/Tick the review checkbox/);assert.doesNotMatch(html,/disabled=""[^>]*>Save attendance and points/);
 });
+
+test('optional programme scopes missed counts without changing other programme attendance',async()=>{
+ const h=setup();const find=h.db.enrollment.findMany;
+ h.db.enrollment.findMany=async args=>{const [entry]=await find(args);return entry.program.schedules.map((schedule,index)=>({...entry,programId:'programme-'+index,program:{...entry.program,title:'Programme '+index,schedules:[schedule]}}));};
+ const preview=await ready(h);assert.equal(preview.sessions[0].programs.length,1);
+ h.input.mode='count';h.input.programId='programme-0';h.input.missedCount=2;
+ await assert.rejects(h.service.saveAdminAttendance('admin',h.input),/Missed count exceeds/);
+ h.input.missedCount=1;const result=await h.service.saveAdminAttendance('admin',h.input);
+ assert.equal(result.attended,1);assert.equal(result.pointsDelta,5);
+ assert.equal(h.records.find(record=>record.scheduleId==='evening').source,'admin-recovery');
+ assert.equal(h.reports[0].revisions[0].programId,'programme-0');
+ assert.equal(h.reports[0].revisions[0].programme,'Programme 0');
+});
