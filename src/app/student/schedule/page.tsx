@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { FamilyClassAlerts } from "@/components/dashboard/family/FamilyClassAlerts";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -5,7 +7,6 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { buildTrackedZoomJoinUrl } from "@/lib/live-classes/attendance";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { ensureStudentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import { FamilyDashboardFrame, MetricGrid, SectionCard, formatWeekday } from "@/components/dashboard/family/FamilyDashboardFrame";
 import { LiveClassCountdown, LiveClassUpdates } from "@/components/dashboard/family/LiveClassCountdown";
 
@@ -24,21 +25,19 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
 
   const dashboard = await getStudentDashboardData(session.user.id);
   if (!dashboard) redirect("/auth/login");
-  await ensureStudentLiveClassReminders(session.user.id);
-  const notifications = await getUnreadNotifications(session.user.id);
   const params = searchParams ? await searchParams : undefined;
 
   const child = dashboard.child;
   const activeTab = params?.tab === "parental" ? "parental" : "classes";
   const classSessions = child.schedule.filter((entry) => entry.category !== "PARENTAL");
   const parentalSessions = child.schedule.filter((entry) => entry.category === "PARENTAL");
-  const visibleSessions = activeTab === "parental" ? parentalSessions : classSessions;
+  const visibleSessions = (activeTab === "parental" ? parentalSessions : classSessions).slice().sort((a,b)=>Number(b.isLive)-Number(a.isLive)||a.nextStartsAt.getTime()-b.nextStartsAt.getTime());
 
   return (
     <FamilyDashboardFrame
       roleLabel="Student Dashboard"
-      title="Schedule"
-      subtitle="Follow your weekly classes, teacher assignment, meeting links, and lesson timezone."
+      title="Join Classes"
+      subtitle="Live classes appear first. Tap Join now when your teacher starts."
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
@@ -49,31 +48,9 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
           {params.join === "ended" ? "This Zoom class has already ended." : "This class has not started on Zoom yet. Join now will appear after the teacher starts it."}
         </div>
       ) : null}
-      <MetricGrid
-        metrics={[
-          { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
-          { label: "Parental sessions", value: String(parentalSessions.length), hint: "Shared parent sessions by Ustadh Mehran / Ustadha Saba." },
-          { label: "Meeting links", value: child.schedule.some((item) => item.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom links." },
-          { label: "Access", value: child.accessLocked ? "Locked" : "Open", hint: "Schedule opens fully after payment confirmation." },
-        ]}
-      />
 
-      {notifications.length ? (
-        <SectionCard eyebrow="Live class alerts" title="Notifications">
-          <div className="space-y-3">
-            {notifications.map((notification) => (
-              <Link
-                key={notification.id}
-                href={notification.href ?? "/student/schedule"}
-                className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
-              >
-                <p className="font-semibold text-[#22304a]">{notification.title}</p>
-                <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
-              </Link>
-            ))}
-          </div>
-        </SectionCard>
-      ) : null}
+
+
 
       <SectionCard eyebrow="Weekly timetable" title={activeTab === "parental" ? "Parental Sessions" : "Class schedule"}>
         <div className="mb-5 flex flex-wrap gap-3">
@@ -110,6 +87,15 @@ export default async function StudentSchedulePage({ searchParams }: PageProps) {
           ) : null}
         </div>
       </SectionCard>
+    <details className="rounded-2xl border bg-white p-4"><summary className="cursor-pointer font-semibold">Class information</summary><MetricGrid
+        metrics={[
+          { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
+          { label: "Parental sessions", value: String(parentalSessions.length), hint: "Shared parent sessions by Ustadh Mehran / Ustadha Saba." },
+          { label: "Meeting links", value: child.schedule.some((item) => item.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom links." },
+          { label: "Access", value: child.accessLocked ? "Locked" : "Open", hint: "Schedule opens fully after payment confirmation." },
+        ]}
+      /></details>
+    <Suspense fallback={<p className="text-sm">Loading class updates...</p>}><FamilyClassAlerts userId={session.user.id} role="student"/></Suspense>
     </FamilyDashboardFrame>
   );
 }

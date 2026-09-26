@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 import {
   BookOpen,
   CalendarDays,
@@ -28,32 +28,6 @@ type NavItem = {
   icon?: FamilyNavIcon;
   activity?: NavActivity;
 };
-
-function getNavIcon(icon?: FamilyNavIcon) {
-  switch (icon) {
-    case "book":
-      return BookOpen;
-    case "check":
-      return CheckCircle2;
-    case "calendar":
-      return CalendarDays;
-    case "sparkles":
-      return Sparkles;
-    case "chart":
-      return ChartColumn;
-    case "journal":
-      return PenSquare;
-    case "profile":
-      return CircleUserRound;
-    case "pen":
-      return PenSquare;
-    case "sun":
-      return SunMedium;
-    case "home":
-    default:
-      return Home;
-  }
-}
 
 function getMetricIcon(label: string) {
   const normalized = label.toLowerCase();
@@ -131,10 +105,9 @@ export async function FamilyDashboardFrame({
   children: ReactNode;
   pendingReason?: string | null;
 }) {
-  const session = await getCurrentSession();
-  const activityNavItems = session ? await getNavigationActivity(session.user.id, navItems) : navItems;
+
   return (
-    <div className="min-h-screen bg-[#f7f2ea]">
+    <div className="min-h-screen bg-[#f7f2ea] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pb-0">
       <div className="border-b border-[#2e3d57] bg-[#17243a] text-white shadow-[0_14px_40px_rgba(23,36,58,0.18)]">
         <div className="section-container py-5 sm:py-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -152,12 +125,12 @@ export async function FamilyDashboardFrame({
               >
                 Main site
               </Link>
-              <NotificationBell />
+              <Suspense fallback={<span className="text-xs text-white/70">Loading alerts...</span>}><NotificationBell /></Suspense>
               <FamilyLogoutButton />
             </div>
           </div>
           <PwaInstallPrompt audience={roleLabel.toLowerCase().includes("student") ? "student" : "parent"} />
-          <MobileFamilyNavRailClient navItems={activityNavItems} />
+          <Suspense fallback={<MobileFamilyNavRailClient navItems={navItems} />}><FamilyNavigation navItems={navItems}/></Suspense>
         </div>
       </div>
 
@@ -169,6 +142,15 @@ export async function FamilyDashboardFrame({
       </div>
     </div>
   );
+}
+
+async function FamilyNavigation({navItems}:{navItems:NavItem[]}) {
+  let items=navItems;
+  try {
+    const session=await getCurrentSession();
+    if(session)items=await getNavigationActivity(session.user.id,navItems);
+  }catch(error){console.error('Family navigation badges unavailable',error);}
+  return <MobileFamilyNavRailClient navItems={items}/>;
 }
 
 export function PendingAccessNotice({ message }: { message: string }) {

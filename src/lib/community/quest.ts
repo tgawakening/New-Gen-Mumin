@@ -131,7 +131,7 @@ export async function ensureStudentHouse(studentId: string) {
   return ensureStudentHouseMembership(studentId);
 }
 
-export async function getStudentQuestData(studentId: string, programIds: string[]) {
+export async function getStudentQuestData(studentId: string, programIds: string[], options: { includeCommunity?: boolean } = {}) {
   const membership = await ensureStudentHouse(studentId);
   const now = new Date();
   const missions = await db.mission.findMany({
@@ -178,8 +178,8 @@ export async function getStudentQuestData(studentId: string, programIds: string[
     _sum: { points: true },
   });
   const [leaderboard, teammates] = await Promise.all([
-    getHouseLeaderboard(),
-    getHouseTeamMembers(membership.houseId),
+    options.includeCommunity === false ? Promise.resolve([]) : getHouseLeaderboard(),
+    options.includeCommunity === false ? Promise.resolve([]) : getHouseTeamMembers(membership.houseId),
   ]);
   const leaderboardWithMine = leaderboard.map((entry) => ({
     ...entry,

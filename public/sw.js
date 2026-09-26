@@ -1,11 +1,5 @@
-const CACHE_NAME = "gen-mumin-pwa-v3-20260915";
-const OFFLINE_SHELL = [
-  "/",
-  "/manifest.webmanifest",
-  "/images/logo.png",
-  "/gen-mumin-chars/ali-superhero.png",
-  "/gen-mumin-chars/rania-superhero.png"
-];
+const CACHE_NAME = "gen-mumin-pwa-v4-20260926";
+const OFFLINE_SHELL = ["/offline.html", "/manifest.webmanifest", "/icons/icon-192.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -33,7 +27,7 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(() => caches.match("/").then((cached) => cached || Response.error()))
+      fetch(request).catch(() => caches.match("/offline.html").then((cached) => cached || Response.error()))
     );
     return;
   }

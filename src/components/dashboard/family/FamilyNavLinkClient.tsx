@@ -81,10 +81,11 @@ export function FamilyNavLinkClient({
     return (
       <Link
         href={href}
+        prefetch={false}
         title={activity?.tooltip ?? label}
         onClick={() => activity?.ids.length && clearNavActivity(activity.ids)}
         aria-current={isActive ? "page" : undefined}
-        className={`relative flex min-w-[9rem] snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
+        className={`relative flex min-w-0 min-h-12 snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
           isActive
             ? "bg-white text-[#22304a] ring-1 ring-white/40"
             : "bg-white/10 text-white/90 hover:bg-white/16"
@@ -102,6 +103,7 @@ export function FamilyNavLinkClient({
   return (
     <Link
       href={href}
+        prefetch={false}
       title={activity?.tooltip ?? label}
       onClick={() => activity?.ids.length && clearNavActivity(activity.ids)}
       aria-current={isActive ? "page" : undefined}

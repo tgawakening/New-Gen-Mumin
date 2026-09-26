@@ -41,7 +41,7 @@ export default async function StudentMissionsPage({ searchParams }: PageProps) {
     where: { id: child.id },
     include: { enrollments: { select: { programId: true } } },
   });
-  const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? []);
+  const quest = await getStudentQuestData(child.id, profile?.enrollments.map((enrollment) => enrollment.programId) ?? [], { includeCommunity: false });
   const params = searchParams ? await searchParams : {};
   const sunnahOnly = params.type === "sunnah";
   const visibleMissions = sunnahOnly ? quest.missions.filter(isSunnahTrackerMission) : quest.missions;

@@ -93,11 +93,12 @@ export async function FamilyJourneyLinks({ role, childId }: { role: Role; childI
     return { ...item, syntheticAlert: false };
   });
 
-  const visibleItems = items.filter((item) => item.syntheticAlert || (grouped.get(item.key)?.length ?? 0) > 0);
+  const family = role === "parent" || role === "student";
+  const visibleItems = items.filter((item) => (family && ["classes", "sunnah", "quizzes"].includes(item.key)) || item.syntheticAlert || (grouped.get(item.key)?.length ?? 0) > 0);
   if (!visibleItems.length) return null;
 
   return <section className="rounded-[26px] border border-[#eadfce] bg-white p-4 shadow-sm sm:p-5">
-    <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">Quick actions</p><h2 className="mt-1 text-xl font-semibold text-[#22304a]">Open what needs your attention</h2><p className="mt-1 text-sm text-[#617184]">Red numbers show new activity. Open a card to mark those updates as seen.</p></div>
+    <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#c27a2c]">Quick actions</p><h2 className="mt-1 text-xl font-semibold text-[#22304a]">{family ? "Your daily activities" : "Open what needs your attention"}</h2><p className="mt-1 text-sm text-[#617184]">{family ? "Join a class, complete your Sunnah tracker or open a quiz." : "Red numbers show new activity. Open a card to mark those updates as seen."}</p></div>
     <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {visibleItems.map(({ key, label, description, href, icon: Icon, tone, syntheticAlert }) => {
         const updates = grouped.get(key) ?? [];

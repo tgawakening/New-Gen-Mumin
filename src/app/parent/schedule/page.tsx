@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { FamilyClassAlerts } from "@/components/dashboard/family/FamilyClassAlerts";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -5,7 +7,6 @@ import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { buildTrackedZoomJoinUrl } from "@/lib/live-classes/attendance";
 import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
-import { ensureParentLiveClassReminders, getUnreadNotifications } from "@/lib/live-classes/notifications";
 import {
   ChildSelector,
   FamilyDashboardFrame,
@@ -33,8 +34,6 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
 
   const dashboard = await getParentDashboardData(session.user.id);
   if (!dashboard) redirect("/registration");
-  await ensureParentLiveClassReminders(session.user.id);
-  const notifications = await getUnreadNotifications(session.user.id);
   if (!dashboard.children.length) {
     if (dashboard.pendingRegistrationId) redirect(`/registration/pending/${dashboard.pendingRegistrationId}`);
     redirect("/registration");
@@ -45,7 +44,7 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
   const activeTab = params?.tab === "parental" ? "parental" : "classes";
   const classSessions = selectedChild?.schedule.filter((entry) => entry.category !== "PARENTAL") ?? [];
   const parentalSessions = selectedChild?.schedule.filter((entry) => entry.category === "PARENTAL") ?? [];
-  const visibleSessions = activeTab === "parental" ? parentalSessions : classSessions;
+  const visibleSessions = (activeTab === "parental" ? parentalSessions : classSessions).slice().sort((a,b)=>Number(b.isLive)-Number(a.isLive)||a.nextStartsAt.getTime()-b.nextStartsAt.getTime());
 
   return (
     <FamilyDashboardFrame
@@ -72,31 +71,9 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
 
       {selectedChild ? (
         <>
-          <MetricGrid
-            metrics={[
-              { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
-              { label: "Parental sessions", value: String(parentalSessions.length), hint: "Shared parent sessions by Ustadh Mehran / Ustadha Saba." },
-              { label: "Teacher linked", value: classSessions.some((entry) => entry.teacherName) ? "Yes" : "Pending", hint: "Teacher assignment visibility." },
-              { label: "Meeting links", value: classSessions.some((entry) => entry.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom access." },
-            ]}
-          />
 
-          {notifications.length ? (
-            <SectionCard eyebrow="Live class alerts" title="Notifications">
-              <div className="space-y-3">
-                {notifications.map((notification) => (
-                  <Link
-                    key={notification.id}
-                    href={notification.href ?? "/parent/schedule"}
-                    className="block rounded-[20px] border border-[#eadfce] bg-white px-4 py-3"
-                  >
-                    <p className="font-semibold text-[#22304a]">{notification.title}</p>
-                    <p className="mt-1 text-sm text-[#5f6b7a]">{notification.body}</p>
-                  </Link>
-                ))}
-              </div>
-            </SectionCard>
-          ) : null}
+
+
 
           <SectionCard eyebrow="Timetable" title={activeTab === "parental" ? "Parental Sessions" : `${selectedChild.name}'s weekly classes`}>
             <div className="mb-5 flex flex-wrap gap-3">
@@ -130,6 +107,15 @@ export default async function ParentSchedulePage({ searchParams }: PageProps) {
           </SectionCard>
         </>
       ) : null}
+    <details className="rounded-2xl border bg-white p-4"><summary className="cursor-pointer font-semibold">Class information</summary><MetricGrid
+            metrics={[
+              { label: "Class slots", value: String(classSessions.length), hint: "Rostered child classes." },
+              { label: "Parental sessions", value: String(parentalSessions.length), hint: "Shared parent sessions by Ustadh Mehran / Ustadha Saba." },
+              { label: "Teacher linked", value: classSessions.some((entry) => entry.teacherName) ? "Yes" : "Pending", hint: "Teacher assignment visibility." },
+              { label: "Meeting links", value: classSessions.some((entry) => entry.meetingUrl) ? "Ready" : "Pending", hint: "Live classroom access." },
+            ]}
+          /></details>
+    <Suspense fallback={<p className="text-sm">Loading class updates...</p>}><FamilyClassAlerts userId={session.user.id} role="parent"/></Suspense>
     </FamilyDashboardFrame>
   );
 }

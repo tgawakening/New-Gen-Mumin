@@ -44,7 +44,7 @@ export default async function ParentSunnahTrackerPage({ searchParams }: PageProp
   const params = searchParams ? await searchParams : {};
   const selectedChild = dashboard.children.find((child) => child.id === params.child) ?? dashboard.children[0];
   const programIds = selectedChild.courses.flatMap((course) => course.programIds.length ? course.programIds : [course.programId]);
-  const quest = await getStudentQuestData(selectedChild.id, programIds);
+  const quest = await getStudentQuestData(selectedChild.id, programIds, { includeCommunity: false });
   const trackers = quest.missions.filter(isSunnahTrackerMission);
   const submittedToday = trackers.some((mission) => mission.attempts.some((attempt) => attempt.submissionDay === pointDayKey()));
 

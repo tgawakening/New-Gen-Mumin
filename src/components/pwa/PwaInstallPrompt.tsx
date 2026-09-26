@@ -1,106 +1,30 @@
 "use client";
-
-import { useEffect, useMemo, useState } from "react";
-import { Download, Smartphone, X } from "lucide-react";
-
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
-};
-
-const DISMISS_KEY = "gen-mumin-pwa-install-dismissed";
-
-function isStandalone() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(display-mode: standalone)").matches || ("standalone" in window.navigator && Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone));
-}
-
-function isIOS() {
-  if (typeof navigator === "undefined") return false;
-  return /iphone|ipad|ipod/i.test(navigator.userAgent);
-}
-
-type Props = {
-  audience?: "dashboard" | "parent" | "teacher" | "student";
-  force?: boolean;
-};
-
-export function PwaInstallPrompt({ audience = "dashboard", force = false }: Props) {
-  const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [visible, setVisible] = useState(force);
-  const [iosDevice, setIosDevice] = useState(false);
-
-  const label = useMemo(() => {
-    if (audience === "teacher") return "Install teacher app";
-    if (audience === "parent" || audience === "student") return "Install dashboard app";
-    return "Install Gen-Mumin app";
-  }, [audience]);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || isStandalone()) return;
-    if (!force && window.sessionStorage.getItem(DISMISS_KEY) === "true") return;
-
-    setIosDevice(isIOS());
-    setVisible(true);
-
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setInstallEvent(event as BeforeInstallPromptEvent);
-      setVisible(true);
-    };
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-  }, [force]);
-
-  if (!visible) return null;
-
-  async function installApp() {
-    if (!installEvent) return;
-    await installEvent.prompt();
-    const choice = await installEvent.userChoice;
-    if (choice.outcome === "accepted") {
-      window.sessionStorage.setItem(DISMISS_KEY, "true");
-      if (!force) setVisible(false);
-    }
-    setInstallEvent(null);
-  }
-
-  function dismiss() {
-    window.sessionStorage.setItem(DISMISS_KEY, "true");
-    setVisible(false);
-  }
-
-  return (
-    <section className="mt-5 rounded-[22px] border border-white/15 bg-white/10 p-4 text-white shadow-sm backdrop-blur">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-start gap-3">
-          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/12 text-[#f2c58f]">
-            <Smartphone className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-sm font-semibold">{label}</p>
-            <p className="mt-1 text-xs leading-5 text-white/72">
-              Add Gen-Mumin to your phone home screen for quicker dashboard access.
-              {iosDevice && !installEvent ? " On iPhone, tap Share, then Add to Home Screen." : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {installEvent ? (
-            <button type="button" onClick={installApp} className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-[#17243a] transition hover:bg-[#fff3df]">
-              <Download className="h-4 w-4" /> Install
-            </button>
-          ) : (
-            <span className="rounded-full border border-white/15 px-4 py-2 text-xs font-semibold text-white/80">Add to Home Screen</span>
-          )}
-          {!force ? (
-            <button type="button" onClick={dismiss} aria-label="Dismiss install prompt" className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/8 text-white transition hover:bg-white/15">
-              <X className="h-4 w-4" />
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </section>
-  );
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { Download, X } from "lucide-react";
+type InstallEvent=Event&{prompt:()=>Promise<void>;userChoice:Promise<{outcome:'accepted'|'dismissed'}>};
+function subscribeStandalone(callback:()=>void){const media=window.matchMedia('(display-mode: standalone)');media.addEventListener('change',callback);return()=>media.removeEventListener('change',callback);}
+function standaloneSnapshot(){return window.matchMedia('(display-mode: standalone)').matches||Boolean((navigator as Navigator&{standalone?:boolean}).standalone);}
+export function PwaInstallPrompt({force=false}:{audience?:'dashboard'|'parent'|'teacher'|'student';force?:boolean}){
+ const standalone=useSyncExternalStore(subscribeStandalone,standaloneSnapshot,()=>false);
+ const [event,setEvent]=useState<InstallEvent|null>(null);
+ const [installed,setInstalled]=useState(false);
+ const [dismissed,setDismissed]=useState(false);
+ const [help,setHelp]=useState(false);
+ const [message,setMessage]=useState('');
+ useEffect(()=>{
+  const ready=(value:Event)=>{value.preventDefault();setEvent(value as InstallEvent);};
+  const done=()=>{setInstalled(true);setEvent(null);};
+  window.addEventListener('beforeinstallprompt',ready);window.addEventListener('appinstalled',done);
+  return()=>{window.removeEventListener('beforeinstallprompt',ready);window.removeEventListener('appinstalled',done);};
+ },[]);
+ if(standalone||installed||dismissed&&!force)return null;
+ async function install(){
+  setHelp(true);
+  if(!event)return;
+  try{await event.prompt();const choice=await event.userChoice;if(choice.outcome==='accepted')setInstalled(true);setEvent(null);}catch{setMessage('Use the browser steps below to add Gen-Mumin.');}
+ }
+ return <section className="mt-3 rounded-2xl border border-white/15 bg-white/5 p-3 text-white">
+  <div className="flex items-center justify-between gap-2"><button type="button" onClick={install} aria-expanded={help} className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold"><Download className="h-4 w-4" aria-hidden="true"/>Add Gen-Mumin to your phone</button>{!force?<button type="button" onClick={()=>setDismissed(true)} aria-label="Dismiss home screen help" className="flex h-11 w-11 items-center justify-center"><X className="h-4 w-4"/></button>:null}</div>
+  {help?<div className="space-y-2 border-t border-white/15 pt-3 text-sm leading-6"><p>Add it directly from your browser. You do not need to search an app store for this home-screen version.</p><p><strong>iPhone / iPad:</strong> Open genmumin.com in Safari, tap Share, then Add to Home Screen.</p><p><strong>Android:</strong> Open genmumin.com in Chrome, tap the three-dot menu, then Add to Home screen or Install app.</p><p>If you opened a link inside WhatsApp, open it in your phone browser first. An internet connection is needed for classes and saving work.</p>{message?<p role="status">{message}</p>:null}<button type="button" onClick={()=>setHelp(false)} className="min-h-11 underline">Close instructions</button></div>:null}
+ </section>;
 }

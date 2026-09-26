@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 const pageRefreshers = new Set<() => void>();
 let pageRefreshTimer: number | null = null;
@@ -24,12 +24,24 @@ function subscribeToPageRefresh(refresh: () => void) {
   };
 }
 
+function useClassRefresh(){
+  const router=useRouter();
+  const [pending,startTransition]=useTransition();
+  const inFlight=useRef(false);
+  useEffect(()=>{if(!pending)inFlight.current=false;},[pending]);
+  return useCallback(()=>{
+    if(inFlight.current||document.hidden||!navigator.onLine)return;
+    inFlight.current=true;
+    startTransition(()=>router.refresh());
+  },[router]);
+}
+
 export function LiveClassUpdates({ enabled }: { enabled: boolean }) {
-  const router = useRouter();
+  const refresh = useClassRefresh();
   useEffect(() => {
     if (!enabled) return;
-    return subscribeToPageRefresh(() => router.refresh());
-  }, [enabled, router]);
+    return subscribeToPageRefresh(refresh);
+  }, [enabled, refresh]);
   return null;
 }
 
@@ -57,7 +69,7 @@ export function LiveClassCountdown({
   accessLocked: boolean;
   isLive?: boolean;
 }) {
-  const router = useRouter();
+  const refresh = useClassRefresh();
   const targetTime = useMemo(() => new Date(startsAt).getTime(), [startsAt]);
   const [now, setNow] = useState(() => Date.now());
   const millisecondsUntilStart = targetTime - now;
@@ -72,8 +84,8 @@ export function LiveClassCountdown({
   const shouldRefresh = Boolean(meetingUrl) && !accessLocked;
   useEffect(() => {
     if (!shouldRefresh) return;
-    return subscribeToPageRefresh(() => router.refresh());
-  }, [shouldRefresh, router]);
+    return subscribeToPageRefresh(refresh);
+  }, [shouldRefresh, refresh]);
 
   return (
     <div className={`mt-4 rounded-[20px] border px-4 py-4 shadow-sm ${isLive ? "border-[#f4b85f] bg-[#102544]" : "border-white/10 bg-[#17243a]"}`}>
@@ -82,8 +94,9 @@ export function LiveClassCountdown({
       {canJoin ? (
         <Link
           href={meetingUrl!}
+          prefetch={false}
           target="_blank"
-          className="mt-4 inline-flex rounded-full bg-[#f4b85f] px-4 py-2 text-sm font-bold text-[#102544] shadow-sm transition hover:bg-[#ffd082] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+          className="mt-4 inline-flex min-h-12 w-full items-center justify-center rounded-full bg-[#f4b85f] px-5 py-3 sm:w-auto text-sm font-bold text-[#102544] shadow-sm transition hover:bg-[#ffd082] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
         >
           Join now
         </Link>
