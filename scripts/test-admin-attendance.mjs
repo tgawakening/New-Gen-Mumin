@@ -47,7 +47,7 @@ test('admin form exposes multiple learners and defaults to August without saving
  const source=fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8');
  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']},{id:'b',name:'Child B',parents:'Parent B',teachers:['Sabah']}]}));
- assert.match(html,/2026-08-01/);assert.match(html,/Mustafa/);assert.match(html,/Child B/);assert.equal((html.match(/type="checkbox"/g)||[]).length,2);assert.match(html,/Parent report/);
+ assert.match(html,/2026-08-01/);assert.match(html,/Mustafa/);assert.match(html,/Child B/);assert.equal((html.match(/type="checkbox"/g)||[]).length,2);assert.ok(html.includes('Notes (optional)'));
 });
 
 test('selected learner shows all attendance radio choices before preview',()=>{
@@ -59,10 +59,10 @@ test('selected learner shows all attendance radio choices before preview',()=>{
   const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']}]}));
   assert.equal((html.match(/type="radio"/g)||[]).length,3);
   assert.match(html,/Attended all classes/);assert.match(html,/Missed some classes - number only/);assert.match(html,/Missed specific class dates/);
-  assert.match(html,/Preview below to load sessions/);
+  if(mode!=='all')assert.match(html,/Load programmes and session dates/);
   if(mode==='count')assert.match(html,/type="number"[^>]*value="2"/);
-  if(mode==='dates')assert.match(html,/select the missed dates/);
-  assert.equal(html.includes('>Save attendance and points</button>'),false);
+
+  assert.equal(html.includes('>Save attendance and points</button>'),true);
  }
 });
 
@@ -83,14 +83,6 @@ test('admin all-attended save clears parent pending list and repairs stale Zoom-
  assert.equal(policy.deduplicateAttendance(h.records).filter(record=>record.status==='NEEDS_CONFIRMATION').length,0);
 });
 
-test('previewed form explains unsaved percentage and missing save requirements',()=>{
- const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');const exports={};let hook=0;
- const state={1:['a'],5:{a:{fingerprint:'test',sessions:[{key:'one',teacherIds:[],teachers:[],verified:false,day:'2026-09-05',title:'Arabic'}]}},6:{a:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:''}},10:'2026-08-01:2026-09-26'};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,()=>{}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{}:require(id)});
- const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-26',learners:[{id:'a',name:'Mustafa',parents:'',teachers:[]}]}));
- assert.match(html,/Preview only - attendance after saving/);assert.match(html,/Attendance has not been saved/);assert.match(html,/Enter a parent report/);assert.match(html,/Enter the reporting parent for/);assert.match(html,/Tick the review checkbox/);assert.doesNotMatch(html,/disabled=""[^>]*>Save attendance and points/);
-});
-
 test('optional programme scopes missed counts without changing other programme attendance',async()=>{
  const h=setup();const find=h.db.enrollment.findMany;
  h.db.enrollment.findMany=async args=>{const [entry]=await find(args);return entry.program.schedules.map((schedule,index)=>({...entry,programId:'programme-'+index,program:{...entry.program,title:'Programme '+index,schedules:[schedule]}}));};
@@ -102,4 +94,14 @@ test('optional programme scopes missed counts without changing other programme a
  assert.equal(h.records.find(record=>record.scheduleId==='evening').source,'admin-recovery');
  assert.equal(h.reports[0].revisions[0].programId,'programme-0');
  assert.equal(h.reports[0].revisions[0].programme,'Programme 0');
+});
+
+test('one-click save loads sessions automatically and accepts empty optional notes',async()=>{
+ const React=require('react');const exports={};let hook=0;const saves=[],messages=[];
+ const state={1:['a','b'],6:{a:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:''},b:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:'Parent B'}}};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,value=>{if(index===7)messages.push(typeof value==='function'?value({}):value);}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview:async()=>({data:{fingerprint:'fresh',sessions:[{key:'one'}]}})}:id==='@/app/admin/attendance/actions'?{saveRecovery:async input=>{saves.push(input);if(input.studentId==='a')throw Error('connection failed');return {data:{attended:1,sessions:1,missed:0,pointsDelta:5}};}}:require(id)});
+ const tree=exports.AdminAttendanceRecovery({today:'2026-09-26',learners:[{id:'a',name:'A',parents:'',teachers:[]},{id:'b',name:'B',parents:'Parent B',teachers:[]}]});
+ function find(node){if(!node)return;if(Array.isArray(node)){for(const child of node){const match=find(child);if(match)return match;}}else if(node.props){if(node.type==='button'&&node.props.children==='Save attendance and points')return node;return find(node.props.children);}}
+ const button=find(tree);assert.equal(button.props.disabled,false);await button.props.onClick();
+ assert.equal(saves.length,2);assert.equal(saves[0].fingerprint,'fresh');assert.equal(saves[0].parentName,'Admin record');assert.match(saves[0].note,/Admin recorded attendance: all classes attended/);assert.ok(messages.some(value=>value.b?.startsWith('Saved:')));
 });
