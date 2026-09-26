@@ -94,16 +94,20 @@ export async function saveAdminAttendance(userId: string, raw: RecoveryInput) {
       const delta = parentAttendancePointDelta(status, state);
       pointsDelta += delta;
       if (delta) credits.push({ studentId: input.studentId, houseId: membership.houseId, points: delta, sourceType: delta > 0 ? "ATTENDANCE_PARENT_ADMIN" : "ATTENDANCE_PARENT_ADMIN_REVERSAL", sourceId: `${state.key}:${revisionId}`, reason: `Admin recorded parent attendance: ${group.title} (${group.day})` });
-      if (verified) continue;
+      // Preserve actual attendance evidence, but repair stale unconfirmed rows
+      // when another slot or a Zoom interval proves this requirement was attended.
+      const writable = verified ? matched.filter(record =>
+        record.status !== "PRESENT" && record.status !== "LATE" && !record.joinedAt && !(record.durationMinutes ?? 0)
+      ) : matched;
       const isEstimate = estimatedMissed > 0 && estimatePool.includes(plan);
       const data = { status, source: isEstimate ? "admin-recovery-estimate" : "admin-recovery", note: `Parent report: ${input.parentName}. ${input.note} Report ${reportId}.`, markedByUserId: userId, joinedAt: null, leftAt: null, durationMinutes: null };
-      if (matched.length) {
+      if (writable.length) {
         const bucketKey = `${status}:${data.source}`;
         const bucket = updates.get(bucketKey) ?? { ids: [] as string[], data };
-        bucket.ids.push(...matched.map(record => record.id));
+        bucket.ids.push(...writable.map(record => record.id));
         updates.set(bucketKey, bucket);
       }
-      else newRecords.push({ ...data, id: randomUUID(), studentId: input.studentId, enrollmentId: slot.enrollmentId, scheduleId: slot.scheduleId, lessonDate: slot.date, attendanceDay: group.day });
+      else if (!matched.length) newRecords.push({ ...data, id: randomUUID(), studentId: input.studentId, enrollmentId: slot.enrollmentId, scheduleId: slot.scheduleId, lessonDate: slot.date, attendanceDay: group.day });
     }
     const oldEstimateBalance = snapshot.rows.filter(row => row.sourceType === "ATTENDANCE_ADMIN_ESTIMATE" && row.sourceId?.startsWith(`${reportId}:`)).reduce((sum, row) => sum + row.points, 0);
     const adjustment = -estimatedMissed * 5 - oldEstimateBalance;

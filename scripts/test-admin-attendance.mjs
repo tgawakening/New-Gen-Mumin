@@ -23,7 +23,7 @@ function setup(){
  h.db.adminAttendanceRecovery={findMany:async({where})=>reports.filter(r=>r.studentId===where.studentId&&r.fromDay<=where.fromDay.lte&&r.toDay>=where.toDay.gte),upsert:async({where,create,update})=>{const r=reports.find(r=>r.studentId===where.studentId_fromDay_toDay.studentId&&r.fromDay===where.studentId_fromDay_toDay.fromDay&&r.toDay===where.studentId_fromDay_toDay.toDay);if(r){Object.assign(r,update);return r;}reports.push(create);return create;}};
  const service=load('src/lib/live-classes/admin-attendance.ts',{'server-only':{},'@/lib/db':{db:h.db},'@/lib/live-classes/parent-attendance':h.service,'@/lib/live-classes/attendance-policy':policy,'@/lib/live-classes/attendance-ledger':ledger,'@/lib/community/house-points':{ensureStudentHouseMembership:async()=>({houseId:'house'})}});
  const input={studentId:'child',from:'2026-09-01',to:'2026-09-22',parentName:'Parent',note:'Attended all, except count if specified',mode:'all',missedCount:0,missedKeys:[],teacherId:'',fingerprint:''};
- return {...h,service,reports,input,setRole:r=>{role=r;}};
+ return {...h,parentService:h.service,service,reports,input,setRole:r=>{role=r;}};
 }
 async function ready(h){const p=await h.service.previewAdminAttendance('admin','child',h.input.from,h.input.to);h.input.fingerprint=p.fingerprint;return p;}
 test('admin recovery saves all eligible classes, five points each, with repeat-save protection',async()=>{const h=setup();await ready(h);let r=await h.service.saveAdminAttendance('admin',h.input);assert.equal(r.attended,2);assert.equal(r.pointsDelta,10);r=await h.service.saveAdminAttendance('admin',h.input);assert.equal(r.pointsDelta,0);assert.equal(h.ledger.reduce((s,r)=>s+r.points,0),10);assert.equal(h.reports[0].revisions.length,2);});
@@ -62,7 +62,7 @@ test('selected learner shows all attendance radio choices before preview',()=>{
   assert.match(html,/Preview below to load sessions/);
   if(mode==='count')assert.match(html,/type="number"[^>]*value="2"/);
   if(mode==='dates')assert.match(html,/select the missed dates/);
-  assert.doesNotMatch(html,/Save attendance and points/);
+  assert.equal(html.includes('>Save attendance and points</button>'),false);
  }
 });
 
@@ -73,4 +73,20 @@ test('batch attendance reader keeps learners and Zoom intervals separate',async(
  assert.equal(result.get('a')[0].status,'PRESENT');assert.equal(result.get('a')[0].durationMinutes,30);
  assert.equal(result.get('b')[0].status,'NEEDS_CONFIRMATION');assert.equal(result.get('b')[0].durationMinutes,null);
  assert.equal(result.get('c').length,0);
+});
+
+test('admin all-attended save clears parent pending list and repairs stale Zoom-backed rows',async()=>{
+ const h=setup();h.intervals.push({studentId:'child',scheduleId:'day',joinedAt:new Date('2026-09-05T09:30:00Z')});
+ await ready(h);await h.service.saveAdminAttendance('admin',h.input);
+ assert.ok(h.records.every(record=>record.status==='PRESENT'));
+ assert.equal((await h.parentService.getParentAttendanceRecovery('parent','child')).rows.length,0);
+ assert.equal(policy.deduplicateAttendance(h.records).filter(record=>record.status==='NEEDS_CONFIRMATION').length,0);
+});
+
+test('previewed form explains unsaved percentage and missing save requirements',()=>{
+ const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');const exports={};let hook=0;
+ const state={1:['a'],5:{a:{fingerprint:'test',sessions:[{key:'one',teacherIds:[],teachers:[],verified:false,day:'2026-09-05',title:'Arabic'}]}},6:{a:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:''}},10:'2026-08-01:2026-09-26'};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,()=>{}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{}:require(id)});
+ const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-26',learners:[{id:'a',name:'Mustafa',parents:'',teachers:[]}]}));
+ assert.match(html,/Preview only - attendance after saving/);assert.match(html,/Attendance has not been saved/);assert.match(html,/Enter a parent report/);assert.match(html,/Enter the reporting parent for/);assert.match(html,/Tick the review checkbox/);assert.match(html,/disabled=""[^>]*>Save attendance and points/);
 });
