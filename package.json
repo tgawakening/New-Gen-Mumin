@@ -18,7 +18,8 @@
     "db:apply-community": "node scripts/apply-community-migration.mjs",
     "db:upsert-programme-lead": "node scripts/upsert-programme-lead-teacher.mjs",
     "prisma:studio": "prisma studio",
-    "prisma:seed": "node prisma/seed.mjs"
+    "prisma:seed": "node prisma/seed.mjs",
+    "prebuild": "node scripts/check-source-encoding.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",
