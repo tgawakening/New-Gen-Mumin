@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { loadRecoveryGroups } from "@/lib/live-classes/parent-attendance";
-import { attendanceDayKey } from "@/lib/live-classes/attendance-policy";
+import { attendanceDayKey, deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
 import { attendancePointState, lockAttendanceStudent, parentAttendancePointDelta } from "@/lib/live-classes/attendance-ledger";
 import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 
@@ -117,11 +117,17 @@ export async function saveAdminAttendance(userId: string, raw: RecoveryInput) {
     for (const bucket of updates.values()) await tx.attendanceRecord.updateMany({ where: { id: { in: bucket.ids } }, data: bucket.data });
     if (newRecords.length) await tx.attendanceRecord.createMany({ data: newRecords });
     if (credits.length) await tx.housePointLedger.createMany({ data: credits });
+    const persisted = await tx.attendanceRecord.findMany({ where: { studentId: input.studentId, scheduleId: { in: scheduleIds }, lessonDate: { gte: start, lte: end } } });
+    for (const plan of plans) {
+      const slotIds = new Set(plan.group.slots.map(slot=>slot.scheduleId));
+      const effective = deduplicateAttendance(persisted.filter(record=>record.scheduleId && slotIds.has(record.scheduleId) && attendanceDayKey(record.lessonDate)===plan.group.day).map(record=>({...record,schedule:plan.group.slots[0].schedule,enrollment:{program:plan.group.slots[0].schedule.program}})))[0];
+      if(effective?.status !== plan.status) throw new Error('Attendance verification failed. No corrections were committed; please retry.');
+    }
     const sessions = plans.map(plan => ({ key: plan.group.key, day: plan.group.day, title: plan.group.title, status: plan.status, verified: plan.verified }));
     const revision = { id: revisionId, adminUserId: userId, savedAt: new Date().toISOString(), parentName: input.parentName, note: input.note, mode: input.mode, missedCount: estimatedMissed, teacherId: input.teacherId ?? null, programId: input.programId || null, programme: groups.flatMap(group => group.slots).find(slot => slot.programId === input.programId)?.programTitle ?? null, missedKeys: [...missed], pointsDelta, sessionCount: groups.length };
     const history = Array.isArray(existing?.revisions) ? existing.revisions : [];
     const data = { parentName: input.parentName, note: input.note, missedCount: estimatedMissed, teacherId: input.teacherId || null, sessions, revisions: [...history, revision] };
     await tx.adminAttendanceRecovery.upsert({ where: { studentId_fromDay_toDay: { studentId: input.studentId, fromDay: input.from, toDay: input.to } }, create: { id: reportId, studentId: input.studentId, fromDay: input.from, toDay: input.to, ...data }, update: data });
-    return { sessions: groups.length, attended: groups.length - missed.size - estimatedMissed, missed: missed.size + estimatedMissed, pointsDelta };
+    return { reportId, verifiedSessions: groups.length, sessions: groups.length, attended: groups.length - missed.size - estimatedMissed, missed: missed.size + estimatedMissed, pointsDelta };
   }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable, maxWait: 10000, timeout: 60000 });
 }

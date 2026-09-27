@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { saveRecovery } from "@/app/admin/attendance/actions";
+import { saveRecovery } from "@/lib/live-classes/attendance-save-client";
 import { requestAttendancePreview } from "@/lib/live-classes/attendance-preview-client";
 import type { RecoveryInput } from "@/lib/live-classes/admin-attendance";
 type Learner = { id: string; name: string; parents: string; teachers: string[] };
@@ -40,6 +40,7 @@ export function AdminAttendanceRecovery({ learners, today }: { learners: Learner
     if(!from||!to||from>to||to>today){setResults({general:'Choose a valid date range ending today or earlier.'});return;}
     setBusy(true);setResults({});
     try {for(const id of ids){
+      setResults(current=>({...current,[id]:'Saving and verifying attendance...'}));
       try {
         const choice=choices[id]??defaultChoice(id);
         if(choice.mode==='dates'&&(rangePreviewed!==rangeKey||!choice.missedKeys.length)){
@@ -49,7 +50,7 @@ export function AdminAttendanceRecovery({ learners, today }: { learners: Learner
         if(!preview.data){setResults(current=>({...current,[id]:preview.error}));continue;}
         if(!preview.data.sessions.length){setResults(current=>({...current,[id]:'No completed classes found in this period. Nothing was changed.'}));continue;}
         const result=await saveRecovery({studentId:id,from,to,...choice,parentName:choice.parentName.trim()||'Admin record',note:note.trim()||('Admin recorded attendance: '+(choice.mode==='all'?'all classes attended':choice.mode==='count'?choice.missedCount+' classes missed; dates unknown':'specific missed dates selected')+'.'),fingerprint:preview.data.fingerprint});
-        setResults(current=>({...current,[id]:result.data?`Saved: ${result.data.attended}/${result.data.sessions} attended; ${result.data.missed} missed. Points adjustment: ${result.data.pointsDelta>0?'+':''}${result.data.pointsDelta}.`:result.error}));
+        setResults(current=>({...current,[id]:result.data?`Saved: ${result.data.attended}/${result.data.sessions} attended; ${result.data.missed} missed. Verified ${result.data.verifiedSessions} classes (${from} to ${to}). Receipt: ${result.data.reportId}. Points adjustment: ${result.data.pointsDelta>0?'+':''}${result.data.pointsDelta}.`:result.error}));
       }catch{setResults(current=>({...current,[id]:'Save could not be confirmed. Retry safely; duplicate points are prevented.'}));}
     }}finally{setBusy(false);router.refresh();}
   }
@@ -78,5 +79,5 @@ export function AdminAttendanceRecovery({ learners, today }: { learners: Learner
     </section>;})}
     <button type="button" disabled={busy||!ids.length} onClick={save} className="rounded-full bg-green-800 px-5 py-3 text-white disabled:opacity-40">{busy?'Please wait...':'Save attendance and points'}</button>
     <p className="text-sm">Saving applies attendance to eligible completed classes in this period and adds any missing attendance points. Wait for a Saved message for each child. Existing points are not duplicated.</p>
-  </fieldset><div role="status" className="space-y-2">{Object.entries(results).map(([id,message])=><p key={id} className="rounded border bg-white p-3">{id==='general'?'':`${learners.find(s=>s.id===id)?.name??'Learner'}: `}{message}</p>)}</div></div>;
+  </fieldset><div role="status" className="space-y-2">{Object.entries(results).map(([id,message])=><p key={id} className={`rounded border p-3 ${message.startsWith('Saved:')?'border-green-300 bg-green-50':'border-amber-300 bg-amber-50'}`}>{id==='general'?'':`${learners.find(s=>s.id===id)?.name??'Learner'}: `}{message}</p>)}</div></div>;
 }

@@ -45,7 +45,7 @@ test('admin-recorded attendance cannot be overwritten by a stale parent confirma
 test('admin form exposes multiple learners and defaults to August without saving on render',()=>{
  const React=require('react');const {renderToStaticMarkup}=require('react-dom/server');const exports={};
  const source=fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8');
- vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/app/admin/attendance/actions'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
+ vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/lib/live-classes/attendance-save-client'?{previewRecovery:()=>{throw Error('unexpected preview');},saveRecovery:()=>{throw Error('unexpected save');}}:require(id)});
  const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']},{id:'b',name:'Child B',parents:'Parent B',teachers:['Sabah']}]}));
  assert.match(html,/2026-08-01/);assert.match(html,/Mustafa/);assert.match(html,/Child B/);assert.equal((html.match(/type="checkbox"/g)||[]).length,2);assert.ok(html.includes('Notes (optional)'));
 });
@@ -55,7 +55,7 @@ test('selected learner shows all attendance radio choices before preview',()=>{
  for(const mode of ['all','count','dates']){
   const exports={};let hook=0;
   const fakeReact={...React,useState(initial){const index=hook++;return [index===1?['a']:index===6?{a:{mode,missedCount:2,missedKeys:[],teacherId:'',parentName:'Nida'}}:initial,()=>{}];}};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='react'?fakeReact:id==='@/app/admin/attendance/actions'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview(){throw Error('unexpected preview');}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='react'?fakeReact:id==='@/lib/live-classes/attendance-save-client'?{previewRecovery(){throw Error('unexpected preview');},saveRecovery(){throw Error('unexpected save');}}:require(id)});
   const html=renderToStaticMarkup(React.createElement(exports.AdminAttendanceRecovery,{today:'2026-09-25',learners:[{id:'a',name:'Mustafa',parents:'Nida',teachers:['Mehran']}]}));
   assert.equal((html.match(/type="radio"/g)||[]).length,3);
   assert.match(html,/Attended all classes/);assert.match(html,/Missed some classes - number only/);assert.match(html,/Missed specific class dates/);
@@ -99,9 +99,22 @@ test('optional programme scopes missed counts without changing other programme a
 test('one-click save loads sessions automatically and accepts empty optional notes',async()=>{
  const React=require('react');const exports={};let hook=0;const saves=[],messages=[];
  const state={1:['a','b'],6:{a:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:''},b:{mode:'all',missedCount:0,missedKeys:[],teacherId:'',parentName:'Parent B'}}};
- vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,value=>{if(index===7)messages.push(typeof value==='function'?value({}):value);}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview:async()=>({data:{fingerprint:'fresh',sessions:[{key:'one'}]}})}:id==='@/app/admin/attendance/actions'?{saveRecovery:async input=>{saves.push(input);if(input.studentId==='a')throw Error('connection failed');return {data:{attended:1,sessions:1,missed:0,pointsDelta:5}};}}:require(id)});
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/admin/AdminAttendanceRecovery.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='react'?{...React,useState(initial){const index=hook++;return [index in state?state[index]:initial,value=>{if(index===7)messages.push(typeof value==='function'?value({}):value);}];}}:id==='next/navigation'?{useRouter:()=>({refresh(){}})}:id==='@/lib/live-classes/attendance-preview-client'?{requestAttendancePreview:async()=>({data:{fingerprint:'fresh',sessions:[{key:'one'}]}})}:id==='@/lib/live-classes/attendance-save-client'?{saveRecovery:async input=>{saves.push(input);if(input.studentId==='a')throw Error('connection failed');return {data:{attended:1,sessions:1,missed:0,pointsDelta:5}};}}:require(id)});
  const tree=exports.AdminAttendanceRecovery({today:'2026-09-26',learners:[{id:'a',name:'A',parents:'',teachers:[]},{id:'b',name:'B',parents:'Parent B',teachers:[]}]});
  function find(node){if(!node)return;if(Array.isArray(node)){for(const child of node){const match=find(child);if(match)return match;}}else if(node.props){if(node.type==='button'&&node.props.children==='Save attendance and points')return node;return find(node.props.children);}}
  const button=find(tree);assert.equal(button.props.disabled,false);await button.props.onClick();
  assert.equal(saves.length,2);assert.equal(saves[0].fingerprint,'fresh');assert.equal(saves[0].parentName,'Admin record');assert.match(saves[0].note,/Admin recorded attendance: all classes attended/);assert.ok(messages.some(value=>value.b?.startsWith('Saved:')));
+});
+
+test('admin save rolls back when persisted class status does not match the requested correction',async()=>{
+ const h=setup();await ready(h);h.db.attendanceRecord.updateMany=async()=>{};
+ await assert.rejects(h.service.saveAdminAttendance('admin',h.input),/verification failed/);
+ assert.equal(h.reports.length,0);assert.equal(h.ledger.length,0);
+});
+
+test('attendance banner distinguishes a confirmed-only 100 percent from a completed correction',()=>{
+ const React=require('react'),{renderToStaticMarkup}=require('react-dom/server'),exports={};
+ vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/components/dashboard/family/AttendanceRecordStatus.tsx','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>id==='@/lib/live-classes/attendance-summary'?summary:require(id)});
+ const html=renderToStaticMarkup(React.createElement(exports.AttendanceRecordStatus,{records:[{status:'PRESENT'},{status:'NEEDS_CONFIRMATION'}],reports:[]}));
+ assert.match(html,/100% applies only to confirmed classes/);assert.match(html,/No completed admin attendance correction/);assert.match(html,/1 sessions still unconfirmed/);
 });
