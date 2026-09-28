@@ -1,4 +1,5 @@
 ﻿import "server-only";
+import { recordCharitySubscriptionPayment } from "@/lib/payments/charity";
 
 import { MonthlyPaymentMethod, MonthlyPaymentStatus, PaymentGateway, Prisma } from "@prisma/client";
 
@@ -269,6 +270,7 @@ export async function recordAutoSubscriptionPayment(input: {
   rawPayload?: unknown;
   gateway: PaymentGateway;
 }) {
+  if (await recordCharitySubscriptionPayment(input)) return { updated: 1 };
   const subscription = await db.subscription.findUnique({
     where: { providerSubscriptionId: input.providerSubscriptionId },
     include: { orderItem: true },
@@ -349,6 +351,7 @@ export async function recordAutoSubscriptionFailure(input: {
   rawPayload?: unknown;
   gateway: PaymentGateway;
 }) {
+  if (await recordCharitySubscriptionPayment(input, true)) return { updated: 1 };
   const subscription = await db.subscription.findUnique({
     where: { providerSubscriptionId: input.providerSubscriptionId },
     include: { orderItem: true },

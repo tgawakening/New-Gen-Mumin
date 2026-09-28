@@ -1,3 +1,4 @@
+import { charityOriginalOrderIds } from "@/lib/payments/charity";
 import { db } from "@/lib/db";
 import { convertAmountToGbp } from "@/lib/registration/catalog";
 
@@ -81,10 +82,12 @@ export function formatRevenueMoney(value: number, currency: string) {
 
 export async function getAdminRevenueOverview(month?: string | null) {
   const period = parseMonth(month);
+  const charityIds = await charityOriginalOrderIds();
 
   const [orders, monthlyRecords] = await Promise.all([
     db.order.findMany({
       where: {
+        id: { notIn: charityIds },
         status: "SUCCEEDED",
         paidAt: {
           gte: period.startsAt,

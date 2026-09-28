@@ -1,3 +1,4 @@
+import { charityClassification } from "@/lib/payments/charity-policy";
 import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
@@ -40,6 +41,8 @@ export async function markOrderPaid(
   if (!order) {
     throw new Error("Order not found.");
   }
+
+  if (charityClassification(order.metadata)) return;
 
   const payment = order.payments[0];
   if (!payment) {
@@ -474,6 +477,8 @@ export async function resendOrderCompletionEmails(
   if (!order?.registration) {
     throw new Error("Completed registration not found for this order.");
   }
+
+  if (charityClassification(order.metadata)) throw new Error("This record is now a TGA charity commitment, not a course registration.");
 
   const registration = order.registration;
   const payment = order.payments[0];

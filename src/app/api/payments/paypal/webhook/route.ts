@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     const amountInfo = resource?.amount as { total?: string; value?: string; currency?: string; currency_code?: string } | undefined;
     await recordAutoSubscriptionPayment({
       providerSubscriptionId: billingSubscriptionId,
-      providerInvoiceId: typeof body.id === "string" ? body.id : null,
+      providerInvoiceId: typeof resource?.id === "string" && !resource.id.startsWith("I-") ? resource.id : typeof body.id === "string" ? body.id : null,
       amount: amountInfo?.total ? Number(amountInfo.total) : amountInfo?.value ? Number(amountInfo.value) : null,
       currency: amountInfo?.currency || amountInfo?.currency_code || null,
       paidAt: typeof resource?.create_time === "string" ? new Date(resource.create_time) : new Date(),

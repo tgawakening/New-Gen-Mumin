@@ -15,6 +15,7 @@ export default function AdminLayout({
           >
             Main site
           </Link>
+          <Link href="/admin/charity" className="rounded-full border px-4 py-2 text-sm font-semibold">TGA charity</Link>
           <Link href="/admin/attendance" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Student attendance & recovery</Link>
         </div>
       </div>

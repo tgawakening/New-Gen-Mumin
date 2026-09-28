@@ -1,3 +1,4 @@
+import { charityClassification } from "@/lib/payments/charity-policy";
 import { Prisma } from "@prisma/client";
 
 import { db } from "@/lib/db";
@@ -282,10 +283,11 @@ export async function activateOrderEnrollments(orderId: string) {
     where: { id: orderId },
     select: {
       registrationId: true,
+      metadata: true,
     },
   });
 
-  if (!order?.registrationId) {
+  if (!order?.registrationId || charityClassification(order.metadata)) {
     return;
   }
 
@@ -296,6 +298,8 @@ export async function syncRegistrationAccess(
   registrationId: string,
   targetStatus: MutableEnrollmentStatus,
 ) {
+  const order = await db.order.findUnique({ where: { registrationId }, select: { metadata: true } });
+  if (charityClassification(order?.metadata)) return;
   await db.$transaction(async (tx) => {
     await provisionRegistrationAccess(tx, registrationId, targetStatus);
   }, {

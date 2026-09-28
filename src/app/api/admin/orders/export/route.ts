@@ -1,3 +1,4 @@
+import { charityOriginalOrderIds } from "@/lib/payments/charity";
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
@@ -95,8 +96,9 @@ export async function GET() {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
+  const charityIds = await charityOriginalOrderIds();
   const orders = await db.order.findMany({
-    where: completedOrderWhere,
+    where: { AND: [completedOrderWhere, { id: { notIn: charityIds } }] },
     orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
     include: {
       parent: {

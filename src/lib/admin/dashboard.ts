@@ -1,3 +1,4 @@
+import { charityOriginalOrderIds } from "@/lib/payments/charity";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { completedOrderWhere } from "@/lib/payments/completed-orders";
@@ -171,6 +172,7 @@ function buildRegistrationChildren(
 }
 
 export async function getAdminDashboardData(filters: AdminDashboardFilters = {}) {
+  const charityIds = await charityOriginalOrderIds();
   const orderSearch = filters.orderSearch?.trim();
   const orderSearchWhere = orderSearch ? { OR: [
     { orderNumber: { contains: orderSearch } },
@@ -227,7 +229,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
     }),
     db.contactMessage.count({ where: { status: "NEW" } }),
     db.order.findMany({
-      where: completedOrderWhere,
+      where: { AND: [completedOrderWhere, { id: { notIn: charityIds } }] },
       select: {
         gateway: true,
         totalAmount: true,
@@ -244,7 +246,7 @@ export async function getAdminDashboardData(filters: AdminDashboardFilters = {})
       },
     }),
     db.order.findMany({
-      where: orderSearchWhere,
+      where: { AND: [orderSearchWhere ?? {}, { id: { notIn: charityIds } }] },
       orderBy: { createdAt: "desc" },
       take: 80,
       include: {

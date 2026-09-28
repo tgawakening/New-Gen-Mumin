@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
+import { charityOriginalOrderIds } from "@/lib/payments/charity";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -249,7 +251,9 @@ export default async function AdminOrdersPage({
 
   const params = searchParams ? await searchParams : undefined;
 
+  const charityIds = await charityOriginalOrderIds();
   const orders = await db.order.findMany({
+    where: { id: { notIn: charityIds } },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {
@@ -295,6 +299,7 @@ export default async function AdminOrdersPage({
           </p>
         </div>
 
+        <Link href="/admin/charity" className="inline-block rounded-full bg-[#22304a] px-5 py-3 text-white">TGA charity payments</Link>
         <div className="overflow-hidden rounded-[1.35rem] border border-[#d9e2ec] bg-white shadow-sm">
           <div className="hidden grid-cols-[1.25fr_1.35fr_0.8fr_0.75fr_0.75fr_1.2fr] gap-4 border-b border-[#e4ecf4] bg-[#f8fbff] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#6b7888] lg:grid">
             <span>Parent</span>

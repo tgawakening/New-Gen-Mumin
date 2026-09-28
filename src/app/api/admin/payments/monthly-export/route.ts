@@ -1,3 +1,4 @@
+import { charityOriginalOrderIds } from "@/lib/payments/charity";
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
@@ -273,8 +274,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const exportAll = searchParams.get("all") === "1";
   const window = monthWindow(searchParams.get("month"));
+  const charityIds = await charityOriginalOrderIds();
   const orders = await db.order.findMany({
-    where: completedOrderWhere,
+    where: { AND: [completedOrderWhere, { id: { notIn: charityIds } }] },
     orderBy: [{ paidAt: "desc" }, { createdAt: "desc" }],
     include: {
       parent: { include: { user: true } },

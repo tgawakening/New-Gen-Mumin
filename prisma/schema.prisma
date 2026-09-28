@@ -1719,3 +1719,19 @@ model AdminAttendanceRecovery {
   @@unique([studentId, fromDay, toDay])
   @@index([studentId])
 }
+
+model CharityPayment {
+  id String @id @default(cuid())
+  sourceKey String @unique
+  orderId String
+  providerSubscriptionId String?
+  gateway PaymentGateway
+  status PaymentStatus
+  amount Decimal @db.Decimal(12, 2)
+  currency String
+  paidAt DateTime?
+  metadata Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([orderId, paidAt])
+}
