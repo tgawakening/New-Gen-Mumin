@@ -58,7 +58,7 @@ export async function markOrderPaid(
       providerPaymentId: details.providerPaymentId ?? payment.providerPaymentId,
       providerReference: details.providerReference ?? payment.providerReference,
       rawPayload: toJsonValue(details.rawPayload),
-      paidAt: new Date(),
+      paidAt: payment.paidAt ?? new Date(),
     },
   });
 
@@ -67,7 +67,7 @@ export async function markOrderPaid(
     data: {
       status: "SUCCEEDED",
       providerReference: details.providerReference ?? order.providerReference,
-      paidAt: new Date(),
+      paidAt: order.paidAt ?? payment.paidAt ?? new Date(),
       metadata: {
         ...(typeof order.metadata === "object" && order.metadata ? order.metadata as object : {}),
         subscriptionId: details.subscriptionId ?? null,

@@ -1,3 +1,4 @@
+import { getManualPaymentDetails } from "@/lib/payments/config";
 import { env } from "@/lib/env";
 import { sendTransactionalEmail } from "@/lib/email/client";
 import { SITE } from "@/lib/config";
@@ -687,57 +688,60 @@ function paymentRowsHtml(rows: Array<{ childName: string; programmeTitle: string
 }
 
 export async function sendMonthlyPaymentReceiptEmail(input: {
-  toEmail: string;
-  parentName: string;
-  monthLabel: string;
-  totalLabel: string;
-  gatewayLabel: string;
+  toEmail: string; parentName: string; monthLabel: string; totalLabel: string;
+  gatewayLabel: string; paidAtLabel?: string; reference?: string; orderNumber?: string;
+  receiptUrl?: string | null; deduplicationKey?: string;
   rows: Array<{ childName: string; programmeTitle: string; amountLabel: string }>;
 }) {
-  await sendTransactionalEmail({
-    toEmail: input.toEmail,
-    subject: "Gen-Mumins monthly payment received",
-    template: "monthlyPaymentReceipt",
+  return sendTransactionalEmail({
+    toEmail: input.toEmail, subject: "Gen-Mumin payment receipt - " + input.totalLabel,
+    template: "monthlyPaymentReceipt", deduplicationKey: input.deduplicationKey,
     html: renderGenMuminsEmailTemplate({
-      heading: "Monthly payment received",
-      preview: `Your ${input.monthLabel} Gen-Mumins payment has been received.`,
-      intro: `Assalamu alaikum ${input.parentName}, your monthly Gen-Mumins payment has been received through ${input.gatewayLabel}.`,
+      heading: "Your monthly payment receipt",
+      preview: input.totalLabel + " received for your Gen-Mumin learning programme.",
+      intro: "Assalamu alaikum " + input.parentName + ", your monthly Gen-Mumin payment has been successfully received. Here is a clear record of the payment for your reference. No further payment is required for this transaction.",
       sections: [
-        { label: "Month", value: input.monthLabel },
-        { label: "Children / programmes", value: paymentRowsHtml(input.rows) },
-        { label: "Total", value: input.totalLabel },
+        { label: "Billing month", value: input.monthLabel },
+        { label: "Learner and programme", value: paymentRowsHtml(input.rows) },
+        { label: "Amount paid", value: input.totalLabel },
+        { label: "Deduction date", value: input.paidAtLabel ?? "See payment record" },
+        { label: "Payment method", value: input.gatewayLabel },
+        { label: "Transaction reference", value: input.reference ?? "See payment record" },
+        ...(input.orderNumber ? [{ label: "Gen-Mumin order", value: input.orderNumber }] : []),
       ],
-      callToAction: { label: "Open parent dashboard", href: resolveHref("/parent/profile") },
+      callToAction: { label: input.receiptUrl?.includes("paypal.com/") ? "View PayPal activity" : input.receiptUrl ? "View payment receipt" : "View your payment record", href: input.receiptUrl || resolveHref("/parent/profile") },
+      secondaryCallToAction: { label: "Open parent portal", href: resolveHref("/parent/profile") },
+      closing: "Thank you for supporting your child's learning. If you do not recognise this payment, please contact our team on WhatsApp 03181602388 with the transaction reference. JazakAllahu khairan, The Gen-Mumin team",
     }),
   });
 }
 
 export async function sendMonthlyPaymentPendingEmail(input: {
-  toEmail: string;
-  parentName: string;
-  monthLabel: string;
-  totalLabel: string;
+  toEmail: string; parentName: string; monthLabel: string; totalLabel: string;
   rows: Array<{ childName: string; programmeTitle: string; amountLabel: string }>;
-  reminder?: boolean;
+  reminder?: boolean; overdue?: boolean; dueDateLabel?: string; reference?: string; deduplicationKey?: string;
 }) {
-  await sendTransactionalEmail({
+  const manual = getManualPaymentDetails();
+  return sendTransactionalEmail({
     toEmail: input.toEmail,
-    subject: input.reminder ? "Reminder: Gen-Mumins monthly payment pending" : "Gen-Mumins monthly payment pending",
-    template: input.reminder ? "monthlyPaymentReminder" : "monthlyPaymentPending",
+    subject: (input.overdue ? "Payment overdue: " : input.reminder ? "Payment reminder: " : "Monthly fee due: ") + "Gen-Mumin - " + input.totalLabel,
+    template: input.reminder ? "monthlyPaymentReminder" : "monthlyPaymentPending", deduplicationKey: input.deduplicationKey,
     html: renderGenMuminsEmailTemplate({
-      heading: input.reminder ? "Monthly payment still pending" : "Monthly payment pending",
-      preview: `Your ${input.monthLabel} Gen-Mumins payment is pending.`,
-      intro: `Assalamu alaikum ${input.parentName}, your Gen-Mumins monthly payment is pending. Please complete payment to keep learning access active.`,
+      heading: input.overdue ? "Your monthly fee is overdue" : "Your monthly Gen-Mumin fee",
+      preview: "Please complete your " + input.totalLabel + " monthly payment by " + (input.dueDateLabel ?? "the due date") + ".",
+      intro: "Assalamu alaikum " + input.parentName + ", your monthly manual payment is pending. " + (input.overdue ? "The payment window has passed; please pay as soon as possible or contact us if you need assistance." : "Please complete payment within the five-day payment window to keep your child's learning access uninterrupted."),
       sections: [
-        { label: "Month", value: input.monthLabel },
-        { label: "Children / programmes", value: paymentRowsHtml(input.rows) },
-        { label: "Total", value: input.totalLabel },
-        { label: "JazzCash", value: "Areej - details used for initial manual payment" },
-        { label: "Meezan Bank", value: "Areej - bank details used for initial manual payment" },
-        { label: "EasyPaisa", value: "Irshad Ahmad - 03326725419" },
-        { label: "After payment", value: "Send payment screenshot to WhatsApp 03181602388 so admin can activate your status." },
+        { label: "Billing month", value: input.monthLabel },
+        { label: "Learner and programme", value: paymentRowsHtml(input.rows) },
+        { label: "Amount due", value: input.totalLabel },
+        { label: "Payment deadline", value: input.dueDateLabel ?? "Within five days of your monthly renewal" },
+        ...manual.channels.map(channel => ({ label: channel.badge.replace(/\[[^\]]+\]\s*/, ""), value: channel.fields.map(field => field.label + ": " + field.value).join("\n") })),
+        { label: "Payment reference", value: input.reference ?? "Include the parent and child name" },
+        { label: "After payment", value: "Send your payment screenshot, parent name and child name to WhatsApp 03181602388. Once our team confirms payment, your monthly status will be updated and reminders will stop." },
       ],
-      callToAction: { label: "Open parent dashboard", href: resolveHref("/parent/profile") },
+      callToAction: { label: "Send payment screenshot", href: "https://wa.me/923181602388" },
+      secondaryCallToAction: { label: "View payment status", href: resolveHref("/parent/profile") },
+      closing: "If you have already transferred the fee, please send the screenshot so we can confirm it. Thank you for your cooperation. JazakAllahu khairan, The Gen-Mumin team",
     }),
   });
 }

@@ -1,3 +1,4 @@
+import { verifyPayPalWebhook } from "@/lib/payments/paypal-webhook";
 import { NextResponse } from "next/server";
 
 import { markOrderPaid } from "@/lib/payments/fulfillment";
@@ -5,6 +6,7 @@ import { recordAutoSubscriptionFailure, recordAutoSubscriptionPayment } from "@/
 
 export async function POST(request: Request) {
   const body = await request.json();
+  if (!(await verifyPayPalWebhook(request, body))) return NextResponse.json({ error: "Invalid PayPal signature" }, { status: 400 });
   const eventType = body.event_type as string | undefined;
   const resource = body.resource as Record<string, unknown> | undefined;
   const orderId = typeof resource?.custom_id === "string" ? resource.custom_id : null;
@@ -32,6 +34,8 @@ export async function POST(request: Request) {
     await recordAutoSubscriptionPayment({
       providerSubscriptionId: billingSubscriptionId,
       providerInvoiceId: typeof resource?.id === "string" && !resource.id.startsWith("I-") ? resource.id : typeof body.id === "string" ? body.id : null,
+      receiptUrl: "https://www.paypal.com/myaccount/activities",
+      methodLabel: "PayPal automatic subscription payment",
       amount: amountInfo?.total ? Number(amountInfo.total) : amountInfo?.value ? Number(amountInfo.value) : null,
       currency: amountInfo?.currency || amountInfo?.currency_code || null,
       paidAt: typeof resource?.create_time === "string" ? new Date(resource.create_time) : new Date(),
@@ -41,7 +45,10 @@ export async function POST(request: Request) {
   }
 
   if (billingSubscriptionId && (eventType === "BILLING.SUBSCRIPTION.PAYMENT.FAILED" || eventType === "PAYMENT.SALE.DENIED")) {
+    const amountInfo = resource?.amount as { total?: string; value?: string; currency?: string; currency_code?: string } | undefined;
     await recordAutoSubscriptionFailure({
+      amount: amountInfo?.total ? Number(amountInfo.total) : amountInfo?.value ? Number(amountInfo.value) : null,
+      currency: amountInfo?.currency || amountInfo?.currency_code || null,
       providerSubscriptionId: billingSubscriptionId,
       providerInvoiceId: typeof body.id === "string" ? body.id : null,
       failedAt: new Date(),

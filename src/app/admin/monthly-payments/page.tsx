@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
@@ -54,22 +55,28 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
   const selectedMonth = params.month && /^\d{4}-\d{2}$/.test(params.month) ? params.month : monthKey(new Date());
   const selectedStatus = params.status || "PENDING";
   const records = await getAdminMonthlyPaymentRecords(selectedStatus, selectedMonth);
+  const emailCounts = await db.billingEmailJob.groupBy({ by: ["status"], _count: true });
+  const waitingEmails = emailCounts.filter(r => ["PENDING", "PROCESSING"].includes(r.status)).reduce((n, r) => n + r._count, 0);
+  const sentEmails = emailCounts.find(r => r.status === "SENT")?._count ?? 0;
+  const latestMailProblem = await db.billingEmailJob.findFirst({ where: { status: "PENDING", lastError: { not: null } }, orderBy: { updatedAt: "desc" }, select: { lastError: true } });
 
   async function activateSelected(formData: FormData) {
     "use server";
     const currentSession = await getCurrentSession();
-    if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin");
+    if (!currentSession || currentSession.user.role !== "ADMIN" || !(await canAccessAdminFinance(currentSession.user.id))) redirect("/admin");
     const recordIds = formData.getAll("recordId").map(String).filter(Boolean);
     const month = String(formData.get("month") || "");
     const status = String(formData.get("status") || "");
+    let updated = 0;
     try {
       const result = await markMonthlyPaymentsActive(recordIds, currentSession.user.id, String(formData.get("note") || ""));
       revalidatePath("/admin/monthly-payments");
       revalidatePath("/parent/profile");
-      redirect(noticeHref(`Activated ${result.updated} monthly payment row${result.updated === 1 ? "" : "s"}.`, "success", month, status));
+      updated = result.updated;
     } catch (error) {
       redirect(noticeHref(error instanceof Error ? error.message : "Unable to activate selected records.", "error", month, status));
     }
+    redirect(noticeHref(`Confirmed ${updated} monthly payment record${updated === 1 ? "" : "s"}.`, "success", month, status));
   }
 
   async function extendStripeBilling(formData: FormData) {
@@ -97,8 +104,9 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
     }
   }
 
-  const totals = records.reduce((sum, record) => sum + record.amount, 0);
-  const currency = records[0]?.currency ?? "GBP";
+  const totalsByCurrency = new Map<string, number>();
+  for (const record of records) totalsByCurrency.set(record.currency, (totalsByCurrency.get(record.currency) ?? 0) + record.amount);
+  const totalsLabel = [...totalsByCurrency].map(([currency, total]) => new Intl.NumberFormat("en-GB", { style: "currency", currency }).format(total)).join(" / ") || "0";
 
   return (
     <div className="min-h-screen bg-[#edf2f6] py-8">
@@ -108,7 +116,7 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Admin / Subscriptions</p>
               <h1 className="mt-2 text-3xl font-semibold text-[#22304a]">Monthly payment status</h1>
-              <p className="mt-2 max-w-3xl text-sm leading-7 text-[#617184]">Filter pending manual/auto subscriptions, review monthly charges, and activate records after manual payment proof is received.</p>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-[#617184]">Review pending manual fees and confirmed gateway charges. Confirm manual payments after receiving payment proof.</p>
             </div>
             <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Admin home</Link>
           </div>
@@ -116,10 +124,15 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
 
         {params.notice ? <div className={`rounded-2xl border px-4 py-3 text-sm font-semibold ${params.tone === "error" ? "border-[#efb3b3] bg-[#fff4f4] text-[#a23c3c]" : "border-[#bfe4ca] bg-[#effaf3] text-[#2f6b4b]"}`}>{params.notice}</div> : null}
 
+        <div className="rounded-2xl border border-[#dce4ed] bg-white p-5 text-sm">
+          <p className="font-semibold">Payment emails: {sentEmails} sent; {waitingEmails} queued or awaiting retry.</p>
+          <p>Manual fees use the latest completed programme order. Payment is due five days after monthly renewal; reminders stop when you confirm payment. Automatic receipts are queued after a confirmed Stripe or PayPal deduction.</p>
+          {latestMailProblem && <p className="mt-2 text-amber-800">Delivery needs attention: {latestMailProblem.lastError}. Unsent messages remain queued.</p>}
+        </div>
         <section className="grid gap-4 md:grid-cols-3">
           <div className="rounded-[22px] border border-[#dce4ed] bg-white p-5"><p className="text-sm text-[#617184]">Rows</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{records.length}</p></div>
           <div className="rounded-[22px] border border-[#dce4ed] bg-white p-5"><p className="text-sm text-[#617184]">Month</p><p className="mt-2 text-2xl font-semibold text-[#22304a]">{monthLabel(selectedMonth)}</p></div>
-          <div className="rounded-[22px] border border-[#dce4ed] bg-white p-5"><p className="text-sm text-[#617184]">Filtered total</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{new Intl.NumberFormat("en-GB", { style: "currency", currency, maximumFractionDigits: 0 }).format(totals)}</p></div>
+          <div className="rounded-[22px] border border-[#dce4ed] bg-white p-5"><p className="text-sm text-[#617184]">Filtered total</p><p className="mt-2 text-3xl font-semibold text-[#22304a]">{totalsLabel}</p></div>
         </section>
 
         <section className="rounded-[28px] border border-[#dce4ed] bg-white p-6 shadow-sm">
@@ -138,7 +151,7 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
           <input type="hidden" name="status" value={selectedStatus} />
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <label className="grid min-w-[260px] flex-1 gap-2 text-sm font-semibold text-[#22304a]">Admin note<input name="note" placeholder="Payment proof received / manual bank transfer" className="rounded-2xl border border-[#dce4ed] px-4 py-3 text-sm" /></label>
-            <button className="rounded-full bg-[#2f6b4b] px-5 py-3 text-sm font-semibold text-white">Mark selected active</button>
+            <button className="rounded-full bg-[#2f6b4b] px-5 py-3 text-sm font-semibold text-white">Confirm selected payments received</button>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-[#e6edf4]">
             <table className="min-w-[1180px] w-full text-left text-sm">
@@ -146,7 +159,7 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
               <tbody>
                 {records.map((record) => (
                   <tr key={record.id} className="border-t border-[#e6edf4] align-top">
-                    <td className="px-4 py-3"><input type="checkbox" name="recordId" value={record.id} disabled={["PAID", "ADMIN_ACTIVATED", "ACTIVE"].includes(record.status)} /></td>
+                    <td className="px-4 py-3"><input type="checkbox" name="recordId" value={record.id} disabled={!["PENDING", "FAILED"].includes(record.status)} /></td>
                     <td className="px-4 py-3"><span className={`rounded-full px-3 py-1 text-xs font-semibold ${badge(record.status)}`}>{record.status.replace(/_/g, " ")}</span></td>
                     <td className="px-4 py-3"><p className="font-semibold text-[#22304a]">{record.parent.user.firstName} {record.parent.user.lastName}</p><p className="text-xs text-[#617184]">{record.parent.user.email}</p></td>
                     <td className="px-4 py-3">{record.childName}</td>

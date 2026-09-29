@@ -18,6 +18,8 @@ const CRITICAL_TEMPLATES = new Set([
   "scholarshipRejected",
   "dashboardUnlocked",
   "monthlyPaymentReceipt",
+  "monthlyPaymentPending",
+  "monthlyPaymentReminder",
   "monthlyPaymentActivated",
 ]);
 const TIME_SENSITIVE_TEMPLATES = new Set([
@@ -47,6 +49,10 @@ function getOptionalEmailConfig() {
 }
 
 export async function sendTransactionalEmail(input: SendEmailInput) {
+  if (input.deduplicationKey?.startsWith("billing:")) {
+    const delivered = await db.emailLog.findFirst({ where: { toEmail: input.toEmail, status: "SENT", payload: { path: "$.deduplicationKey", equals: input.deduplicationKey } }, select: { id: true } });
+    if (delivered) return { skipped: false as const, failed: false as const };
+  }
   const config = getOptionalEmailConfig();
 
   if (!config) {
@@ -104,11 +110,14 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     return { skipped: true as const };
   }
   reservedSends += 1;
+  try {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
+    signal: AbortSignal.timeout(20000),
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
+      ...(input.deduplicationKey?.startsWith("billing:") ? { "Idempotency-Key": input.deduplicationKey } : {}),
     },
     body: JSON.stringify({
       from: config.from,
@@ -133,7 +142,6 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     },
   });
 
-  reservedSends = Math.max(0, reservedSends - 1);
 
   if (!response.ok) {
     return {
@@ -144,4 +152,5 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
   }
 
   return { skipped: false as const, failed: false as const };
+  } finally { reservedSends = Math.max(0, reservedSends - 1); }
 }

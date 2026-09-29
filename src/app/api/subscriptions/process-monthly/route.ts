@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { env } from "@/lib/env";
-import { createDueMonthlyPaymentRecords, sendPendingPaymentReminders } from "@/lib/payments/monthly-ledger";
+import { processBillingNotifications } from "@/lib/payments/billing-worker";
 
 function authorized(request: NextRequest) {
   const secret = env.success ? env.data.CRON_SECRET : process.env.CRON_SECRET;
@@ -15,7 +15,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const created = await createDueMonthlyPaymentRecords();
-  const reminded = await sendPendingPaymentReminders();
-  return NextResponse.json({ ok: true, ...created, ...reminded });
+  return NextResponse.json({ ok: true, ...(await processBillingNotifications()) });
 }

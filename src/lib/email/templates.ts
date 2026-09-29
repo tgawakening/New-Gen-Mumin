@@ -24,7 +24,7 @@ function renderRows(sections: EmailTemplateInput["sections"] = []) {
         <tr>
           <td style="padding:12px 0;border-bottom:1px solid #efe3d3;">
             <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#c27a2c;font-weight:700;">${escapeHtml(section.label)}</div>
-            <div style="margin-top:6px;font-size:15px;line-height:1.7;color:#314258;">${escapeHtml(section.value)}</div>
+            <div style="margin-top:6px;font-size:15px;line-height:1.7;color:#314258;white-space:pre-line;">${escapeHtml(section.value)}</div>
           </td>
         </tr>`,
     )

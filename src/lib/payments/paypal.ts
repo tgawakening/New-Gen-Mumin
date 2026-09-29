@@ -20,13 +20,14 @@ type PayPalInput = {
   countryCode: string;
 };
 
-async function getAccessToken() {
+export async function getAccessToken() {
   const clientId = getPayPalClientId();
   const clientSecret = getPayPalClientSecret();
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
 
   const response = await fetch(`${getPayPalBaseUrl()}/v1/oauth2/token`, {
     method: "POST",
+    signal: AbortSignal.timeout(15000),
     headers: {
       Authorization: `Basic ${credentials}`,
       "Content-Type": "application/x-www-form-urlencoded",

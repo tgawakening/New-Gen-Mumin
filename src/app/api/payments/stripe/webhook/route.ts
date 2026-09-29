@@ -1,3 +1,5 @@
+import { stripeSubscriptionId } from "@/lib/payments/billing-policy";
+import { stripeReceiptDetails, ensureStripeBillingSubscription } from "@/lib/payments/stripe-receipt";
 import Stripe from "stripe";
 
 import { getStripeWebhookSecret } from "@/lib/payments/config";
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
     const session = event.data.object as Stripe.Checkout.Session;
     const orderId = session.metadata?.orderId;
 
-    if (orderId) {
+    if (orderId && session.payment_status === "paid") {
       await markOrderPaid(orderId, {
         providerPaymentId: session.payment_intent?.toString() ?? null,
         providerReference: session.id,
@@ -38,13 +40,17 @@ export async function POST(request: Request) {
 
   if (event.type === "invoice.payment_succeeded") {
     const invoice = event.data.object as Stripe.Invoice;
-    const invoiceRecord = invoice as Stripe.Invoice & { subscription?: string | { id?: string } | null };
-    const subscriptionId = typeof invoiceRecord.subscription === "string" ? invoiceRecord.subscription : invoiceRecord.subscription?.id ?? null;
+    const subscriptionId = stripeSubscriptionId(invoice);
     if (subscriptionId) {
+      await ensureStripeBillingSubscription(stripe, subscriptionId);
       await recordAutoSubscriptionPayment({
         providerSubscriptionId: subscriptionId,
         providerInvoiceId: invoice.id,
-        amount: invoice.amount_paid ? invoice.amount_paid / 100 : null,
+        amount: invoice.amount_paid / 100,
+        ...(await stripeReceiptDetails(stripe, invoice)),
+        initialPayment: invoice.billing_reason === "subscription_create",
+        periodStart: invoice.lines.data[0]?.period ? new Date(invoice.lines.data[0].period.start * 1000) : undefined,
+        periodEnd: invoice.lines.data[0]?.period ? new Date(invoice.lines.data[0].period.end * 1000) : undefined,
         currency: invoice.currency?.toUpperCase() ?? null,
         paidAt: invoice.status_transitions?.paid_at ? new Date(invoice.status_transitions.paid_at * 1000) : new Date(),
         rawPayload: invoice,
@@ -55,13 +61,13 @@ export async function POST(request: Request) {
 
   if (event.type === "invoice.payment_failed") {
     const invoice = event.data.object as Stripe.Invoice;
-    const invoiceRecord = invoice as Stripe.Invoice & { subscription?: string | { id?: string } | null };
-    const subscriptionId = typeof invoiceRecord.subscription === "string" ? invoiceRecord.subscription : invoiceRecord.subscription?.id ?? null;
+    const subscriptionId = stripeSubscriptionId(invoice);
     if (subscriptionId) {
+      await ensureStripeBillingSubscription(stripe, subscriptionId);
       await recordAutoSubscriptionFailure({
         providerSubscriptionId: subscriptionId,
         providerInvoiceId: invoice.id,
-        amount: invoice.amount_due ? invoice.amount_due / 100 : null,
+        amount: invoice.amount_due / 100,
         currency: invoice.currency?.toUpperCase() ?? null,
         failedAt: new Date(),
         rawPayload: invoice,
