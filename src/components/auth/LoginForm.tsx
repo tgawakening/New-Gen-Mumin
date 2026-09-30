@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
-export function LoginForm({ initialError }: { initialError?: string }) {
+export function LoginForm({ initialError, nextPath }: { initialError?: string; nextPath?: string }) {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -15,6 +15,7 @@ export function LoginForm({ initialError }: { initialError?: string }) {
       onSubmit={() => setIsSubmitting(true)}
       autoComplete="on"
     >
+      {nextPath && <input type="hidden" name="next" value={nextPath} />}
       <input name="email" autoComplete="email" autoCapitalize="none" autoCorrect="off" type="email" placeholder="Email" className="w-full rounded-2xl border border-slate-200 px-4 py-3" required />
       <div className="relative">
         <input name="password" autoComplete="current-password" autoCapitalize="none" autoCorrect="off" type={showPassword ? "text" : "password"} placeholder="Password" className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-20" required />

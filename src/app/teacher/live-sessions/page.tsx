@@ -1,3 +1,4 @@
+import { CopyStudentJoinLink } from "@/components/dashboard/teacher/CopyStudentJoinLink";
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
@@ -209,14 +210,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                   </a>
                 ) : null}
                 {entry.meetingUrl ? (
-                  <a
-                    href={entry.meetingUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
-                  >
-                    Open Zoom link
-                  </a>
+                  <CopyStudentJoinLink scheduleId={entry.id} />
                 ) : null}
                 <Link
                   href={`/teacher/live-sessions/${entry.id}/roster`}

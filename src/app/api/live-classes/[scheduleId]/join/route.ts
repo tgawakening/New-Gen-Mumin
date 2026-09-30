@@ -1,3 +1,5 @@
+import { sharedJoinStudents } from "@/lib/live-classes/shared-join";
+import { recordPortalClassJoin } from "@/lib/live-classes/portal-join";
 import { after, NextRequest, NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
@@ -84,4 +86,28 @@ export async function GET(request: NextRequest, context: RouteContext) {
     });
   });
   return NextResponse.redirect(schedule.meetingUrl, 307);
+}
+/** Shared links only record attendance after an authenticated, explicit join. */
+export async function POST(request: NextRequest, context: RouteContext) {
+  const { scheduleId } = await context.params;
+  const destination = new URL("/join/" + encodeURIComponent(scheduleId), request.url);
+  const origin = request.headers.get("origin");
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
+  if (!origin || new URL(origin).host !== host || request.headers.get("sec-fetch-site") === "cross-site") return NextResponse.json({ error: "Unauthorized request" }, { status: 403 });
+  const session = await getCurrentSession();
+  if (!session) return NextResponse.redirect(new URL("/auth/login?next=" + encodeURIComponent(destination.pathname), request.url), 303);
+  try {
+    const form = await request.formData();
+    const studentId = form.get("student");
+    const schedule = await db.classSchedule.findUnique({ where: { id: scheduleId }, select: { programId: true } });
+    if (!schedule || typeof studentId !== "string") return NextResponse.json({ error: "Invalid class or learner" }, { status: 400 });
+    const students = await sharedJoinStudents(scheduleId, schedule.programId, session.user);
+    if (!students.some(student => student.id === studentId)) return NextResponse.json({ error: "This learner is not on your account and class roster." }, { status: 403 });
+    const meetingUrl = await recordPortalClassJoin(scheduleId, studentId, session.user.id);
+    return NextResponse.redirect(meetingUrl, 303);
+  } catch (error) {
+    console.error("[shared-class-join] Could not complete tracked join", error);
+    destination.searchParams.set("error", "retry");
+    return NextResponse.redirect(destination, 303);
+  }
 }

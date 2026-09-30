@@ -1,6 +1,7 @@
+import { safeJoinReturn } from "@/lib/auth/join-return";
 import { LoginForm } from "@/components/auth/LoginForm";
 
-export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ error?: string }> }) {
+export default async function LoginPage({ searchParams }: { searchParams?: Promise<{ error?: string; next?: string }> }) {
   const params = searchParams ? await searchParams : {};
   return (
     <div className="min-h-[70vh] bg-[#FDF6EF] py-16">
@@ -13,7 +14,7 @@ export default async function LoginPage({ searchParams }: { searchParams?: Promi
             Use your parent or teacher account to review registration drafts, continue payment, open the family dashboard, or publish course content from the teacher workspace.
           </p>
           </div>
-          <LoginForm initialError={params.error} />
+          <LoginForm initialError={params.error} nextPath={safeJoinReturn(params.next) ?? undefined} />
         </div>
       </div>
     </div>

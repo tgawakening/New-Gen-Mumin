@@ -1,3 +1,4 @@
+import { CopyStudentJoinLink } from "@/components/dashboard/teacher/CopyStudentJoinLink";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -56,13 +57,7 @@ export function TeacherHomeDashboard({
                         >
                           Join as member
                         </a>
-                        <Link
-                          href={entry.meetingUrl}
-                                target="_blank"
-                                className="rounded-full border border-[#cdd9e4] bg-white px-3 py-1.5 text-xs font-semibold text-[#0f4d81]"
-                              >
-                                Open Zoom link
-                        </Link>
+                        <CopyStudentJoinLink scheduleId={entry.id} />
                             </div>
                           ) : null}
                         </div>

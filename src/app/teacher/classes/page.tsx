@@ -1,3 +1,4 @@
+import { CopyStudentJoinLink } from "@/components/dashboard/teacher/CopyStudentJoinLink";
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -318,13 +319,7 @@ export default async function TeacherClassesPage({ searchParams }: PageProps) {
                         >
                           Join as member
                         </a>
-                        <Link
-                          href={classInfo.meetingUrl}
-                          target="_blank"
-                          className="rounded-full border border-[#cdd9e4] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"
-                        >
-                          Open Zoom link
-                        </Link>
+                        <CopyStudentJoinLink scheduleId={classInfo.id} />
                       </div>
                     ) : null}
                   </>
