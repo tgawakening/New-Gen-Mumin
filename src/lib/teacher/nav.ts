@@ -4,6 +4,7 @@ export function getTeacherNavItems() {
     { label: "Roster", href: "/teacher/roster", icon: "check" },
     { label: "Live Sessions", href: "/teacher/live-sessions", icon: "video" },
     { label: "Classes", href: "/teacher/classes", icon: "classes" },
+    { label: "Payslips", href: "/teacher/payroll", icon: "reports" },
     { label: "Hours Log", href: "/teacher/hours-log", icon: "reports" },
     { label: "Recordings", href: "/teacher/recordings", icon: "video" },
     { label: "Schedule", href: "/teacher/schedule", icon: "calendar" },

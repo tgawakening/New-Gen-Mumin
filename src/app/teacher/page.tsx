@@ -1,3 +1,7 @@
+import Link from "next/link";
+import { publishedPayslips } from "@/lib/payroll/service";
+import { PayslipCard } from "@/components/payroll/PayslipCard";
+import type { PayrollSnapshot } from "@/lib/payroll/calculation";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -16,6 +20,7 @@ export default async function TeacherDashboardPage() {
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
+  const latestPayslip = (await publishedPayslips(session.user.id, 1))[0];
   const qabilas = await db.communityRoomSupervisor.findMany({
     where: { userId: session.user.id, room: { isActive: true, type: "PROJECT_TEAM" } },
     orderBy: { room: { title: "asc" } },
@@ -29,6 +34,7 @@ export default async function TeacherDashboardPage() {
       navItems={getTeacherNavItems()}
     >
       <FamilyJourneyLinks role="teacher" />
+      {latestPayslip && <div className="space-y-3"><PayslipCard id={latestPayslip.id} snapshot={latestPayslip.publishedData as unknown as PayrollSnapshot} /><Link href="/teacher/payroll" className="inline-block text-sm font-semibold underline">View all payslips</Link></div>}
       <TeacherHomeDashboard dashboard={dashboard} leaderboard={<QabilaLeaderboardOverview audience="teacher" />} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
     </TeacherDashboardFrame>
   );

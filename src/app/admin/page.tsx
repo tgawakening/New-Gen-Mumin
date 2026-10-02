@@ -996,6 +996,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     ...TABS.filter((tab) => canViewFinance || tab.key !== "orders").map((tab) => ({ key: tab.key, label: tab.label, href: tabHref(tab.key), icon: tab.icon })),
     { key: "classes", label: "Live Classes", href: "/admin/classes", icon: BookOpen },
     { key: "recordings", label: "Recordings", href: "/admin/recordings", icon: BookOpen },
+    ...(canViewFinance ? [{ key: "teacher-payroll", label: "Teacher Payroll", href: "/admin/payroll", icon: ClipboardCheck }] : []),
     { key: "hours-log", label: "Hours Log", href: "/admin/hours-log", icon: ClipboardCheck },
     ...(canViewFinance ? [{ key: "monthly-payments", label: "Monthly Payments", href: "/admin/monthly-payments", icon: Banknote }] : []),
     { key: "community", label: "Community", href: "/admin/community", icon: Users },

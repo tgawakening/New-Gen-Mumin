@@ -145,6 +145,8 @@ model TeacherProfile {
   programAssignments TeacherProgram[]
   hoursLogEntries    TeacherHoursLogEntry[]
   hoursSubmissions   TeacherHoursSubmission[]
+  payslips           TeacherPayslip[]
+  payrollSettings    TeacherPayrollSettings?
 }
 
 model TeacherProgram {
@@ -1754,4 +1756,40 @@ model BillingEmailJob {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   @@index([status, nextAttemptAt])
+}
+
+model TeacherPayrollSettings {
+  teacherId String @id
+  driveFolderId String?
+  showPkr Boolean @default(false)
+  updatedAt DateTime @updatedAt
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+}
+
+model TeacherPayslip {
+  id String @id @default(cuid())
+  teacherId String
+  month String @db.VarChar(7)
+  draftData Json
+  publishedData Json?
+  version Int @default(1)
+  publishedAt DateTime?
+  updatedByUserId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  teacher TeacherProfile @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  revisions TeacherPayslipRevision[]
+  @@unique([teacherId, month])
+  @@index([teacherId, publishedAt])
+}
+
+model TeacherPayslipRevision {
+  id String @id @default(cuid())
+  payslipId String
+  version Int
+  snapshot Json
+  publishedByUserId String
+  publishedAt DateTime @default(now())
+  payslip TeacherPayslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
+  @@unique([payslipId, version])
 }
