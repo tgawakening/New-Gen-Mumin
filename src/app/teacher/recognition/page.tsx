@@ -1,3 +1,5 @@
+import { RecognitionWeekSelector } from "@/components/dashboard/teacher/RecognitionWeekSelector";
+import { currentRecognitionWeek, validRecognitionWeek, recognitionWeekLabel } from "@/lib/community/recognition-week";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { Award, CalendarDays, FileText, Sparkles, Trash2 } from "lucide-react";
@@ -19,13 +21,7 @@ const BONUS: Record<string, number> = { MUMIN_OF_WEEK: 150, HELPER: 10, COURAGEO
 
 type Props = { searchParams?: Promise<{ awarded?: string; removed?: string; error?: string; certificate?: string }> };
 
-function weekKey(value = new Date()) {
-  const [year, month, day] = pointDayKey(value).split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  const daysSinceMonday = (date.getUTCDay() + 6) % 7;
-  date.setUTCDate(date.getUTCDate() - daysSinceMonday);
-  return date.toISOString().slice(0, 10);
-}
+
 
 export default async function TeacherRecognitionPage({ searchParams }: Props) {
   const session = await getCurrentSession();
@@ -56,6 +52,8 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     const evidence = String(formData.get("evidence") || "").trim().slice(0, certificateAward ? 240 : 500);
     const beneficiaryStudentId = String(formData.get("beneficiaryStudentId") || "") || undefined;
     const weekly = certificateAward;
+    const selectedWeek = String(formData.get("featuredWeek") || "");
+    if (weekly && !validRecognitionWeek(selectedWeek)) redirect("/teacher/recognition?error=Choose%20a%20valid%20current%20or%20past%20week.");
     const permittedBadges = new Set([...MANUAL.map((badge) => badge.key), WEEKLY_BADGE_KEY]);
     const eligible = new Set(currentDashboard.rosters.flatMap((roster) => roster.students.map((student) => student.id)));
 
@@ -69,9 +67,9 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       evidence,
       awardedByUserId: current.user.id,
       sourceType: weekly ? "WEEKLY_NOMINATION" : "TEACHER_NOMINATION",
-      sourceId: weekly ? `${current.user.id}:${badgeKey}:${weekKey()}` : `${current.user.id}:${badgeKey}:${pointDayKey()}`,
+      sourceId: weekly ? `${current.user.id}:${badgeKey}:${selectedWeek}` : `${current.user.id}:${badgeKey}:${pointDayKey()}`,
       pointsBonus: BONUS[badgeKey] ?? 10,
-      featuredWeek: weekly ? weekKey() : undefined,
+      featuredWeek: weekly ? selectedWeek : undefined,
       beneficiaryStudentId: weekly ? undefined : beneficiaryStudentId,
     });
 
@@ -111,10 +109,10 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       <TeacherSection eyebrow="Weekly recognition" title="Award Mumin of the Week">
         <div className="mb-5 grid gap-3 rounded-[24px] border border-[#f0cd89] bg-gradient-to-r from-[#fff8e8] to-[#fffdf8] p-5 sm:grid-cols-[auto_1fr]">
           <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#172b49] text-[#f7bd59]"><Award className="h-7 w-7" /></span>
-          <div><p className="font-black text-[#22304a]">Celebrate character—not points alone.</p><p className="mt-1 text-sm leading-6 text-[#617184]">Choose a learner you directly observed this week and write the exact reason. Their named certificate will appear immediately on the student and parent rewards dashboards.</p></div>
+          <div><p className="font-black text-[#22304a]">Celebrate character—not points alone.</p><p className="mt-1 text-sm leading-6 text-[#617184]">Choose a learner you directly observed during the selected week and write the exact reason. Their named certificate will appear immediately on the student and parent rewards dashboards.</p></div>
         </div>
         <form action={nominate} className="grid gap-4 lg:grid-cols-2">
-          <input type="hidden" name="awardKind" value="certificate" />
+          <input type="hidden" name="awardKind" value="certificate" /><RecognitionWeekSelector currentWeek={currentRecognitionWeek()} currentMonth={pointDayKey().slice(0,7)} />
           <label className="grid gap-2 text-sm font-bold text-[#22304a]">Certificate recipient
             <select name="studentId" required className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Choose roster student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
           </label>
@@ -146,7 +144,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
         <div className="grid gap-3">
           {recentAwards.map((award) => {
             const learnerName = award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
-            return <article key={award.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dce4ed] bg-[#f8fafc] p-4"><div><p className="font-black text-[#22304a]">{award.title} · {learnerName}</p><p className="mt-1 text-sm text-[#617184]">{award.evidence}</p><p className="mt-1 text-xs text-[#8793a3]">{award.awardedAt.toLocaleDateString("en-GB")} · {award.pointsBonus} points</p></div><div className="flex items-center gap-2"><a href={`/certificates/${award.certificateCode}`} className="rounded-full border border-[#c8d5e3] bg-white px-4 py-2 text-xs font-bold text-[#24466e]">Open certificate</a><details className="relative"><summary className="cursor-pointer list-none rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-xs font-bold text-[#b24646]">Remove</summary><form action={removeAward} className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-[#efb3b3] bg-white p-4 shadow-xl"><input type="hidden" name="awardId" value={award.id}/><p className="text-xs leading-5 text-[#617184]">Remove this certificate and reverse its awarded points?</p><button className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#b24646] px-4 py-2 text-xs font-bold text-white"><Trash2 className="h-3.5 w-3.5"/>Yes, remove award</button></form></details></div></article>;
+            return <article key={award.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dce4ed] bg-[#f8fafc] p-4"><div><p className="font-black text-[#22304a]">{award.title} · {learnerName}</p><p className="mt-1 text-sm text-[#617184]">{award.featuredWeek ? <span className="block font-semibold">Week: {recognitionWeekLabel(award.featuredWeek)}</span> : null}{award.evidence}</p><p className="mt-1 text-xs text-[#8793a3]">{award.awardedAt.toLocaleDateString("en-GB")} · {award.pointsBonus} points</p></div><div className="flex items-center gap-2"><a href={`/certificates/${award.certificateCode}`} className="rounded-full border border-[#c8d5e3] bg-white px-4 py-2 text-xs font-bold text-[#24466e]">Open certificate</a><details className="relative"><summary className="cursor-pointer list-none rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-xs font-bold text-[#b24646]">Remove</summary><form action={removeAward} className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-[#efb3b3] bg-white p-4 shadow-xl"><input type="hidden" name="awardId" value={award.id}/><p className="text-xs leading-5 text-[#617184]">Remove this certificate and reverse its awarded points?</p><button className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#b24646] px-4 py-2 text-xs font-bold text-white"><Trash2 className="h-3.5 w-3.5"/>Yes, remove award</button></form></details></div></article>;
           })}
           {!recentAwards.length ? <p className="rounded-2xl bg-[#f8fafc] p-5 text-sm text-[#617184]">You have not assigned any certificates or badges yet.</p> : null}
         </div>
