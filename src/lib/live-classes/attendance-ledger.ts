@@ -1,7 +1,7 @@
 ﻿import "server-only";
 import { createHash } from "crypto";
 import { Prisma } from "@prisma/client";
-import { attendanceDayKey, alternativeAttendanceSubject } from "@/lib/live-classes/attendance-policy";
+import { ATTENDANCE_POINTS, attendanceDayKey, alternativeAttendanceSubject } from "@/lib/live-classes/attendance-policy";
 
 export type AttendancePointSchedule = { id: string; title: string; program: { title: string } };
 
@@ -34,6 +34,6 @@ export async function attendancePointState(tx: Prisma.TransactionClient, student
 }
 
 export function parentAttendancePointDelta(status: "PRESENT" | "ABSENT", state: { parentBalance: number; verifiedBalance: number }) {
-  const target = status === "PRESENT" && state.verifiedBalance <= 0 ? 5 : 0;
+  const target = status === "PRESENT" ? Math.max(0, ATTENDANCE_POINTS - state.verifiedBalance) : 0;
   return target - state.parentBalance;
 }

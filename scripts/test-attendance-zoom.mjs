@@ -3,7 +3,7 @@ import test from 'node:test';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { createRequire } from 'node:module';
-import { connectedMinutes, attendanceDayKey } from '../src/lib/live-classes/attendance-policy.ts';
+import { ATTENDANCE_POINTS, connectedMinutes, attendanceDayKey } from '../src/lib/live-classes/attendance-policy.ts';
 const require = createRequire(import.meta.url);
 const ts = require('typescript');
 
@@ -39,7 +39,7 @@ function harness(participants, matched = false) {
   const deps = {
     'server-only': {}, '@prisma/client': { Prisma: {} }, '@/lib/db': { db },
     '@/lib/community/point-awards': { pointDayKey: attendanceDayKey, awardHousePointsOnce: async () => {}, HOUSE_POINT_RULES: { ATTENDANCE_LATE: { points: 5, label: 'Late award' }, ATTENDANCE_ON_TIME: { points: 25, label: 'On time award' } } }, '@/lib/env': {},
-    '@/lib/live-classes/attendance-policy': { connectedMinutes, attendanceDayKey },
+    '@/lib/live-classes/attendance-policy': { ATTENDANCE_POINTS, connectedMinutes, attendanceDayKey },
     '@/lib/community/house-points': { ensureStudentHouseMembership: async () => ({ houseId: 'house' }) },
     '@/lib/live-classes/attendance-ledger': { lockAttendanceStudent: async () => {}, attendancePointState: async () => ({ key: 'class-day', parentBalance: 0, verifiedBalance: ledger.reduce((sum, entry) => sum + entry.points, 0) }) },
     '@/lib/zoom/client': { getZoomPastMeetingParticipants: async () => participants },
@@ -80,7 +80,7 @@ test('verified late join is immediately present, before leaving or meeting end',
   assert.equal(attendance[0].status, 'PRESENT');
   assert.equal(attendance[0].durationMinutes, 0);
   assert.equal(attendance[0].leftAt, null);
-  assert.equal(ledger[0].points, 5);
+  assert.equal(ledger[0].points, 25);
   await api.recordZoomParticipantJoined('schedule', event);
   assert.equal(attendance.length, 1);
   assert.equal(attendance[0].status, 'PRESENT');

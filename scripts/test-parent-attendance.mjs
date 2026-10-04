@@ -78,17 +78,17 @@ test('date list groups alternate sessions and labels missing Zoom matches unconf
  const h=harness();const result=await h.service.getParentAttendanceRecovery('parent','child');
  assert.deepEqual(Array.from(result.rows[0].teacherNames),['Mehran','Sabah']);assert.equal(result.rows.length,1);assert.equal(result.rows[0].alternatives,2);assert.equal(result.rows[0].status,'NEEDS_CONFIRMATION');
 });
-test('parent confirmation updates both slots, awards five once, and preserves unknown minutes',async()=>{
+test('parent confirmation updates both slots, awards 25 once, and preserves unknown minutes',async()=>{
  const h=harness();const changes=[{key:h.key,status:'PRESENT'}];
  await h.service.confirmParentAttendance('parent','child',changes);
  await h.service.confirmParentAttendance('parent','child',changes);
  assert.ok(h.records.every(r=>r.status==='PRESENT'&&r.source==='parent-confirmed'&&r.durationMinutes===null&&r.joinedAt===null));
- assert.equal(h.ledger.length,1);assert.equal(h.ledger[0].points,5);assert.equal(h.audit.length,1);assert.equal(h.audit[0].parentUserId,'parent');
+ assert.equal(h.ledger.length,1);assert.equal(h.ledger[0].points,25);assert.equal(h.audit.length,1);assert.equal(h.audit[0].parentUserId,'parent');
 });
 test('correction reverses only confirmation points and permits a later correction back',async()=>{
  const h=harness();
  for(const status of ['PRESENT','ABSENT','PRESENT'])await h.service.confirmParentAttendance('parent','child',[{key:h.key,status}]);
- assert.deepEqual(h.ledger.map(r=>r.points),[5,-5,5]);assert.equal(h.audit.length,3);
+ assert.deepEqual(h.ledger.map(r=>r.points),[25,-25,25]);assert.equal(h.audit.length,3);
 });
 test('simultaneous parent submissions award once',async()=>{
  const h=harness();await Promise.all([1,2].map(()=>h.service.confirmParentAttendance('parent','child',[{key:h.key,status:'PRESENT'}])));
@@ -124,7 +124,7 @@ test('a points failure rolls back attendance and its audit',async()=>{
 test('a later Zoom report sees the parent reward and must not award again',async()=>{
  const h=harness();await h.service.confirmParentAttendance('parent','child',[{key:h.key,status:'PRESENT'}]);
  const state=await ledgerModule.attendancePointState(h.db,'child',h.schedules[1],new Date('2026-09-05T14:00:00Z'));
- assert.equal(state.parentBalance+state.verifiedBalance,5);
+ assert.equal(state.parentBalance+state.verifiedBalance,25);
 });
 
 test('batch save reads attendance and point history once under the learner lock',async()=>{
@@ -140,7 +140,7 @@ test('batch save reads attendance and point history once under the learner lock'
  h.db.attendanceRecord.findMany=async args=>{attendanceReads++;return readAttendance(args);};
  h.db.housePointLedger.findMany=async args=>{pointReads++;return readPoints(args);};
  const result=await h.service.confirmParentAttendance('parent','child',data.rows.map(r=>({key:r.key,status:'PRESENT'})));
- assert.equal(result.saved,2);assert.equal(result.pointsDelta,10);
+ assert.equal(result.saved,2);assert.equal(result.pointsDelta,50);
  assert.equal(attendanceReads,1);assert.equal(pointReads,1);
 });
 

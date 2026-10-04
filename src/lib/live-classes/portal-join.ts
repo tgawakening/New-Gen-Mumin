@@ -1,7 +1,8 @@
 import "server-only";
+import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
 import { ensureStudentHouseMembership } from "@/lib/community/house-points";
-import { attendanceDayKey } from "@/lib/live-classes/attendance-policy";
+import { ATTENDANCE_POINTS, attendanceDayKey } from "@/lib/live-classes/attendance-policy";
 import { attendancePointState, lockAttendanceStudent } from "@/lib/live-classes/attendance-ledger";
 
 export async function recordPortalClassJoin(scheduleId: string, studentId: string, userId: string) {
@@ -24,7 +25,8 @@ export async function recordPortalClassJoin(scheduleId: string, studentId: strin
       await tx.attendanceRecord.update({ where: { id: existing.id }, data: { status: "PRESENT" } });
     }
     const points = await attendancePointState(tx, studentId, schedule, occurrence.startedAt);
-    if (points.parentBalance + points.verifiedBalance <= 0) await tx.housePointLedger.create({ data: { studentId, houseId: membership.houseId, points: 5, reason: "Joined class: " + schedule.title + " (" + attendanceDay + ")", sourceType: "ATTENDANCE_PORTAL", sourceId: points.key + ":portal" } });
+    const delta = Math.max(0, ATTENDANCE_POINTS - points.parentBalance - points.verifiedBalance);
+    if (delta) await tx.housePointLedger.create({ data: { studentId, houseId: membership.houseId, points: delta, reason: "Joined class: " + schedule.title + " (" + attendanceDay + ")", sourceType: "ATTENDANCE_PORTAL", sourceId: points.key + ":portal:" + randomUUID() } });
     await tx.zoomJoinIntent.create({ data: { scheduleId, studentId, userId } });
     return schedule.meetingUrl;
   }, { maxWait: 10000, timeout: 30000 });

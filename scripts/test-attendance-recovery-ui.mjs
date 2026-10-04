@@ -18,7 +18,7 @@ test('parent recovery screen distinguishes selectable missing attendance from pr
   {key:'pending',day:'2026-09-05',title:'Seerah',teacherNames:['Mehran','Sabah'],status:'NEEDS_CONFIRMATION',locked:false,alternatives:2},
   {key:'verified',day:'2026-09-06',title:'Arabic',teacherNames:['Abdul Badee'],status:'PRESENT',locked:true,alternatives:1},
  ]}));
- assert.match(html,/Teacher: Mehran, Sabah/);assert.doesNotMatch(html,/Teacher: Abdul Badee/);assert.match(html,/Confirm past attendance/);assert.match(html,/5 points/);assert.match(html,/Needs confirmation/);
+ assert.match(html,/Teacher: Mehran, Sabah/);assert.doesNotMatch(html,/Teacher: Abdul Badee/);assert.match(html,/Confirm past attendance/);assert.match(html,/25 points/);assert.match(html,/Needs confirmation/);
  assert.doesNotMatch(html,/Present .*verified/);assert.equal((html.match(/<select/g)||[]).length,1);assert.match(html,/Attend either time slot/);
 });
 test('empty session lists explain missing dates without inventing classes',()=>{
@@ -31,14 +31,14 @@ test('server action blocks non-parents and validates confirmation and payload',a
  const {saveAttendanceConfirmations}=load('../src/app/parent/attendance/actions.ts',{
   'next/cache':{revalidatePath:()=>{}},
   '@/lib/auth/session':{getCurrentSession:async()=>({user:{id:'parent',role}})},
-  '@/lib/live-classes/parent-attendance':{AttendanceConfirmationError,confirmParentAttendance:async()=>{called++;return{saved:1,pointsDelta:5};}},
+  '@/lib/live-classes/parent-attendance':{AttendanceConfirmationError,confirmParentAttendance:async()=>{called++;return{saved:1,pointsDelta:25};}},
  });
  const form=new FormData();form.set('studentId','child');form.set('changes',JSON.stringify([{key:'a'.repeat(64),status:'PRESENT'}]));form.set('confirmed','yes');
  assert.match((await saveAttendanceConfirmations({},form)).error,/parent account/);assert.equal(called,0);
  role='PARENT';form.delete('confirmed');assert.match((await saveAttendanceConfirmations({},form)).error,/confirm/);
  form.set('confirmed','yes');form.set('changes','broken');assert.match((await saveAttendanceConfirmations({},form)).error,/valid attendance/);assert.equal(called,0);
  form.set('changes',JSON.stringify([{key:'a'.repeat(64),status:'PRESENT'}]));
- assert.match((await saveAttendanceConfirmations({},form)).message,/\+5 points/);assert.equal(called,1);
+ assert.match((await saveAttendanceConfirmations({},form)).message,/\+25 points/);assert.equal(called,1);
 });
 
 test('interrupted save requests stay inside the form instead of throwing to the portal boundary', async () => {

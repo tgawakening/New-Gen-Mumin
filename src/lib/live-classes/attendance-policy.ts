@@ -1,3 +1,6 @@
+/** One award contributes equally to the learner and their Qabila. */
+export const ATTENDANCE_POINTS = 25;
+
 ﻿/** Alternative Seerah / Life Skills slots fulfil one requirement per PKT day. */
 export function attendanceDayKey(value: Date) {
   return new Intl.DateTimeFormat("en-CA", {

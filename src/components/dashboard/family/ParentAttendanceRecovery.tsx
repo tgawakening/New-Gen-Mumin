@@ -30,7 +30,7 @@ export function ParentAttendanceRecovery({ studentId, rows, audit }: { studentId
   const selections = Object.entries(changes).filter(([key, status]) => unresolved.some((row) => row.key === key && !row.locked && row.status !== status)).map(([key, status]) => ({ key, status }));
   return <section id="confirm-attendance" className="scroll-mt-24 rounded-[26px] border border-[#eadfce] bg-white p-5">
     <h2 className="text-xl font-semibold text-[#22304a]">Confirm past attendance</h2>
-    <p className="mt-2 text-sm text-[#617184]">Review completed classes from 1 September 2026. Each newly confirmed attended class earns 5 points unless attendance points were already awarded. Same-day Seerah and Life Skills alternatives count once. Unconfirmed dates do not lower attendance.</p>
+    <p className="mt-2 text-sm text-[#617184]">Review completed classes from 1 September 2026. Each newly confirmed attended class earns 25 points unless attendance points were already awarded. Same-day Seerah and Life Skills alternatives count once. Unconfirmed dates do not lower attendance.</p>
     <p className="mt-2 text-sm text-[#617184]">Only unconfirmed sessions appear here. Already tracked and saved Present/Absent sessions remain in attendance history. Joining times and minutes remain unrecorded unless Zoom captured them.</p>
     {state.message ? <p role="status" className="mt-4 rounded-xl bg-green-50 p-3 text-sm text-green-800">{state.message}</p> : null}
     {state.error ? <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-800">{state.error}</p> : null}

@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { db } from "@/lib/db";
 import { loadRecoveryGroups } from "@/lib/live-classes/parent-attendance";
-import { attendanceDayKey, deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
+import { ATTENDANCE_POINTS, attendanceDayKey, deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
 import { attendancePointState, lockAttendanceStudent, parentAttendancePointDelta } from "@/lib/live-classes/attendance-ledger";
 import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 
@@ -111,7 +111,7 @@ export async function saveAdminAttendance(userId: string, raw: RecoveryInput) {
       else if (!matched.length) newRecords.push({ ...data, id: randomUUID(), studentId: input.studentId, enrollmentId: slot.enrollmentId, scheduleId: slot.scheduleId, lessonDate: slot.date, attendanceDay: group.day });
     }
     const oldEstimateBalance = snapshot.rows.filter(row => row.sourceType === "ATTENDANCE_ADMIN_ESTIMATE" && row.sourceId?.startsWith(`${reportId}:`)).reduce((sum, row) => sum + row.points, 0);
-    const adjustment = -estimatedMissed * 5 - oldEstimateBalance;
+    const adjustment = -estimatedMissed * ATTENDANCE_POINTS - oldEstimateBalance;
     pointsDelta += adjustment;
     if (adjustment) credits.push({ studentId: input.studentId, houseId: membership.houseId, points: adjustment, sourceType: "ATTENDANCE_ADMIN_ESTIMATE", sourceId: `${reportId}:${revisionId}`, reason: `Parent-reported missed-class adjustment: ${estimatedMissed} missed, dates unknown (${input.from} to ${input.to}).` });
     for (const bucket of updates.values()) await tx.attendanceRecord.updateMany({ where: { id: { in: bucket.ids } }, data: bucket.data });

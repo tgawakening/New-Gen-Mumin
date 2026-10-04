@@ -1,7 +1,7 @@
 import "server-only";
-import { attendanceDayKey, connectedMinutes } from "@/lib/live-classes/attendance-policy";
+import { ATTENDANCE_POINTS, attendanceDayKey, connectedMinutes } from "@/lib/live-classes/attendance-policy";
 
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 
 import { db } from "@/lib/db";
 import { pointDayKey } from "@/lib/community/point-awards";
@@ -116,10 +116,11 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
     else await tx.attendanceRecord.create({ data });
     if (occurrence) {
       const state = await attendancePointState(tx, studentId, schedule, occurrence.startedAt);
-      if (state.parentBalance + state.verifiedBalance <= 0) await tx.housePointLedger.create({ data: {
-        studentId, houseId: membership.houseId, points: 5,
+      const delta = Math.max(0, ATTENDANCE_POINTS - state.parentBalance - state.verifiedBalance);
+      if (delta) await tx.housePointLedger.create({ data: {
+        studentId, houseId: membership.houseId, points: delta,
         reason: `Attended class: ${cleanLiveClassTitle(schedule.title)} (${attendanceDay})`,
-        sourceType: "ATTENDANCE_VERIFIED", sourceId: `${state.key}:zoom`,
+        sourceType: "ATTENDANCE_VERIFIED", sourceId: `${state.key}:zoom:${randomUUID()}`,
       } });
     }
   }, { maxWait: 10000, timeout: 30000 });
