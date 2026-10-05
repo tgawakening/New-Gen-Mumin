@@ -18,6 +18,7 @@ const CRITICAL_TEMPLATES = new Set([
   "scholarshipRejected",
   "dashboardUnlocked",
   "monthlyPaymentReceipt",
+  "teacherPayrollPublished",
   "monthlyPaymentPending",
   "monthlyPaymentReminder",
   "monthlyPaymentActivated",
@@ -49,7 +50,7 @@ function getOptionalEmailConfig() {
 }
 
 export async function sendTransactionalEmail(input: SendEmailInput) {
-  if (input.deduplicationKey?.startsWith("billing:")) {
+  if ((input.deduplicationKey?.startsWith("billing:") || input.deduplicationKey?.startsWith("payroll:"))) {
     const delivered = await db.emailLog.findFirst({ where: { toEmail: input.toEmail, status: "SENT", payload: { path: "$.deduplicationKey", equals: input.deduplicationKey } }, select: { id: true } });
     if (delivered) return { skipped: false as const, failed: false as const };
   }
@@ -117,7 +118,7 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      ...(input.deduplicationKey?.startsWith("billing:") ? { "Idempotency-Key": input.deduplicationKey } : {}),
+      ...((input.deduplicationKey?.startsWith("billing:") || input.deduplicationKey?.startsWith("payroll:")) ? { "Idempotency-Key": input.deduplicationKey } : {}),
     },
     body: JSON.stringify({
       from: config.from,

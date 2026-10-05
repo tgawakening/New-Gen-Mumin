@@ -27,7 +27,7 @@ export function PayrollEditor({teacherId,teacherName,month,initial,initialVersio
    const response=await fetch("/api/admin/payroll",{method:"POST",body:form});
    const result=await response.json();if(!response.ok)throw new Error(result.error||"Save failed.");
    setVersion(result.version);setId(result.id);setInput(result.snapshot);setRemoveProof(false);setConfirmed(false);if(file.current)file.current.value="";
-   setMessage(result.published?"Published. This payslip is now visible on the teacher's dashboard.":"Draft saved. Unpublished edits are visible only to finance admins.");
+   setMessage(result.published?"Published. This payslip is now visible on the teacher's dashboard. A payroll summary email has been queued for the teacher.":"Draft saved. Unpublished edits are visible only to finance admins.");
   }catch(error){setMessage((error as Error).message||"Connection interrupted. Reload to check the saved version before retrying.");}finally{submitting.current=false;setPending(false);}
  }
  return <div className="space-y-6"><section className="space-y-5 rounded-3xl border border-[#dce4ec] bg-[#f5f8fa] p-5">

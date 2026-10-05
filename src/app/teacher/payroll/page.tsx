@@ -7,8 +7,9 @@ import { publishedPayslips } from "@/lib/payroll/service";
 import { monthLabel, validMonth, type PayrollSnapshot } from "@/lib/payroll/calculation";
 export const dynamic="force-dynamic";
 export default async function TeacherPayrollPage({searchParams}:{searchParams:Promise<{month?:string}>}) {
- const session=await getCurrentSession();if(!session)redirect("/auth/login");if(session.user.role!=="TEACHER")redirect(getDashboardHome(session.user.role));
  const query=await searchParams;
+ const returnPath=query.month&&validMonth(query.month)?"/teacher/payroll?month="+query.month:null;
+ const session=await getCurrentSession();if(!session)redirect(returnPath?"/auth/login?next="+encodeURIComponent(returnPath):"/auth/login");if(session.user.role!=="TEACHER")redirect(getDashboardHome(session.user.role));
  const slips=await publishedPayslips(session.user.id,120);
  const selected=query.month&&validMonth(query.month)?query.month:slips[0]?.month;
  const slip=slips.find(s=>s.month===selected);

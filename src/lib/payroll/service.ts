@@ -1,4 +1,5 @@
 import "server-only";
+import { queuePayrollEmail } from "./email-queue";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCurrentSession } from "@/lib/auth/session";
@@ -59,7 +60,10 @@ export async function savePayroll(form: FormData) {
    const data = {draftData:json,version:nextVersion,updatedByUserId:actor.id,...(mode==="publish"?{publishedData:json,publishedAt:new Date()}: {})};
    const slip = current ? await tx.teacherPayslip.update({where:{id:current.id},data}) : await tx.teacherPayslip.create({data:{teacherId,month,...data}});
    await tx.teacherPayrollSettings.upsert({where:{teacherId},create:{teacherId,driveFolderId:folder,showPkr:input.showPkr},update:{driveFolderId:folder,showPkr:input.showPkr}});
-   if(mode==="publish") await tx.teacherPayslipRevision.create({data:{payslipId:slip.id,version:nextVersion,snapshot:json,publishedByUserId:actor.id}});
+   if(mode==="publish") {
+    await tx.teacherPayslipRevision.create({data:{payslipId:slip.id,version:nextVersion,snapshot:json,publishedByUserId:actor.id}});
+    await queuePayrollEmail(tx,slip.id,nextVersion,teacher.user.email);
+   }
    return {id:slip.id,version:nextVersion,snapshot,published:mode==="publish"};
  },{maxWait:10000,timeout:15000});
 }
