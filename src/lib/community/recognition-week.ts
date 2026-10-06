@@ -29,3 +29,12 @@ export function recognitionMonthWeeks(month: string, currentWeek: string) {
  }
  return weeks;
 }
+
+/** Only the award's nominated week controls the active dashboard spotlight. */
+export function weeklyRecognitionFilter(badgeKey: "MUM_OF_WEEK" | "MUMIN_OF_WEEK", now = new Date()) {
+ return { badgeKey, featuredWeek: currentRecognitionWeek(now), isPublic: true, revokedAt: null };
+}
+export function currentWeeklyRecognition<T extends { badgeKey: string; featuredWeek?: string | null; isPublic?: boolean; revokedAt?: Date | null }>(awards: T[], now = new Date()) {
+ const week = currentRecognitionWeek(now);
+ return awards.find(award => award.badgeKey === "MUMIN_OF_WEEK" && award.featuredWeek === week && award.isPublic !== false && !award.revokedAt) ?? null;
+}

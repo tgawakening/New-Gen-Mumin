@@ -1,3 +1,5 @@
+import { RecognitionHistory } from "./RecognitionHistory";
+import { currentWeeklyRecognition } from "@/lib/community/recognition-week";
 import { PointsHistory } from "@/components/dashboard/family/PointsHistory";
 import Image from "next/image";
 import Link from "next/link";
@@ -71,7 +73,7 @@ function BadgeMedallion({ index, earned }: { index: number; earned: boolean }) {
 
 export function InteractiveRewardsDashboard({ data, parentView = false }: { data: Data; parentView?: boolean }) {
   const name = studentName(data);
-  const featured = data.awards.find((award) => award.featuredWeek) ?? data.awards[0] ?? null;
+  const featured = currentWeeklyRecognition(data.awards);
   const earnedByKey = new Map(data.awards.map((award) => [award.badgeKey, award]));
   const nextPoints = data.nextUnlock ? Math.max(0, data.nextUnlock.milestone - data.collective) : 0;
   const unlockTarget = data.nextUnlock?.milestone ?? Math.max(100, data.collective);
@@ -176,6 +178,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
           </div>
         </div>      </section>
 
+      <RecognitionHistory awards={data.awards} />
       <PointsHistory entries={data.pointsHistory} />
       <section className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm sm:p-6">

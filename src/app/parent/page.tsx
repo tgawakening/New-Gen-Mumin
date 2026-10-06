@@ -1,3 +1,4 @@
+import { weeklyRecognitionFilter } from "@/lib/community/recognition-week";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -120,12 +121,12 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
   }
 
   const parentProfileId = dashboard.parentProfile.id;
-  const parentAwardResult = await loadOptionalDashboardSection("parent recognition", () => db.parentRecognitionAward.findFirst({ where: { parentId: parentProfileId, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true, recipientName: true } }), null);
+  const parentAwardResult = await loadOptionalDashboardSection("parent recognition", () => db.parentRecognitionAward.findFirst({ where: { parentId: parentProfileId, ...weeklyRecognitionFilter("MUM_OF_WEEK") }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, awardedAt: true, recipientName: true } }), null);
   const latestParentAward = parentAwardResult.data;
   const params = searchParams ? await searchParams : {};
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
-  const childAwardResult = await loadOptionalDashboardSection("child recognition", async () => selectedChild ? await db.recognitionAward.findFirst({ where: { studentId: selectedChild.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } }) : null, null);
+  const childAwardResult = await loadOptionalDashboardSection("child recognition", async () => selectedChild ? await db.recognitionAward.findFirst({ where: { studentId: selectedChild.id, ...weeklyRecognitionFilter("MUMIN_OF_WEEK") }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } }) : null, null);
   const latestChildAward = childAwardResult.data;
   const showAddChildModal = params?.addChild === "1";
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && selectedChild && !hasFullGenM(selectedChild);

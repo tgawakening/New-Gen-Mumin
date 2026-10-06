@@ -1,3 +1,4 @@
+import { weeklyRecognitionFilter } from "@/lib/community/recognition-week";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -108,7 +109,7 @@ export default async function StudentDashboardPage() {
     getStudentQuestData(child.id, programIds),
     getStudentCommunityData(session.user.id),
   ]);
-  const latestChildAward = await db.recognitionAward.findFirst({ where: { studentId: child.id, isPublic: true, revokedAt: null, featuredWeek: { not: null } }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } });
+  const latestChildAward = await db.recognitionAward.findFirst({ where: { studentId: child.id, ...weeklyRecognitionFilter("MUMIN_OF_WEEK") }, orderBy: { awardedAt: "desc" }, select: { certificateCode: true, title: true, evidence: true, student: { select: { registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } });
   const nextClassRoom = child.nextClass
     ? child.courses.find((course) => course.title === child.nextClass?.title)?.roomAssignment ?? null
     : null;

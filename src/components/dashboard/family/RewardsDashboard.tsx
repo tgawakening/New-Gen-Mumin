@@ -1,3 +1,4 @@
+import { currentWeeklyRecognition } from "@/lib/community/recognition-week";
 export { InteractiveRewardsDashboard as RewardsDashboard } from "@/components/dashboard/family/InteractiveRewardsDashboard";
 import Image from "next/image";
 import Link from "next/link";
@@ -10,7 +11,7 @@ type Data = Awaited<ReturnType<typeof getRecognitionDashboard>>;
 
 export function LegacyRewardsDashboard({ data, parentView = false }: { data: Data; parentView?: boolean }) {
   const name = data.student?.displayName || [data.student?.user.firstName, data.student?.user.lastName].filter(Boolean).join(" ") || "Student";
-  const featured = data.awards.find((award) => award.featuredWeek);
+  const featured = currentWeeklyRecognition(data.awards);
   const gender = data.student?.registrationStudents[0]?.gender?.toLowerCase() ?? "";
   const characterSrc = gender.includes("girl") || gender.includes("female") ? "/gen-mumin-chars/girl-certificate-v2.png" : "/gen-mumin-chars/boy-certificate-v2.png";
   return <div className="space-y-5">
