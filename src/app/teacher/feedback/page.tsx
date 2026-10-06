@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { isFeedbackReviewer } from "@/lib/feedback/monthly";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { FeedbackAudience } from "@prisma/client";
@@ -189,6 +191,7 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
       subtitle="Submit teaching reflections, workload signals, student support needs, and operational blockers."
       navItems={getTeacherNavItems()}
     >
+      {isFeedbackReviewer(session.user) && <Link href="/feedback/monthly" className="block rounded-2xl border border-amber-200 bg-amber-50 p-5 font-semibold text-[#22304a]">Monthly parent feedback: review family answers and download spreadsheet</Link>}
       <ActionToast message={params.error ? params.error : params.submitted ? "Teacher feedback submitted." : undefined} tone={params.error ? "error" : undefined} />
 
       <TeacherMetricGrid

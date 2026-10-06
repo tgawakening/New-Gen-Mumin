@@ -40,6 +40,7 @@ model User {
   sessions          Session[]
   studentProfile    StudentProfile?
   teacherProfile    TeacherProfile?
+  monthlyFeedback MonthlyParentFeedback[]
   feedbackResponses WeeklyFeedbackResponse[]
   zoomJoinIntents    ZoomJoinIntent[]
 }
@@ -107,6 +108,7 @@ model StudentProfile {
   programRosters          TeacherStudentRoster[]
   scheduleRosters         ClassScheduleRoster[]
   user                    User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthlyFeedback         MonthlyParentFeedback[]
   feedbackResponses       WeeklyFeedbackResponse[]
   fardhPrayerDays         FardhPrayerDay[]
   monthlyPayments         MonthlyPaymentRecord[]
@@ -1792,4 +1794,20 @@ model TeacherPayslipRevision {
   publishedAt DateTime @default(now())
   payslip TeacherPayslip @relation(fields: [payslipId], references: [id], onDelete: Cascade)
   @@unique([payslipId, version])
+}
+
+model MonthlyParentFeedback {
+  id String @id @default(cuid())
+  studentId String
+  submittedById String
+  month String @db.VarChar(7)
+  schemaVersion Int @default(1)
+  details Json
+  answers Json
+  submittedAt DateTime @default(now())
+  student StudentProfile @relation(fields: [studentId], references: [id])
+  submittedBy User @relation(fields: [submittedById], references: [id])
+  @@unique([studentId, month])
+  @@index([submittedById])
+  @@index([month, submittedAt])
 }

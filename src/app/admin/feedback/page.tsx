@@ -128,6 +128,7 @@ export default async function AdminFeedbackPage() {
               <p className="mt-1 text-sm text-[#617184]">Review student, parent, and teacher signals across the platform.</p>
             </div>
             <div className="flex flex-wrap gap-2">
+              <Link href="/feedback/monthly" className="rounded-full bg-amber-100 px-4 py-2 text-sm font-semibold text-[#22304a]">Monthly parent feedback</Link>
               <Link href="/api/admin/feedback/export?audience=PARENT" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">
                 Export parent feedback
               </Link>
