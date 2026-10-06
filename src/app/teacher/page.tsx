@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { publishedPayslips } from "@/lib/payroll/service";
 import { PayslipCard } from "@/components/payroll/PayslipCard";
@@ -54,7 +55,7 @@ export default async function TeacherDashboardPage() {
           </div>
         </details>
       )}
-      <TeacherHomeDashboard dashboard={dashboard} leaderboard={<QabilaLeaderboardOverview audience="teacher" />} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
+      <TeacherHomeDashboard dashboard={dashboard} leaderboard={<Suspense fallback={<p className="text-sm text-slate-500">Loading community overview...</p>}><QabilaLeaderboardOverview audience="teacher" /></Suspense>} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
     </TeacherDashboardFrame>
   );
 }

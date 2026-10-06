@@ -44,7 +44,7 @@ export function getParentNavItems(childId?: string) {
     { label: "Recordings", href: `/parent/recordings${suffix}`, icon: "video" as const },
     { label: "Curriculum", href: `/parent/courses${suffix}`, icon: "book" as const },
     { label: "Progress", href: `/parent/progress${suffix}`, icon: "chart" as const },
-    { label: "Feedback", href: `/parent/feedback${suffix}`, icon: "journal" as const },
+    { label: "Monthly feedback", href: `/parent/feedback${suffix}`, icon: "journal" as const },
     { label: "Profile", href: `/parent/profile${suffix}`, icon: "profile" as const },
   ];
 }

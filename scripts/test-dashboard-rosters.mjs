@@ -84,3 +84,12 @@ test('verified live classes survive an old timetable end date for assigned learn
  assert.equal(exports.map(source,{id:'current'},new Map([['live',['current']]])).length,1);
  assert.equal(exports.map(source,{id:'other'},new Map([['live',['current']]])).length,0);
 });
+
+test('schedule metadata is preloaded once before resolving any learner roster', async () => {
+ const calls = [];
+ const resolve = Object.assign(async id => { calls.push(id); return ['child']; }, { preload: async ids => { calls.push(ids.join(',')); } });
+ const result = await loadDashboardScheduleRosters([learner('a','b'), learner('a')], resolve);
+ assert.equal(calls[0], 'a,b');
+ assert.equal(calls.length, 3);
+ assert.equal(result.get('b')[0], 'child');
+});

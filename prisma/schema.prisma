@@ -1818,3 +1818,16 @@ model MonthlyParentFeedback {
   @@index([submittedById])
   @@index([month, submittedAt])
 }
+
+// Staff-only practice responses never enter family feedback totals or email delivery.
+model MonthlyFeedbackDemo {
+ id String @id @default(cuid())
+ userId String
+ month String @db.VarChar(7)
+ version Int @default(1)
+ details Json
+ answers Json
+ submittedAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ @@unique([userId, month])
+}

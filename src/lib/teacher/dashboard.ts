@@ -8,8 +8,7 @@ import {
   enrollmentMatchesLiveClassAudience,
   getLiveClassAudienceGroup,
   getLiveClassAudienceLabel,
-  getProgramEligibleRosterStudents,
-  getScheduleRosterStudentIds,
+  createReadOnlyRosterResolver,
   getTeacherProgramRosterEntries,
   getTeacherRosterAssignments,
 } from "@/lib/live-classes/service";
@@ -137,7 +136,8 @@ export type TeacherDashboardData = {
 };
 
 export const getTeacherDashboardData = cache(async function getTeacherDashboardData(userId: string) {
-  const teacherProfile = await db.teacherProfile.findUnique({
+  const resolveRoster = createReadOnlyRosterResolver();
+  const [teacherProfile] = await Promise.all([db.teacherProfile.findUnique({
     where: { userId },
     include: {
       user: true,
@@ -256,7 +256,7 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
         },
       },
     },
-  });
+  }), resolveRoster.warm()]);
 
   if (!teacherProfile) {
     return null;
@@ -317,9 +317,10 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
       )
     : teacherProfile.classSchedules;
   const uniqueSchedules = Array.from(new Map(programmeSchedules.map((schedule) => [schedule.id, schedule])).values());
+  await resolveRoster.preload(uniqueSchedules.map(schedule => schedule.id));
   const scheduleRosterIdsBySchedule = new Map(
     await Promise.all(
-      uniqueSchedules.map(async (schedule) => [schedule.id, new Set(await getScheduleRosterStudentIds(schedule.id))] as const),
+      uniqueSchedules.map(async (schedule) => [schedule.id, new Set(await resolveRoster(schedule.id))] as const),
     ),
   );
 
@@ -349,7 +350,7 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
     };
   });
 
-  const programRosterEntries = await getTeacherProgramRosterEntries(teacherProfile.id);
+  const programRosterEntries = await getTeacherProgramRosterEntries(teacherProfile.id, resolveRoster.read);
   const rosterStudentIdsByProgram = new Map<string, Set<string>>();
   for (const rosterEntry of programRosterEntries) {
     const studentSet = rosterStudentIdsByProgram.get(rosterEntry.programId) ?? new Set<string>();
@@ -363,7 +364,7 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
     await Promise.all(
       rosterAssignments.map(async (assignment) => [
         assignment.program.id,
-        await getProgramEligibleRosterStudents(assignment.program.id),
+        await resolveRoster.read.eligible(assignment.program.id),
       ] as const),
     ),
   );

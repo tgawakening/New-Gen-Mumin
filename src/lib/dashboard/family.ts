@@ -1322,7 +1322,8 @@ async function getParentProfile(userId: string) {
 }
 
 export const getParentDashboardData = cache(async function getParentDashboardData(userId: string) {
-  const [parentProfile, parentalSchedules] = await Promise.all([getParentProfile(userId), getParentalSessionSchedules()]);
+  const resolveRoster = createReadOnlyRosterResolver();
+  const [parentProfile, parentalSchedules] = await Promise.all([getParentProfile(userId), getParentalSessionSchedules(), resolveRoster.warm()]);
 
   if (!parentProfile) {
     return null;
@@ -1370,7 +1371,7 @@ export const getParentDashboardData = cache(async function getParentDashboardDat
   const hasUnlockedAccess =
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
-  const resolvedRosters = await loadDashboardScheduleRosters(resolvedChildren, createReadOnlyRosterResolver());
+  const resolvedRosters = await loadDashboardScheduleRosters(resolvedChildren, resolveRoster);
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked

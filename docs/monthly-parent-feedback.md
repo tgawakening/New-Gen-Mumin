@@ -33,3 +33,9 @@ The original submitting parent can edit or delete their response while still lin
 Deletion physically removes the response, cascades linked portal notifications and deletes feedback outbox jobs; it frees the child/month uniqueness slot for a new submission. Current report queries and future exports exclude deleted responses. Messages already delivered or exports already downloaded cannot be recalled. A send already in flight may still finish.
 
 Apply `20261006150000_communications_feedback_edits` using `scripts/apply-communications-feedback-migration.mjs --apply` before deploying the new version. The migration adds the role, response version/update time and cascading notification relation. Older notifications are linked conservatively when editing/deleting a legacy response.
+
+## Communications test form
+Maliha can open Communications > Monthly feedback to complete the same three-step parent form with sample family details. Submissions live in MonthlyFeedbackDemo, unique per staff account/month, and are explicitly labelled dummy. She can edit or delete them. They are excluded from real family counts, reports, CSVs, notifications and emails. Access is restricted to active COMMUNICATIONS accounts; mutation requests require the portal origin and current revision.
+
+## Portal loading
+Dashboard roster reads preload schedule metadata and share eligibility candidates once per request, preserving programme eligibility and canonical student mapping. Teacher dashboard reads no longer trigger registration or roster repairs. Parent and teacher optional community overviews stream separately. There is no cross-family or persistent cache of private dashboard data.

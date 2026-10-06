@@ -18,6 +18,7 @@ function harness() {
    classSchedule: { findUnique: async () => { calls.schedule++; return { teacherId:'teacher', programId:'program' }; } },
    studentProfile: { findMany: async () => [{ id:'old', displayName:'Child', user:{firstName:'Child'}, registrationStudents:[] }] },
   },
+  loadRosterCandidates: async () => [],
   getProgramEligibleRosterStudents: async (id, repair) => {
    assert.equal(repair, false, 'dashboard must not repair registrations'); calls.eligible++;
    return [{id:'current',displayName:'Child',user:{firstName:'Child'},registrationStudents:[]}];
@@ -57,4 +58,23 @@ test('missing recovery audit table leaves an isolated, usable fallback', async (
  });
  const result=await exports.RecoverySection({parentUserId:'parent',studentId:'child'});
  assert.equal(result.type,'section');assert.equal(result.props.title,'Corrections temporarily unavailable');assert.equal(logged,true);
+});
+
+test('shared eligibility candidates retain programme boundaries and cancelled enrolments', async () => {
+ const fn=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='getProgramEligibleRosterStudents').getText(ast);
+ const exports={};
+ vm.runInNewContext(ts.transpileModule(fn,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{
+  exports,db:{program:{findUnique:async({where})=>({id:where.id,slug:where.id})}},
+  isArabicTajweedSlug:slug=>['arabic','tajweed'].includes(slug),
+  ACTIVE_ENROLLMENT_STATUSES:['ACTIVE','CONFIRMED','COMPLETED'], PAID_REGISTRATION_STATUSES:['PAID','CONVERTED'],
+  EXCLUDED_ROSTER_STUDENT_IDS:new Set(),MANUALLY_CANCELLED_ROSTER_NAMES:new Set(['cancelled']),CANCELLED_ROSTER_PARENT_EMAIL_PARTS:[],ROSTER_NAME_ALIASES:new Map(),
+  offerIncludesProgram:(offer,program)=>offer.slug===program.slug,
+  ensurePaidRegistrationAccessForProgram:()=>{throw Error('write forbidden');},loadRosterCandidates:()=>{throw Error('shared candidates were ignored');},
+ });
+ const student=(id,slug,status='ACTIVE')=>({id,displayName:id,user:{firstName:id,email:id+'@test'},parents:[],registrationStudents:[],enrollments:[{program:{slug},status}]});
+ const candidates=Promise.resolve([[student('Arabic child','arabic'),student('Seerah child','seerah'),student('Inactive','seerah','CANCELLED'),student('Cancelled','seerah')],[]]);
+ const seerah=await exports.getProgramEligibleRosterStudents('seerah',false,candidates);
+ assert.deepEqual(Array.from(seerah,s=>s.id),['Seerah child']);
+ const arabic=await exports.getProgramEligibleRosterStudents('tajweed',false,candidates);
+ assert.deepEqual(Array.from(arabic,s=>s.id),['Arabic child']);
 });

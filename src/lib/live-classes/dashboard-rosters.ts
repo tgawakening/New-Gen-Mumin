@@ -5,11 +5,12 @@ type ScheduleSource = {
 
 export async function loadDashboardScheduleRosters(
   students: ScheduleSource[],
-  resolveRoster: (scheduleId: string) => Promise<string[]>,
+  resolveRoster: ((scheduleId: string) => Promise<string[]>) & { preload?: (ids: string[]) => Promise<void> },
 ): Promise<Map<string, readonly string[]>> {
   const scheduleIds = new Set(students.flatMap((student) =>
     student.enrollments.flatMap((enrollment) => enrollment.program.schedules.map((schedule) => schedule.id)),
   ));
+  if (scheduleIds.size) await resolveRoster.preload?.([...scheduleIds]);
   const rosters = new Map<string, readonly string[]>();
   const pending = [...scheduleIds];
   // Bound database fan-out on pages with many class schedules.

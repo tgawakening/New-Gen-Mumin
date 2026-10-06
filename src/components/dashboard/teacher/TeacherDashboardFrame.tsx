@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ReactNode } from "react";
+import { ReactNode, Suspense } from "react";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt";
@@ -26,7 +26,7 @@ export async function TeacherDashboardFrame({
   children: ReactNode;
 }) {
   const session = await getCurrentSession();
-  const activityNavItems = session ? await getNavigationActivity(session.user.id, navItems) : navItems;
+
   return (
     <div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#1c2b45] bg-[linear-gradient(135deg,#14243d_0%,#22304a_55%,#36536f_100%)] text-white shadow-[0_18px_50px_rgba(20,36,61,0.22)]">
@@ -46,12 +46,12 @@ export async function TeacherDashboardFrame({
               >
                 Main site
               </Link>
-              <NotificationBell />
+              <Suspense fallback={null}><NotificationBell /></Suspense>
               <FamilyLogoutButton />
             </div>
           </div>
           <PwaInstallPrompt audience="teacher" />
-          <MobileTeacherNavRailClient navItems={activityNavItems} />
+          <Suspense fallback={<MobileTeacherNavRailClient navItems={navItems} />}><TeacherActivityNavigation userId={session?.user.id} navItems={navItems} /></Suspense>
         </div>
       </div>
 
@@ -139,4 +139,9 @@ export function formatDate(value: Date | null) {
     month: "short",
     year: "numeric",
   }).format(value);
+}
+
+async function TeacherActivityNavigation({ userId, navItems }: { userId?: string; navItems: NavItem[] }) {
+ const items = userId ? await getNavigationActivity(userId, navItems) : navItems;
+ return <MobileTeacherNavRailClient navItems={items} />;
 }

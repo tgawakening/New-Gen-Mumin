@@ -268,7 +268,7 @@ function isRosterTableUnavailable(error: unknown) {
   );
 }
 
-export async function getTeacherProgramRosterEntries(teacherId: string) {
+export async function getTeacherProgramRosterEntries(teacherId: string, read?: RosterReadContext) {
   try {
     const rosterEntries = await db.teacherStudentRoster.findMany({
       where: { teacherId },
@@ -277,7 +277,7 @@ export async function getTeacherProgramRosterEntries(teacherId: string) {
     const programIds = [...new Set(rosterEntries.map((entry) => entry.programId))];
     const eligibleByProgram = await Promise.all(
       programIds.map(async (programId) => {
-        const eligible = await getProgramEligibleRosterStudents(programId);
+        const eligible = await (read ? read.eligible(programId) : getProgramEligibleRosterStudents(programId));
         return [programId, new Set(eligible.map((student) => student.id))] as const;
       }),
     );
@@ -334,6 +334,7 @@ export function getTeacherRosterProgramIds(
     .map((assignment) => assignment.programId);
 }
 type RosterReadContext = {
+  schedule?: (id: string) => Promise<{ teacherId: string; programId: string; scheduleRosters: Array<{ studentId: string }> } | null>;
   eligible: (programId: string) => ReturnType<typeof getProgramEligibleRosterStudents>;
   teacher: (teacherId: string, programId: string) => Promise<string[]>;
 };
@@ -509,25 +510,13 @@ async function ensurePaidRegistrationAccessForProgram(program: { id: string; slu
     }
   }
 }
-export async function getProgramEligibleRosterStudents(programId: string, repairAccess = true) {
-  const program = await db.program.findUnique({
-    where: { id: programId },
-    select: { id: true, slug: true },
-  });
-
-  if (!program) {
-    return [];
-  }
-
-  if (repairAccess) await ensurePaidRegistrationAccessForProgram(program);
-
-  const compatibleProgramSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
-  const [directEnrollmentStudents, paidRegistrationStudents] = await Promise.all([
+async function loadRosterCandidates(compatibleProgramSlugs?: string[]) {
+  return Promise.all([
     db.studentProfile.findMany({
       where: {
         enrollments: {
           some: {
-            program: { slug: { in: compatibleProgramSlugs } },
+            ...(compatibleProgramSlugs ? { program: { slug: { in: compatibleProgramSlugs } } } : {}),
             status: { in: [...ACTIVE_ENROLLMENT_STATUSES] },
           },
         },
@@ -536,8 +525,8 @@ export async function getProgramEligibleRosterStudents(programId: string, repair
         user: true,
         parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { id: true, firstName: true, lastName: true, email: true, phoneCountryCode: true } } } } } },
         enrollments: {
-          where: { program: { slug: { in: compatibleProgramSlugs } } },
-          select: { status: true },
+          where: compatibleProgramSlugs ? { program: { slug: { in: compatibleProgramSlugs } } } : undefined,
+          select: { status: true, program: { select: { slug: true } } },
         },
         registrationStudents: {
           include: {
@@ -582,8 +571,8 @@ export async function getProgramEligibleRosterStudents(programId: string, repair
             user: true,
             parents: { select: { parentId: true, parent: { select: { billingCountryCode: true, billingCountryName: true, user: { select: { id: true, firstName: true, lastName: true, email: true, phoneCountryCode: true } } } } } },
             enrollments: {
-              where: { program: { slug: { in: compatibleProgramSlugs } } },
-              select: { status: true },
+              where: compatibleProgramSlugs ? { program: { slug: { in: compatibleProgramSlugs } } } : undefined,
+              select: { status: true, program: { select: { slug: true } } },
             },
             registrationStudents: {
               include: {
@@ -635,6 +624,25 @@ export async function getProgramEligibleRosterStudents(programId: string, repair
       },
     }),
   ]);
+}
+
+export async function getProgramEligibleRosterStudents(programId: string, repairAccess = true, candidates?: ReturnType<typeof loadRosterCandidates>) {
+  const program = await db.program.findUnique({
+    where: { id: programId },
+    select: { id: true, slug: true },
+  });
+
+  if (!program) {
+    return [];
+  }
+
+  if (repairAccess) await ensurePaidRegistrationAccessForProgram(program);
+
+  const compatibleProgramSlugs = isArabicTajweedSlug(program.slug) ? ["arabic", "tajweed"] : [program.slug];
+  const [allDirect, allPaid] = await (candidates ?? loadRosterCandidates(compatibleProgramSlugs));
+  const inProgram = (enrollment: { program: { slug: string } }) => compatibleProgramSlugs.includes(enrollment.program.slug);
+  const directEnrollmentStudents = allDirect.map(student => ({ ...student, enrollments: student.enrollments.filter(inProgram) })).filter(student => student.enrollments.some(e => ACTIVE_ENROLLMENT_STATUSES.includes(e.status as (typeof ACTIVE_ENROLLMENT_STATUSES)[number])));
+  const paidRegistrationStudents = allPaid.map(entry => ({ ...entry, studentProfile: entry.studentProfile ? { ...entry.studentProfile, enrollments: entry.studentProfile.enrollments.filter(inProgram) } : null }));
 
   const studentsById = new Map<string, (typeof directEnrollmentStudents)[number]>();
 
@@ -732,9 +740,10 @@ export async function getScheduleRosterCandidates(programId: string, title: stri
 }
 
 export async function getScheduleRosterStudentIds(scheduleId: string, read?: RosterReadContext) {
+  const preloaded = read?.schedule ? await read.schedule(scheduleId) : undefined;
   let scheduleRoster: Array<{ studentId: string }> = [];
   try {
-    scheduleRoster = await db.classScheduleRoster.findMany({
+    scheduleRoster = preloaded !== undefined ? (preloaded?.scheduleRosters ?? []) : await db.classScheduleRoster.findMany({
       where: { scheduleId },
       select: { studentId: true },
     });
@@ -746,7 +755,7 @@ export async function getScheduleRosterStudentIds(scheduleId: string, read?: Ros
     }
   }
 
-  const schedule = await db.classSchedule.findUnique({
+  const schedule = preloaded !== undefined ? preloaded : await db.classSchedule.findUnique({
     where: { id: scheduleId },
     select: {
       teacherId: true,
@@ -803,12 +812,13 @@ export async function getScheduleRosterStudentIds(scheduleId: string, read?: Ros
 
 /** Request-local caches: portal reads must never repair registrations or write rosters. */
 export function createReadOnlyRosterResolver() {
+  let candidates: ReturnType<typeof loadRosterCandidates> | undefined;
   const programs = new Map<string, ReturnType<typeof getProgramEligibleRosterStudents>>();
   const teachers = new Map<string, Promise<string[]>>();
   const schedules = new Map<string, Promise<string[]>>();
   const read: RosterReadContext = {
     eligible(programId) {
-      if (!programs.has(programId)) programs.set(programId, getProgramEligibleRosterStudents(programId, false));
+      if (!programs.has(programId)) programs.set(programId, getProgramEligibleRosterStudents(programId, false, candidates ??= loadRosterCandidates()));
       return programs.get(programId)!;
     },
     teacher(teacherId, programId) {
@@ -817,10 +827,14 @@ export function createReadOnlyRosterResolver() {
       return teachers.get(key)!;
     },
   };
-  return (scheduleId: string) => {
+  return Object.assign((scheduleId: string) => {
     if (!schedules.has(scheduleId)) schedules.set(scheduleId, getScheduleRosterStudentIds(scheduleId, read));
     return schedules.get(scheduleId)!;
-  };
+  }, { read, warm() { return (candidates ??= loadRosterCandidates()).then(() => undefined); }, preload(ids: string[]) {
+    const batch = db.classSchedule.findMany({ where: { id: { in: ids } }, select: { id: true, teacherId: true, programId: true, scheduleRosters: { select: { studentId: true } } } }).then(rows => new Map(rows.map(row => [row.id, row])));
+    read.schedule = async id => (await batch).get(id) ?? null;
+    return batch.then(() => undefined);
+  } });
 }
 
 /** The authoritative learner set for live access and automatic attendance. */

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { weeklyRecognitionFilter } from "@/lib/community/recognition-week";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -203,7 +204,7 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
                     )}
                   </SectionCard>
       ) : null}
-      <QabilaLeaderboardOverview audience="parent" />
+      <Suspense fallback={<p className="text-sm text-slate-500">Loading community overview...</p>}><QabilaLeaderboardOverview audience="parent" /></Suspense>
       {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={latestParentAward.recipientName || dashboard.parentName} /> : null}
       {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={latestChildAward.student.registrationStudents[0]?.gender} parentView /> : null}
       <LiveQuizAutoRefresh intervalMs={60000} enabled />
