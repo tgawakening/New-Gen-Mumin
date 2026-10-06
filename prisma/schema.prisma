@@ -1091,6 +1091,9 @@ model ReminderLog {
 }
 
 model Notification {
+  monthlyFeedbackId String?
+  monthlyFeedback MonthlyParentFeedback? @relation(fields: [monthlyFeedbackId], references: [id], onDelete: Cascade)
+  @@index([monthlyFeedbackId])
   id        String    @id @default(cuid())
   userId    String
   title     String
@@ -1497,6 +1500,7 @@ enum UserRole {
   TEACHER
   PARENT
   STUDENT
+  COMMUNICATIONS
 }
 
 enum UserStatus {
@@ -1797,6 +1801,9 @@ model TeacherPayslipRevision {
 }
 
 model MonthlyParentFeedback {
+  version Int @default(1)
+  updatedAt DateTime @default(now()) @updatedAt
+  notifications Notification[]
   id String @id @default(cuid())
   studentId String
   submittedById String

@@ -1,11 +1,12 @@
+import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
-import { canReviewMonthlyFeedback, submitMonthlyFeedback } from "@/lib/feedback/monthly";
+import { canReviewMonthlyFeedback, submitMonthlyFeedback, changeMonthlyFeedback, FeedbackConflict } from "@/lib/feedback/monthly";
 import { MONTHLY_QUESTIONS, csvCell, validMonth } from "@/lib/feedback/monthly-questions";
 import { deliverFeedbackEmails } from "@/lib/feedback/email-worker";
-export async function POST(request: NextRequest) {
+async function mutate(request: NextRequest, method: "POST" | "PATCH" | "DELETE") {
  const session = await getCurrentSession();
  if (!session || session.user.role !== "PARENT") return NextResponse.json({ error: "Please sign in as a parent." }, { status: 401 });
  const origin = request.headers.get("origin");
@@ -18,16 +19,22 @@ export async function POST(request: NextRequest) {
   const body = await request.text();
   if (body.length > 100000) return NextResponse.json({ error: "Your response is too long." }, { status: 413 });
   const input = JSON.parse(body);
-  if (!input || typeof input.studentId !== "string" || typeof input.month !== "string") return NextResponse.json({ error: "Select a child and month." }, { status: 400 });
-  const saved = await submitMonthlyFeedback(session.user.id, input);
+  if (!input || (method === "POST" ? typeof input.studentId !== "string" || typeof input.month !== "string" : typeof input.id !== "string" || !Number.isInteger(input.version))) return NextResponse.json({ error: "Select a child and month." }, { status: 400 });
+  const saved = method === "POST" ? await submitMonthlyFeedback(session.user.id, input) : await changeMonthlyFeedback(session.user.id, input, method === "DELETE");
+  for (const path of ["/parent/feedback", "/feedback/monthly", "/communications"]) revalidatePath(path);
+  if (!saved) return NextResponse.json({ deleted: true });
   after(async () => { try { await deliverFeedbackEmails(10, saved.id); } catch { console.error("Monthly feedback email delivery deferred to worker"); } });
-  return NextResponse.json({ id: saved.id });
+  return NextResponse.json({ id: saved.id, version: saved.version, studentId: saved.studentId, month: saved.month, details: saved.details, answers: saved.answers, submittedAt: saved.submittedAt.toISOString(), canManage: true });
  } catch (error) {
+  if (error instanceof FeedbackConflict) return NextResponse.json({ error: error.message, conflict: true }, { status: 409 });
   if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return NextResponse.json({ error: "Feedback has already been submitted for this child and month. Thank you!", duplicate: true }, { status: 409 });
   if (error instanceof Prisma.PrismaClientKnownRequestError || error instanceof Prisma.PrismaClientInitializationError) { console.error("Monthly feedback save unavailable"); return NextResponse.json({ error: "We could not save right now. Your answers are still here. Please try again." }, { status: 503 }); }
   return NextResponse.json({ error: error instanceof Error ? error.message : "Unable to submit feedback. Please try again." }, { status: 400 });
  }
 }
+export const POST = (request: NextRequest) => mutate(request, "POST");
+export const PATCH = (request: NextRequest) => mutate(request, "PATCH");
+export const DELETE = (request: NextRequest) => mutate(request, "DELETE");
 export async function GET(request: NextRequest) {
  const session = await getCurrentSession();
  if (!session || !(await canReviewMonthlyFeedback(session.user.id))) return NextResponse.json({ error: "Unauthorized" }, { status: 403 });

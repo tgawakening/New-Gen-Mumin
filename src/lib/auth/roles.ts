@@ -1,8 +1,9 @@
-export const USER_ROLES = ["ADMIN", "TEACHER", "PARENT", "STUDENT"] as const;
+export const USER_ROLES = ["ADMIN", "TEACHER", "PARENT", "STUDENT", "COMMUNICATIONS"] as const;
 
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const DASHBOARD_HOME: Record<UserRole, string> = {
+  COMMUNICATIONS: "/communications",
   ADMIN: "/admin",
   TEACHER: "/teacher",
   PARENT: "/parent",
@@ -10,6 +11,7 @@ export const DASHBOARD_HOME: Record<UserRole, string> = {
 };
 
 export const ROLE_LABELS: Record<UserRole, string> = {
+  COMMUNICATIONS: "Communications Lead",
   ADMIN: "Admin",
   TEACHER: "Teacher",
   PARENT: "Parent",

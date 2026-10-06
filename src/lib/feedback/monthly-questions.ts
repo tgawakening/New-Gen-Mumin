@@ -20,6 +20,8 @@ export const MONTHLY_SECTIONS = [
   choice("practiceGroup", "Would you join Arabic practice activities with teachers, parents and a native speaker?", ["Yes", "Maybe", "No"]),
   choice("otherLearning", "Is your child learning Arabic or Quran elsewhere?", ["With another teacher / institution", "With a parent at home", "No"]),
   multi("tajweedGoals", "What would you like your child to gain from Quran / tajweed lessons?", ["Fluent Quran reading (Nazra)", "Correct pronunciation (makharij)", "Confident, fluent recitation", "Not applicable"]),
+  text("practiceDetails", "Please briefly explain how Arabic practice is going at home so we can support you. If there are no difficulties, say what is working well."),
+  { ...text("practiceGroupReason", "If you would not like to join Arabic practice activities, please tell us why."), when: ["practiceGroup", "No"] as [string, string] },
   text("teachingFeedback", "How is the Arabic teacher's teaching style working for your child? What could improve?"),
  ] },
  { title: "Seerah, life skills & interests", description: "Share what engages your child and the changes you would find helpful.", questions: [
@@ -39,14 +41,22 @@ export const MONTHLY_SECTIONS = [
   text("positiveInteraction", "Share a positive community interaction: helping, getting to know, encouraging or celebrating another family or child."),
   text("connectionIdea", "What is one thing that would help your family feel more connected?"),
   choice("parentProgramme", "Would you like a parent programme about children's identity, doubts and questions?", ["Yes", "Maybe", "No"]),
+  text("parentProgrammeReason", "Please briefly explain your interest or concerns about a parent-support programme."),
+  choice("communityEvents", "Would your family be able to join online community events where children can get to know one another and build bonds of sisterhood and brotherhood?", ["Yes", "Maybe", "Not at the moment"], true),
+  { ...text("eventAvailability", "Which days and times would suit your family for online community events? Please include your time zone."), required: true },
   text("supportNeeds", "Is there anything else we should know to support your child's learning? Share only what you are comfortable sharing."),
   choice("contactRequest", "Would you like management to contact you?", ["Yes", "Only if needed", "No"], true),
-  choice("childChat", "May we arrange a 5-6 minute chat with your child to hear their feedback?", ["Yes", "No"], true),
+  choice("childChat", "May we arrange a 5-6 minute chat with your child to hear their feedback?", ["Yes", "No"]),
   { ...text("chatTime", "What day and time would suit you? Please include your time zone."), when: ["childChat", "Yes"] as [string, string], required: true },
  ] },
 ];
+// Match the required fields in the original questionnaire; the unstarred Arabic
+// progress questions, teacher feedback and child-chat consent stay optional.
+const OPTIONAL_QUESTIONS = new Set(["newWords", "introduceSelf", "dailyRoutine", "classDuration", "teachingFeedback", "childChat"]);
+for (const section of MONTHLY_SECTIONS) for (const q of section.questions) q.required = !OPTIONAL_QUESTIONS.has(q.id);
 export const MONTHLY_QUESTIONS: Question[] = MONTHLY_SECTIONS.flatMap(s => s.questions);
 export function visibleQuestion(q: Question, answers: Answers) {
+ if (q.id === "eventAvailability" && !["Yes", "Maybe"].includes(String(answers.communityEvents))) return false;
  if (q.when && answers[q.when[0]] !== q.when[1]) return false;
  if (MONTHLY_SECTIONS[0].questions.includes(q) && q.id !== "arabicParticipation" && answers.arabicParticipation !== "Yes") return false;
  if (q.id === "seerahBarriers" && answers.seerahExperience === "Did not attend") return false;
