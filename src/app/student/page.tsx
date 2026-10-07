@@ -17,7 +17,6 @@ import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCount
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { GrowthRecognitionGuide } from "@/components/dashboard/family/GrowthRecognitionGuide";
 import { ChildCertificateSpotlight } from "@/components/dashboard/family/ChildCertificateSpotlight";
-import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { StudentQuestHub } from "@/components/dashboard/family/StudentQuestHub";
 import {
   FamilyDashboardFrame,
@@ -152,7 +151,6 @@ export default async function StudentDashboardPage() {
     >
       <FamilyJourneyLinks role="student" />
       {latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={dashboard.studentName} childId={child.id} gender={latestChildAward.student.registrationStudents[0]?.gender} /> : null}
-      <LiveQuizAutoRefresh intervalMs={60000} enabled />
       {activeLiveQuizzes.length ? (
         <section className="rounded-[30px] border border-[#f7c56f] bg-[#0b1630] p-4 text-white shadow-lg sm:p-5">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">

@@ -76,6 +76,7 @@ model ParentStudent {
 }
 
 model StudentProfile {
+  liveQuizSeats QuizLiveSeat[]
   attendanceRecoveryReports AdminAttendanceRecovery[]
   id                      String                   @id @default(cuid())
   userId                  String                   @unique
@@ -737,6 +738,7 @@ model QuizAnswer {
 }
 
 model QuizLiveSession {
+  seats QuizLiveSeat[]
   id                       String             @id @default(cuid())
   quizId                   String
   teacherUserId            String
@@ -749,6 +751,7 @@ model QuizLiveSession {
   updatedAt                DateTime           @updatedAt
   responses                QuizLiveResponse[]
 
+  @@index([status, updatedAt])
   @@index([quizId, status])
   @@index([teacherUserId, status])
 }
@@ -1830,4 +1833,16 @@ model MonthlyFeedbackDemo {
  submittedAt DateTime @default(now())
  updatedAt DateTime @updatedAt
  @@unique([userId, month])
+}
+
+model QuizLiveSeat {
+ id String @id @default(cuid())
+ sessionId String
+ studentId String
+ joinedAt DateTime?
+ lastSeenAt DateTime?
+ session QuizLiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+ student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+ @@unique([sessionId, studentId])
+ @@index([studentId, sessionId])
 }

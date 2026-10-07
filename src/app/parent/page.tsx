@@ -6,7 +6,6 @@ import { redirect } from "next/navigation";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { FamilyJourneyLinks } from "@/components/dashboard/family/FamilyJourneyLinks";
 import { GrowthRecognitionGuide } from "@/components/dashboard/family/GrowthRecognitionGuide";
-import { LiveQuizAutoRefresh } from "@/components/quizzes/LiveQuizAutoRefresh";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import { ParentCalendarSubscribeCard } from "@/components/calendar/ParentCalendarSubscribeCard";
 import { ParentRecognitionSpotlight } from "@/components/dashboard/family/ParentRecognitionSpotlight";
@@ -196,7 +195,6 @@ export default async function ParentDashboardPage({ searchParams }: PageProps) {
       <Suspense fallback={<p className="text-sm text-slate-500">Loading community overview...</p>}><QabilaLeaderboardOverview audience="parent" /></Suspense>
       {latestParentAward ? <ParentRecognitionSpotlight award={latestParentAward} parentName={latestParentAward.recipientName || dashboard.parentName} /> : null}
       {selectedChild && latestChildAward ? <ChildCertificateSpotlight award={latestChildAward} childName={selectedChild.name} childId={selectedChild.id} gender={latestChildAward.student.registrationStudents[0]?.gender} parentView /> : null}
-      <LiveQuizAutoRefresh intervalMs={60000} enabled />
       <ParentCalendarSubscribeCard webcalUrl={calendarUrls.webcalUrl} httpsUrl={calendarUrls.httpsUrl} />
       <Suspense fallback={null}><ParentLiveQuizUpdates learners={dashboard.children} /></Suspense>
       <SectionCard
