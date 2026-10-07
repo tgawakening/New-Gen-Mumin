@@ -1,0 +1,9 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+const source=fs.readFileSync('src/lib/quizzes/live.ts','utf8');const ast=ts.createSourceFile('live.ts',source,ts.ScriptTarget.Latest,true);const fn=ast.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='listStudentActiveLiveQuizzesByStudentId').getText(ast);
+function fixture(active=true,assigned=true){let rosterReads=0;const exports={};vm.runInNewContext(ts.transpileModule(fn,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports,closeExpiredLiveQuizSessions:async()=>{},ACTIVE_ENROLLMENT_STATUSES:['ACTIVE'],db:{quizLiveSession:{findMany:async()=>active?[{id:'session',quizId:'quiz',teacherUserId:'teacher-user'}]:[]},quiz:{findMany:async()=>[{id:'quiz',programId:'arabic'}]},teacherStudentRoster:{findMany:async()=>{rosterReads++;return[{teacherId:'teacher',programId:'arabic',teacher:{userId:'teacher-user'}}];}},enrollment:{findMany:async()=>[{programId:'arabic'}]},teacherProgram:{findMany:async()=>[{teacherId:'unrelated',programId:'arabic',teacher:{userId:'other-user'}}]}},createReadOnlyRosterResolver:()=>({read:{teacher:async(teacher,program)=>{assert.equal(teacher,'teacher');assert.equal(program,'arabic');return assigned?['child']:[];}}}),getTeacherProgramRosterStudentIds:()=>{throw Error('write-capable resolver called');}});return{list:exports.listStudentActiveLiveQuizzesByStudentId,reads:()=>rosterReads};}
+test('no live quiz skips every enrolment and roster lookup',async()=>{const f=fixture(false);assert.equal((await f.list('child')).length,0);assert.equal(f.reads(),0);});
+test('active quiz is shown only to its teacher programme roster',async()=>{const f=fixture();const result=await f.list('child');assert.equal(result.length,1);assert.equal(result[0].id,'session');assert.equal((await fixture(true,false).list('child')).length,0);});

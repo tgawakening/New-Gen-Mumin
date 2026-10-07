@@ -27,14 +27,15 @@ async function mutate(request: NextRequest, remove = false) {
   }
   if (!/^\d{1,2}$/.test(details.age) || Number(details.age) < 1) throw new Error("Enter a valid age.");
   const answers = validateAnswers(input.answers);
-  const saved = await db.$transaction(async tx => {
+  const save = async () => {
    if (request.method === "PATCH") {
-    const changed = await tx.monthlyFeedbackDemo.updateMany({ where: { id: String(input.id), userId: session.user.id, month: input.month, version: Number(input.version) }, data: { details, answers, version: { increment: 1 } } });
+    const changed = await db.monthlyFeedbackDemo.updateMany({ where: { id: String(input.id), userId: session.user.id, month: input.month, version: Number(input.version) }, data: { details, answers, version: { increment: 1 } } });
     if (!changed.count) throw new Error("This test response changed. Reload to continue.");
-    return tx.monthlyFeedbackDemo.findUniqueOrThrow({ where: { id: String(input.id) } });
+    return db.monthlyFeedbackDemo.findUniqueOrThrow({ where: { id: String(input.id) } });
    }
-   return tx.monthlyFeedbackDemo.create({ data: { userId: session.user.id, month: input.month, details, answers } });
-  });
+   return db.monthlyFeedbackDemo.create({ data: { userId: session.user.id, month: input.month, details, answers } });
+  };
+  const saved = await save();
   return NextResponse.json({ ...saved, studentId: "demo", canManage: true });
  } catch { return NextResponse.json({ error: "Could not save this test response. Check required answers, or reload if already submitted." }, { status: 400 }); }
 }

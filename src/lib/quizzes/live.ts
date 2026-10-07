@@ -1,7 +1,7 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { getTeacherProgramRosterStudentIds } from "@/lib/live-classes/service";
+import { getTeacherProgramRosterStudentIds, createReadOnlyRosterResolver } from "@/lib/live-classes/service";
 import { QUIZ_AVATARS } from "@/lib/quizzes/avatars";
 import {
   CANONICAL_HOUSES,
@@ -386,6 +386,23 @@ export async function getStudentLiveQuizSession(sessionId: string, studentUserId
 
 export async function listStudentActiveLiveQuizzesByStudentId(studentId: string) {
   await closeExpiredLiveQuizSessions();
+  // Most dashboard visits have no live quiz. Check that before loading any rosters.
+  const sessions = await db.quizLiveSession.findMany({
+    where: { status: "LIVE", currentQuestionId: { not: null } },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (!sessions.length) return [];
+  const quizzes = await db.quiz.findMany({
+    where: { isPublished: true, id: { in: [...new Set(sessions.map(s => s.quizId))] } },
+    include: { program: true },
+  });
+  if (!quizzes.length) return [];
+  const quizById = new Map(quizzes.map(quiz => [quiz.id, quiz]));
+  const activePairs = new Set(sessions.flatMap(session => {
+    const quiz = quizById.get(session.quizId);
+    return quiz ? [session.teacherUserId + ":" + quiz.programId] : [];
+  }));
+  const resolveRoster = createReadOnlyRosterResolver();
   const [rosterRows, enrollments] = await Promise.all([
     db.teacherStudentRoster.findMany({
       where: { studentId },
@@ -408,32 +425,15 @@ export async function listStudentActiveLiveQuizzesByStudentId(studentId: string)
   );
   const allowedPairRows = (
     await Promise.all(
-      [...candidatePairs.values()].map(async (row) => ({
+      [...candidatePairs.values()].filter(row => activePairs.has(row.teacher.userId + ":" + row.programId)).map(async (row) => ({
         row,
-        studentIds: await getTeacherProgramRosterStudentIds(row.teacherId, row.programId),
+        studentIds: await resolveRoster.read.teacher(row.teacherId, row.programId),
       })),
     )
   ).filter(({ studentIds }) => studentIds.includes(studentId));
   if (!allowedPairRows.length) return [];
 
   const allowedPairs = new Set(allowedPairRows.map(({ row }) => row.teacher.userId + ":" + row.programId));
-  const programIds = [...new Set(allowedPairRows.map(({ row }) => row.programId))];
-  const quizzes = await db.quiz.findMany({
-    where: { isPublished: true, programId: { in: programIds } },
-    include: { program: true },
-  });
-  if (!quizzes.length) return [];
-  const quizById = new Map(quizzes.map((quiz) => [quiz.id, quiz]));
-
-  const sessions = await db.quizLiveSession.findMany({
-    where: {
-      status: "LIVE",
-      currentQuestionId: { not: null },
-      quizId: { in: quizzes.map((quiz) => quiz.id) },
-    },
-    orderBy: { updatedAt: "desc" },
-    take: 30,
-  });
   const eligibleSessions = sessions.filter((session) => {
     const quiz = quizById.get(session.quizId);
     return quiz && allowedPairs.has(session.teacherUserId + ":" + quiz.programId);
