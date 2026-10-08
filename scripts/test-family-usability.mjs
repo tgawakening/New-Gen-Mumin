@@ -60,3 +60,11 @@ test('class countdown initial markup is stable when browser and server clocks di
  return renderToStaticMarkup(React.createElement(LiveClassCountdown,{startsAt:'2026-10-08T12:00:00Z',meetingUrl:null,accessLocked:false}));};
  assert.equal(render(Date.parse('2026-10-08T11:59:00Z')),render(Date.parse('2026-10-08T12:01:00Z')));
 });
+
+test('notification dates render identically across server and parent device timezones',()=>{
+ const {formatNotificationTime}=load('src/lib/notifications/format-time.ts');
+ const original=process.env.TZ;
+ try {for(const zone of ['UTC','Asia/Karachi','America/Los_Angeles']){process.env.TZ=zone;assert.equal(formatNotificationTime('2026-12-31T22:15:00.000Z'),'01/01/2027, 03:15 PKT');}}
+ finally {if(original===undefined)delete process.env.TZ;else process.env.TZ=original;}
+ assert.equal(formatNotificationTime('invalid'),'Date unavailable');
+});

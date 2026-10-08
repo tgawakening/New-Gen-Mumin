@@ -17,3 +17,7 @@ Restore only verified original teacher/program/schedule metadata. Recovered sche
 - npm run build
 - node --test scripts/test-schedule-lifecycle.mjs
 - DATABASE_URL=... node scripts/test-schedule-archive.mjs (transaction always rolls back and verifies no test schedule remains)
+
+## Recovery verified on 8 October 2026
+
+Recovered 68 stored recording entries for Ustadha Saba under 13 ended archive schedules. Of these, 56 teaching/parent-session recordings are available to eligible families; 12 staff/planning recordings are restricted to admin and the owning teacher. Verified all 68 media streams with small range reads, family playback access, denial of staff playback to parents, and admin/teacher/parent listing pages. Exact session start times could not be matched to surviving Zoom metadata; original date-labelled filenames are retained. No guessed attendance, points, occurrences or hours were created.

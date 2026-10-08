@@ -557,7 +557,7 @@ export function CourseBuilderWorkspace({
               <p className="text-xs text-[#617184]">{pack.live.startTime}-{pack.live.endTime} {pack.live.timezone}</p>
               <form action={deleteCurriculumLiveSessionAction}>
                 <input type="hidden" name="scheduleId" value={pack.live.id} />
-                <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
+                <FormSubmitButton pendingLabel="Stopping..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Stop recurring session</FormSubmitButton>
               </form>
             </div>
           ) : (
@@ -1420,7 +1420,7 @@ export function CourseBuilderWorkspace({
                   : success === "live"
                     ? "Recurring Zoom live session created for this topic."
                     : success === "live_deleted"
-                      ? "Live session deleted from this lesson."
+                      ? "Recurring session stopped. Past recordings and attendance are preserved."
                       : success === "live_pending"
                         ? "Session saved successfully. Zoom join link is pending admin sync."
                         : success === "material"
