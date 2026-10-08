@@ -71,13 +71,14 @@ export function LiveClassCountdown({
 }) {
   const refresh = useClassRefresh();
   const targetTime = useMemo(() => new Date(startsAt).getTime(), [startsAt]);
-  const [now, setNow] = useState(() => Date.now());
-  const millisecondsUntilStart = targetTime - now;
+  const [now, setNow] = useState<number | null>(null);
+  const millisecondsUntilStart = now === null ? null : targetTime - now;
   const canJoin = Boolean(meetingUrl) && !accessLocked && isLive;
 
   useEffect(() => {
+    const initial = window.setTimeout(() => setNow(Date.now()), 0);
     const interval = window.setInterval(() => setNow(Date.now()), 30000);
-    return () => window.clearInterval(interval);
+    return () => { window.clearTimeout(initial); window.clearInterval(interval); };
   }, []);
 
   // Teachers may start early, reschedule, or create a class while this page is open.
@@ -90,7 +91,7 @@ export function LiveClassCountdown({
   return (
     <div className={`mt-4 rounded-[20px] border px-4 py-4 shadow-sm ${isLive ? "border-[#f4b85f] bg-[#102544]" : "border-white/10 bg-[#17243a]"}`}>
       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">{isLive ? "Live now" : "Starts in"}</p>
-      <p className="mt-1 text-3xl font-semibold text-white">{isLive ? "Class has started on Zoom" : formatCountdown(millisecondsUntilStart)}</p>
+      <p className="mt-1 text-3xl font-semibold text-white">{isLive ? "Class has started on Zoom" : millisecondsUntilStart === null ? "Checking time..." : formatCountdown(millisecondsUntilStart)}</p>
       {canJoin ? (
         <Link
           href={meetingUrl!}

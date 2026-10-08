@@ -53,3 +53,10 @@ test('daily class, tracker and quiz shortcuts stay visible without notifications
  const html=renderToStaticMarkup(await FamilyJourneyLinks({role:'parent',childId:'child-a'}));
  for(const path of ['schedule','sunnah-tracker','quizzes'])assert.ok(html.includes('/parent/'+path+'?child=child-a'));
 });
+
+test('class countdown initial markup is stable when browser and server clocks differ',()=>{
+ const render=clock=>{class Clock extends Date{static now(){return clock;}}
+ const {LiveClassCountdown}=load('src/components/dashboard/family/LiveClassCountdown.tsx',{'next/link':Link,'next/navigation':{useRouter:()=>({refresh(){}})}},{Date:Clock});
+ return renderToStaticMarkup(React.createElement(LiveClassCountdown,{startsAt:'2026-10-08T12:00:00Z',meetingUrl:null,accessLocked:false}));};
+ assert.equal(render(Date.parse('2026-10-08T11:59:00Z')),render(Date.parse('2026-10-08T12:01:00Z')));
+});
