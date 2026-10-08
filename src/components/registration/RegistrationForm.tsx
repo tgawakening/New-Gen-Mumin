@@ -183,6 +183,7 @@ const DIAL_CODES: Record<string, string> = {
   KW: "+965",
   BH: "+973",
   OM: "+968",
+  ID: "+62",
   MY: "+60",
   SG: "+65",
 };

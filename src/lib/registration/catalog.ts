@@ -160,6 +160,7 @@ export const REGISTRATION_COUNTRIES = [
   { code: "KW", name: "Kuwait", currency: "KWD" },
   { code: "BH", name: "Bahrain", currency: "BHD" },
   { code: "OM", name: "Oman", currency: "OMR" },
+  { code: "ID", name: "Indonesia", currency: "GBP" },
   { code: "MY", name: "Malaysia", currency: "MYR" },
   { code: "SG", name: "Singapore", currency: "SGD" },
   { code: "ZA", name: "South Africa", currency: "ZAR" },
