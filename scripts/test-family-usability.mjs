@@ -10,7 +10,7 @@ const Link=({href,prefetch,...props})=>React.createElement('a',{href,...props});
 const nav=load('src/lib/dashboard/family-nav.ts');
 test('family navigation keeps child context and every section accessible under More',()=>{
  for(const expanded of [false,true]){
-  const {MobileFamilyNavRailClient}=load('src/components/dashboard/family/MobileFamilyNavRailClient.tsx',{'react':{...React,useState:()=>[expanded,()=>{}]},'next/link':Link,'next/navigation':{usePathname:()=>'/parent/schedule'},'@/components/dashboard/family/FamilyNavLinkClient':{FamilyNavLinkClient:({href,label})=>React.createElement('a',{href},label)}});
+  const {MobileFamilyNavRailClient}=load('src/components/dashboard/family/MobileFamilyNavRailClient.tsx',{'react':{...React,useState:()=>[expanded,()=>{}]},'next/link':Link,'./FamilyNavigation':{FamilyPortalLink:Link},'next/navigation':{usePathname:()=>'/parent/schedule'},'@/components/dashboard/family/FamilyNavLinkClient':{FamilyNavLinkClient:({href,label})=>React.createElement('a',{href},label)}});
   const items=nav.getParentNavItems('child-a');
   const html=renderToStaticMarkup(React.createElement(MobileFamilyNavRailClient,{navItems:items}));
   assert.match(html,/aria-label="Quick access"/);assert.match(html,/\/parent\/schedule\?child=child-a/);assert.match(html,/\/parent\/sunnah-tracker\?child=child-a/);
@@ -19,7 +19,7 @@ test('family navigation keeps child context and every section accessible under M
 });
 test('family frame does not await activity or notifications before rendering main content',async()=>{
  let queries=0;const empty=()=>null;
- const {FamilyDashboardFrame}=load('src/components/dashboard/family/FamilyDashboardFrame.tsx',{'next/link':Link,'@/components/dashboard/family/FamilyLogoutButton':{FamilyLogoutButton:empty},'@/components/dashboard/family/MobileFamilyNavRailClient':{MobileFamilyNavRailClient:empty},'@/components/dashboard/NotificationBell':{NotificationBell:empty},'@/lib/auth/session':{getCurrentSession:async()=>{queries++;throw Error('should stream');}},'@/lib/notifications/navigation':{getNavigationActivity:async()=>{queries++;}},'@/components/pwa/PwaInstallPrompt':{PwaInstallPrompt:empty}});
+ const {FamilyDashboardFrame}=load('src/components/dashboard/family/FamilyDashboardFrame.tsx',{'next/link':Link,'./FamilyNavigation':{FamilyPortalLink:Link},'@/components/dashboard/family/FamilyLogoutButton':{FamilyLogoutButton:empty},'@/components/dashboard/family/MobileFamilyNavRailClient':{MobileFamilyNavRailClient:empty},'@/components/dashboard/NotificationBell':{NotificationBell:empty},'@/lib/auth/session':{getCurrentSession:async()=>{queries++;throw Error('should stream');}},'@/lib/notifications/navigation':{getNavigationActivity:async()=>{queries++;}},'@/components/pwa/PwaInstallPrompt':{PwaInstallPrompt:empty}});
  const tree=await FamilyDashboardFrame({roleLabel:'Parent',title:'Classes',subtitle:'Join',navItems:nav.getParentNavItems(),children:'Class content'});
  assert.equal(queries,0);assert.ok(tree);
 });
@@ -44,7 +44,7 @@ test('app updates offer a reload without interrupting existing work',()=>{
 
 test('slow live-class refreshes do not overlap while a transition is pending',()=>{
  let tick,refreshes=0;
- const {LiveClassUpdates}=load('src/components/dashboard/family/LiveClassCountdown.tsx',{'react':{...React,useEffect:fn=>fn(),useRef:()=>({current:false}),useTransition:()=>[false,fn=>fn()],useCallback:fn=>fn},'next/link':Link,'next/navigation':{useRouter:()=>({refresh:()=>{refreshes++;}})}},{window:{setInterval:fn=>{tick=fn;return 1;},clearInterval(){}},document:{hidden:false},navigator:{onLine:true}});
+ const {LiveClassUpdates}=load('src/components/dashboard/family/LiveClassCountdown.tsx',{'react':{...React,useEffect:fn=>fn(),useRef:()=>({current:false}),useTransition:()=>[false,fn=>fn()],useCallback:fn=>fn},'next/link':Link,'./FamilyNavigation':{FamilyPortalLink:Link},'next/navigation':{useRouter:()=>({refresh:()=>{refreshes++;}})}},{window:{setInterval:fn=>{tick=fn;return 1;},clearInterval(){}},document:{hidden:false},navigator:{onLine:true}});
  LiveClassUpdates({enabled:true});tick();tick();assert.equal(refreshes,1);
 });
 

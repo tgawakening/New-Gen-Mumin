@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import { FamilyPortalLink as Link } from "./FamilyNavigation";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Home, CalendarDays, CheckCircle2, Sun, Menu, X } from "lucide-react";

@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable react-hooks/static-components -- navigation icons are selected from stable imports. */
 
-import Link from "next/link";
+import { FamilyPortalLink as Link } from "./FamilyNavigation";
 import { usePathname } from "next/navigation";
 import {
   BookOpen,

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { FamilyPortalLink as Link } from "./FamilyNavigation";
 import { ReactNode, Suspense } from "react";
 import {
   BookOpen,
