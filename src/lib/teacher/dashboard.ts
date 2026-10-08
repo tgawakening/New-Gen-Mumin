@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import "server-only";
 
 import { cache } from "react";
@@ -324,7 +325,7 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
     ),
   );
 
-  const classes = uniqueSchedules.map((schedule) => {
+  const classes = uniqueSchedules.filter(schedule => !hasScheduleEnded(schedule)).map((schedule) => {
     const audienceGroup = getLiveClassAudienceGroup(schedule.title);
     const rosterStudentIds = scheduleRosterIdsBySchedule.get(schedule.id) ?? new Set<string>();
     const visibleEnrollments = schedule.program.enrollments.filter((enrollment) => {

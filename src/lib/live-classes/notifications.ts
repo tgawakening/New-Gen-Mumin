@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import "server-only";
 
 import { db } from "@/lib/db";
@@ -275,7 +276,7 @@ export async function notifyRosteredUsersClassStarted(scheduleId: string) {
     },
   });
 
-  if (!schedule?.meetingUrl || !isLiveClassVisibleToStudents(schedule.title)) return;
+  if (!schedule?.meetingUrl || hasScheduleEnded(schedule) || !isLiveClassVisibleToStudents(schedule.title)) return;
 
   const now = new Date();
   const title = cleanLiveClassTitle(schedule.title);

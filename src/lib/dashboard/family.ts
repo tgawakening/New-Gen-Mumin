@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import "server-only";
 import { attendanceTotals } from "@/lib/live-classes/attendance-summary";
 import { deduplicateAttendance } from "@/lib/live-classes/attendance-policy";
@@ -746,8 +747,7 @@ function mapScheduleEntries(
         .filter(
           (schedule: any) => {
             if (!isLiveClassVisibleToStudents(schedule.title)) return false;
-            if (schedule.endsOn && new Date(schedule.endsOn).getTime() < Date.now()
-              && !mapScheduleSummary(schedule, enrollment.program.title).isLive) return false;
+            if (hasScheduleEnded(schedule)) return false;
 
             const hasRoster = (resolvedRosters.get(schedule.id)?.length ?? 0) > 0
               || schedule.scheduleRosters?.length > 0
@@ -768,7 +768,7 @@ function mapScheduleEntries(
     );
 
   const parentalEntries = parentalSchedules
-    .filter((schedule: any) => !schedule.endsOn || new Date(schedule.endsOn).getTime() >= Date.now() || mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL").isLive)
+    .filter((schedule: any) => !hasScheduleEnded(schedule))
     .map((schedule: any) => mapScheduleSummary(schedule, "Parental Sessions", "PARENTAL"));
   const allEntries = [...entries, ...parentalEntries];
 

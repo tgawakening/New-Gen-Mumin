@@ -222,7 +222,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
                   <input type="hidden" name="intent" value="delete" />
                   <input type="hidden" name="scheduleId" value={entry.id} />
                   <FormSubmitButton pendingLabel="Removing..." className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646] disabled:cursor-wait disabled:opacity-70">
-                    Remove session
+                    Stop recurring session
                   </FormSubmitButton>
                 </form>
               </div>

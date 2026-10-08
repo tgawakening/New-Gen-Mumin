@@ -1,3 +1,5 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
+import { archiveClassSchedule } from "@/lib/live-classes/archive";
 import "server-only";
 
 import { db } from "@/lib/db";
@@ -847,9 +849,10 @@ export type LiveClassAccessState = "scheduled" | "live" | "ended";
 export async function getLiveClassAccessState(scheduleId: string): Promise<LiveClassAccessState> {
   const schedule = await db.classSchedule.findUnique({
     where: { id: scheduleId },
-    select: { teacher: { select: { userId: true } } },
+    select: { endsOn: true, teacher: { select: { userId: true } } },
   });
   if (!schedule) return "scheduled";
+  if (hasScheduleEnded(schedule)) return "ended";
 
   const latest = await db.liveClassSessionOccurrence.findFirst({
     where: {
@@ -1126,6 +1129,7 @@ export async function approveTeacherLiveClass(scheduleId: string, approvedByUser
     },
   });
   if (!schedule) throw new Error("Class schedule not found.");
+  if (hasScheduleEnded(schedule)) throw new Error("This recurring class has been stopped.");
 
   const meeting = await createRecurringZoomMeeting({
     topic: cleanLiveClassTitle(schedule.title),
@@ -1175,8 +1179,9 @@ export async function rejectTeacherLiveClass(scheduleId: string) {
     include: { teacher: { include: { user: true } } },
   });
   if (!schedule) throw new Error("Class schedule not found.");
+  if (hasScheduleEnded(schedule)) throw new Error("This recurring class has been stopped.");
 
-  await db.classSchedule.delete({ where: { id: scheduleId } });
+  await archiveClassSchedule(scheduleId);
   await db.notification.create({
     data: {
       userId: schedule.teacher.user.id,
@@ -1200,6 +1205,7 @@ export async function syncScheduleToZoom(scheduleId: string) {
     },
   });
   if (!schedule) throw new Error("Class schedule not found.");
+  if (hasScheduleEnded(schedule)) throw new Error("This recurring class has been stopped.");
 
   const meeting = await createRecurringZoomMeeting({
     topic: cleanLiveClassTitle(schedule.title),
@@ -1255,7 +1261,7 @@ export async function notifyEnrolledUsers(scheduleId: string) {
       teacher: { include: { user: true } },
     },
   });
-  if (!schedule || !schedule.meetingUrl || !isLiveClassVisibleToStudents(schedule.title)) return;
+  if (!schedule || hasScheduleEnded(schedule) || !schedule.meetingUrl || !isLiveClassVisibleToStudents(schedule.title)) return;
 
   const audienceGroup = getLiveClassAudienceGroup(schedule.title);
   const visibleTitle = cleanLiveClassTitle(schedule.title);

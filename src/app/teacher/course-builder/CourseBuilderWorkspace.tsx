@@ -1,3 +1,4 @@
+import { archiveClassSchedule } from "@/lib/live-classes/archive";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -1320,7 +1321,7 @@ export function CourseBuilderWorkspace({
         ownerTeacherUserId: schedule.teacher.userId,
       }))
     ) {
-      await db.classSchedule.delete({ where: { id: schedule.id } });
+      await archiveClassSchedule(schedule.id);
     }
 
     revalidatePath("/teacher/live-sessions");

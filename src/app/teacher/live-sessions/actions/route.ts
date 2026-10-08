@@ -1,3 +1,4 @@
+import { archiveClassSchedule } from "@/lib/live-classes/archive";
 import { revalidatePath } from "next/cache";
 import { NextResponse, type NextRequest } from "next/server";
 
@@ -103,11 +104,11 @@ async function deleteSession(request: NextRequest, formData: FormData, teacherUs
   });
 
   if (schedule) {
-    await db.classSchedule.delete({ where: { id: schedule.id } });
+    await archiveClassSchedule(schedule.id);
   }
 
   revalidateLiveSessionViews();
-  return redirectTo(request, noticeHref("Live session removed successfully.", "success"));
+  return redirectTo(request, noticeHref("Recurring session stopped. Past recordings and attendance are preserved.", "success"));
 }
 
 export async function POST(request: NextRequest) {

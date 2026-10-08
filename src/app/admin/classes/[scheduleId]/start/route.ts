@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
@@ -42,10 +43,11 @@ export async function GET(request: Request, context: RouteContext) {
     select: {
       id: true,
       meetingId: true,
+      endsOn: true,
     },
   });
 
-  if (!schedule?.meetingId) {
+  if (!schedule?.meetingId || hasScheduleEnded(schedule)) {
     const params = new URLSearchParams({
       notice: "Zoom start link is not available for this class yet.",
       tone: "error",

@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { after, NextRequest, NextResponse } from "next/server";
 
@@ -207,13 +208,14 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "meeting.started") {
+    const activeSchedules = schedules.filter(item => !hasScheduleEnded(item));
     const normalize = (value?: string | null) => (value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
     const hostEmail = payload.payload?.object?.host_email?.trim().toLowerCase();
     const topic = normalize(payload.payload?.object?.topic);
-    const hostMatches = hostEmail ? schedules.filter((item) => item.teacher.user.email.trim().toLowerCase() === hostEmail) : [];
-    const topicPool = hostMatches.length ? hostMatches : schedules;
+    const hostMatches = hostEmail ? activeSchedules.filter((item) => item.teacher.user.email.trim().toLowerCase() === hostEmail) : [];
+    const topicPool = hostMatches.length ? hostMatches : activeSchedules;
     const topicMatches = topic ? topicPool.filter((item) => normalize(cleanLiveClassTitle(item.title)) === topic) : [];
-    const startedSchedules = topicMatches.length ? topicMatches : hostMatches.length ? hostMatches : schedules.length === 1 ? schedules : [];
+    const startedSchedules = topicMatches.length ? topicMatches : hostMatches.length ? hostMatches : activeSchedules.length === 1 ? activeSchedules : [];
     if (!startedSchedules.length) {
       console.warn("Ignored ambiguous Zoom meeting.started event", { meetingId, hostEmail, topic, scheduleCount: schedules.length });
       return NextResponse.json({ received: true, ignored: "ambiguous-schedule" });

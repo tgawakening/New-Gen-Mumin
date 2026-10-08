@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import "server-only";
 import { randomUUID } from "crypto";
 import { db } from "@/lib/db";
@@ -9,8 +10,8 @@ export async function recordPortalClassJoin(scheduleId: string, studentId: strin
   const membership = await ensureStudentHouseMembership(studentId);
   return db.$transaction(async tx => {
     await lockAttendanceStudent(tx, studentId);
-    const schedule = await tx.classSchedule.findUnique({ where: { id: scheduleId }, select: { id: true, title: true, meetingUrl: true, programId: true, program: { select: { title: true } }, teacher: { select: { userId: true } } } });
-    if (!schedule?.meetingUrl) throw new Error("Class unavailable");
+    const schedule = await tx.classSchedule.findUnique({ where: { id: scheduleId }, select: { id: true, title: true, endsOn: true, meetingUrl: true, programId: true, program: { select: { title: true } }, teacher: { select: { userId: true } } } });
+    if (!schedule?.meetingUrl || hasScheduleEnded(schedule)) throw new Error("Class unavailable or stopped");
     const occurrence = await tx.liveClassSessionOccurrence.findFirst({ where: { scheduleId, teacherUserId: schedule.teacher.userId, source: "zoom-webhook", startedAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) } }, orderBy: { startedAt: "desc" } });
     if (!occurrence || occurrence.endedAt) throw new Error("Class is not live");
     const enrollment = await tx.enrollment.findFirst({ where: { studentId, programId: schedule.programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } }, select: { id: true } });

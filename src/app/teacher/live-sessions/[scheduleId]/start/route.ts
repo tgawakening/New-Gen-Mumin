@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
@@ -55,11 +56,12 @@ export async function GET(_request: Request, context: RouteContext) {
     select: {
       id: true,
       meetingId: true,
+      endsOn: true,
       meetingUrl: true,
     },
   });
 
-  if (!schedule?.meetingId && !schedule?.meetingUrl) {
+  if (!schedule || hasScheduleEnded(schedule) || (!schedule.meetingId && !schedule.meetingUrl)) {
     const params = new URLSearchParams({
       notice: "Zoom link is not available for this session yet.",
       tone: "error",

@@ -1,3 +1,4 @@
+import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import { sharedJoinStudents } from "@/lib/live-classes/shared-join";
 import { recordPortalClassJoin } from "@/lib/live-classes/portal-join";
 import { after, NextRequest, NextResponse } from "next/server";
@@ -32,6 +33,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       where: { id: scheduleId },
       select: {
         meetingUrl: true,
+        endsOn: true,
         programId: true,
         teacher: { select: { userId: true } },
         sessionOccurrences: {
@@ -46,6 +48,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
   ]);
 
   if (!schedule?.meetingUrl) return NextResponse.redirect(scheduleDestination(request));
+  if (hasScheduleEnded(schedule)) return NextResponse.redirect(scheduleDestination(request, "ended"));
   if (!signed && !session) return NextResponse.redirect(new URL("/auth/login", request.url));
 
   const latest = schedule.sessionOccurrences.find((occurrence) => occurrence.teacherUserId === schedule.teacher.userId);

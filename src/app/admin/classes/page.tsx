@@ -1,3 +1,4 @@
+import { archiveClassSchedule } from "@/lib/live-classes/archive";
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
@@ -223,10 +224,10 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
     if (!currentSession || currentSession.user.role !== "ADMIN") redirect("/admin/classes");
 
     const scheduleId = String(formData.get("scheduleId") || "");
-    if (!scheduleId) redirect(noticeHref("Choose a live class to delete.", "error"));
+    if (!scheduleId) redirect(noticeHref("Choose a recurring class to stop.", "error"));
 
     try {
-      await db.classSchedule.delete({ where: { id: scheduleId } });
+      await archiveClassSchedule(scheduleId);
       revalidatePath("/admin/classes");
       revalidatePath("/teacher/live-sessions");
       revalidatePath("/teacher/schedule");
@@ -235,11 +236,11 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       revalidatePath("/parent");
       revalidatePath("/parent/schedule");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to delete this live class.";
+      const message = error instanceof Error ? error.message : "Unable to stop this recurring class.";
       redirect(noticeHref(message, "error"));
     }
 
-    redirect(noticeHref("Live class deleted from LMS dashboards.", "danger"));
+    redirect(noticeHref("Recurring class stopped. Past recordings and attendance are preserved.", "danger"));
   }
 
   async function importRoomAssignmentsAction(formData: FormData) {
@@ -322,6 +323,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
       orderBy: { createdAt: "desc" },
     }),
     db.classSchedule.findMany({
+      where: { OR: [{ endsOn: null }, { endsOn: { gt: new Date() } }] },
       orderBy: [{ weekday: "asc" }, { startTime: "asc" }],
       include: {
         program: true,
@@ -347,7 +349,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
               </p>
               <h1 className="mt-2 text-3xl font-semibold text-[#22304a]">Zoom class control</h1>
               <p className="mt-2 max-w-3xl text-sm leading-7 text-[#617184]">
-                Create weekly LMS schedules, generate recurring Zoom links, and notify enrolled families.
+                Create weekly LMS schedules, generate recurring Zoom links, and notify enrolled families. Stopping a recurring class preserves its past recordings and attendance.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -663,7 +665,7 @@ export default async function AdminClassesPage({ searchParams }: PageProps) {
                     <form action={deleteClassAction}>
                       <input type="hidden" name="scheduleId" value={schedule.id} />
                       <button className="rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-sm font-semibold text-[#b24646]">
-                        Delete
+                        Stop recurring class
                       </button>
                     </form>
                   </div>
