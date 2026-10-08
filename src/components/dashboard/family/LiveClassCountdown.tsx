@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useFamilyNavigationPending } from "./FamilyNavigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 
 const pageRefreshers = new Set<() => void>();
@@ -25,15 +26,16 @@ function subscribeToPageRefresh(refresh: () => void) {
 }
 
 function useClassRefresh(){
+  const navigating=useFamilyNavigationPending();
   const router=useRouter();
   const [pending,startTransition]=useTransition();
   const inFlight=useRef(false);
   useEffect(()=>{if(!pending)inFlight.current=false;},[pending]);
   return useCallback(()=>{
-    if(inFlight.current||document.hidden||!navigator.onLine)return;
+    if(navigating||inFlight.current||document.hidden||!navigator.onLine)return;
     inFlight.current=true;
     startTransition(()=>router.refresh());
-  },[router]);
+  },[router,navigating]);
 }
 
 export function LiveClassUpdates({ enabled }: { enabled: boolean }) {
