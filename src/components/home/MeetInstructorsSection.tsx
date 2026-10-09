@@ -9,47 +9,41 @@ import "swiper/css";
 
 const INSTRUCTORS = [
   {
-    src: "/images/ustad-nimra.png",
-    name: "Programme Founder & Lead Coordinator",
-    role: "Founder & Director - TGA Platform",
-    bio: "PGDE in Primary Education from the University of Dundee. BA (Hons) in E-Commerce from Glasgow Caledonian University. Student of Tafsir, Tajweed, and Seerah An-Nabawiyyah. Gen-Mumin Programme Lead Coordinator.",
+    "src": "/images/ustad-nimra.png",
+    "name": "Programme Founder & Lead Coordinator",
+    "role": "Founder & Director - TGA Platform",
+    "bio": "PGDE in Primary Education from the University of Dundee. BA (Hons) in E-Commerce from Glasgow Caledonian University. Student of Tafsir, Tajweed, and Seerah An-Nabawiyyah."
   },
   {
-    src: "/images/ustad-abubakar.png",
-    name: "Ustadh Abubakar Sadique",
-    role: "Program Lead Coordinator",
-    bio: "Hafiz-e-Qur'an with formal Islamic education. Holds AD & BS from the University of the Punjab. Certified in Teacher Training, Islamic Finance (Kuwait University), Arabic Language, and School Management.",
+    "src": "/images/ustad-abubakar.png",
+    "name": "Ustadh Abubakr Sadique",
+    "role": "Arabic Teacher",
+    "bio": "Supports children in building Arabic vocabulary, understanding and confidence through structured lessons and guided practice."
   },
   {
-    src: "/images/ustad-mehran.png",
-    name: "Ustadh Mehran Raziq",
-    role: "Head-Teacher",
-    bio: "F.Sc background and Dars-e-Nizami graduate. Specialized in Fiqh and Hadith with 2 years of teaching experience in Arabic and Islamic studies, focused on building strong foundations in classical knowledge.",
+    "src": "/images/ustad-mehran.png",
+    "name": "Ustadh Mehran Raziq",
+    "role": "Seerah & Parental Sessions Teacher / Programme Lead",
+    "bio": "Leads the programme and teaches Seerah and parental sessions, helping families connect Prophetic lessons with everyday life."
   },
   {
-    src: "/images/ustad-mussab.png",
-    name: "Brother Mussab Anwar",
-    role: "Leadership skills Teacher",
-    bio: "Professionally serving as an Agriculture Expert Officer in the UAE. An active student of the Arabic language, bringing a unique blend of professional insight and passion for Islamic learning and growth.",
+    "src": "/images/teacher-avatar.png",
+    "name": "Ustadh Abdul Badee",
+    "role": "Advanced Arabic Teacher",
+    "bio": "Guides advanced Arabic learners in developing their language skills, pronunciation and fluency through structured teaching and practice."
   },
   {
-    src: "/images/ustad-afira.png",
-    name: "Ustadha Afira Tahir",
-    role: "Spoken Arabic Teacher",
-    bio: "Bachelor’s degree holder with 6 years of Islamic studies. Over 7 years of international experience teaching Arabic grammar to children. Renowned for clear, student-focused, and engaging teaching methods.",
+    "src": "/images/ustad-afira.png",
+    "name": "Ustadha Afirah Tahir",
+    "role": "Arabic Teacher",
+    "bio": "Helps children develop Arabic grammar, vocabulary and speaking skills through clear explanations and engaging practice."
   },
   {
-    src: "/images/ustad-zeba.png",
-    name: "Sister Javeria Khuram",
-    role: "Seerah Instructor",
-    bio: "Supports the Seerah pathway with child-friendly storytelling, reflective discussion, and weekly lesson guidance that helps families connect Prophetic character with daily life.",
-  },
-  {
-    src: "/images/ustad-nimra.png",
-    name: "Sister Sabah",
-    role: "Seerah Instructor",
-    bio: "Contributes to the Seerah stream through nurturing class delivery, engaging follow-up prompts, and practical reflection activities that keep children connected to the weekly Prophetic lessons.",
-  },
+    "src": "/images/ustad-zeba.png",
+    "name": "Ustadha Javeria Khuram",
+    "role": "Life Skills & Leadership Teacher",
+    "bio": "Helps children build confidence, practical life skills and leadership through discussion, reflection and engaging activities."
+  }
 ];
 
 export function MeetInstructorsSection() {

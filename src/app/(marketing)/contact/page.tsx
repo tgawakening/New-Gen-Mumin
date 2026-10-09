@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { ContactForm } from "@/components/contact/ContactForm";
 
 export default function ContactPage() {
@@ -10,6 +11,7 @@ export default function ContactPage() {
             Get in touch with the Gen-Mumins team. We&apos;re here to help with
             enrollment, schedules, and any questions families may have.
           </p>
+          <Link href="/#team" className="mb-6 inline-flex rounded-full bg-[#21314d] px-5 py-3 font-semibold text-white hover:bg-[#32486b]">Meet our team & contact support</Link>
           <div className="space-y-4 rounded-[28px] border border-[#eadfce] bg-white p-6 shadow-sm">
             <p>
               <strong>Email:</strong>{" "}

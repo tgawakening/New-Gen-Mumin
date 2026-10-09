@@ -1,3 +1,4 @@
+import { MeetTeamSection } from "@/components/home/MeetTeamSection";
 import Image from "next/image";
 import { SECTION_IDS } from "@/lib/config";
 import { SectionHeading } from "@/components/ui/Section";
@@ -124,6 +125,7 @@ export default function HomePage() {
       <ExploreProgramsSection id={SECTION_IDS.courses} />
 
       <MeetInstructorsSection />
+      <MeetTeamSection />
 
       <JoinNowSection />
       <AllInOneSection />
