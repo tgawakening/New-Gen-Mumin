@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
+import { reserveEmailSend } from "@/lib/email/quota";
 
 type SendEmailInput = {
   toEmail: string;
@@ -8,8 +9,7 @@ type SendEmailInput = {
   template: string;
   deduplicationKey?: string;
 };
-// Keep quota capacity for mail that grants access, protects an account, or confirms money.
-// Routine engagement mail must never consume the final daily reserve.
+// These templates bypass only the ordinary notification cooldown, never the global quota.
 const CRITICAL_TEMPLATES = new Set([
   "accountCreationConfirmation",
   "passwordReset",
@@ -23,13 +23,6 @@ const CRITICAL_TEMPLATES = new Set([
   "monthlyPaymentReminder",
   "monthlyPaymentActivated",
 ]);
-const TIME_SENSITIVE_TEMPLATES = new Set([
-  "liveClassStarted",
-  "teacherZoomMeetingApproved",
-]);
-const STANDARD_DAILY_LIMIT = 60;
-const TIME_SENSITIVE_DAILY_LIMIT = 75;
-const CRITICAL_DAILY_LIMIT = 95;
 const TEMPLATE_COOLDOWN_MS: Record<string, number> = {
   liveClassStarted: 60 * 60 * 1000,
   fardhTrackerSubmitted: 12 * 60 * 60 * 1000,
@@ -37,8 +30,6 @@ const TEMPLATE_COOLDOWN_MS: Record<string, number> = {
   qabilaMessagePosted: 2 * 60 * 60 * 1000,
   sunnahTrackerSubmitted: 60 * 60 * 1000,
 };
-let reservedSends = 0;
-let reservationWindowStartedAt = Date.now();
 
 function getOptionalEmailConfig() {
   if (!env.success) return null;
@@ -50,10 +41,7 @@ function getOptionalEmailConfig() {
 }
 
 export async function sendTransactionalEmail(input: SendEmailInput) {
-  if ((input.deduplicationKey?.startsWith("billing:") || input.deduplicationKey?.startsWith("payroll:") || input.deduplicationKey?.startsWith("feedback:"))) {
-    const delivered = await db.emailLog.findFirst({ where: { toEmail: input.toEmail, status: "SENT", payload: { path: "$.deduplicationKey", equals: input.deduplicationKey } }, select: { id: true } });
-    if (delivered) return { skipped: false as const, failed: false as const };
-  }
+  const durableDeduplication = ["billing:", "payroll:", "feedback:"].some(prefix => input.deduplicationKey?.startsWith(prefix));
   const config = getOptionalEmailConfig();
 
   if (!config) {
@@ -69,56 +57,33 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     return { skipped: true as const };
   }
 
-  const now = Date.now();
-  if (now - reservationWindowStartedAt >= 24 * 60 * 60 * 1000) {
-    reservationWindowStartedAt = now;
-    reservedSends = 0;
-  }
-  const critical = CRITICAL_TEMPLATES.has(input.template);
-  const timeSensitive = TIME_SENSITIVE_TEMPLATES.has(input.template);
-  const dailyLimit = critical ? CRITICAL_DAILY_LIMIT : timeSensitive ? TIME_SENSITIVE_DAILY_LIMIT : STANDARD_DAILY_LIMIT;
-  const cooldownMs = TEMPLATE_COOLDOWN_MS[input.template] ?? 10 * 60 * 1000;
-  const [sentCount, duplicate] = await Promise.all([
-    db.emailLog.count({ where: { status: "SENT", createdAt: { gte: new Date(now - 24 * 60 * 60 * 1000) } } }),
-    critical
-      ? Promise.resolve(null)
-      : db.emailLog.findFirst({
-          where: {
-            toEmail: input.toEmail,
-            template: input.template,
-            ...(input.deduplicationKey
-              ? { payload: { path: "$.deduplicationKey", equals: input.deduplicationKey } }
-              : { subject: input.subject }),
-            status: "SENT",
-            createdAt: { gte: new Date(now - cooldownMs) },
-          },
-          select: { id: true },
-        }),
-  ]);
-  const reason = duplicate
-    ? "Duplicate notification suppressed"
-    : sentCount + reservedSends >= dailyLimit
-      ? critical
-        ? "Provider quota safety limit reached"
-        : timeSensitive
-          ? "Critical email reserve protected"
-          : "Daily quota reserve protected"
-      : null;
-  if (reason) {
-    await db.emailLog.create({
-      data: { toEmail: input.toEmail, template: input.template, subject: input.subject, status: "SKIPPED", payload: { reason } },
+  let reservation;
+  try {
+    reservation = await reserveEmailSend({ ...input, durableDeduplication,
+      critical: CRITICAL_TEMPLATES.has(input.template),
+      cooldownMs: TEMPLATE_COOLDOWN_MS[input.template] ?? 10 * 60 * 1000,
     });
+  } catch (error) {
+    console.error("Email quota reservation unavailable", error);
+    return { skipped: false as const, failed: true as const, error: "Email quota could not be verified. No email was sent." };
+  }
+  if (reservation.kind === "already-sent") return { skipped: false as const, failed: false as const };
+  if (reservation.kind === "blocked") {
+    await db.emailLog.create({ data: { toEmail: input.toEmail, template: input.template,
+      subject: input.subject, status: "SKIPPED", payload: { reason: reservation.reason },
+    } });
     return { skipped: true as const };
   }
-  reservedSends += 1;
+  // UNKNOWN is deliberately counted by the quota: a timeout can occur after acceptance.
+  let response: Response;
   try {
-  const response = await fetch("https://api.resend.com/emails", {
+  response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     signal: AbortSignal.timeout(20000),
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
-      ...((input.deduplicationKey?.startsWith("billing:") || input.deduplicationKey?.startsWith("payroll:") || input.deduplicationKey?.startsWith("feedback:")) ? { "Idempotency-Key": input.deduplicationKey } : {}),
+      ...(durableDeduplication ? { "Idempotency-Key": input.deduplicationKey } : {}),
     },
     body: JSON.stringify({
       from: config.from,
@@ -128,14 +93,19 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
     }),
   });
 
+  } catch (error) {
+    await db.emailLog.update({ where: { id: reservation.id }, data: {
+      status: "UNKNOWN", error: "Provider outcome unknown; quota slot retained for reconciliation",
+    } }).catch(() => undefined);
+    console.error("Email provider outcome unknown", error);
+    return { skipped: false as const, failed: true as const, error: "Email provider outcome is unknown." };
+  }
   const payload = await response.json().catch(() => ({}));
 
-  await db.emailLog.create({
+  await db.emailLog.update({
+    where: { id: reservation.id },
     data: {
-      toEmail: input.toEmail,
-      template: input.template,
-      subject: input.subject,
-      status: response.ok ? "SENT" : "FAILED",
+      status: response.ok ? "SENT" : response.status >= 500 ? "UNKNOWN" : "FAILED",
       providerId: typeof payload?.id === "string" ? payload.id : null,
       error: response.ok ? null : JSON.stringify(payload),
       payload: { ...payload, ...(input.deduplicationKey ? { deduplicationKey: input.deduplicationKey } : {}) },
@@ -153,5 +123,4 @@ export async function sendTransactionalEmail(input: SendEmailInput) {
   }
 
   return { skipped: false as const, failed: false as const };
-  } finally { reservedSends = Math.max(0, reservedSends - 1); }
 }

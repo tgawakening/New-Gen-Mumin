@@ -38,7 +38,8 @@ test('month-specific login returns allow payroll only, without opening arbitrary
 });
 test('payroll emails reuse the configured sender and permanent delivery deduplication',async()=>{
  const logs=[];let requests=0;
- const db={emailLog:{findFirst:async({where})=>logs.find(l=>l.status==='SENT'&&l.toEmail===where.toEmail&&l.payload?.deduplicationKey===where.payload?.equals)||null,count:async()=>0,create:async({data})=>{logs.push(data);return data;}}};
- const client=load('src/lib/email/client.ts',{'@/lib/db':{db},'@/lib/env':{env:{success:true,data:{RESEND_API_KEY:'test-key',EMAIL_FROM:'TGA Finance <finance@example.test>'}}}},{fetch:async(url,options)=>{requests++;assert.equal(JSON.parse(options.body).from,'TGA Finance <finance@example.test>');assert.equal(options.headers['Idempotency-Key'],'payroll:slip:2');return{ok:true,json:async()=>({id:'provider-id'})};}});
+ const db={emailLog:{update:async({data})=>{logs.push(data);return data;}}};
+ const quota={reserveEmailSend:async input=>{assert.equal(input.durableDeduplication,true);return logs.some(l=>l.status==='SENT'&&l.payload?.deduplicationKey===input.deduplicationKey)?{kind:'already-sent'}:{kind:'reserved',id:'reservation'};}};
+ const client=load('src/lib/email/client.ts',{'@/lib/email/quota':quota,'@/lib/db':{db},'@/lib/env':{env:{success:true,data:{RESEND_API_KEY:'test-key',EMAIL_FROM:'TGA Finance <finance@example.test>'}}}},{fetch:async(url,options)=>{requests++;assert.equal(JSON.parse(options.body).from,'TGA Finance <finance@example.test>');assert.equal(options.headers['Idempotency-Key'],'payroll:slip:2');return{ok:true,json:async()=>({id:'provider-id'})};}});
  const mail={toEmail:'teacher@example.test',subject:'Payroll',html:'Summary',template:'teacherPayrollPublished',deduplicationKey:'payroll:slip:2'};await client.sendTransactionalEmail(mail);await client.sendTransactionalEmail(mail);assert.equal(requests,1);
 });
