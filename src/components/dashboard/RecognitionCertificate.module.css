@@ -2,15 +2,15 @@
 .artwork[data-theme="girl"] { --ink:#383d65; --rail:#30395b; --soft:#eeedf7; --accent:#986e39; }
 .artwork[data-theme="mum"] { --ink:#643a50; --rail:#563448; --soft:#f6ebee; --accent:#a47742; }
 .artwork[data-theme="neutral"] { --ink:#243d5c; --rail:#243d5c; --soft:#edf1f6; }
-.sheet { display:grid; grid-template-columns:28% 72%; min-height:70.7cqw; border:1px solid #dfd7c5; overflow:hidden; }
+.sheet { display:grid; grid-template-columns:28% 72%; min-height:60cqw; border:1px solid #dfd7c5; overflow:hidden; }
 .rail { position:relative; overflow:hidden; background:var(--rail); color:#fff4d9; display:flex; flex-direction:column; align-items:center; }
 .rail::before { content:""; position:absolute; inset:1.6cqw; border:1px solid #d7b77d70; border-radius:18cqw 18cqw 0 0; }
-.railBrand { z-index:1; margin-top:6cqw; font-size:1.5cqw; letter-spacing:.22em; font-weight:800; text-align:center; }
+.railBrand { z-index:1; margin-top:4cqw; font-size:1.5cqw; letter-spacing:.22em; font-weight:800; text-align:center; }
 .railBrand span { display:block; margin-top:.8cqw; font-size:1cqw; letter-spacing:.04em; font-weight:400; }
-.orbit { position:absolute; width:30cqw; height:30cqw; top:22cqw; border:1px solid #e2c98b55; border-radius:50%; }
-.character { position:absolute; top:16cqw; width:27cqw; height:46cqw; object-fit:contain; object-position:bottom; }
-.railCaption { position:relative; margin-top:auto; padding:3.3cqw 2cqw; text-align:center; font-family:Georgia,serif; font-style:italic; font-size:1.65cqw; line-height:1.5; }
-.neutralStar { position:absolute; top:27cqw; width:13cqw; height:13cqw; color:#dec48e; stroke-width:1; }
+.orbit { position:absolute; width:30cqw; height:30cqw; top:17cqw; border:1px solid #e2c98b55; border-radius:50%; }
+.character { position:absolute; top:12cqw; width:27cqw; height:calc(100% - 21cqw); max-height:46cqw; object-fit:contain; object-position:bottom; }
+.railCaption { position:relative; margin-top:auto; padding:2cqw 2cqw; text-align:center; font-family:Georgia,serif; font-style:italic; font-size:1.65cqw; line-height:1.5; }
+.neutralStar { position:absolute; top:23cqw; width:13cqw; height:13cqw; color:#dec48e; stroke-width:1; }
 .content { min-width:0; position:relative; display:flex; flex-direction:column; padding:4cqw 4.4cqw 2.4cqw; background:radial-gradient(ellipse at top right,var(--soft),transparent 55%); }
 .header { display:flex; align-items:center; justify-content:space-between; gap:2cqw; }
 .eyebrow { display:flex; align-items:center; gap:.6cqw; font-size:.95cqw; font-weight:700; letter-spacing:.17em; text-transform:uppercase; color:var(--accent); margin:0; }
