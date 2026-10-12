@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toPng } from "html-to-image";
-import { Download, ImageDown, LoaderCircle, Printer } from "lucide-react";
+import { Download, ImageDown, LoaderCircle, Printer, ZoomIn, ZoomOut } from "lucide-react";
 
 type PreparingAction = "png" | "pdf" | "print" | null;
 type CertificateImage = { dataUrl: string; width: number; height: number };
@@ -15,20 +15,32 @@ async function renderCertificatePng(): Promise<CertificateImage> {
   const source = document.querySelector<HTMLElement>("[data-certificate-artwork]");
   if (!source) throw new Error("Certificate artwork was not found.");
 
-  await Promise.all(Array.from(source.querySelectorAll("img")).map((image) => image.decode().catch(() => undefined)));
-  const bounds = source.getBoundingClientRect();
-  const pixelRatio = Math.max(2, Math.min(3, 2400 / bounds.width));
-  const dataUrl = await toPng(source, {
-    cacheBust: true,
-    backgroundColor: "#fffaf0",
-    pixelRatio,
-    width: bounds.width,
-    height: bounds.height,
-    preferredFontFormat: "woff2",
-    fetchRequestInit: { credentials: "same-origin" },
-    style: { margin: "0", transform: "none", rotate: "none" },
-  });
-  return { dataUrl, width: bounds.width, height: bounds.height };
+  await document.fonts.ready;
+  // Render a full-size copy so mobile downloads match desktop quality and layout.
+  const copy = source.cloneNode(true) as HTMLElement;
+  copy.removeAttribute("data-certificate-artwork");
+  Object.assign(copy.style, { width: "1120px", minWidth: "1120px", maxWidth: "1120px", margin: "0", boxShadow: "none" });
+  const host = document.createElement("div");
+  Object.assign(host.style, { position: "fixed", left: "-20000px", top: "0", width: "1120px", pointerEvents: "none" });
+  host.setAttribute("aria-hidden", "true");
+  host.appendChild(copy);
+  document.body.appendChild(host);
+  try {
+    await Promise.all(Array.from(copy.querySelectorAll("img")).map(async image => {
+      image.loading = "eager";
+      await image.decode();
+    }));
+    const bounds = copy.getBoundingClientRect();
+    const dataUrl = await toPng(copy, {
+      cacheBust: true, backgroundColor: "#fffcf5", pixelRatio: 2,
+      width: bounds.width, height: bounds.height, preferredFontFormat: "woff2",
+      fetchRequestInit: { credentials: "same-origin" },
+      style: { margin: "0", transform: "none", rotate: "none" },
+    });
+    return { dataUrl, width: bounds.width, height: bounds.height };
+  } finally {
+    host.remove();
+  }
 }
 
 function clickDownload(href: string, filename: string) {
@@ -60,6 +72,14 @@ async function createCertificatePdf(image: CertificateImage, autoPrint = false) 
 export function CertificateActions({ filename = "Gen-Mumin certificate" }: { filename?: string }) {
   const [preparing, setPreparing] = useState<PreparingAction>(null);
   const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState(false);
+  function togglePreview() {
+    const source = document.querySelector<HTMLElement>("[data-certificate-artwork]");
+    if (!source) return;
+    source.style.width = expanded ? "" : "1120px";
+    source.style.minWidth = expanded ? "" : "1120px";
+    setExpanded(!expanded);
+  }
 
   async function run(action: Exclude<PreparingAction, null>) {
     if (preparing) return;
@@ -91,6 +111,7 @@ export function CertificateActions({ filename = "Gen-Mumin certificate" }: { fil
   }
 
   return <div className="mt-8 print:hidden"><div className="flex flex-wrap justify-center gap-3">
+    <button type="button" onClick={togglePreview} aria-pressed={expanded} className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-[#172842]">{expanded ? <ZoomOut className="h-4 w-4"/> : <ZoomIn className="h-4 w-4"/>}{expanded ? "Fit to screen" : "Enlarge preview"}</button>
     <button type="button" onClick={() => run("png")} disabled={Boolean(preparing)} className="inline-flex items-center gap-2 rounded-full bg-[#c27a2c] px-6 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-65">{preparing==="png"?<LoaderCircle className="h-4 w-4 animate-spin"/>:<ImageDown className="h-4 w-4"/>}{preparing==="png"?"Preparing PNG...":"Download PNG"}</button>
     <button type="button" onClick={() => run("pdf")} disabled={Boolean(preparing)} className="inline-flex items-center gap-2 rounded-full bg-[#172842] px-6 py-3 text-sm font-semibold text-white disabled:cursor-wait disabled:opacity-65">{preparing==="pdf"?<LoaderCircle className="h-4 w-4 animate-spin"/>:<Download className="h-4 w-4"/>}{preparing==="pdf"?"Preparing PDF...":"Download PDF"}</button>
     <button type="button" onClick={() => run("print")} disabled={Boolean(preparing)} className="inline-flex items-center gap-2 rounded-full border border-[#d8a657] bg-white px-6 py-3 text-sm font-semibold text-[#172842] disabled:cursor-wait disabled:opacity-65">{preparing==="print"?<LoaderCircle className="h-4 w-4 animate-spin"/>:<Printer className="h-4 w-4"/>}{preparing==="print"?"Preparing print...":"Print certificate"}</button>

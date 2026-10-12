@@ -1,0 +1,42 @@
+.artwork { --ink:#163f43; --rail:#153e42; --soft:#eaf2ed; --accent:#9b722f; container-type:inline-size; width:100%; max-width:1120px; margin:auto; background:#fffcf5; color:var(--ink); box-shadow:0 24px 70px #192c3920; }
+.artwork[data-theme="girl"] { --ink:#383d65; --rail:#30395b; --soft:#eeedf7; --accent:#986e39; }
+.artwork[data-theme="mum"] { --ink:#643a50; --rail:#563448; --soft:#f6ebee; --accent:#a47742; }
+.artwork[data-theme="neutral"] { --ink:#243d5c; --rail:#243d5c; --soft:#edf1f6; }
+.sheet { display:grid; grid-template-columns:28% 72%; min-height:70.7cqw; border:1px solid #dfd7c5; overflow:hidden; }
+.rail { position:relative; overflow:hidden; background:var(--rail); color:#fff4d9; display:flex; flex-direction:column; align-items:center; }
+.rail::before { content:""; position:absolute; inset:1.6cqw; border:1px solid #d7b77d70; border-radius:18cqw 18cqw 0 0; }
+.railBrand { z-index:1; margin-top:6cqw; font-size:1.5cqw; letter-spacing:.22em; font-weight:800; text-align:center; }
+.railBrand span { display:block; margin-top:.8cqw; font-size:1cqw; letter-spacing:.04em; font-weight:400; }
+.orbit { position:absolute; width:30cqw; height:30cqw; top:22cqw; border:1px solid #e2c98b55; border-radius:50%; }
+.character { position:absolute; top:16cqw; width:27cqw; height:46cqw; object-fit:contain; object-position:bottom; }
+.railCaption { position:relative; margin-top:auto; padding:3.3cqw 2cqw; text-align:center; font-family:Georgia,serif; font-style:italic; font-size:1.65cqw; line-height:1.5; }
+.neutralStar { position:absolute; top:27cqw; width:13cqw; height:13cqw; color:#dec48e; stroke-width:1; }
+.content { position:relative; display:flex; flex-direction:column; padding:4cqw 4.4cqw 2.4cqw; background:radial-gradient(ellipse at top right,var(--soft),transparent 55%); }
+.header { display:flex; align-items:center; justify-content:space-between; gap:2cqw; }
+.eyebrow { display:flex; align-items:center; gap:.6cqw; font-size:.95cqw; font-weight:700; letter-spacing:.17em; text-transform:uppercase; color:var(--accent); margin:0; }
+.eyebrow svg { width:1.3cqw; height:1.3cqw; }
+.subline { font-size:1.05cqw; color:#73716c; margin:.7cqw 0 0; }
+.seal { border:1px solid #c9ad77; border-radius:50%; width:6.6cqw; height:6.6cqw; display:flex; flex-direction:column; align-items:center; justify-content:center; color:var(--accent); flex-shrink:0; }
+.seal svg { width:2.5cqw; height:2.5cqw; stroke-width:1.3; }
+.seal span { font-size:.52cqw; letter-spacing:.12em; margin-top:.5cqw; }
+.heading { margin-top:3cqw; }
+.heading h1 { font-family:Georgia,serif; font-size:4.25cqw; line-height:1.13; font-weight:400; letter-spacing:-.035em; margin:1.2cqw 0; }
+.week { display:inline-block; border:1px solid #dfd7c5; background:#ffffff80; padding:.65cqw 1.1cqw; border-radius:3cqw; margin:0; font-size:1cqw; color:var(--ink); }
+.recipient { margin-top:3cqw; }
+.recipient h2 { font-family:Georgia,serif; font-size:4.4cqw; line-height:1.15; overflow-wrap:anywhere; margin:1cqw 0 1.4cqw; font-weight:700; }
+.recipient h2.longName { font-size:3.3cqw; }
+.goldLine { width:8cqw; height:3px; background:#c5a367; }
+.qabila { font-size:1.1cqw; font-weight:600; margin:1cqw 0 0; }
+.citation { margin:2.4cqw 0 1.8cqw; padding-left:1.6cqw; border-left:2px solid #d7c29a; }
+.citation p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1.55cqw; line-height:1.65; margin:0; color:#555b60; }
+.citation p.longEvidence { font-size:1.25cqw; }
+.citation p.recognition { font-size:1.1cqw; font-weight:700; color:var(--ink); margin-bottom:.8cqw; }
+.blessing { font-family:Georgia,serif; font-style:italic; font-size:1.2cqw; line-height:1.6; margin:0 0 2cqw; color:var(--accent); }
+.footer { display:flex; justify-content:space-between; gap:2cqw; border-top:1px solid #dfd7c5; padding-top:1.7cqw; margin-top:auto; }
+.footer strong { display:block; font-size:1.2cqw; overflow-wrap:anywhere; }
+.footer span { display:block; margin-top:.4cqw; font-size:.9cqw; color:#77766e; }
+.signature { text-align:right; max-width:55%; }
+.reference { display:flex; justify-content:space-between; gap:1cqw; color:#878275; font-size:.72cqw; margin-top:2cqw; }
+@media print { .artwork { width:277mm!important; min-width:0!important; max-width:none!important; box-shadow:none; margin:0; print-color-adjust:exact; -webkit-print-color-adjust:exact; } .sheet { break-inside:avoid; } }
+
+@page { size: A4 landscape; margin: 7mm; }
