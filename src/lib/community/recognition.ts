@@ -1,3 +1,4 @@
+import { saveWeeklyRecognition } from "@/lib/community/weekly-recognition-save";
 import "server-only";
 
 import { Prisma } from "@prisma/client";
@@ -53,18 +54,27 @@ export async function awardRecognition(input: {
   if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another Qabila who benefited from this action.");
 
   let award;
-  try {
-    award = await db.recognitionAward.create({
-      data: { studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus ?? 0, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId },
-    });
-  } catch (error) {
-    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-    const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
-    if (!existing) throw error;
-    return existing;
+  if (definition.key === "MUMIN_OF_WEEK") {
+    input = { ...input, pointsBonus: 150 };
+    const membership = await ensureStudentHouseMembership(input.studentId);
+    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek }, membership.houseId);
+    if (saved.existing) return saved.award;
+    award = saved.award;
+  } else {
+    try {
+      award = await db.recognitionAward.create({
+        data: { studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus ?? 0, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId },
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+      const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
+      if (!existing) throw error;
+      return existing;
+    }
+
   }
 
-  if ((input.pointsBonus ?? 0) > 0) await awardHousePointsOnce({ studentId: input.studentId, points: input.pointsBonus!, reason: definition.title + ": " + input.evidence, sourceType: "RECOGNITION_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
+  if (definition.key !== "MUMIN_OF_WEEK" && (input.pointsBonus ?? 0) > 0) await awardHousePointsOnce({ studentId: input.studentId, points: input.pointsBonus!, reason: definition.title + ": " + input.evidence, sourceType: "RECOGNITION_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   if (input.beneficiaryStudentId && isCrossHouseBadge) {
     const otherBonus = definition.key === "ALLIANCE_CHAMPION" ? 30 : 20;
     await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another Qabila helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
