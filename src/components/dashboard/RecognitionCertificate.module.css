@@ -11,7 +11,7 @@
 .character { position:absolute; top:16cqw; width:27cqw; height:46cqw; object-fit:contain; object-position:bottom; }
 .railCaption { position:relative; margin-top:auto; padding:3.3cqw 2cqw; text-align:center; font-family:Georgia,serif; font-style:italic; font-size:1.65cqw; line-height:1.5; }
 .neutralStar { position:absolute; top:27cqw; width:13cqw; height:13cqw; color:#dec48e; stroke-width:1; }
-.content { position:relative; display:flex; flex-direction:column; padding:4cqw 4.4cqw 2.4cqw; background:radial-gradient(ellipse at top right,var(--soft),transparent 55%); }
+.content { min-width:0; position:relative; display:flex; flex-direction:column; padding:4cqw 4.4cqw 2.4cqw; background:radial-gradient(ellipse at top right,var(--soft),transparent 55%); }
 .header { display:flex; align-items:center; justify-content:space-between; gap:2cqw; }
 .eyebrow { display:flex; align-items:center; gap:.6cqw; font-size:.95cqw; font-weight:700; letter-spacing:.17em; text-transform:uppercase; color:var(--accent); margin:0; }
 .eyebrow svg { width:1.3cqw; height:1.3cqw; }
@@ -27,9 +27,9 @@
 .recipient h2.longName { font-size:3.3cqw; }
 .goldLine { width:8cqw; height:3px; background:#c5a367; }
 .qabila { font-size:1.1cqw; font-weight:600; margin:1cqw 0 0; }
-.citation { margin:2.4cqw 0 1.8cqw; padding-left:1.6cqw; border-left:2px solid #d7c29a; }
-.citation p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1.55cqw; line-height:1.65; margin:0; color:#555b60; }
-.citation p.longEvidence { font-size:1.25cqw; }
+.citation { flex-shrink:0; margin:2cqw 0 1.6cqw; padding-left:1.6cqw; border-left:2px solid #d7c29a; }
+.citation p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1.2cqw; font-weight:400; line-height:1.55; margin:0; color:#555b60; }
+.citation p.longEvidence { font-size:1.08cqw; }
 .citation p.recognition { font-size:1.1cqw; font-weight:700; color:var(--ink); margin-bottom:.8cqw; }
 .blessing { font-family:Georgia,serif; font-style:italic; font-size:1.2cqw; line-height:1.6; margin:0 0 2cqw; color:var(--accent); }
 .footer { display:flex; justify-content:space-between; gap:2cqw; border-top:1px solid #dfd7c5; padding-top:1.7cqw; margin-top:auto; }
