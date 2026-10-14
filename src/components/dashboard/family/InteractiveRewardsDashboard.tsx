@@ -1,3 +1,4 @@
+import { EarnedBadgeArtwork } from "@/components/badges/EarnedBadgeArtwork";
 import { RecognitionHistory } from "./RecognitionHistory";
 import { currentWeeklyRecognition } from "@/lib/community/recognition-week";
 import { PointsHistory } from "@/components/dashboard/family/PointsHistory";
@@ -74,7 +75,7 @@ function BadgeMedallion({ index, earned }: { index: number; earned: boolean }) {
 export function InteractiveRewardsDashboard({ data, parentView = false }: { data: Data; parentView?: boolean }) {
   const name = studentName(data);
   const featured = currentWeeklyRecognition(data.awards);
-  const earnedByKey = new Map(data.awards.map((award) => [award.badgeKey, award]));
+  const earnedByKey = new Map([...data.awards].reverse().map((award) => [award.badgeKey, award]));
   const nextPoints = data.nextUnlock ? Math.max(0, data.nextUnlock.milestone - data.collective) : 0;
   const unlockTarget = data.nextUnlock?.milestone ?? Math.max(100, data.collective);
   const unlockProgress = data.nextUnlock ? Math.min(100, (data.collective / data.nextUnlock.milestone) * 100) : 100;
@@ -186,14 +187,15 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             {data.badgeDefinitions.map((badge, index) => {
               const award = earnedByKey.get(badge.key);
+              if (award) return <article key={badge.key} className="min-w-0 rounded-3xl border border-[#eadfce] bg-white p-2 shadow-sm"><EarnedBadgeArtwork name={award.recipientName || name} title={award.title} badgeKey={award.badgeKey} reason={award.evidence || award.description} qabila={data.membership.qabilaGroup} gender={data.resolvedGender} date={new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeZone:"Asia/Karachi"}).format(award.awardedAt)}/><Link href={"/badges/" + award.certificateCode} className="m-2 flex min-h-11 items-center justify-center rounded-full bg-[#22304a] px-3 py-2 text-xs font-bold text-white">View & download badge PNG</Link></article>;
               return (
                 <article key={badge.key} className={`group flex gap-4 rounded-[24px] border p-4 transition duration-300 hover:-translate-y-1 hover:shadow-lg ${award ? "border-[#e4b75f] bg-gradient-to-br " + badgeCardLooks[index % badgeCardLooks.length] + " shadow-md" : "bg-gradient-to-br " + badgeCardLooks[index % badgeCardLooks.length] + " shadow-sm"}`}>
                   <BadgeMedallion index={index} earned={Boolean(award)} />
                   <div className="min-w-0">
                     <h4 className="font-black text-[#182743]">{badge.title}</h4>
                     <p className="mt-1 text-xs font-semibold uppercase tracking-[0.12em] text-[#c16d24]">{award ? "Earned" : "Locked"}</p>
-                    <p className="mt-2 text-sm leading-5 text-[#647184]">{award?.evidence ?? badge.description}</p>
-                    {award ? <Link href={`/certificates/${award.certificateCode}`} className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-[#1d5f92]">View award <Sparkles className="h-3.5 w-3.5" /></Link> : null}
+                    <p className="mt-2 text-sm leading-5 text-[#647184]">{badge.description}</p>
+
                   </div>
                 </article>
               );

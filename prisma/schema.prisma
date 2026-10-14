@@ -1179,6 +1179,7 @@ model RecognitionAward {
   title           String
   category        String
   description     String
+  recipientName   String?
   evidence        String?
   awardedByUserId String?
   beneficiaryStudentId String?

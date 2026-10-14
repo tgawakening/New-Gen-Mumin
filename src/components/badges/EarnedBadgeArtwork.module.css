@@ -1,0 +1,22 @@
+.artwork { --ink:#164e48; --soft:#e8f5ee; --dark:#194c46; container-type:inline-size; width:100%; max-width:640px; margin:auto; background:#fffdf7; color:var(--ink); border-radius:24px; overflow:hidden; border:1px solid #e3dac7; }
+.artwork[data-theme="girl"] { --ink:#573e78; --soft:#f2ecfa; --dark:#4d3b70; }
+.artwork[data-theme="neutral"] { --ink:#234667; --soft:#ebf2fa; --dark:#234667; }
+.body { min-height:100cqw; padding:6cqw; display:flex; flex-direction:column; align-items:center; text-align:center; background:radial-gradient(ellipse at top,var(--soft),transparent 70%); }
+.brand { margin:0; font-size:2cqw; letter-spacing:.17em; font-weight:800; }
+.brand span { display:block; margin-top:1cqw; font-size:1.4cqw; letter-spacing:.2em; color:#8c713c; }
+.illustration { position:relative; width:70cqw; height:37cqw; margin-top:3cqw; }
+.halo { position:absolute; inset:3cqw 17cqw 1cqw; border:1px solid #d2b777; border-radius:50%; background:var(--soft); }
+.character { position:absolute; left:7cqw; bottom:0; width:27cqw; height:37cqw; object-fit:contain; }
+.medal { position:absolute; left:31cqw; top:10cqw; width:25cqw; height:25cqw; border-radius:50%; border:1.3cqw solid #e8c97d; outline:1px solid #bd8a35; background:var(--dark); color:#ffdf89; display:flex; flex-direction:column; justify-content:center; align-items:center; box-shadow:0 2cqw 4cqw #17284218; }
+.medal svg { width:11cqw; height:11cqw; stroke-width:1.5; }
+.medal span { margin-top:1cqw; font-size:1.5cqw; letter-spacing:.1em; font-weight:700; }
+.artwork[data-theme="neutral"] .medal { left:22.5cqw; }
+.sparkle { position:absolute; right:7cqw; top:3cqw; width:5cqw; height:5cqw; color:#b38a37; }
+.eyebrow { margin:3cqw 0 1.5cqw; color:#92713d; font-size:1.8cqw; }
+.body h2 { font-family:Georgia,serif; font-size:6cqw; line-height:1.15; margin:0; overflow-wrap:anywhere; }
+.name { font-size:4cqw; font-weight:800; margin:2.5cqw 0; overflow-wrap:anywhere; max-width:100%; }
+.reason { font-size:2.3cqw; line-height:1.6; color:#566174; white-space:pre-wrap; overflow-wrap:anywhere; margin:0; max-width:100%; }
+.qabila { font-size:2cqw; font-weight:700; padding:1.3cqw 3cqw; background:var(--soft); border-radius:9cqw; margin:3cqw 0 0; }
+.footer { display:flex; width:100%; justify-content:space-between; gap:2cqw; font-size:1.55cqw; color:#7a7d80; border-top:1px solid #e3dac7; padding-top:2cqw; margin-top:auto; }
+.footer::before { content:""; position:absolute; }
+.qabila + .footer { margin-top:3cqw; }
