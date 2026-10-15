@@ -1,3 +1,4 @@
+import { QuizPracticeHub } from "@/components/quizzes/QuizPracticeHub";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -225,6 +226,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
             </SectionCard>
           ) : null}
 
+          <QuizPracticeHub key={selectedChild.id} studentId={selectedChild.id} />
           <SectionCard eyebrow="Assessment overview" title={`${childName}'s quiz activity`}>
             <div className={`space-y-4 ${selectedChild.accessLocked ? "opacity-60" : ""}`}>
               {quizForms.map((quiz) => {

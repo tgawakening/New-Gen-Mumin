@@ -274,7 +274,7 @@ export async function driveResumableUploadRequest<T>(sessionUrl: string, init: R
   };
 }
 
-export async function driveMediaRequest(fileId: string, rangeHeader?: string | null) {
+export async function driveMediaRequest(fileId: string, rangeHeader?: string | null, signal?: AbortSignal) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -287,6 +287,7 @@ export async function driveMediaRequest(fileId: string, rangeHeader?: string | n
             ...(rangeHeader ? { Range: rangeHeader } : {}),
           },
           cache: "no-store",
+          signal,
         },
       );
       if (response.ok || response.status === 206) return response;
@@ -296,6 +297,7 @@ export async function driveMediaRequest(fileId: string, rangeHeader?: string | n
       lastError = new Error(`Google Drive media request failed (${response.status}): ${detail}`);
       if (!TRANSIENT_DRIVE_STATUSES.has(response.status) && response.status !== 401) throw lastError;
     } catch (error) {
+      if (signal?.aborted) throw error;
       lastError = error;
     }
 

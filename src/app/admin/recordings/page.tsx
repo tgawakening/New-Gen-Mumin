@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
+import { RecordingDownloadButtons } from "./RecordingDownloadButtons";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -240,7 +241,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
               <p className="text-sm font-semibold uppercase tracking-[0.24em] text-[#c27a2c]">Admin / Recordings</p>
               <h1 className="mt-3 text-3xl font-semibold text-[#22304a]">Live class recordings</h1>
               <p className="mt-2 text-sm leading-6 text-[#617184]">
-                Review unique Drive-backed recordings by teacher, with pagination for larger libraries.
+                Review recordings by teacher. Download the original video or choose Download MP3 for an audio-only copy. Audio downloads may take a few minutes; keep this page open.
               </p>
             </div>
             <Link href="/admin" className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">
@@ -334,6 +335,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                     <div className="flex flex-wrap gap-2">
                       {recording.isReadyForPlayback && recording.watchUrl ? (
                         <>
+                          <RecordingDownloadButtons recordingId={recording.id} />
                           <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
                           {(() => { const share = createRecordingShareToken(recording.id); return <CopyRecordingLinkButton path={`/shared/recordings/${recording.id}?expires=${share.expiresAt}&token=${share.token}`} />; })()}
                         </>

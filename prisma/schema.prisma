@@ -76,6 +76,7 @@ model ParentStudent {
 }
 
 model StudentProfile {
+  practiceAttempts QuizPracticeAttempt[]
   liveQuizSeats QuizLiveSeat[]
   attendanceRecoveryReports AdminAttendanceRecovery[]
   id                      String                   @id @default(cuid())
@@ -667,6 +668,7 @@ model LessonLog {
 }
 
 model Quiz {
+  practiceAttempts QuizPracticeAttempt[]
   id               String         @id @default(cuid())
   programId        String
   title            String
@@ -1846,4 +1848,25 @@ model QuizLiveSeat {
  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
  @@unique([sessionId, studentId])
  @@index([studentId, sessionId])
+}
+
+// Private revision results, deliberately separate from assessed attempts and house points.
+model QuizPracticeAttempt {
+  id String @id @default(cuid())
+  studentId String
+  quizId String
+  title String
+  snapshot Json
+  answers Json
+  questionIndex Int @default(0)
+  questionStartedAt DateTime @default(now())
+  durationSeconds Int
+  score Int @default(0)
+  correctCount Int @default(0)
+  questionCount Int
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  @@index([studentId, quizId, startedAt])
 }

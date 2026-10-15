@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ['ffmpeg-static'],
+  outputFileTracingIncludes: { '/api/recordings/*/audio': ['./node_modules/ffmpeg-static/**'] },
   experimental: {
     serverActions: {
       bodySizeLimit: "500mb",
