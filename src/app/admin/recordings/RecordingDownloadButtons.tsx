@@ -21,9 +21,9 @@ export function RecordingDownloadButtons({recordingId}:{recordingId:string}){
   }catch(e){setMessage('');if(!abort.signal.aborted)setError(e instanceof Error?e.message:'Download interrupted. Please retry.');}
   finally{controller.current=null;setBusy(false);}
  }
- return <div className="flex max-w-sm flex-wrap items-center gap-2">
-  <a href={`/api/recordings/${recordingId}/download`} download className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"><Download size={14} className="mr-1 inline"/>Download video</a>
-  <button disabled={busy} onClick={()=>void audio()} className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81] disabled:opacity-50"><Headphones size={14} className="mr-1 inline"/>{busy?'Preparing / downloading…':'Download MP3'}</button>
+ return <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2 sm:max-w-sm">
+  <a href={`/api/recordings/${recordingId}/download`} download className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81]"><Download size={14} className="mr-1 inline"/>Download video</a>
+  <button disabled={busy} onClick={()=>void audio()} className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#0f4d81] disabled:opacity-50"><Headphones size={14} className="mr-1 inline"/>{busy?'Preparing MP3...':'Download MP3'}</button>
   {busy&&<button className="text-xs underline" onClick={()=>controller.current?.abort()}>Cancel</button>}
   {message&&<p role="status" className="w-full text-xs text-slate-600">{message}</p>}{error&&<p role="alert" className="w-full text-xs text-red-700">{error}</p>}
  </div>;

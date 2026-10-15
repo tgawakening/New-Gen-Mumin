@@ -317,8 +317,8 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
             <div className="mt-5 space-y-3">
               {paginatedRecordings.map((recording) => (
                 <div key={recording.id} className="rounded-[22px] bg-[#fbf6ef] p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                    <div className="min-w-0 break-words">
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">{recording.programTitle}</p>
                       <h3 className="mt-2 text-lg font-semibold text-[#22304a]">{recording.title}</h3>
                       <p className="mt-1 text-sm text-[#617184]">
@@ -332,11 +332,12 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                         {recording.processingError ? <span className="max-w-xl text-xs leading-5 text-[#a23c3c]">{recording.processingError}</span> : null}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="min-w-0 space-y-3">
+                      <div className="flex flex-wrap items-start gap-2">
                       {recording.isReadyForPlayback && recording.watchUrl ? (
                         <>
                           <RecordingDownloadButtons recordingId={recording.id} />
-                          <Link href={recording.watchUrl} target="_blank" className="rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
+                          <Link href={recording.watchUrl} target="_blank" className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
                           {(() => { const share = createRecordingShareToken(recording.id); return <CopyRecordingLinkButton path={`/shared/recordings/${recording.id}?expires=${share.expiresAt}&token=${share.token}`} />; })()}
                         </>
                       ) : (
@@ -347,11 +348,13 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                           </button>
                         </form>
                       )}
-                      <form action={reassignRecordingAction} className="flex flex-wrap items-center gap-2">
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                      <form action={reassignRecordingAction} className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
                         <input type="hidden" name="recordingId" value={recording.id} />
                         <input type="hidden" name="teacher" value={activeTeacher ?? ""} />
                         <input type="hidden" name="page" value={page} />
-                        <select name="targetAssignment" required defaultValue="" className="max-w-[250px] rounded-full border border-[#c9d7e6] bg-white px-3 py-2 text-xs font-semibold text-[#22304a]">
+                        <select name="targetAssignment" required defaultValue="" className="min-h-10 min-w-0 max-w-full sm:max-w-[250px] rounded-full border border-[#c9d7e6] bg-white px-3 py-2 text-xs font-semibold text-[#22304a]">
                           <option value="" disabled>Move to teacher / programme...</option>
                           {manualRecordingOptions.map((teacher) => (
                             <optgroup key={teacher.id} label={teacher.name}>
@@ -369,6 +372,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                         <input type="hidden" name="page" value={page} />
                         <button className="rounded-full border border-[#efc6c1] bg-white px-4 py-2 text-sm font-semibold text-[#a23c3c]">Delete</button>
                       </form>
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -6,5 +6,5 @@ export function CopyRecordingLinkButton({ path }: { path: string }) {
     await navigator.clipboard.writeText(`${window.location.origin}${path}`);
     setCopied(true); window.setTimeout(() => setCopied(false), 2200);
   }
-  return <button type="button" onClick={copyLink} className="rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]" title="Copy a secure link that works for 30 days">{copied ? "Link copied" : "Copy access link"}</button>;
+  return <button type="button" onClick={copyLink} className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]" title="Copy a secure link that works for 30 days">{copied ? "Link copied" : "Copy access link"}</button>;
 }
