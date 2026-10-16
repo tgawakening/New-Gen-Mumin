@@ -373,6 +373,7 @@ model ClassScheduleRoster {
 }
 
 model LiveClassRecording {
+  transcript RecordingTranscript?
   id              String        @id @default(cuid())
   scheduleId      String
   recordingFileId String?
@@ -1869,4 +1870,22 @@ model QuizPracticeAttempt {
   student StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
   quiz Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
   @@index([studentId, quizId, startedAt])
+}
+
+model RecordingTranscript {
+ id String @id @default(cuid())
+ recordingId String @unique
+ status String @default("EMPTY")
+ provider String @default("zoom")
+ providerJobId String?
+ segments Json?
+ speakerNames Json?
+ error String? @db.Text
+ mediaTokenHash String?
+ mediaExpiresAt DateTime?
+ lastCheckedAt DateTime?
+ requestedByUserId String?
+ createdAt DateTime @default(now())
+ updatedAt DateTime @updatedAt
+ recording LiveClassRecording @relation(fields: [recordingId], references: [id], onDelete: Cascade)
 }

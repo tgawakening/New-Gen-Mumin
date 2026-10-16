@@ -577,3 +577,30 @@ export async function diagnoseZoomParticipantAccess(meetingId: string) {
     details,
   };
 }
+// Only select a transcript from the same recording occurrence, never a recurring meeting's newest class.
+export async function getZoomTranscriptText(input: { meetingId: string; recordingFileId?: string | null; recordingStart?: Date | null }) {
+  const select = (meeting: ZoomMeetingRecordingsResponse) => {
+    const files = meeting.recording_files ?? [];
+    const transcripts = files.filter(file => file.file_type?.toUpperCase() === 'TRANSCRIPT' && file.download_url);
+    if (input.recordingStart) return transcripts.find(file => sameRecordingTime(file.recording_start, input.recordingStart));
+    if (input.recordingFileId && files.some(file => file.id === input.recordingFileId) && transcripts.length === 1) return transcripts[0];
+    return undefined;
+  };
+  let file: ZoomRecordingFile | undefined;
+  try { file = select(await getZoomMeetingRecordings(input.meetingId)); } catch { /* Search the dated recording archive below. */ }
+  if (!file && input.recordingStart) {
+    const archive = await getZoomUserRecordings({ recordingStart: input.recordingStart });
+    for (const meeting of archive.meetings ?? []) {
+      if (String(meeting.id) !== input.meetingId && meeting.uuid !== input.meetingId) continue;
+      file = select(meeting); if (file) break;
+    }
+  }
+  if (!file?.download_url) return null;
+  const token = await getZoomAccessToken();
+  const response = await fetch(file.download_url, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store', signal: AbortSignal.timeout(30000) });
+  if (!response.ok || !response.body) throw new Error('Zoom transcript download unavailable.');
+  const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
+  try { for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > 2_000_000) throw new Error('Transcript is too large.'); chunks.push(part.value); } }
+  finally { await reader.cancel(); }
+  return Buffer.concat(chunks).toString('utf8');
+}

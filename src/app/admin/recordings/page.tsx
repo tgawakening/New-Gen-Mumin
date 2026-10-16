@@ -337,6 +337,7 @@ export default async function AdminRecordingsPage({ searchParams }: PageProps) {
                       {recording.isReadyForPlayback && recording.watchUrl ? (
                         <>
                           <RecordingDownloadButtons recordingId={recording.id} />
+                          <Link href={`/admin/recordings/${recording.id}/transcript`} className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full border border-[#c9d7e6] bg-white px-4 py-2 text-sm font-semibold text-[#22304a]">Transcript</Link>
                           <Link href={recording.watchUrl} target="_blank" className="inline-flex min-h-10 shrink-0 items-center whitespace-nowrap rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Open</Link>
                           {(() => { const share = createRecordingShareToken(recording.id); return <CopyRecordingLinkButton path={`/shared/recordings/${recording.id}?expires=${share.expiresAt}&token=${share.token}`} />; })()}
                         </>
