@@ -27,7 +27,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
   );
   if (!studentId) return NextResponse.redirect(new URL("/auth/login", request.url));
 
-  const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
   const [schedule, session] = await Promise.all([
     db.classSchedule.findUnique({
       where: { id: scheduleId },
@@ -36,12 +35,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         endsOn: true,
         programId: true,
         teacher: { select: { userId: true } },
-        sessionOccurrences: {
-          where: { source: "zoom-webhook", startedAt: { gte: sixHoursAgo } },
-          orderBy: { startedAt: "desc" },
-          take: 5,
-          select: { teacherUserId: true, endedAt: true },
-        },
+
       },
     }),
     signed ? Promise.resolve(null) : getCurrentSession(),
@@ -50,11 +44,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (!schedule?.meetingUrl) return NextResponse.redirect(scheduleDestination(request));
   if (hasScheduleEnded(schedule)) return NextResponse.redirect(scheduleDestination(request, "ended"));
   if (!signed && !session) return NextResponse.redirect(new URL("/auth/login", request.url));
-
-  const latest = schedule.sessionOccurrences.find((occurrence) => occurrence.teacherUserId === schedule.teacher.userId);
-  if (!latest || latest.endedAt) {
-    return NextResponse.redirect(scheduleDestination(request, latest?.endedAt ? "ended" : "not-started"));
-  }
 
   let attributionUserId: string;
   if (signed) {
