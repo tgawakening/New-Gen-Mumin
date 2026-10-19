@@ -51,6 +51,7 @@ export function FardhTrackerBoard({ days, today, start, records, action, locked 
       <Link className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-bold text-[#22304a]" href={`?${queryPrefix}week=${shiftDay(start,7)}`}>Next</Link>
     </div>
 
+    <p className="text-sm text-[#68758a]">Choose the correct day, check or uncheck prayers, then save. You can correct submitted days or clear all prayers. Your points and Qabila total adjust automatically.</p>
     <div className="grid gap-4 lg:grid-cols-7">
       {days.map((day) => {
         const record = records.get(day);
@@ -62,7 +63,7 @@ export function FardhTrackerBoard({ days, today, start, records, action, locked 
           <div className="space-y-2">
             {FARDH_PRAYERS.map((prayer) => {
               const done = Boolean(record?.[prayer.key]);
-              const disabled = future || locked || done;
+              const disabled = future || locked;
               return <label key={prayer.key} className={`relative flex items-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r p-3 text-white ${colors[prayer.key]} ${disabled && !done ? "cursor-not-allowed" : "cursor-pointer"} ${done ? "ring-2 ring-emerald-300" : "shadow-sm"}`}>
                 <input aria-label={`Mark ${prayer.label} complete for ${prettyDay(day)}`} name="prayer" value={prayer.key} type="checkbox" defaultChecked={done} disabled={disabled} className="peer sr-only"/>
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/20">{prayer.icon}</span>
@@ -71,7 +72,7 @@ export function FardhTrackerBoard({ days, today, start, records, action, locked 
               </label>;
             })}
           </div>
-          <button disabled={future || locked || completed === 5} className="mt-3 w-full rounded-2xl bg-[#17243a] px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{completed === 5 ? "Day complete" : future ? "Available on this day" : "Save selected prayers"}</button>
+          <button disabled={future || locked} className="mt-3 w-full rounded-2xl bg-[#17243a] px-3 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:bg-slate-300">{future ? "Available on this day" : record ? "Save changes" : "Save selected prayers"}</button>
         </form>;
       })}
     </div>

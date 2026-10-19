@@ -28,9 +28,10 @@
 .goldLine { width:8cqw; height:3px; background:#c5a367; }
 .qabila { font-size:1.1cqw; font-weight:600; margin:1cqw 0 0; }
 .citation { flex-shrink:0; margin:2cqw 0 1.6cqw; padding-left:1.6cqw; border-left:2px solid #d7c29a; }
-.citation p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1.2cqw; font-weight:400; line-height:1.55; margin:0; color:#555b60; }
-.citation p.longEvidence { font-size:1.08cqw; }
-.citation p.recognition { font-size:1.1cqw; font-weight:700; color:var(--ink); margin-bottom:.8cqw; }
+.citation p { white-space:pre-wrap; overflow-wrap:anywhere; font-size:1.55cqw; font-weight:400; line-height:1.6; margin:0; color:#555b60; }
+.citation p.longEvidence { font-size:1.3cqw; }
+.citation p.citationLabel { font-size:1cqw; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:.8cqw; }
+.citation p.recognition { font-size:1.65cqw; font-weight:700; color:var(--ink); margin-bottom:.8cqw; }
 .blessing { font-family:Georgia,serif; font-style:italic; font-size:1.2cqw; line-height:1.6; margin:0 0 2cqw; color:var(--accent); }
 .footer { display:flex; justify-content:space-between; gap:2cqw; border-top:1px solid #dfd7c5; padding-top:1.7cqw; margin-top:auto; }
 .footer strong { display:block; font-size:1.2cqw; overflow-wrap:anywhere; }

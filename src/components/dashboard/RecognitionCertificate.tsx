@@ -36,13 +36,14 @@ export function RecognitionCertificate(props: Props) {
           {props.qabila && <p className={styles.qabila}>{props.qabila}</p>}
         </div>
         <div className={styles.citation}>
+          <p className={styles.citationLabel}>Reason for nomination</p>
           {props.recognition !== props.title && <p className={styles.recognition}>{props.recognition}</p>}
           <p className={props.evidence.length > 350 ? styles.longEvidence : undefined}>{props.evidence}</p>
         </div>
         <p className={styles.blessing}>{mum ? "May Allah bless your care, patience and every quiet effort." : "May Allah bless your efforts and help your goodness grow."}</p>
         <footer className={styles.footer}>
           <div><strong>{props.date}</strong><span>Date awarded</span></div>
-          <div className={styles.signature}><strong>{props.teacher}</strong><span>Gen-Mumin faculty</span></div>
+          <div className={styles.signature}><strong>{props.teacher}</strong><span>Nominated by - Gen-Mumin faculty</span></div>
         </footer>
         <div className={styles.reference}><span>{mum ? "Nurturing faith. Inspiring generations." : "Character is the achievement that lasts."}</span><span>ID {props.code.slice(-8).toUpperCase()}</span></div>
       </div>

@@ -1,7 +1,8 @@
 import "server-only";
 
 import { db } from "@/lib/db";
-import { awardHousePointsOnce } from "@/lib/community/point-awards";
+import { Prisma } from "@prisma/client";
+import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 
 export const FARDH_PRAYERS = [
   { key: "fajr", label: "Fajr", points: 25, icon: "🌅", message: "Begin with Allah" },
@@ -48,18 +49,40 @@ export async function getFardhWeek(studentId: string, requestedStart: string | u
 export async function saveFardhDay(input: { studentId: string; dayKey: string; timezone: string; prayers: FardhPrayerKey[] }) {
   const today = localDateKey(new Date(), input.timezone);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dayKey) || input.dayKey > today) throw new Error("Future prayers cannot be marked complete.");
+  if (!Number.isFinite(keyDate(input.dayKey).getTime()) || keyDate(input.dayKey).toISOString().slice(0, 10) !== input.dayKey) throw new Error("Invalid prayer date.");
+  if (input.prayers.some(key => !FARDH_PRAYERS.some(p => p.key === key))) throw new Error("Invalid prayer selection.");
   const selected = new Set(input.prayers);
-  const data = Object.fromEntries(FARDH_PRAYERS.filter((p) => selected.has(p.key)).map((p) => [p.key, true]));
-  if (!Object.keys(data).length) return { points: 0 };
-  await db.fardhPrayerDay.upsert({
-    where: { studentId_dayKey: { studentId: input.studentId, dayKey: input.dayKey } },
-    create: { studentId: input.studentId, dayKey: input.dayKey, timezone: input.timezone, ...data },
-    update: { timezone: input.timezone, ...data },
-  });
+  const data = Object.fromEntries(FARDH_PRAYERS.map(p => [p.key, selected.has(p.key)]));
+  const membership = await ensureStudentHouseMembership(input.studentId);
   let points = 0;
-  for (const prayer of FARDH_PRAYERS.filter((p) => selected.has(p.key))) {
-    const result = await awardHousePointsOnce({ studentId: input.studentId, points: prayer.points, reason: `${prayer.label} prayer completed (${input.dayKey})`, sourceType: "FARDH_PRAYER", sourceId: `${input.dayKey}:${prayer.key}`, notificationHref: "/student/fardh-tracker", notify: false });
-    if (result.awarded) points += prayer.points;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      points = await db.$transaction(async tx => {
+        const sourceIds = FARDH_PRAYERS.map(p => input.dayKey + ":" + p.key);
+        const previous = await tx.housePointLedger.findMany({ where: { studentId: input.studentId, sourceType: "FARDH_PRAYER", sourceId: { in: sourceIds } } });
+        await tx.fardhPrayerDay.upsert({
+          where: { studentId_dayKey: { studentId: input.studentId, dayKey: input.dayKey } },
+          create: { studentId: input.studentId, dayKey: input.dayKey, timezone: input.timezone, ...data },
+          update: { timezone: input.timezone, ...data },
+        });
+        for (const prayer of FARDH_PRAYERS) {
+          const sourceId = input.dayKey + ":" + prayer.key;
+          if (!selected.has(prayer.key)) {
+            await tx.housePointLedger.deleteMany({ where: { studentId: input.studentId, sourceType: "FARDH_PRAYER", sourceId } });
+          } else {
+            await tx.housePointLedger.upsert({
+              where: { studentId_sourceType_sourceId: { studentId: input.studentId, sourceType: "FARDH_PRAYER", sourceId } },
+              create: { studentId: input.studentId, houseId: membership.houseId, sourceType: "FARDH_PRAYER", sourceId, points: prayer.points, reason: prayer.label + " prayer completed (" + input.dayKey + ")" },
+              update: { points: prayer.points },
+            });
+          }
+        }
+        return FARDH_PRAYERS.reduce((sum, p) => sum + (selected.has(p.key) ? p.points : 0), 0) - previous.reduce((sum, entry) => sum + entry.points, 0);
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+      break;
+    } catch (error) {
+      if (attempt >= 3 || !(error instanceof Prisma.PrismaClientKnownRequestError) || !["P2034", "P2002"].includes(error.code)) throw error;
+    }
   }
   if (points) {
     const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, parents: { include: { parent: true } }, enrollments: { select: { programId: true } } } });
@@ -70,7 +93,7 @@ export async function saveFardhDay(input: { studentId: string; dayKey: string; t
       const adminIds = admins.map((admin) => admin.id);
       const staffIds = [...teacherLinks.map((link) => link.teacher.userId), ...adminIds];
       const name = student.displayName || student.user.firstName;
-      await db.notification.createMany({ data: Array.from(new Set([...familyIds, ...staffIds])).map((userId) => ({ userId, title: "Fardh tracker updated", body: `${name} recorded salah for ${input.dayKey} and earned ${points} verified points.`, href: familyIds.includes(userId) ? (userId === student.userId ? "/student/fardh-tracker" : `/parent/fardh-tracker?child=${student.id}`) : adminIds.includes(userId) ? "/admin/fardh-tracker" : "/teacher/fardh-tracker" })) });
+      await db.notification.createMany({ data: Array.from(new Set([...familyIds, ...staffIds])).map((userId) => ({ userId, title: "Fardh tracker updated", body: `${name} recorded salah for ${input.dayKey} with a points adjustment of ${points > 0 ? "+" : ""}${points}.`, href: familyIds.includes(userId) ? (userId === student.userId ? "/student/fardh-tracker" : `/parent/fardh-tracker?child=${student.id}`) : adminIds.includes(userId) ? "/admin/fardh-tracker" : "/teacher/fardh-tracker" })) });
     }
   }
   return { points };
