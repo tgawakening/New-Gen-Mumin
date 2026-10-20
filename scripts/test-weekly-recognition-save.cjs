@@ -10,7 +10,7 @@ function fixture(initial = null, rejectLedger = false) {
     const draft = structuredClone(state);
     const result = await fn({ recognitionAward: {
       findUnique: async () => draft.award,
-      upsert: async ({ create }) => draft.award ?? (draft.award = { ...create, id: "award-1", isPublic: true, revokedAt: null, awardedAt: new Date() }),
+      upsert: async ({ create, update }) => draft.award ? Object.assign(draft.award, update) : (draft.award = { ...create, id: "award-1", isPublic: true, revokedAt: null, awardedAt: new Date() }),
     }, housePointLedger: { createMany: async ({ data }) => {
       if (rejectLedger) throw Error("database failure");
       for (const row of data) if (!draft.ledger.some(x => x.sourceId === row.sourceId && x.studentId === row.studentId)) draft.ledger.push(row);
@@ -29,3 +29,18 @@ test("certificate and exactly 150 points commit together", async () => { const f
 test("point failure rolls back the certificate", async () => { const f=fixture(null,true); await assert.rejects(f.save(data,"house-1")); assert.equal(f.state().award,null); assert.equal(f.state().ledger.length,0); });
 test("retries repair a partial old save without duplicating points", async () => { const f=fixture({...data,id:"old-award",pointsBonus:150,isPublic:true,revokedAt:null,awardedAt:new Date()}); assert.equal((await f.save(data,"house-1")).existing,true); await f.save(data,"house-1"); assert.equal(f.state().ledger.length,1); assert.equal(f.state().ledger[0].sourceId,"old-award"); });
 test("revoked certificates do not regain points", async () => { const f=fixture({...data,id:"revoked",isPublic:true,revokedAt:new Date()}); await f.save(data,"house-1"); assert.equal(f.state().ledger.length,0); });
+
+test("certificate name can be set and corrected without another points award", async () => {
+  const f = fixture();
+  await f.save({ ...data, recipientName: "Correct Student Name" }, "house-1");
+  assert.equal(f.state().award.recipientName, "Correct Student Name");
+  const certificateId = f.state().award.id;
+  await f.save({ ...data, recipientName: "Updated Student Name" }, "house-1");
+  assert.equal(f.state().award.recipientName, "Updated Student Name");
+  assert.equal(f.state().award.id, certificateId);
+  assert.equal(f.state().award.studentId, data.studentId);
+  assert.equal(f.state().ledger.length, 1);
+  assert.equal(f.state().ledger[0].points, 150);
+  await f.save(data, "house-1");
+  assert.equal(f.state().award.recipientName, "Updated Student Name");
+});

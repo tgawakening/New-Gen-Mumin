@@ -45,7 +45,7 @@ export function recognitionLevel(points: number) {
 }
 
 export async function awardRecognition(input: {
-  studentId: string; badgeKey: string; evidence: string; awardedByUserId?: string;
+  studentId: string; badgeKey: string; evidence: string; awardedByUserId?: string; recipientName?: string;
   sourceType: string; sourceId: string; pointsBonus?: number; featuredWeek?: string; beneficiaryStudentId?: string;
 }) {
   const definition = CHARACTER_BADGES.find((badge) => badge.key === input.badgeKey);
@@ -53,11 +53,12 @@ export async function awardRecognition(input: {
   const isCrossHouseBadge = ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key);
   if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another Qabila who benefited from this action.");
 
+  const recipientName = input.recipientName?.trim().replace(/\s+/g, " ").slice(0, 80) || undefined;
   let award;
   if (definition.key === "MUMIN_OF_WEEK") {
     input = { ...input, pointsBonus: 150 };
     const membership = await ensureStudentHouseMembership(input.studentId);
-    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek }, membership.houseId);
+    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek }, membership.houseId);
     if (saved.existing) return saved.award;
     award = saved.award;
   } else {
