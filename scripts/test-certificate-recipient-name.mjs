@@ -14,7 +14,7 @@ function fixture(recipientName, displayName = 'Registered Name') {
     '@/lib/community/recognition-week': { recognitionWeekLabel: () => 'Week of 19 October' },
     'next/navigation': { notFound: () => { throw Error('not found'); }, redirect: () => { throw Error('login'); } },
     '@/lib/auth/session': { getCurrentSession: async () => ({ user: { id: 'student', role: 'STUDENT' } }) },
-    '@/lib/community/qabilas': { qabilaProfile: () => null },
+    '@/lib/community/qabilas': { qabilaProfile: () => award.student.houseMembership?.profile ?? null },
     '@/lib/db': { db: { recognitionAward: { findUnique: async () => award } } },
   };
   const exports = {};
@@ -39,3 +39,29 @@ for (const [label, recipientName, displayName, expected] of [
   assert.equal(find(tree, f.Actions).props.filename, expected + ' Mumin of the Week');
 });
 test('revoked certificates remain inaccessible', async () => { const f = fixture('Corrected Name'); f.award.revokedAt = new Date(); await assert.rejects(f.render(), /not found/); });
+
+for (const gender of ['Girl', 'Female', 'F', ' female ']) test('girl certificate title and filename: ' + gender, async () => {
+  const f = fixture('Corrected Name'); f.award.student.registrationStudents = [{ gender }];
+  const tree = await f.render(), certificate = find(tree, f.Certificate).props;
+  assert.equal(certificate.title, 'Mumina of the Week');
+  assert.equal(certificate.recognition, 'Mumina of the Week');
+  assert.equal(certificate.kind, 'girl');
+  assert.equal(find(tree, f.Actions).props.filename, 'Corrected Name Mumina of the Week');
+});
+for (const gender of ['Boy', 'Male', 'M']) test('boy certificate title: ' + gender, async () => {
+  const f = fixture('Corrected Name'); f.award.student.registrationStudents = [{ gender }];
+  const certificate = find(await f.render(), f.Certificate).props;
+  assert.equal(certificate.title, 'Mumin of the Week'); assert.equal(certificate.kind, 'boy');
+});
+test('gender-specific Qabila provides fallback when registration gender is missing', async () => {
+  const f = fixture('Corrected Name'); f.award.student.houseMembership = { profile: { gender: 'GIRLS' } };
+  assert.equal(find(await f.render(), f.Certificate).props.title, 'Mumina of the Week');
+  f.award.student.registrationStudents = [{ gender: 'Boy' }];
+  assert.equal(find(await f.render(), f.Certificate).props.title, 'Mumin of the Week');
+});
+test('character awards retain their badge description', async () => {
+  const f = fixture('Corrected Name'); f.award.student.registrationStudents = [{ gender: 'Girl' }];
+  f.award.title = 'The Helper'; f.award.featuredWeek = null;
+  const certificate = find(await f.render(), f.Certificate).props;
+  assert.equal(certificate.title, 'Certificate of Character'); assert.equal(certificate.recognition, 'The Helper');
+});
