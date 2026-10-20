@@ -380,25 +380,22 @@ function AdminProgramChangePopup({
             </section>
 
             <section className="rounded-[22px] border border-[#ebdccb] bg-white p-4">
-              <label className="block text-sm font-semibold text-[#22304a]">
-                Programme selection
-                <select name="offerSlug" required className="mt-2 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm">
-                  {offers.map((offer) => (
-                    <option key={offer.slug} value={offer.slug}>
-                      {offer.kind === "BUNDLE" ? `${offer.title} - full bundle` : offer.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <fieldset>
+                <legend className="text-sm font-semibold text-[#22304a]">Select one or more programmes</legend>
+                <p className="mt-1 text-sm text-[#617184]">For Arabic, Tajweed and Seerah, select Arabic &amp; Tajweed plus Seerah. Avoid overlapping offers.</p>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {offers.map((offer) => <label key={offer.slug} className="flex items-start gap-3 rounded-2xl border border-[#d8c3ac] bg-white p-3 text-sm"><input type="checkbox" name="offerSlugs" value={offer.slug} className="mt-1"/><span>{offer.title}{offer.kind === "BUNDLE" ? " - full bundle" : ""}</span></label>)}
+                </div>
+              </fieldset>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-4 text-sm">
                   <input type="radio" name="changeMode" value="add" defaultChecked className="mr-2" />
-                  <span className="font-semibold text-[#22304a]">Add programme</span>
-                  <p className="mt-1 text-[#617184]">Keep existing access and add this programme/order.</p>
+                  <span className="font-semibold text-[#22304a]">Add programmes</span>
+                  <p className="mt-1 text-[#617184]">Keep existing access and add all selected programmes.</p>
                 </label>
                 <label className="rounded-2xl border border-[#e6edf4] bg-[#fbfdff] p-4 text-sm">
                   <input type="radio" name="changeMode" value="switch" className="mr-2" />
-                  <span className="font-semibold text-[#22304a]">Switch programme</span>
+                  <span className="font-semibold text-[#22304a]">Switch programmes</span>
                   <p className="mt-1 text-[#617184]">After completion, cancel old access and keep only this selection.</p>
                 </label>
               </div>
@@ -429,6 +426,7 @@ function AdminProgramChangePopup({
               <label className="mt-4 block text-sm font-semibold text-[#22304a]">
                 Coupon code
                 <input name="couponCode" placeholder="Optional" className="mt-2 w-full rounded-2xl border border-[#d8c3ac] bg-white px-4 py-3 text-sm uppercase" />
+                <span className="mt-2 block text-xs font-normal text-[#617184]">PKMULTI3K: one Pakistani child, two or three programmes, PKR 3,000 total per month.</span>
               </label>
             </section>
 
@@ -918,7 +916,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
         : targetScope === "custom"
           ? customStudentIds
           : [studentId];
-    const offerSlug = String(formData.get("offerSlug") || "");
+    const offerSlugs = formData.getAll("offerSlugs").filter((value): value is string => typeof value === "string" && value.length > 0);
     const changeMode = String(formData.get("changeMode") || "add");
     const paymentMode = String(formData.get("paymentMode") || "MANUAL_REVIEW");
     const gateway = String(formData.get("gateway") || "BANK_TRANSFER");
@@ -929,7 +927,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
       await createAdminProgramEnrollmentOrder({
         studentId,
         studentIds: studentIds.length ? studentIds : [studentId],
-        offerSlug,
+        offerSlugs,
         changeMode: changeMode === "switch" ? "switch" : "add",
         paymentMode: paymentMode === "AUTO_COMPLETE" ? "AUTO_COMPLETE" : "MANUAL_REVIEW",
         gateway: gateway === "STRIPE" || gateway === "PAYPAL" || gateway === "BANK_TRANSFER" ? gateway : "BANK_TRANSFER",

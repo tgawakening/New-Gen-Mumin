@@ -1,5 +1,7 @@
 import "server-only";
 
+import { validateAdminProgramSelection, adminMultiProgramDiscount } from "@/lib/admin/program-selection";
+
 import { db } from "@/lib/db";
 import { markOrderPaid } from "@/lib/payments/fulfillment";
 import { createCheckoutDraft } from "@/lib/registration/payment-service";
@@ -24,17 +26,24 @@ function parentName(user: { firstName: string; lastName: string | null; email: s
 export async function createAdminProgramEnrollmentOrder(input: {
   studentId: string;
   studentIds?: string[];
-  offerSlug: string;
+  offerSlug?: string;
+  offerSlugs?: string[];
   changeMode: AdminProgramChangeMode;
   paymentMode: AdminPaymentMode;
   gateway: "STRIPE" | "PAYPAL" | "BANK_TRANSFER";
   couponCode?: string | null;
   adminUserId: string;
 }) {
-  if (!input.studentId || !input.offerSlug) {
+  const offerSlugs = [...new Set(input.offerSlugs ?? (input.offerSlug ? [input.offerSlug] : []))];
+  if (!input.studentId || !offerSlugs.length) {
     throw new Error("Choose a student and programme offer.");
   }
 
+  const admin = await db.user.findUnique({ where: { id: input.adminUserId }, select: { role: true, status: true } });
+  if (!admin || admin.role !== "ADMIN" || admin.status !== "ACTIVE") throw new Error("An active administrator is required.");
+  const offers = await db.offer.findMany({ where: { slug: { in: offerSlugs } }, select: { slug: true, programs: { select: { program: { select: { slug: true } } } } } });
+  const programSlugs = validateAdminProgramSelection(offerSlugs, offers.map(offer => ({ slug: offer.slug, programSlugs: offer.programs.map(link => link.program.slug) })));
+  const couponCode = input.couponCode?.trim().toUpperCase() || "";
   const requestedStudentIds = [...new Set([...(input.studentIds?.length ? input.studentIds : [input.studentId])])];
   const students = await db.studentProfile.findMany({
     where: { id: { in: requestedStudentIds } },
@@ -73,7 +82,7 @@ export async function createAdminProgramEnrollmentOrder(input: {
 
   const allowedStudentIds = new Set(parent.students.map((entry) => entry.studentId));
   const selectedStudents = students.filter((entry) => allowedStudentIds.has(entry.id));
-  if (!selectedStudents.length) throw new Error("No linked children were selected for this parent.");
+  if (!selectedStudents.length || selectedStudents.length !== requestedStudentIds.length) throw new Error("Every selected child must belong to the same linked parent.");
 
   const phoneCountryCode =
     parent.user.phoneCountryCode || student.registrationStudents[0]?.registration.phoneCountryCode || "";
@@ -92,6 +101,7 @@ export async function createAdminProgramEnrollmentOrder(input: {
     student.countryName ||
     student.registrationStudents[0]?.registration.selectedCountryName ||
     "United Kingdom";
+  const targetAmount = adminMultiProgramDiscount({ couponCode, countryCode, studentCount: selectedStudents.length, programSlugs });
   const parentParts = splitName(parent.user.firstName, parent.user.lastName, parentName(parent.user));
   const adminSource = input.changeMode === "switch" ? "admin-program-switch" : "admin-program-add";
 
@@ -104,7 +114,7 @@ export async function createAdminProgramEnrollmentOrder(input: {
     whatsappNumber: "",
     selectedCountryCode: countryCode,
     selectedCountryName: countryName,
-    couponCode: input.couponCode?.trim() || "",
+    couponCode: targetAmount === null ? couponCode : "",
     notes: `Source: admin-program-change; ${adminSource}; studentIds=${selectedStudents.map((entry) => entry.id).join(",")}; adminUserId=${input.adminUserId}`,
     students: selectedStudents.map((selectedStudent) => {
       const childName = splitName(selectedStudent.user.firstName, selectedStudent.user.lastName, selectedStudent.displayName || "Student");
@@ -113,11 +123,21 @@ export async function createAdminProgramEnrollmentOrder(input: {
         lastName: childName.lastName,
         age: selectedStudent.age ?? 8,
         gender: "",
-        selectedOfferSlugs: [input.offerSlug],
+        selectedOfferSlugs: offerSlugs,
         notes: `Source: ${adminSource}; existingChildId=${selectedStudent.id}`,
       };
     }),
   });
+
+  if (targetAmount !== null) {
+    if (registration.selectedCurrency !== "PKR" || registration.subtotalAmount < targetAmount) throw new Error("The selected programmes cannot use the PKR 3,000 discount.");
+    const snapshot = typeof registration.pricingSnapshot === "object" && registration.pricingSnapshot && !Array.isArray(registration.pricingSnapshot) ? registration.pricingSnapshot : {};
+    await db.registration.update({ where: { id: registration.id }, data: {
+      totalAmount: targetAmount,
+      discountAmount: registration.subtotalAmount - targetAmount,
+      pricingSnapshot: { ...snapshot, couponCode, couponDiscountPercent: null, couponDiscountAmount: registration.subtotalAmount - targetAmount, couponEligibility: "admin-pakistan-multi-programme", adminUserId: input.adminUserId },
+    } });
+  }
 
   const checkout = await createCheckoutDraft(registration.id, {
     gateway: input.gateway,
@@ -142,7 +162,8 @@ export async function createAdminProgramEnrollmentOrder(input: {
         adminProgramChange: {
           studentId: student.id,
           studentIds: selectedStudents.map((entry) => entry.id),
-          offerSlug: input.offerSlug,
+          offerSlug: offerSlugs[0],
+          offerSlugs,
           mode: input.changeMode,
           paymentMode: input.paymentMode,
           createdByUserId: input.adminUserId,
