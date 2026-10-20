@@ -13,7 +13,7 @@ export default async function CertificatePage({ params }: Props) {
   if (!award || !award.isPublic || award.revokedAt) notFound();
   const allowed = session.user.role === "ADMIN" || session.user.role === "TEACHER" || award.student.userId === session.user.id || award.student.parents.some((link) => link.parent.userId === session.user.id); if (!allowed) notFound();
   const teacher = award.awardedByUserId ? await db.user.findUnique({ where: { id: award.awardedByUserId }, select: { firstName: true, lastName: true } }) : null;
-  const name = award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
+  const name = award.recipientName?.trim() || award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
   const teacherName = teacher ? `${teacher.firstName} ${teacher.lastName ?? ""}`.trim() : "Gen-Mumin Faculty";
   const qabila = qabilaProfile(award.student.houseMembership?.qabilaGroup);
   const gender = award.student.registrationStudents[0]?.gender?.toLowerCase() ?? "";
