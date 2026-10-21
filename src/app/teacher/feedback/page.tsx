@@ -1,5 +1,7 @@
+import { MonthlyFeedbackReview } from "@/components/dashboard/feedback/MonthlyFeedbackReview";
+import { feedbackMonth, validMonth, type Answers } from "@/lib/feedback/monthly-questions";
 import Link from "next/link";
-import { isFeedbackReviewer } from "@/lib/feedback/monthly";
+import { canReviewMonthlyFeedback } from "@/lib/feedback/monthly";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { FeedbackAudience } from "@prisma/client";
@@ -22,7 +24,7 @@ import {
 } from "@/components/dashboard/teacher/TeacherDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ submitted?: string; error?: string }>;
+  searchParams?: Promise<{ submitted?: string; error?: string; view?: string; month?: string }>;
 };
 
 function noticeHref(message: string, tone: "success" | "error" | "danger" = "success") {
@@ -32,8 +34,8 @@ function noticeHref(message: string, tone: "success" | "error" | "danger" = "suc
   } else {
     params.set("error", message);
   }
-  const query = params.toString();
-  return `/teacher/feedback${query ? `?${query}` : ""}`;
+  params.set("view", "weekly");
+  return `/teacher/feedback?${params.toString()}`;
 }
 
 function payloadEntries(payload: unknown) {
@@ -48,6 +50,21 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
+
+  const params = searchParams ? await searchParams : {};
+  if (!(await canReviewMonthlyFeedback(session.user.id))) redirect(getDashboardHome(session.user.role));
+  if (params.view !== "weekly" && !params.submitted && !params.error) {
+    const month = params.month && validMonth(params.month) ? params.month : feedbackMonth();
+    const responses = await db.monthlyParentFeedback.findMany({ where: { month }, orderBy: { submittedAt: "desc" }, include: { submittedBy: { select: { email: true } } } });
+    return <TeacherDashboardFrame title="Monthly Parent Feedback" subtitle="Review family feedback, follow up on concerns, and understand the parent experience across Gen-Mumin." navItems={getTeacherNavItems()}>
+      <FeedbackTabs monthly />
+      <TeacherSection eyebrow="Monthly parent feedback" title="Family responses">
+        <p className="mb-4 text-sm text-[#617184]">All active teachers can review monthly parent feedback by question or family.</p>
+        <form className="mb-5 flex flex-wrap items-end gap-3"><label className="grid gap-2 text-sm font-semibold">Month<input name="month" type="month" min="2020-01" max={feedbackMonth()} defaultValue={month} required className="rounded-xl border p-3" /></label><button className="rounded-full bg-[#22304a] px-5 py-3 text-white">Show responses</button><a href={`/api/feedback/monthly?month=${month}`} className="rounded-full border px-5 py-3 font-semibold">Download monthly spreadsheet</a></form>
+        <MonthlyFeedbackReview responses={responses.map(r => ({ id: r.id, month: r.month, submittedAt: r.submittedAt.toISOString(), parentEmail: r.submittedBy.email, details: r.details as Record<string, string>, answers: r.answers as Answers }))} />
+      </TeacherSection>
+    </TeacherDashboardFrame>;
+  }
 
   const [dashboard, feedback] = await Promise.all([
     getTeacherDashboardData(session.user.id),
@@ -104,7 +121,7 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
     ],
   }));
 
-  const params = searchParams ? await searchParams : {};
+
 
   async function submitTeacherFeedback(formData: FormData) {
     "use server";
@@ -187,11 +204,11 @@ export default async function TeacherFeedbackPage({ searchParams }: PageProps) {
 
   return (
     <TeacherDashboardFrame
-      title="Weekly Feedback"
+      title="Weekly Feedback & Class Handover"
       subtitle="Submit teaching reflections, workload signals, student support needs, and operational blockers."
       navItems={getTeacherNavItems()}
     >
-      {isFeedbackReviewer(session.user) && <Link href="/feedback/monthly" className="block rounded-2xl border border-amber-200 bg-amber-50 p-5 font-semibold text-[#22304a]">Monthly parent feedback: review family answers and download spreadsheet</Link>}
+      <FeedbackTabs monthly={false} />
       <ActionToast message={params.error ? params.error : params.submitted ? "Teacher feedback submitted." : undefined} tone={params.error ? "error" : undefined} />
 
       <TeacherMetricGrid
@@ -312,4 +329,11 @@ function Choice({ name, label, options }: { name: string; label: string; options
       </div>
     </Field>
   );
+}
+
+function FeedbackTabs({ monthly }: { monthly: boolean }) {
+  return <nav aria-label="Feedback views" className="flex flex-wrap gap-3 rounded-2xl border border-[#d8e3ed] bg-white p-3">
+    <Link href="/teacher/feedback" aria-current={monthly ? "page" : undefined} className={`rounded-xl px-5 py-3 font-bold ${monthly ? "bg-[#22304a] text-white" : "text-[#22304a]"}`}>Monthly parent feedback</Link>
+    <Link href="/teacher/feedback?view=weekly" aria-current={!monthly ? "page" : undefined} className={`rounded-xl px-5 py-3 font-semibold ${!monthly ? "bg-[#22304a] text-white" : "text-[#617184]"}`}>Weekly feedback &amp; class handover</Link>
+  </nav>;
 }

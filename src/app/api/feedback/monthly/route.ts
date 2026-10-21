@@ -21,7 +21,7 @@ async function mutate(request: NextRequest, method: "POST" | "PATCH" | "DELETE")
   const input = JSON.parse(body);
   if (!input || (method === "POST" ? typeof input.studentId !== "string" || typeof input.month !== "string" : typeof input.id !== "string" || !Number.isInteger(input.version))) return NextResponse.json({ error: "Select a child and month." }, { status: 400 });
   const saved = method === "POST" ? await submitMonthlyFeedback(session.user.id, input) : await changeMonthlyFeedback(session.user.id, input, method === "DELETE");
-  for (const path of ["/parent/feedback", "/feedback/monthly", "/communications"]) revalidatePath(path);
+  for (const path of ["/parent/feedback", "/feedback/monthly", "/teacher/feedback", "/communications"]) revalidatePath(path);
   if (!saved) return NextResponse.json({ deleted: true });
   after(async () => { try { await deliverFeedbackEmails(10, saved.id); } catch { console.error("Monthly feedback email delivery deferred to worker"); } });
   return NextResponse.json({ id: saved.id, version: saved.version, studentId: saved.studentId, month: saved.month, details: saved.details, answers: saved.answers, submittedAt: saved.submittedAt.toISOString(), canManage: true });

@@ -3,10 +3,10 @@ import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { validMonth, validateAnswers } from "./monthly-questions";
 
-// Programme leads listed in the faculty directory; no partial-name matching.
+// Direct notifications remain with programme leads; every active teacher can review in the portal.
 export const FEEDBACK_LEAD_EMAILS = ["mehranraziq@gmail.com", "umm.abdissamee@gmail.com"];
 export function isFeedbackReviewer(user: { role: string; email: string; status?: string }) {
- return (!user.status || user.status === "ACTIVE") && (user.role === "ADMIN" || user.role === "COMMUNICATIONS" || (user.role === "TEACHER" && FEEDBACK_LEAD_EMAILS.includes(user.email.toLowerCase())));
+ return (!user.status || user.status === "ACTIVE") && (user.role === "ADMIN" || user.role === "COMMUNICATIONS" || user.role === "TEACHER");
 }
 export async function canReviewMonthlyFeedback(userId: string) {
  const user = await db.user.findUnique({ where: { id: userId }, select: { role: true, email: true, status: true } });
