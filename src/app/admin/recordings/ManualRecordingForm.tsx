@@ -127,7 +127,7 @@ export function ManualRecordingForm({ teachers }: ManualRecordingFormProps) {
 
           <label className="block text-sm font-semibold text-[#22304a]">
             Program
-            <select name="programId" required disabled={busy} className="mt-2 w-full rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm outline-none focus:border-[#c27a2c] disabled:bg-[#f3f6f8]">
+            <select key={teacherId} name="programId" required disabled={busy} className="mt-2 w-full rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm outline-none focus:border-[#c27a2c] disabled:bg-[#f3f6f8]">
               {(selectedTeacher?.programs ?? []).map((program) => (
                 <option key={program.id} value={program.id}>{program.title}</option>
               ))}

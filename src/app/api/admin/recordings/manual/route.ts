@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 
 import { getCurrentSession } from "@/lib/auth/session";
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       collaboratorTeacherIds: formData.getAll("collaboratorTeacherIds").map(String).filter(Boolean),
     });
 
+    for (const path of ["/admin/recordings", "/parent/recordings", "/parent", "/teacher/recordings"]) revalidatePath(path);
     return NextResponse.json({
       ok: true,
       recordingId,

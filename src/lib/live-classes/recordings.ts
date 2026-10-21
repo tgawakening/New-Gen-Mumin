@@ -1,5 +1,6 @@
 import "server-only";
 
+import { canUploadParentalRecording, PARENTAL_RECORDING_OPTION } from "@/lib/live-classes/manual-recording-category";
 import { db } from "@/lib/db";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
 import { driveRequest } from "@/lib/google-drive/client";
@@ -11,6 +12,7 @@ import {
   getScheduleRosterStudentIds,
   isLiveClassVisibleToStudents,
   isParentalLiveClass,
+  PARENTAL_SESSION_MARKER,
 } from "@/lib/live-classes/service";
 import { downloadZoomRecordingRange, findZoomRecordingDownloadUrl, getZoomUserRecordings } from "@/lib/zoom/client";
 import { createRecordingShareToken } from "@/lib/live-classes/recording-share";
@@ -556,6 +558,7 @@ export async function userCanAccessRecording(recordingId: string, user: { id: st
       where: { parent: { userId: user.id } },
       select: { studentId: true },
     });
+    if (childIds.length && (isParentalLiveClass(recording.schedule.title) || isParentalLiveClass(recording.topic))) return recording;
     for (const child of childIds) {
       if (!recordingIsVisibleToStudent(recording, child.studentId)) continue;
       const enrollment = await db.enrollment.findFirst({
@@ -1136,7 +1139,11 @@ export async function notifyRecordingReady(recordingId: string) {
   const users = new Map<string, { role: "teacher" | "student" | "parent"; childId?: string }>();
   users.set(recording.schedule.teacher.user.id, { role: "teacher" });
 
-  if (isLiveClassVisibleToStudents(recording.schedule.title)) {
+  const parentalRecording = isParentalLiveClass(recording.schedule.title) || isParentalLiveClass(recording.topic);
+  if (parentalRecording && isLiveClassVisibleToStudents(recording.schedule.title)) {
+    const families = await db.parentStudent.findMany({ where: { student: { enrollments: { some: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } } } } }, select: { studentId: true, parent: { select: { userId: true } } } });
+    for (const family of families) users.set(family.parent.userId, { role: "parent", childId: family.studentId });
+  } else if (isLiveClassVisibleToStudents(recording.schedule.title)) {
     const rosterStudentIds = new Set(await getScheduleRosterStudentIds(recording.scheduleId));
     const audienceGroup = getLiveClassAudienceGroup(recording.schedule.title);
     for (const enrollment of recording.schedule.program.enrollments) {
@@ -1183,11 +1190,12 @@ export async function getRecordingPlaybackDetails(recordingId: string, user: { i
     throw new Error("Recording not found or you do not have access.");
   }
 
+  const summary = mapRecording(recording);
   return {
     id: recording.id,
     title: cleanLiveClassTitle(recording.topic || recording.schedule.title),
-    programTitle: displayProgramTitle(recording.schedule.program.title),
-    programSlug: recording.schedule.program.slug,
+    programTitle: summary.programTitle,
+    programSlug: summary.programSlug,
     teacherId: recording.schedule.teacherId,
     teacherName: teacherName(recording.schedule.teacher),
     recordingStart: recording.recordingStart,
@@ -1236,7 +1244,8 @@ export async function listManualRecordingFormOptions() {
         id: assignment.program.id,
         title: displayProgramTitle(assignment.program.title),
       }))
-      .sort((left, right) => left.title.localeCompare(right.title)),
+      .sort((left, right) => left.title.localeCompare(right.title))
+      .concat(canUploadParentalRecording(teacher.user) && teacher.programAssignments.length ? [{ id: PARENTAL_RECORDING_OPTION, title: "Parental Session" }] : []),
   }));
 }
 
@@ -1329,22 +1338,28 @@ export async function addManualLiveClassRecording(input: {
   const collaboratorTeacherIds = [...new Set([input.teacherId, ...(input.collaboratorTeacherIds ?? [])].filter(Boolean))];
   const collaborators = await db.teacherProfile.findMany({
     where: { id: { in: collaboratorTeacherIds } },
-    include: { user: true, programAssignments: true },
+    include: { user: true, programAssignments: { include: { program: true } } },
   });
   if (!collaborators.length) throw new Error("Teacher not found.");
   if (collaborators.length !== collaboratorTeacherIds.length) {
     throw new Error("One or more selected teachers could not be found.");
   }
+  const teacher = collaborators.find((item) => item.id === input.teacherId) ?? collaborators[0];
+  const parental = input.programId === PARENTAL_RECORDING_OPTION;
+  if (parental && !canUploadParentalRecording(teacher.user)) throw new Error("Parental Session is available for Sir Mehran's recordings.");
+  const parentalAssignment = teacher.programAssignments.find(assignment => assignment.program.slug === "seerah") ?? teacher.programAssignments[0];
+  const programId = parental ? parentalAssignment?.programId : input.programId;
+  if (!programId) throw new Error("The teacher needs a programme assignment before adding recordings.");
   for (const collaborator of collaborators) {
-    if (!collaborator.programAssignments.some((assignment) => assignment.programId === input.programId)) {
+    if (!collaborator.programAssignments.some((assignment) => assignment.programId === programId)) {
       throw new Error(`${teacherName(collaborator)} is not assigned to the selected program.`);
     }
   }
-  const teacher = collaborators.find((item) => item.id === input.teacherId) ?? collaborators[0];
   const collaboratorNames = collaborators.map(teacherName);
-  const recordingTitle = collaboratorNames.length > 1 ? `${title}${collaboratorMarker(collaboratorNames)}` : title;
+  const categoryTitle = parental ? `${title} ${PARENTAL_SESSION_MARKER}` : title;
+  const recordingTitle = collaboratorNames.length > 1 ? `${categoryTitle}${collaboratorMarker(collaboratorNames)}` : categoryTitle;
 
-  const program = await db.program.findUnique({ where: { id: input.programId } });
+  const program = await db.program.findUnique({ where: { id: programId } });
   if (!program) throw new Error("Program not found.");
 
   const sessionDate = parseManualSessionDate(input.sessionDate);
@@ -1353,7 +1368,7 @@ export async function addManualLiveClassRecording(input: {
   const schedule = await createManualRecordingSchedule({
     adminUserId: input.adminUserId,
     teacherId: input.teacherId,
-    programId: input.programId,
+    programId,
     title: recordingTitle,
     recordedAt,
     durationSeconds,
@@ -1373,7 +1388,7 @@ export async function addManualLiveClassRecording(input: {
     fileType = fileTypeFromName(file.name, file.type);
     fileSize = BigInt(file.size);
     const uploaded = await uploadLiveClassRecordingToDrive({
-      programId: input.programId,
+      programId,
       teacherUserId: teacher.userId,
       scheduleId: schedule.id,
       recordingFileId,
@@ -1464,7 +1479,7 @@ export async function addManualLiveClassRecording(input: {
     data: {
       userId: teacher.userId,
       title: "Recording added",
-      body: `${title} has been added to ${displayProgramTitle(program.title)} recordings.`,
+      body: `${title} has been added to ${parental ? "Parental Sessions" : displayProgramTitle(program.title)} recordings.`,
       href: "/teacher/recordings",
     },
   });
