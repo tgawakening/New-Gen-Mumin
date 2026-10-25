@@ -1,4 +1,5 @@
 import { CopyStudentJoinLink } from "@/components/dashboard/teacher/CopyStudentJoinLink";
+import { ZoomChatGuide } from "@/components/dashboard/teacher/ZoomChatGuide";
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
@@ -56,6 +57,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
       navItems={getTeacherNavItems()}
     >
       <ActionToast message={params.notice} tone={params.tone} />
+      <ZoomChatGuide />
 
       <TeacherMetricGrid
         metrics={[

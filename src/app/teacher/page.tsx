@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { TeacherBadgeOverview } from "@/components/dashboard/teacher/TeacherBadgeOverview";
 import Link from "next/link";
 import { publishedPayslips } from "@/lib/payroll/service";
 import { PayslipCard } from "@/components/payroll/PayslipCard";
@@ -37,6 +38,7 @@ export default async function TeacherDashboardPage() {
       navItems={getTeacherNavItems()}
     >
       <FamilyJourneyLinks role="teacher" />
+      <TeacherBadgeOverview />
       {latestPayslip && payslipSnapshot && (
         <details className="group rounded-2xl border border-[#eadfce] bg-white shadow-sm">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#22304a] sm:px-5 [&::-webkit-details-marker]:hidden">

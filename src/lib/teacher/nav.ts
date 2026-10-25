@@ -12,7 +12,7 @@ export function getTeacherNavItems() {
     { label: "Lesson Log", href: "/teacher/lesson-log", icon: "lesson" },
     { label: "Qabila Community", href: "/teacher/community", icon: "classes" },
     { label: "Attendance", href: "/teacher/attendance", icon: "check" },
-    { label: "Live Points & Recognition", href: "/teacher/house-points", icon: "quiz" },
+    { label: "Badges, Certificates & Points", href: "/teacher/recognition", icon: "quiz" },
     { label: "Materials", href: "/teacher/materials", icon: "folder" },
     { label: "Quizzes", href: "/teacher/quizzes", icon: "quiz" },
     { label: "Journal", href: "/teacher/journal", icon: "journal" },

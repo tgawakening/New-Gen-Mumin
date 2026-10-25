@@ -22,7 +22,7 @@ function roleItems(role: Role, childId?: string): Item[] {
   const suffix = role === "parent" && childId ? `?child=${encodeURIComponent(childId)}` : "";
   if (role === "teacher") return [
     { key: "classes", label: "Live sessions", description: "Start or manage today’s classes.", href: "/teacher/live-sessions", icon: CalendarDays, tone: "bg-[#e7f1ff] text-[#2465a5]" },
-    { key: "rewards", label: "Live House Points", description: "Award points while teaching.", href: "/teacher/house-points", icon: Star, tone: "bg-[#fff0db] text-[#c27a2c]" },
+    { key: "rewards", label: "Award badges", description: "Badges, weekly certificates and points.", href: "/teacher/recognition", icon: Star, tone: "bg-[#fff0db] text-[#c27a2c]" },
     { key: "quizzes", label: "Quizzes", description: "Run live quizzes and review answers.", href: "/teacher/quizzes", icon: PlayCircle, tone: "bg-[#f0eaff] text-[#7453b8]" },
     { key: "sunnah", label: "Sunnah Tracker", description: "Publish and review daily trackers.", href: "/teacher/missions", icon: CheckCircle2, tone: "bg-[#e9f7ee] text-[#2f6b4b]" },
     { key: "community", label: "Qabila Community", description: "Read and guide team discussions.", href: "/teacher/community", icon: MessageCircle, tone: "bg-[#e7f1ff] text-[#2465a5]" },
