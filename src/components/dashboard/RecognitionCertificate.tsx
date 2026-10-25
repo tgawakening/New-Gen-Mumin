@@ -29,17 +29,17 @@ export function RecognitionCertificate(props: Props) {
           <h1>{props.title}</h1>
           {props.week && <p className={styles.week}>{props.week}</p>}
         </div>
-        <section className={styles.citation} aria-label="Reason for this award">
-          <p className={styles.citationLabel}><Sparkles aria-hidden="true" /> The goodness we celebrate</p>
-          {props.recognition !== props.title && <p className={styles.recognition}>{props.recognition}</p>}
-          <p className={`${styles.evidence} ${props.evidence.length > 350 ? styles.longEvidence : props.evidence.length > 180 ? styles.mediumEvidence : ""}`}><strong>{props.evidence}</strong></p>
-        </section>
         <div className={styles.recipient}>
           <p className={styles.eyebrow}>{mum ? "With heartfelt appreciation for" : "Proudly presented to"}</p>
           <h2 className={props.name.length > 32 ? styles.longName : undefined}>{props.name}</h2>
           <div className={styles.goldLine} />
           {props.qabila && <p className={styles.qabila}>{props.qabila}</p>}
         </div>
+        <section className={styles.citation} aria-label="Reason for this award">
+          <p className={styles.citationLabel}>Reason for recognition</p>
+          {props.recognition !== props.title && <p className={styles.recognition}>{props.recognition}</p>}
+          <p className={`${styles.evidence} ${props.evidence.length > 350 ? styles.longEvidence : props.evidence.length > 180 ? styles.mediumEvidence : ""}`}><strong>{props.evidence}</strong></p>
+        </section>
         <p className={styles.blessing}>{mum ? "May Allah bless your care, patience and every quiet effort." : "May Allah bless your efforts and help your goodness grow."}</p>
         <footer className={styles.footer}>
           <div><strong>{props.date}</strong><span>Date awarded</span></div>

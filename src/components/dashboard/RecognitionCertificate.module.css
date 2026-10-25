@@ -22,20 +22,19 @@
 .heading { margin-top:1.8cqw; }
 .heading h1 { font-family:Georgia,serif; font-size:3.2cqw; line-height:1.13; font-weight:400; letter-spacing:-.035em; margin:.8cqw 0; }
 .week { display:inline-block; border:1px solid #dfd7c5; background:#ffffff80; padding:.65cqw 1.1cqw; border-radius:3cqw; margin:0; font-size:1cqw; color:var(--ink); }
-.recipient { margin:0 0 1.6cqw; }
-.recipient h2 { font-family:Georgia,serif; font-size:2.1cqw; line-height:1.2; overflow-wrap:anywhere; margin:.6cqw 0 .8cqw; font-weight:600; }
-.recipient h2.longName { font-size:1.8cqw; }
+.recipient { margin:2cqw 0 0; }
+.recipient h2 { font-family:Georgia,serif; font-size:2.6cqw; line-height:1.2; overflow-wrap:anywhere; margin:.7cqw 0 .9cqw; font-weight:600; }
+.recipient h2.longName { font-size:2.1cqw; }
 .goldLine { width:8cqw; height:3px; background:#c5a367; }
 .qabila { font-size:1.1cqw; font-weight:600; margin:1cqw 0 0; }
-.citation { flex-shrink:0; margin:1.8cqw 0; padding:2cqw 2.2cqw; border:1px solid #d7b77d; border-left:.55cqw solid var(--accent); border-radius:1.4cqw; background:linear-gradient(125deg,#fff0ca,#fff8e9 65%,var(--soft)); box-shadow:0 .6cqw 1.6cqw #9b722f12; }
+.citation { flex-shrink:0; margin:1.8cqw 0; padding:1.5cqw 1.8cqw; border:1px solid #dac8a7; border-left:.22cqw solid var(--accent); border-radius:.5cqw; background:#fff9ed; }
 .citation p { white-space:pre-wrap; overflow-wrap:anywhere; margin:0; color:var(--ink); }
-.citation p.evidence { font-size:3.2cqw; font-weight:800; line-height:1.28; letter-spacing:-.02em; text-wrap:pretty; }
+.citation p.evidence { font-family:Georgia,"Times New Roman",serif; font-size:1.95cqw; font-weight:600; line-height:1.55; letter-spacing:0; text-wrap:pretty; }
 .evidence strong { font-weight:inherit; }
-.citation p.mediumEvidence { font-size:2.75cqw; line-height:1.3; }
-.citation p.longEvidence { font-size:2.35cqw; line-height:1.35; }
-.citation p.citationLabel { display:flex; align-items:center; gap:.6cqw; font-size:1cqw; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:1cqw; }
-.citationLabel svg { width:1.5cqw; height:1.5cqw; flex-shrink:0; }
-.citation p.recognition { font-size:1.3cqw; font-weight:700; color:var(--ink); margin-bottom:.8cqw; }
+.citation p.mediumEvidence { font-size:1.8cqw; }
+.citation p.longEvidence { font-size:1.6cqw; }
+.citation p.citationLabel { font-size:.85cqw; font-weight:600; letter-spacing:.13em; text-transform:uppercase; color:var(--accent); margin-bottom:.8cqw; }
+.citation p.recognition { font-size:1.15cqw; font-weight:600; color:var(--ink); margin-bottom:.7cqw; }
 .blessing { font-family:Georgia,serif; font-style:italic; font-size:1.2cqw; line-height:1.6; margin:0 0 2cqw; color:var(--accent); }
 .footer { display:flex; justify-content:space-between; gap:2cqw; border-top:1px solid #dfd7c5; padding-top:1.7cqw; margin-top:auto; }
 .footer strong { display:block; font-size:1.2cqw; overflow-wrap:anywhere; }
