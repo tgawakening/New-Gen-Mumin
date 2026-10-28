@@ -1,3 +1,4 @@
+import { matchZoomIdentity, zoomAttendanceCode } from "../src/lib/live-classes/zoom-presence-policy.ts";
 ﻿import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -26,7 +27,7 @@ function harness(participants, matched = false) {
   } };
   db.classSchedule = { findUnique: async () => ({ programId: 'program' }) };
   db.studentProfile = { findMany: async () => [{ id: 'learner', displayName: 'Learner', user: { firstName: 'Learner', lastName: '', email: 'learner@example.test' }, parents: [] }] };
-  db.enrollment = { findFirst: async () => ({ id: 'enrollment' }) };
+  db.enrollment = { findMany: async () => [], findFirst: async () => ({ id: 'enrollment' }) };
   db.liveClassSessionOccurrence = { findFirst: async () => ({ startedAt: new Date('2026-09-19T09:00:00Z') }) };
   db.attendanceRecord = {
     findFirst: async () => attendance[0] ?? null,
@@ -39,11 +40,12 @@ function harness(participants, matched = false) {
   const deps = {
     'server-only': {}, '@prisma/client': { Prisma: {} }, '@/lib/db': { db },
     '@/lib/community/point-awards': { pointDayKey: attendanceDayKey, awardHousePointsOnce: async () => {}, HOUSE_POINT_RULES: { ATTENDANCE_LATE: { points: 5, label: 'Late award' }, ATTENDANCE_ON_TIME: { points: 25, label: 'On time award' } } }, '@/lib/env': {},
+    '@/lib/live-classes/zoom-presence-policy': { matchZoomIdentity },
     '@/lib/live-classes/attendance-policy': { ATTENDANCE_POINTS, connectedMinutes, attendanceDayKey },
     '@/lib/community/house-points': { ensureStudentHouseMembership: async () => ({ houseId: 'house' }) },
     '@/lib/live-classes/attendance-ledger': { lockAttendanceStudent: async () => {}, attendancePointState: async () => ({ key: 'class-day', parentBalance: 0, verifiedBalance: ledger.reduce((sum, entry) => sum + entry.points, 0) }) },
     '@/lib/zoom/client': { getZoomPastMeetingParticipants: async () => participants },
-    '@/lib/live-classes/service': { cleanLiveClassTitle: s => s, resolveScheduleStudentIds: async () => matched ? ['learner'] : [] },
+    '@/lib/live-classes/service': { isParentalLiveClass: title => /Category:PARENTAL/.test(title??""), cleanLiveClassTitle: s => s, resolveScheduleStudentIds: async () => matched ? ['learner'] : [] },
   };
   const exports = {};
   const source = fs.readFileSync(new URL('../src/lib/live-classes/attendance.ts', import.meta.url), 'utf8');
@@ -96,4 +98,28 @@ test('a shared parent email needs a unique child name to resolve siblings', asyn
  db.studentProfile.findMany = async () => ['First Child','Second Child'].map((name,i) => ({ id: String(i), displayName: name, user: { firstName: name, lastName: '', email: 'child'+i+'@example.test' }, parents: [{ parent: { user: { email: 'parent@example.test' } } }] }));
  await api.recordZoomParticipantJoined('schedule', { meetingId: 'meeting', email: 'parent@example.test', name: 'Parent phone', occurredAt: new Date('2026-09-19T09:00:00Z') });
  assert.equal(rows[0].studentId, null);
+});
+
+test('Sunday parent identity records its own interval without a child attendance award', async () => {
+ const {api,rows,ledger,db}=harness([],false);
+ db.classSchedule.findUnique=async()=>({title:'Sunday [Category:PARENTAL]',programId:'program'});
+ db.parentProfile={findMany:async()=>[{id:'parent-profile',user:{firstName:'Parent',lastName:'One',email:'parent@example.test'}}]};
+ const code=zoomAttendanceCode('parent','parent-profile');
+ await api.recordZoomParticipantJoined('schedule',{meetingId:'meeting',meetingUuid:'sunday',participantId:'zoom-parent',name:code+' - Parent',occurredAt:new Date('2026-10-25T09:00:00Z')});
+ assert.equal(rows[0].parentId,'parent-profile');assert.equal(rows[0].studentId,null);assert.equal(ledger.length,0);
+});
+test('final Zoom report corrects an overlong interval and late webhook replay cannot overwrite it',async()=>{
+ const report=[{user_id:'p',name:'Learner',join_time:'2026-09-19T09:00:00Z',leave_time:'2026-09-19T09:45:00Z',duration:2700}];
+ const {api,rows,ledger}=harness(report,true);
+ await api.recordZoomParticipantJoined('schedule',{meetingId:'meeting',participantId:'p',name:'Learner',occurredAt:new Date(report[0].join_time)});
+ await api.recordZoomParticipantLeft('schedule',{meetingId:'meeting',participantId:'p',name:'Learner',occurredAt:new Date('2026-09-19T10:00:00Z'),durationSeconds:3600});
+ await api.reconcileZoomParticipantReport('schedule','meeting');
+ assert.equal(connectedMinutes(rows),45);assert.equal(rows[0].durationSeconds,2700);
+ await api.recordZoomParticipantLeft('schedule',{meetingId:'meeting',participantId:'p',name:'Learner',occurredAt:new Date('2026-09-19T10:00:00Z'),durationSeconds:3600});
+ assert.equal(connectedMinutes(rows),45);assert.equal(ledger.reduce((sum,row)=>sum+row.points,0),25);
+});
+test('orphan leave without timing evidence retries rather than inventing a connection',async()=>{
+ const {api,rows}=harness([]);
+ await assert.rejects(api.recordZoomParticipantLeft('schedule',{meetingId:'meeting',participantId:'p',occurredAt:new Date('2026-09-19T10:00:00Z')}),/Join event/);
+ assert.equal(rows.length,0);
 });

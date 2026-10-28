@@ -1,10 +1,11 @@
+import { closeOpenZoomAttendanceIntervals, reconcileZoomParticipantReport, recordZoomParticipantJoined, recordZoomParticipantLeft } from "@/lib/live-classes/attendance";
+import { captureZoomPresence, processZoomAttendanceWork, zoomPresenceEnabled } from "@/lib/live-classes/zoom-attendance-work";
 import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { after, NextRequest, NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { closeOpenZoomAttendanceIntervals, reconcileZoomParticipantReport, recordZoomParticipantJoined, recordZoomParticipantLeft } from "@/lib/live-classes/attendance";
 import { recordLiveClassSessionEnd, recordLiveClassSessionFromRecording, recordLiveClassSessionOccurrence } from "@/lib/live-classes/occurrences";
 import { notifyRosteredUsersClassStarted } from "@/lib/live-classes/notifications";
 import {
@@ -86,7 +87,7 @@ function verifyZoomSignature(request: NextRequest, rawBody: string) {
 
   const timestamp = request.headers.get("x-zm-request-timestamp");
   const signature = request.headers.get("x-zm-signature");
-  if (!timestamp || !signature) return false;
+  if (!timestamp || !signature || !Number.isFinite(Number(timestamp)) || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
 
   const expected = `v0=${hashWithSecret(`v0:${timestamp}:${rawBody}`)}`;
   const left = Buffer.from(signature);
@@ -98,6 +99,7 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const payload = JSON.parse(rawBody) as {
     event?: string;
+    event_ts?: number;
     payload?: {
       plainToken?: string;
       object?: {
@@ -107,9 +109,11 @@ export async function POST(request: NextRequest) {
         join_url?: string;
         host_email?: string;
         end_time?: string;
+        start_time?: string;
         participant?: {
           id?: string;
           user_id?: string;
+          participant_uuid?: string;
           user_name?: string;
           email?: string;
           join_time?: string;
@@ -138,6 +142,12 @@ export async function POST(request: NextRequest) {
 
   if (!verifyZoomSignature(request, rawBody)) {
     return NextResponse.json({ error: "Invalid Zoom webhook signature." }, { status: 401 });
+  }
+
+  await captureZoomPresence(payload);
+  if (zoomPresenceEnabled() && ["meeting.participant_joined", "meeting.participant_left", "meeting.ended"].includes(payload.event ?? "")) {
+    after(async () => { await processZoomAttendanceWork(1, true).catch(error => console.error("Zoom attendance worker deferred", error)); });
+    return NextResponse.json({ received: true, queued: true });
   }
 
   const meetingId = payload.payload?.object?.id ? String(payload.payload.object.id) : null;
@@ -276,7 +286,8 @@ export async function POST(request: NextRequest) {
   }
 
   if (payload.event === "recording.completed") {
-    await reconcileZoomParticipantReport(schedule.id, meetingId, payload.payload?.object?.uuid).catch((error) => console.error("Unable to reconcile Zoom attendance", error));
+    if (!zoomPresenceEnabled()) await reconcileZoomParticipantReport(schedule.id, meetingId, payload.payload?.object?.uuid).catch(error => console.error("Legacy attendance reconciliation failed", error));
+
     const primaryFile = choosePrimaryRecordingFile(payload.payload?.object?.recording_files ?? []);
     if (!primaryFile) {
       return NextResponse.json({ received: true, recordings: 0 });
