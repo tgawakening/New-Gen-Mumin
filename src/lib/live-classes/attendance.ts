@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { matchZoomIdentity } from "@/lib/live-classes/zoom-presence-policy";
 import "server-only";
 import { ATTENDANCE_POINTS, attendanceDayKey, connectedMinutes } from "@/lib/live-classes/attendance-policy";
 
@@ -9,7 +11,7 @@ import { ensureStudentHouseMembership } from "@/lib/community/house-points";
 import { attendancePointState, lockAttendanceStudent } from "@/lib/live-classes/attendance-ledger";
 import { env } from "@/lib/env";
 import { getZoomPastMeetingParticipants } from "@/lib/zoom/client";
-import { cleanLiveClassTitle, resolveScheduleStudentIds } from "@/lib/live-classes/service";
+import { cleanLiveClassTitle, isParentalLiveClass, resolveScheduleStudentIds } from "@/lib/live-classes/service";
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
 
@@ -51,27 +53,37 @@ type ParticipantEvent = {
   email?: string | null;
   name?: string | null;
   occurredAt: Date;
+  evidenceSource?: string;
+  deferSync?: boolean;
+  identityMatch?: { studentId: string | null; parentId?: string | null; method: string | null };
 };
 
-async function matchParticipantToStudent(scheduleId: string, event: ParticipantEvent) {
-  const studentIds = await resolveScheduleStudentIds(scheduleId);
-  if (!studentIds.length) return { studentId: null, method: null };
-  const email = normalize(event.email);
-  const participantName = normalize(event.name);
-  const students = await db.studentProfile.findMany({
-    where: { id: { in: studentIds } },
-    include: { user: { select: { firstName: true, lastName: true, email: true } }, parents: { include: { parent: { include: { user: { select: { email: true } } } } } } },
-  });
-  const named = students.filter((student) => [student.displayName, `${student.user.firstName} ${student.user.lastName ?? ""}`].map(normalize).filter(Boolean).includes(participantName));
-  const emailed = email ? students.filter((student) => normalize(student.user.email) === email || student.parents.some((link) => normalize(link.parent.user.email) === email)) : [];
-  if (emailed.length === 1) return { studentId: emailed[0].id, method: "zoom-email" };
-  if (emailed.length > 1) {
-    const exact = emailed.filter((student) => named.some((entry) => entry.id === student.id));
-    if (exact.length === 1) return { studentId: exact[0].id, method: "zoom-email-and-name" };
-    return { studentId: null, method: null };
+type ZoomIdentityMatch = { studentId: string | null; parentId?: string | null; method: string | null };
+async function loadIdentityMatcher(scheduleId: string): Promise<(event: Pick<ParticipantEvent, "name" | "email">) => ZoomIdentityMatch> {
+  const schedule = await db.classSchedule.findUnique({ where: { id: scheduleId }, select: { title: true, programId: true } });
+  if (isParentalLiveClass(schedule?.title)) {
+    const parents = await db.parentProfile.findMany({ where: { students: { some: { student: { enrollments: { some: { status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } } } } } } }, include: { user: true } });
+    const candidates = parents.map(p => ({ id: p.id, names: [[p.user.firstName, p.user.lastName].filter(Boolean).join(" ")], emails: [p.user.email] }));
+    return event => { const matched = matchZoomIdentity("parent", candidates, event.name, event.email); return { studentId: null, parentId: matched?.id ?? null, method: matched?.method ?? null }; };
   }
-  if (named.length === 1) return { studentId: named[0].id, method: "display-name" };
-  return { studentId: null, method: null };
+  const studentIds = await resolveScheduleStudentIds(scheduleId);
+  const enrolled = schedule?.programId ? await db.enrollment.findMany({ where: { programId: schedule.programId, status: { in: [...ACTIVE_ENROLLMENT_STATUSES] } }, select: { studentId: true } }) : [];
+  const ids = [...new Set([...studentIds, ...enrolled.map(e => e.studentId)])];
+  if (!ids.length) return () => ({ studentId: null, method: null });
+  const students = await db.studentProfile.findMany({ where: { id: { in: ids } }, include: { user: { select: { firstName: true, lastName: true, email: true } }, parents: { include: { parent: { include: { user: { select: { email: true } } } } } } } });
+  const candidates = students.map(student => ({ id: student.id, names: [student.displayName ?? "", [student.user.firstName, student.user.lastName].filter(Boolean).join(" ")], emails: [student.user.email, ...student.parents.map(link => link.parent.user.email)] }));
+  return event => { const matched = matchZoomIdentity("student", candidates, event.name, event.email); return { studentId: matched?.id ?? null, method: matched?.method ?? null }; };
+}
+
+const identityCache = new Map<string, { until: number; match: (event: Pick<ParticipantEvent, "name" | "email">) => ZoomIdentityMatch }>();
+async function buildIdentityMatcher(scheduleId: string) {
+  const cached = identityCache.get(scheduleId);
+  if (cached && cached.until > Date.now()) return cached.match;
+  const match = await loadIdentityMatcher(scheduleId);
+  for (const [key, entry] of identityCache) if (entry.until <= Date.now()) identityCache.delete(key);
+  if (identityCache.size >= 50) identityCache.delete(identityCache.keys().next().value!);
+  identityCache.set(scheduleId, { until: Date.now() + 15_000, match });
+  return match;
 }
 
 async function syncAttendanceRecord(scheduleId: string, studentId: string, sessionDate: Date) {
@@ -127,11 +139,13 @@ async function syncAttendanceRecord(scheduleId: string, studentId: string, sessi
 }
 
 export async function recordZoomParticipantJoined(scheduleId: string, event: ParticipantEvent) {
-  const matched = await matchParticipantToStudent(scheduleId, event);
+  const matched = event.identityMatch ?? (await buildIdentityMatcher(scheduleId))(event);
+  const participantKey = event.participantId || "anon:" + createHash("sha256").update(normalize(event.email) + ":" + normalize(event.name)).digest("hex").slice(0, 32);
   const existing = await db.zoomAttendanceInterval.findFirst({
     where: {
       scheduleId,
       meetingId: event.meetingId,
+      ...(event.meetingUuid ? { OR: [{ meetingUuid: event.meetingUuid }, { meetingUuid: null }] } : {}),
       ...(event.participantId ? { zoomParticipantId: event.participantId }
         : event.email ? { participantEmail: normalize(event.email) }
         : { participantName: event.name?.trim() || null }),
@@ -139,22 +153,23 @@ export async function recordZoomParticipantJoined(scheduleId: string, event: Par
     },
   });
   const interval = existing
-    ? (!existing.studentId && matched.studentId
-      ? await db.zoomAttendanceInterval.update({ where: { id: existing.id }, data: { studentId: matched.studentId, matchMethod: matched.method } }) : existing)
+    ? await db.zoomAttendanceInterval.update({ where: { id: existing.id }, data: { ...(event.meetingUuid ? { meetingUuid: event.meetingUuid } : {}), ...(matched.studentId ? { studentId: matched.studentId, matchMethod: matched.method } : {}), ...("parentId" in matched && matched.parentId ? { parentId: matched.parentId, matchMethod: matched.method } : {}), ...(event.evidenceSource === "zoom-report" ? { evidenceSource: "zoom-report" } : {}) } })
     : await db.zoomAttendanceInterval.create({
     data: {
       scheduleId,
       studentId: matched.studentId,
+      parentId: "parentId" in matched ? matched.parentId : null,
+      evidenceSource: event.evidenceSource ?? "webhook",
       meetingId: event.meetingId,
       meetingUuid: event.meetingUuid,
-      zoomParticipantId: event.participantId,
+      zoomParticipantId: participantKey,
       participantEmail: normalize(event.email) || null,
       participantName: event.name?.trim() || null,
       joinedAt: event.occurredAt,
       matchMethod: matched.method,
     },
   });
-  if (interval.studentId) await syncAttendanceRecord(scheduleId, interval.studentId, interval.joinedAt);
+  if (interval.studentId && !event.deferSync) await syncAttendanceRecord(scheduleId, interval.studentId, interval.joinedAt);
   return interval;
 }
 
@@ -163,6 +178,7 @@ export async function recordZoomParticipantLeft(scheduleId: string, event: Parti
     where: {
       scheduleId,
       meetingId: event.meetingId,
+      ...(event.meetingUuid ? { meetingUuid: event.meetingUuid } : {}),
       ...(event.joinedAt ? { joinedAt: event.joinedAt } : { leftAt: null }),
       OR: [
         ...(event.participantId ? [{ zoomParticipantId: event.participantId }] : []),
@@ -173,18 +189,22 @@ export async function recordZoomParticipantLeft(scheduleId: string, event: Parti
     orderBy: { joinedAt: "desc" },
   });
   if (!interval) {
+    if (!event.joinedAt && !(event.durationSeconds && event.durationSeconds > 0)) throw new Error("Join event not yet available; awaiting Zoom report reconciliation.");
     const joined = await recordZoomParticipantJoined(scheduleId, {
       ...event,
-      occurredAt: new Date(event.occurredAt.getTime() - Math.max(0, event.durationSeconds ?? 0) * 1000),
+      occurredAt: event.joinedAt ?? new Date(event.occurredAt.getTime() - Math.max(0, event.durationSeconds ?? 0) * 1000),
     });
+    if (joined.evidenceSource === "zoom-report" && event.evidenceSource !== "zoom-report") return joined;
     const durationSeconds = Math.max(0, event.durationSeconds ?? Math.round((event.occurredAt.getTime() - joined.joinedAt.getTime()) / 1000));
-    const updated = await db.zoomAttendanceInterval.update({ where: { id: joined.id }, data: { leftAt: event.occurredAt, durationSeconds } });
-    if (updated.studentId) await syncAttendanceRecord(scheduleId, updated.studentId, updated.joinedAt);
+    const updated = await db.zoomAttendanceInterval.update({ where: { id: joined.id }, data: { leftAt: event.occurredAt, durationSeconds, ...(event.evidenceSource === "zoom-report" ? { evidenceSource: "zoom-report" } : {}) } });
+    if (updated.studentId && !event.deferSync) await syncAttendanceRecord(scheduleId, updated.studentId, updated.joinedAt);
     return updated;
   }
-  const durationSeconds = Math.max(interval.durationSeconds, event.durationSeconds ?? Math.round((event.occurredAt.getTime() - interval.joinedAt.getTime()) / 1000));
-  const updated = await db.zoomAttendanceInterval.update({ where: { id: interval.id }, data: { leftAt: event.occurredAt, durationSeconds } });
-  if (updated.studentId) await syncAttendanceRecord(scheduleId, updated.studentId, updated.joinedAt);
+  if (interval.evidenceSource === "zoom-report" && event.evidenceSource !== "zoom-report") return interval;
+  if (event.occurredAt < interval.joinedAt) throw new Error("Zoom leave time precedes join time.");
+  const durationSeconds = event.evidenceSource === "zoom-report" ? Math.max(0, Math.round((event.occurredAt.getTime() - interval.joinedAt.getTime()) / 1000)) : Math.max(interval.durationSeconds, event.durationSeconds ?? Math.round((event.occurredAt.getTime() - interval.joinedAt.getTime()) / 1000));
+  const updated = await db.zoomAttendanceInterval.update({ where: { id: interval.id }, data: { leftAt: event.occurredAt, durationSeconds, ...(event.evidenceSource === "zoom-report" ? { evidenceSource: "zoom-report" } : {}) } });
+  if (updated.studentId && !event.deferSync) await syncAttendanceRecord(scheduleId, updated.studentId, updated.joinedAt);
   return updated;
 }
 
@@ -204,13 +224,23 @@ async function markRosterAbsences(scheduleId: string, endedAt: Date) {
 
 export async function reconcileZoomParticipantReport(scheduleId: string, meetingId: string, meetingUuid?: string) {
   const participants = await getZoomPastMeetingParticipants(meetingUuid || meetingId);
+  await reconcileZoomParticipantRows(scheduleId, meetingId, meetingUuid, participants);
+  return participants.length;
+}
+
+export async function reconcileZoomParticipantRows(scheduleId: string, meetingId: string, meetingUuid: string | undefined, participants: Awaited<ReturnType<typeof getZoomPastMeetingParticipants>>) {
+  const matcher = await buildIdentityMatcher(scheduleId);
+  const changed = new Map<string, { studentId: string; day: Date }>();
   for (const participant of participants) {
     const joinedAt = participant.join_time ? new Date(participant.join_time) : null;
     const leftAt = participant.leave_time ? new Date(participant.leave_time) : null;
-    if (!joinedAt) continue;
-    const joined = await recordZoomParticipantJoined(scheduleId, { meetingId, meetingUuid, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: joinedAt });
-    if (leftAt) await recordZoomParticipantLeft(scheduleId, { meetingId, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: leftAt, joinedAt: joined.joinedAt, durationSeconds: participant.duration });
+    if (!joinedAt || !Number.isFinite(joinedAt.getTime())) continue;
+    const identityMatch = matcher({ name: participant.name, email: participant.user_email });
+    const joined = await recordZoomParticipantJoined(scheduleId, { meetingId, meetingUuid, participantId: participant.user_id ?? participant.id, evidenceSource: "zoom-report", deferSync: true, identityMatch, email: participant.user_email, name: participant.name, occurredAt: joinedAt });
+    if (joined.studentId) changed.set(joined.studentId + ":" + attendanceDayKey(joinedAt), { studentId: joined.studentId, day: joinedAt });
+    if (leftAt && Number.isFinite(leftAt.getTime()) && leftAt >= joinedAt) await recordZoomParticipantLeft(scheduleId, { meetingId, meetingUuid, evidenceSource: "zoom-report", deferSync: true, identityMatch, participantId: participant.user_id ?? participant.id, email: participant.user_email, name: participant.name, occurredAt: leftAt, joinedAt: joined.joinedAt, durationSeconds: participant.duration });
   }
+  for (const item of changed.values()) await syncAttendanceRecord(scheduleId, item.studentId, item.day);
   return participants.length;
 }
 
@@ -218,7 +248,7 @@ export async function closeOpenZoomAttendanceIntervals(scheduleId: string, meeti
   const open = await db.zoomAttendanceInterval.findMany({ where: { scheduleId, meetingId, leftAt: null } });
   for (const interval of open) {
     const durationSeconds = Math.max(0, Math.round((endedAt.getTime() - interval.joinedAt.getTime()) / 1000));
-    await db.zoomAttendanceInterval.update({ where: { id: interval.id }, data: { leftAt: endedAt, durationSeconds } });
+    await db.zoomAttendanceInterval.update({ where: { id: interval.id }, data: { leftAt: endedAt, durationSeconds, evidenceSource: "inferred-close" } });
     if (interval.studentId) await syncAttendanceRecord(scheduleId, interval.studentId, interval.joinedAt);
   }
   await markRosterAbsences(scheduleId, endedAt);

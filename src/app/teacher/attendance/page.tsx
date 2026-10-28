@@ -30,6 +30,7 @@ export default async function TeacherAttendancePage({ searchParams }: PageProps)
   const records = params.schedule ? report.records.filter((record) => record.scheduleId === params.schedule) : report.records;
 
   return <TeacherDashboardFrame title="Attendance" subtitle="Automatic Zoom attendance with verified join, leave, and class-time evidence." navItems={getTeacherNavItems()}>
+    <Link href="/teacher/attendance/zoom" className="block rounded-2xl border border-sky-200 bg-sky-50 p-5 font-bold">Programme completion and monthly Zoom duration reports</Link>
     <TeacherMetricGrid metrics={[
       { label: "Present", value: String(report.summary.present), hint: range === "month" ? "This month." : "Last 7 days." },
       { label: "Needs confirmation", value: String(report.summary.needsConfirmation), hint: "Not yet matched or confirmed." },
