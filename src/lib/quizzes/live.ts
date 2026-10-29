@@ -342,8 +342,8 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
   }
   const streakBonusPoints = isCorrect && withinWindow && consecutiveCorrectBefore > 0 ? live.settings.streakBonusPoints : 0;
   const participationPoints = live.settings.participationPoints;
-  // Live team score is separate from the child's permanent house points.
-  const housePointsAwarded = isCorrect ? 1 : 0;
+  // The same earned score strengthens the learner's Qabila.
+  const housePointsAwarded = Math.max(0, earnedPoints);
 
   try {
     return await db.$transaction(async (tx) => {
@@ -352,7 +352,7 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
           sessionId: live.session.id,
           questionId: live.currentQuestion!.id,
           studentId: live.student.id,
-          answer: { value: input.answer, secondsTaken, withinWindow, streakBonusPoints, participationPoints },
+          answer: { value: input.answer, secondsTaken, withinWindow, streakBonusPoints, participationPoints, questionCount: live.quiz.questions.length },
           isCorrect,
           earnedPoints,
           housePointsAwarded,
@@ -365,8 +365,8 @@ export async function submitLiveQuizAnswerByStudentId(input: { sessionId: string
           data: {
             houseId: live.houseMembership.houseId,
             studentId: live.student.id,
-            points: 1,
-            reason: `${live.quiz.title}: correct live answer (+1 team point)`,
+            points: housePointsAwarded,
+            reason: `${live.quiz.title}: correct live answer (+${housePointsAwarded} Qabila points)`,
             sourceType: "QUIZ_LIVE_ANSWER",
             sourceId: response.id,
           },

@@ -133,17 +133,18 @@ export async function submitQuizAnswer(sessionId: string, user: SessionUser, inp
  const correct = objective && typeof correctKey === 'string' ? input.answer.trim().toLowerCase() === correctKey.trim().toLowerCase() : null;
  const membership = await db.houseMembership.findUnique({ where: { studentId: seat.studentId }, select: { houseId: true } });
  if (!membership) throw new QuizError('Please rejoin the quiz before submitting.');
+ const creditedPoints = correct ? Math.max(0, question.points) : 0;
  const id = randomUUID(), seconds = Math.max(0, Math.floor((receivedAt.getTime() - Date.parse(input.round)) / 1000));
- const answer = JSON.stringify({ value: input.answer.trim(), secondsTaken: seconds, withinWindow: true });
+ const answer = JSON.stringify({ value: input.answer.trim(), secondsTaken: seconds, withinWindow: true, questionCount: quiz.questions.length });
  try {
   return await db.$transaction(async tx => {
    // INSERT...SELECT checks the round at the write itself. A stale request can never answer a newer question.
    const inserted = await tx.$executeRaw`INSERT INTO QuizLiveResponse (id, sessionId, questionId, studentId, answer, isCorrect, earnedPoints, housePointsAwarded, answeredAt)
-    SELECT ${id}, id, ${input.questionId}, ${seat.studentId}, ${answer}, ${correct}, ${correct ? question.points : 0}, ${correct ? 1 : 0}, ${receivedAt}
+    SELECT ${id}, id, ${input.questionId}, ${seat.studentId}, ${answer}, ${correct}, ${creditedPoints}, ${creditedPoints}, ${receivedAt}
     FROM QuizLiveSession WHERE id = ${sessionId} AND status = 'LIVE' AND currentQuestionId = ${input.questionId} AND currentQuestionStartedAt = ${new Date(input.round)}`;
    if (!inserted) throw new QuizError('Your teacher changed the question. Please answer the current round.', 409);
-   if (correct) await tx.housePointLedger.create({ data: { houseId: membership.houseId, studentId: seat.studentId, points: 1, reason: `${quiz.title}: correct live answer (+1 team point)`, sourceType: 'QUIZ_LIVE_ANSWER', sourceId: id } });
-   return { questionId: input.questionId, answer: input.answer.trim(), correct, points: correct ? 1 : 0, seconds };
+   if (creditedPoints > 0) await tx.housePointLedger.create({ data: { houseId: membership.houseId, studentId: seat.studentId, points: creditedPoints, reason: `${quiz.title}: correct live answer (+${creditedPoints} Qabila points)`, sourceType: 'QUIZ_LIVE_ANSWER', sourceId: id } });
+   return { questionId: input.questionId, answer: input.answer.trim(), correct, points: creditedPoints, seconds };
   }, { maxWait: 10000, timeout: 15000 });
  } catch (error) {
   if (typeof error === 'object' && error && 'code' in error && (error.code === 'P2002' || error.code === 'P2010')) {
