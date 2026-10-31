@@ -19,6 +19,7 @@ type LessonPayload = {
 
 type TaskPayload = {
   title: string;
+  lessonId?: string | null;
   launchAt?: string | null;
   timezone?: string | null;
   instructions: string;
@@ -117,6 +118,7 @@ export function parseTaskPayload(value: string | null) {
   if (!value || !value.startsWith(TASK_PREFIX)) {
     return {
       instructions: value,
+      lessonId: null as string | null,
       launchAt: null as string | null,
       timezone: null as string | null,
       instructorName: null as string | null,
@@ -136,6 +138,7 @@ export function parseTaskPayload(value: string | null) {
   if (!parsed) {
     return {
       instructions: value,
+      lessonId: null as string | null,
       launchAt: null as string | null,
       timezone: null as string | null,
       instructorName: null as string | null,
@@ -152,6 +155,7 @@ export function parseTaskPayload(value: string | null) {
 
   return {
     instructions: parsed.instructions ?? null,
+    lessonId: typeof parsed.lessonId === "string" ? parsed.lessonId : null,
     launchAt: typeof parsed.launchAt === "string" && Number.isFinite(Date.parse(parsed.launchAt)) ? parsed.launchAt : null,
     timezone: parsed.timezone ?? null,
     instructorName: parsed.instructorName ?? null,

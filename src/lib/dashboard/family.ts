@@ -851,7 +851,7 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
         termId: parsedInstructions.termId,
         familyNote: parsedInstructions.familyNote,
         dueDate: assignment.dueDate,
-        dueDateLabel: assignment.dueDate ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: parsedInstructions.timezone || "Europe/London" }).format(assignment.dueDate) : "No deadline",
+        dueDateLabel: assignment.dueDate ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: parsedInstructions.timezone || "Europe/London" }).format(assignment.dueDate) : "No deadline",
         submissionTiming: homeworkTiming(submission?.submittedAt ?? null, assignment.dueDate),
         submissionText: submission?.submissionText ?? null,
         attachmentUrl: submission?.attachmentUrl ?? null,

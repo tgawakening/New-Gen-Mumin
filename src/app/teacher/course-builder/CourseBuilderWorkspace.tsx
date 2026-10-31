@@ -1,9 +1,10 @@
 import { HomeworkDateFields } from "@/components/dashboard/HomeworkDateFields";
+import { HomeworkReviewFocus } from "@/components/dashboard/teacher/HomeworkReviewFocus";
 import { saveModuleSharing, loadModuleSharing, moduleIsShared } from "@/lib/curriculum/handover";
 import { notifyCurriculumParents } from "@/lib/curriculum/notifications";
 import { HomeworkStatus } from "@/components/dashboard/HomeworkStatus";
 import { reviewHomework } from "@/lib/teacher/homework-review";
-import { homeworkWindow } from "@/lib/homework/timing";
+import { homeworkWindow, homeworkDateDefaults } from "@/lib/homework/timing";
 import { archiveClassSchedule } from "@/lib/live-classes/archive";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -100,11 +101,13 @@ function canSendTaskEmail(email: string | null | undefined) {
 
 function formatTaskDueDate(dueDate: Date | null, timezone = "Europe/London") {
   if (!dueDate) return "No due date set";
-  return dueDate.toLocaleDateString("en-GB", {
+  return dueDate.toLocaleString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
     timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
@@ -365,7 +368,7 @@ async function notifyTaskLearners(input: {
 
   for (const enrollment of targetEnrollments) {
     const studentName = enrollment.student.displayName || userDisplayName(enrollment.student.user);
-    const launchLabel = input.launchAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: input.timezone || "Europe/London" }).format(new Date(input.launchAt)) : null;
+    const launchLabel = input.launchAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: input.timezone || "Europe/London" }).format(new Date(input.launchAt)) : null;
     const body = input.launchAt && Date.parse(input.launchAt) > Date.now() ? `${input.taskTitle} is scheduled for ${studentName}. Available from ${launchLabel}.` : `${input.taskTitle} is ready for ${studentName}.`;
 
     notificationRows.push({
@@ -408,7 +411,7 @@ async function notifyTaskLearners(input: {
         taskTitle: input.taskTitle,
         teacherName: input.teacherName,
         dueDateLabel: formatTaskDueDate(input.dueDate, input.timezone),
-        launchDateLabel: input.launchAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: input.timezone || "Europe/London" }).format(new Date(input.launchAt)) : undefined,
+        launchDateLabel: input.launchAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: input.timezone || "Europe/London" }).format(new Date(input.launchAt)) : undefined,
         completionPath,
       }),
     ),
@@ -510,15 +513,15 @@ export function CourseBuilderWorkspace({
     return Boolean((topic && haystack.includes(topic)) || (week && haystack.includes(week)));
   }
 
-  function getLessonPackage(lessonTopic: string, weekLabel: string | null | undefined) {
+  function getLessonPackage(lessonTopic: string, weekLabel: string | null | undefined, lessonLogId?: string) {
     const quiz = dashboard.quizzes.find(
       (item) =>
         item.programId === selectedProgramId &&
         textMatchesLesson(`${item.title}\n${item.description ?? ""}`, weekLabel, lessonTopic),
     );
-    const task = visibleAssignments.find((item) => {
+    const task = visibleAssignments.find((item) => lessonLogId && parseTaskPayload(item.instructions).lessonId === lessonLogId) ?? visibleAssignments.find((item) => {
       const parsed = parseTaskPayload(item.instructions);
-      return textMatchesLesson(`${item.title}\n${parsed.weekLabel ?? ""}\n${parsed.instructions ?? ""}`, weekLabel, lessonTopic);
+      return !parsed.lessonId && textMatchesLesson(`${item.title}\n${parsed.weekLabel ?? ""}\n${parsed.instructions ?? ""}`, weekLabel, lessonTopic);
     });
     const live = visibleClasses.find(
       (item) =>
@@ -542,7 +545,7 @@ export function CourseBuilderWorkspace({
     lessonLogId: string;
     attachments: PublishedAttachment[];
   }) {
-    const pack = getLessonPackage(lessonTopic, weekLabel);
+    const pack = getLessonPackage(lessonTopic, weekLabel, lessonLogId);
     const attachedRecordings = attachments.filter(isRecordingAttachment);
     return (
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
@@ -591,7 +594,7 @@ export function CourseBuilderWorkspace({
               </form>
             </div>
           ) : (
-            <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, taskComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Create task</Link>
+            <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, lessonId: lessonLogId || undefined, taskComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Assign homework</Link>
           )}
         </div>
         <div className="rounded-2xl border border-[#dbe8f3] bg-[#f5fbff] p-3">
@@ -1134,12 +1137,16 @@ export function CourseBuilderWorkspace({
     const familyNote = cleanOptional(formData.get("familyNote"));
     const programmeFocus = cleanOptional(formData.get("taskProgrammeFocus"));
     const taskCategory = cleanOptional(formData.get("taskCategory"));
+    const linkedLessonId = cleanOptional(formData.get("taskLessonId"));
     const returnTab = String(formData.get("returnTab") || "task") === "plan" ? "plan" : "task";
     const attachmentFiles = getUploadFiles(formData, "taskFiles");
     const currentDashboard = await getTeacherDashboardData(currentSession.user.id);
     if (!currentDashboard?.rosters.some((program) => program.programId === programId)) throw new Error("Choose a programme assigned to you.");
     const timezone = currentDashboard.profile.timezone || "Europe/London";
     const { launchAt, dueDate } = homeworkWindow(cleanOptional(formData.get("launchDate")), dueDateRaw, timezone);
+    const linkedLesson = linkedLessonId ? await db.lessonLog.findFirst({ where: { id: linkedLessonId, schedule: { programId } } }) : null;
+    if (linkedLessonId && (!linkedLesson || ["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(parseLessonPayload(linkedLesson.summary).contentType || ""))) throw new Error("Choose a lesson from this programme.");
+    const linkedContent = linkedLesson ? parseLessonPayload(linkedLesson.summary, linkedLesson.homework) : null;
 
     if (!programId || !title || !instructions) {
       throw new Error("Please complete programme, task title, and instructions before publishing.");
@@ -1152,7 +1159,7 @@ export function CourseBuilderWorkspace({
       folderName: ["Tasks", weekLabel || title].filter(Boolean).join(" / "),
       titlePrefix: weekLabel || title,
       purpose: "task",
-      termId,
+      termId: linkedContent?.termId || termId,
     });
 
     const assignment = await db.assignment.create({
@@ -1161,6 +1168,7 @@ export function CourseBuilderWorkspace({
         title,
         instructions: buildTaskPayload({
           title,
+          lessonId: linkedLessonId,
           launchAt,
           timezone,
           instructions,
@@ -1169,8 +1177,8 @@ export function CourseBuilderWorkspace({
           taskCategory,
           resourceLinks: splitLinks(resourceLinks),
           evidenceMode,
-          weekLabel,
-          termId,
+          weekLabel: linkedContent?.weekLabel || weekLabel,
+          termId: linkedContent?.termId || termId,
           familyNote,
           attachments,
         }),
@@ -1188,7 +1196,7 @@ export function CourseBuilderWorkspace({
         dueDate,
         launchAt,
         timezone,
-        termId,
+        termId: linkedContent?.termId || termId,
       });
     } catch (error) {
       console.error("Unable to notify learners about assigned task", error);
@@ -2167,7 +2175,7 @@ export function CourseBuilderWorkspace({
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c27a2c]">Student work</p>
-                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Assign task</h2>
+                    <h2 className="mt-2 text-2xl font-semibold text-[#22304a]">Assign homework</h2>
                     <p className="mt-1 text-sm text-[#617184]">{[prefillWeekLabel, prefillTopic].filter(Boolean).join(" - ")}</p>
                   </div>
                   <Link href={buildBuilderHref("plan")} className="rounded-full border border-[#eadfce] bg-[#fffaf5] px-4 py-2 text-sm font-semibold text-[#22304a]">
@@ -2178,15 +2186,16 @@ export function CourseBuilderWorkspace({
                 <form action={publishStudentTask} className="grid gap-4">
                   <input type="hidden" name="programId" value={selectedProgramId} />
                   <input type="hidden" name="taskWeekLabel" value={prefillWeekLabel ?? ""} />
-                  <input type="hidden" name="taskTermId" value={prefillTermId ?? ""} />
+                  <label className="mb-3 grid gap-2 text-sm font-semibold text-[#22304a]">Module<select name="taskTermId" defaultValue={prefillTermId || genMTerms[0].id} className="rounded-2xl border border-[#d8e3ed] p-3">{genMTerms.map((term) => <option key={term.id} value={term.id}>{term.title}</option>)}</select><span className="text-xs font-normal text-[#617184]">Homework linked to a lesson uses that lesson&apos;s module.</span></label>
                   <input type="hidden" name="taskProgrammeFocus" value={selectedProgramme.title} />
                   <input type="hidden" name="returnTab" value="plan" />
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_190px]">
+                  <label className="mb-3 grid gap-2 text-sm font-semibold text-[#22304a]">Assign to<select name="taskLessonId" defaultValue={lessonId || ""} className="rounded-2xl border border-[#d8e3ed] p-3"><option value="">Whole programme / module</option>{parsedVisibleLessons.filter(({ entry }) => entry.programId === selectedProgramId).map(({ entry, parsed }) => <option key={entry.id} value={entry.id}>{parsed.topic || entry.topic}</option>)}</select><span className="text-xs font-normal text-[#617184]">Choose a specific lesson, or leave this as programme homework.</span></label>
+                  <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                       Task title
                       <input name="title" required defaultValue={prefillTopic ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                     </label>
-                    <HomeworkDateFields timezone={dashboard.profile.timezone || "Europe/London"} />
+                    <HomeworkDateFields timezone={dashboard.profile.timezone || "Europe/London"} defaults={homeworkDateDefaults(dashboard.profile.timezone || "Europe/London")} />
                   </div>
                   <textarea name="instructions" rows={4} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Clear task instructions for students and parents." />
                   <div className="grid gap-4 md:grid-cols-2">
@@ -2318,7 +2327,7 @@ export function CourseBuilderWorkspace({
                       required
                     />
                   </label>
-                  <HomeworkDateFields timezone={dashboard.profile.timezone || "Europe/London"} />
+                  <HomeworkDateFields timezone={dashboard.profile.timezone || "Europe/London"} defaults={homeworkDateDefaults(dashboard.profile.timezone || "Europe/London")} />
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -2414,10 +2423,11 @@ export function CourseBuilderWorkspace({
 
               <div className="mt-8 border-t border-[#eadfce] pt-6">
                 <h3 className="text-lg font-semibold text-[#22304a]">Submission tracker</h3>
+                <HomeworkReviewFocus />
                 <p className="text-sm text-[#617184]">On-time, late and missing work are shown for your roster students. Review an answer and award performance points below.</p>
                 <div className="mt-4 space-y-3">
                   {visibleAssignments.map((task) => (
-                    <details key={task.id} className="rounded-[18px] bg-[#fbf6ef] p-4">
+                    <details key={task.id} id={`homework-${task.id}`} className="scroll-mt-6 rounded-[18px] bg-[#fbf6ef] p-4">
                       <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
                         {task.title} - {task.submissions} submissions
                       </summary>
