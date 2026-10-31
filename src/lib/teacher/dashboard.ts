@@ -515,8 +515,7 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
       if (left.dueDate) return -1;
       if (right.dueDate) return 1;
       return left.title.localeCompare(right.title);
-    })
-    .slice(0, 12);
+    });
 
   const uniqueStudents = new Set(
     rosterPrograms.flatMap((roster) => roster.students.map((student) => student.email.toLowerCase())),

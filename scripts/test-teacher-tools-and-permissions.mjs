@@ -27,6 +27,24 @@ test("display names and other account roles cannot grant certificate permission"
   assert.equal(permission.canAwardWeeklyCertificates({ role: "PARENT", email: "umm.abdissamee@gmail.com" }), false);
 });
 const { getTeacherNavItems } = load("src/lib/teacher/nav.ts");
+test("Live Sessions follows Dashboard in teacher navigation", () => {
+  assert.equal(getTeacherNavItems()[0].href, "/teacher");
+  assert.equal(getTeacherNavItems()[1].href, "/teacher/live-sessions");
+});
+test("parent mobile navigation keeps both trackers and Curriculum outside More", () => {
+  const { getParentNavItems } = load("src/lib/dashboard/family-nav.ts");
+  const link = ({ children, href }) => React.createElement("a", { href }, children);
+  const icon = () => null;
+  const { MobileFamilyNavRailClient } = load("src/components/dashboard/family/MobileFamilyNavRailClient.tsx", {
+    "./FamilyNavigation": { FamilyPortalLink: link },
+    "next/navigation": { usePathname: () => "/parent" },
+    "lucide-react": { Home: icon, CalendarDays: icon, CheckCircle2: icon, Sun: icon, Menu: icon, X: icon, BookOpen: icon },
+    "@/components/dashboard/family/FamilyNavLinkClient": { FamilyNavLinkClient: ({ href, label }) => React.createElement("a", { href }, label) },
+  });
+  const html = renderToStaticMarkup(React.createElement(MobileFamilyNavRailClient, { navItems: getParentNavItems("child") }));
+  const quick = html.match(/<nav aria-label="Quick access"[\s\S]*?<\/nav>/)?.[0] || "";
+  for (const route of ["sunnah-tracker", "fardh-tracker", "curriculum"]) assert.ok(quick.includes(`/parent/${route}?child=child`));
+});
 const { MobileTeacherNavRailClient } = load("src/components/dashboard/teacher/MobileTeacherNavRailClient.tsx", {
   "lucide-react": { ChevronDown: () => null, ChevronUp: () => null, LayoutGrid: () => null },
   "@/components/dashboard/teacher/TeacherNavLinkClient": { TeacherNavLinkClient: ({ href, label }) => React.createElement("a", { href }, label) },

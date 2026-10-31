@@ -1,11 +1,11 @@
 export function getTeacherNavItems() {
   return [
     { label: "Dashboard", href: "/teacher", icon: "home" },
+    { label: "Live Sessions", href: "/teacher/live-sessions", icon: "video" },
     { label: "Badges & Certificates", href: "/teacher/recognition", icon: "quiz" },
     { label: "Curriculum Builder", href: "/teacher/course-builder", icon: "builder" },
     { label: "Homework & Assignments", href: "/teacher/homework", icon: "lesson" },
     { label: "Roster", href: "/teacher/roster", icon: "check" },
-    { label: "Live Sessions", href: "/teacher/live-sessions", icon: "video" },
     { label: "Classes", href: "/teacher/classes", icon: "classes" },
     { label: "Payslips", href: "/teacher/payroll", icon: "reports" },
     { label: "Hours Log", href: "/teacher/hours-log", icon: "reports" },

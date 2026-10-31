@@ -1,5 +1,6 @@
 import { HomeworkDateFields } from "@/components/dashboard/HomeworkDateFields";
 import { HomeworkReviewFocus } from "@/components/dashboard/teacher/HomeworkReviewFocus";
+import { deleteTeacherHomework } from "@/lib/homework/manage";
 import { saveModuleSharing, loadModuleSharing, moduleIsShared } from "@/lib/curriculum/handover";
 import { notifyCurriculumParents } from "@/lib/curriculum/notifications";
 import { HomeworkStatus } from "@/components/dashboard/HomeworkStatus";
@@ -588,10 +589,12 @@ export function CourseBuilderWorkspace({
             <div className="mt-2 space-y-2">
               <p className="text-sm font-semibold text-[#22304a]">{pack.task.title}</p>
               <p className="text-xs text-[#617184]">{pack.task.submissions} submissions</p>
-              <form action={deleteCurriculumTaskAction}>
+              <Link href={`/teacher/homework?edit=${encodeURIComponent(pack.task.id)}`} className="inline-flex min-h-11 items-center rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Edit homework</Link>
+              <details><summary className="cursor-pointer text-xs font-semibold text-[#b24646]">Delete homework</summary><form action={deleteCurriculumTaskAction} className="mt-2 grid gap-2 rounded-xl bg-white p-3">
                 <input type="hidden" name="taskId" value={pack.task.id} />
-                <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Delete</FormSubmitButton>
-              </form>
+                <label className="flex items-start gap-2 text-xs leading-5 text-[#617184]"><input type="checkbox" name="confirmDelete" required className="mt-1 shrink-0" />Remove this homework and its submissions permanently. Earned points stay.</label>
+                <FormSubmitButton pendingLabel="Deleting..." className="rounded-full bg-[#fff4f4] px-3 py-1.5 text-xs font-semibold text-[#b24646]">Confirm delete</FormSubmitButton>
+              </form></details>
             </div>
           ) : (
             <Link href={buildBuilderHref("plan", { weekLabel: weekLabel ?? undefined, topic: lessonTopic, termId, lessonId: lessonLogId || undefined, taskComposer: true })} className="mt-2 inline-flex rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Assign homework</Link>
@@ -1340,22 +1343,16 @@ export function CourseBuilderWorkspace({
 
     const session = await getCurrentSession();
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
-    const teacher = await db.teacherProfile.findUnique({
-      where: { userId: session.user.id },
-      include: { programAssignments: true },
-    });
-    if (!teacher) redirect("/teacher-registration");
-
     const taskId = String(formData.get("taskId") || "");
-    const task = await db.assignment.findUnique({ where: { id: taskId } });
-    if (task && teacher.programAssignments.some((assignment) => assignment.programId === task.programId)) {
-      await db.assignment.delete({ where: { id: task.id } });
-    }
+    if (formData.get("confirmDelete") !== "on") throw new Error("Confirm deletion before removing homework.");
+    await deleteTeacherHomework(session.user.id, taskId);
 
     revalidatePath("/teacher/course-builder");
     if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
     revalidatePath("/student/courses");
     revalidatePath("/parent/courses");
+    revalidatePath("/parent/curriculum");
+    revalidatePath("/teacher/homework");
     redirect(`${successRedirectPath}?tab=plan&success=task_deleted`);
   }
 
@@ -2432,6 +2429,7 @@ export function CourseBuilderWorkspace({
                         {task.title} - {task.submissions} submissions
                       </summary>
                       <p className="mt-2 text-xs text-[#617184]">Launch: {task.launchAt ? new Date(task.launchAt).toLocaleDateString("en-GB", { timeZone: dashboard.profile.timezone || "Europe/London" }) : "Available now"} - Due: {formatTaskDueDate(task.dueDate, parseTaskPayload(task.instructions).timezone || dashboard.profile.timezone || "Europe/London")}</p>
+                      <Link href={`/teacher/homework?edit=${encodeURIComponent(task.id)}`} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-[#24466e] underline">Edit this homework</Link>
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         {task.submissionDetails.map((submission) => (
                           <div key={submission.id} className="rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[#4d5a6b]">

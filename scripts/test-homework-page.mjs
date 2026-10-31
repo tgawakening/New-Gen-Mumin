@@ -17,6 +17,11 @@ async function render(instructions, { role = 'TEACHER', hidden = false } = {}) {
   const task = { id: 'work', programId: 'program', programTitle: 'Seerah', title: 'My homework', instructions, dueDate: new Date('2026-11-02T23:59:59Z'), submissionDetails: [{ canReview: true, submissionTiming: 'Submitted late' }, { canReview: false, submissionTiming: 'Not submitted' }] };
   const wrapper = ({ children }) => React.createElement('section', null, children);
   const { default: Page } = load('src/app/teacher/homework/page.tsx', {
+    'next/cache': { revalidatePath: () => {} },
+    '@/lib/homework/manage': { teacherHomeworkForManagement: async () => null, updateTeacherHomework: async () => {}, deleteTeacherHomework: async () => {} },
+    '@/components/dashboard/teacher/HomeworkEditDialog': { HomeworkEditDialog: () => null },
+    '@/components/dashboard/ActionToast': { ActionToast: () => null },
+    '@/components/dashboard/FormSubmitButton': { FormSubmitButton: ({ children }) => React.createElement('button', null, children) },
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     'next/navigation': { redirect: href => { throw Error(`redirect:${href}`); } },
     '@/lib/auth/session': { getCurrentSession: async () => ({ user: { id: 'teacher', role } }), getDashboardHome: () => '/parent' },
@@ -36,7 +41,9 @@ test('structured homework displays readable instructions and named files, never 
   assert.match(html, /Read the story and answer the questions/);
   assert.match(html, /Story worksheet.pdf/);
   assert.match(html, /https:\/\/drive.google.com\/file\/d\/example\/view/);
-  assert.doesNotMatch(html, /__GENM_TASK__|thumbnailUrl|mimeType|internal-thumbnail|javascript:/);
+  assert.doesNotMatch(html, /__GENM_TASK__|thumbnailUrl|mimeType|internal-thumbnail|href="javascript:/);
+  assert.match(html, /Edit homework/);
+  assert.match(html, /name="confirmDelete"/);
   assert.match(html, /1 received · 1 not submitted · 1 late/);
   assert.match(html, /\/teacher\/course-builder\/seerah\?tab=task#homework-work/);
 });
