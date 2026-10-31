@@ -24,6 +24,7 @@ export function activityLabel(source: string, reason: string) {
   if (source.startsWith("SUNNAH")) return source === "SUNNAH_DAILY" ? "Daily Sunnah tracker submitted" : "Sunnah activity completed";
   if (source.startsWith("FARDH")) return reason;
   if (source.includes("ATTENDANCE")) return source === "ATTENDANCE_PARENT" ? "Attendance confirmed by parent" : "Live class attendance";
+  if (source === "HOMEWORK_PERFORMANCE") return "Homework performance";
   if (source.includes("HOMEWORK")) return "Homework completed";
   if (source === "RECOGNITION_MUMIN_OF_WEEK") return "Mumin of the Week certificate";
   if (source === "PARENT_RECOGNITION_MUM_OF_WEEK") return "Mum of the Week certificate";

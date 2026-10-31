@@ -1,5 +1,6 @@
 import { CopyStudentJoinLink } from "@/components/dashboard/teacher/CopyStudentJoinLink";
 import { ZoomChatGuide } from "@/components/dashboard/teacher/ZoomChatGuide";
+import { isSeerahParentalTeacher } from "@/lib/teacher/programme-scope";
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
@@ -44,7 +45,7 @@ export default async function TeacherLiveSessionsPage({ searchParams }: PageProp
   if (!dashboard) redirect("/teacher-registration");
 
   const params = searchParams ? await searchParams : {};
-  const isMehran = (dashboard.teacherName + " " + dashboard.profile.email).toLowerCase().includes("mehran");
+  const isMehran = isSeerahParentalTeacher(session.user);
   const seerahRoster = dashboard.rosters.find((roster) => roster.title.toLowerCase().includes("seerah"));
   const defaultProgramId = params.programId && dashboard.rosters.some((roster) => roster.programId === params.programId)
     ? params.programId

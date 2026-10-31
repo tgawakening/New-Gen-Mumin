@@ -19,6 +19,8 @@ type LessonPayload = {
 
 type TaskPayload = {
   title: string;
+  launchAt?: string | null;
+  timezone?: string | null;
   instructions: string;
   instructorName?: string | null;
   programmeFocus?: string | null;
@@ -115,6 +117,8 @@ export function parseTaskPayload(value: string | null) {
   if (!value || !value.startsWith(TASK_PREFIX)) {
     return {
       instructions: value,
+      launchAt: null as string | null,
+      timezone: null as string | null,
       instructorName: null as string | null,
       programmeFocus: null as string | null,
       taskCategory: null as string | null,
@@ -132,6 +136,8 @@ export function parseTaskPayload(value: string | null) {
   if (!parsed) {
     return {
       instructions: value,
+      launchAt: null as string | null,
+      timezone: null as string | null,
       instructorName: null as string | null,
       programmeFocus: null as string | null,
       taskCategory: null as string | null,
@@ -146,6 +152,8 @@ export function parseTaskPayload(value: string | null) {
 
   return {
     instructions: parsed.instructions ?? null,
+    launchAt: typeof parsed.launchAt === "string" && Number.isFinite(Date.parse(parsed.launchAt)) ? parsed.launchAt : null,
+    timezone: parsed.timezone ?? null,
     instructorName: parsed.instructorName ?? null,
     programmeFocus: parsed.programmeFocus ?? null,
     taskCategory: parsed.taskCategory ?? null,

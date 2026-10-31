@@ -1,3 +1,4 @@
+import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -114,7 +115,7 @@ export default async function TeacherHousePointsPage({ searchParams }: PageProps
   const toast = params.awarded ? "House points awarded and the family was notified." : params.duplicate ? "Already awarded for this student, session, reason, and day." : params.updated ? "Live award updated and the family was notified." : params.removed ? "Live award removed; totals were reversed safely." : params.error;
   return <TeacherDashboardFrame title="Live Points & Recognition" subtitle="Award fair live-class points or evidence-based character badges from one clear workspace." navItems={getTeacherNavItems()}>
     <ActionToast message={toast} tone={params.error || params.duplicate ? "error" : "success"}/>
-    <TeacherRewardWorkspaceTabs active="points"/>
+    <TeacherRewardWorkspaceTabs active="points" canAwardCertificates={canAwardWeeklyCertificates(session.user)}/>
     <TeacherMetricGrid metrics={[{label:"Students",value:String(students.length),hint:"Eligible roster learners."},{label:"Live sessions",value:String(dashboard.classes.length),hint:"Choose where it happened."},{label:"Approved reasons",value:String(MANUAL_HOUSE_POINT_REASONS.length),hint:"Fixed fair values."},{label:"Recent awards",value:String(recentAwards.length),hint:"Your auditable history."}]}/>
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
       <TeacherSection eyebrow="Live award" title="Recognise a student contribution">

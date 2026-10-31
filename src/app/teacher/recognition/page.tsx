@@ -1,3 +1,5 @@
+import { BADGE_POINT_BONUSES } from "@/lib/community/recognition-points";
+import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import { AwardBadgeForm } from "@/components/dashboard/teacher/AwardBadgeForm";
 import { TeacherBadgeOverview } from "@/components/dashboard/teacher/TeacherBadgeOverview";
 import { RecognitionWeekSelector } from "@/components/dashboard/teacher/RecognitionWeekSelector";
@@ -16,12 +18,13 @@ import { pointDayKey } from "@/lib/community/point-awards";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
 import { db } from "@/lib/db";
+import { RosterAwards, type RosterAwardFilters } from "@/components/dashboard/teacher/RosterAwards";
 
 const WEEKLY_BADGE_KEY = "MUMIN_OF_WEEK";
 const MANUAL = CHARACTER_BADGES.filter((badge) => !["RELIABLE", "CONSISTENT", "SEEKER", WEEKLY_BADGE_KEY].includes(badge.key));
-const BONUS: Record<string, number> = { MUMIN_OF_WEEK: 150, HELPER: 10, COURAGEOUS: 10, NOTICER: 10, TRUTH_TELLER: 10, LEADER: 15, HOUSE_BUILDER: 30, ALLIANCE_CHAMPION: 40 };
+const BONUS = BADGE_POINT_BONUSES;
 
-type Props = { searchParams?: Promise<{ awarded?: string; removed?: string; error?: string; certificate?: string; tab?: string; badge?: string }> };
+type Props = { searchParams?: Promise<RosterAwardFilters & { awarded?: string; removed?: string; error?: string; certificate?: string; tab?: string; badge?: string }> };
 
 
 
@@ -33,7 +36,9 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
+  const canAwardCertificates = canAwardWeeklyCertificates(session.user);
   const certificateTab = params.tab === "certificate" || Boolean(params.certificate);
+  if (certificateTab && !canAwardCertificates) redirect("/teacher/recognition?error=Weekly%20certificates%20are%20awarded%20by%20Sister%20Saba%20or%20Ustadh%20Mehran.");
   const selectedBadge = MANUAL.some((badge) => badge.key === params.badge) ? params.badge : "";
   const students = Array.from(new Map(dashboard.rosters.flatMap((roster) => roster.students).map((student) => [student.id, student])).values()).sort((a, b) => a.name.localeCompare(b.name));
   const recentAwards = await db.recognitionAward.findMany({
@@ -53,7 +58,9 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     const studentId = String(formData.get("studentId") || "");
     const badgeKey = String(formData.get("badgeKey") || "");
     const certificateAward = formData.get("awardKind") === "certificate";
+    if (certificateAward && !canAwardWeeklyCertificates(current.user)) redirect("/teacher/recognition?error=You%20do%20not%20have%20permission%20to%20award%20weekly%20certificates.");
     const evidence = String(formData.get("evidence") || "").trim().slice(0, certificateAward ? 240 : 500);
+    const recipientName = certificateAward ? String(formData.get("recipientName") || "").trim().replace(/\s+/g, " ").slice(0, 80) : undefined;
     const beneficiaryStudentId = String(formData.get("beneficiaryStudentId") || "") || undefined;
     const weekly = certificateAward;
     const errorBase = weekly ? "/teacher/recognition?tab=certificate&error=" : "/teacher/recognition?error=";
@@ -78,6 +85,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       studentId,
       badgeKey,
       evidence,
+      recipientName,
       awardedByUserId: current.user.id,
       sourceType: weekly ? "WEEKLY_NOMINATION" : "TEACHER_NOMINATION",
       sourceId: weekly ? `${current.user.id}:${badgeKey}:${selectedWeek}` : `${current.user.id}:${badgeKey}:${pointDayKey()}`,
@@ -111,9 +119,9 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     redirect("/teacher/recognition?removed=1");
   }
   return (
-    <TeacherDashboardFrame title="Badges, Certificates & Points" subtitle="Award fair live-class points, character badges, and a printable Mumin of the Week certificate from one workspace." navItems={getTeacherNavItems()}>
+    <TeacherDashboardFrame title={canAwardCertificates ? "Badges, Certificates & Points" : "Badges & Live Points"} subtitle={canAwardCertificates ? "Award student badges, class points and weekly certificates." : "Recognise student character and award fair points during class."} navItems={getTeacherNavItems()}>
       <ActionToast message={params.awarded ? (certificateTab ? "Weekly certificate awarded. Open it below to print or save." : "Badge awarded. The learner can find it in their rewards.") : params.removed ? "Award, certificate, and its related House points removed." : params.error} tone={params.error ? "error" : "success"} />
-      <TeacherRewardWorkspaceTabs active={certificateTab ? "certificate" : "recognition"} />
+      <TeacherRewardWorkspaceTabs active={certificateTab ? "certificate" : "recognition"} canAwardCertificates={canAwardCertificates} />
       <TeacherMetricGrid metrics={[
         { label: "Roster students", value: String(students.length), hint: "Unique eligible learners." },
         certificateTab ? { label: "Weekly Qabila bonus", value: "150 pts", hint: "Added with Mumin of the Week." } : { label: "Character badges", value: String(MANUAL.length), hint: "Choose a badge for an action you observed." },
@@ -132,6 +140,10 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
             <select name="studentId" required className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Choose roster student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
           </label>
           <input type="hidden" name="badgeKey" value={WEEKLY_BADGE_KEY} />
+          <label className="grid gap-2 text-sm font-bold text-[#22304a] lg:col-span-2">Student name shown on certificate
+            <input name="recipientName" maxLength={80} placeholder="Optional - enter the student's full name" className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal" />
+            <span className="text-xs font-normal text-[#7a8797]">Leave blank to use the selected student&apos;s name. This changes only the certificate name, not the student profile.</span>
+          </label>
           <label className="grid gap-2 text-sm font-bold text-[#22304a] lg:col-span-2">Short reason printed on the certificate
             <textarea name="evidence" required minLength={12} maxLength={240} rows={4} placeholder="Example: For consistently helping classmates and showing excellent adab throughout this week's sessions." className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal" />
             <span className="text-xs font-normal text-[#7a8797]">Keep it clear and concise (maximum 240 characters). This exact reason appears on the learner&apos;s dashboard and certificate.</span>
@@ -144,12 +156,13 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
         <p className="mb-4 text-sm text-[#617184]">Choose a student, select the character you observed, and describe what they did.</p>
         <AwardBadgeForm key={selectedBadge} action={nominate} students={students.map(student => ({ id: student.id, name: student.name }))} badges={MANUAL} bonuses={BONUS} initialBadge={selectedBadge ?? ""} />
       </TeacherSection>}
-      {!certificateTab ? <TeacherBadgeOverview /> : null}
+      {!certificateTab ? <TeacherBadgeOverview canAwardCertificates={canAwardCertificates} /> : null}
+      <RosterAwards students={students.map(({ id, name }) => ({ id, name }))} filters={params} />
       <TeacherSection eyebrow="Teacher award history" title={certificateTab ? "My recent weekly certificates" : "My recent student badges"}>
         <p className="mb-4 text-sm leading-6 text-[#617184]">You can remove an award you created while testing. Its certificate will be hidden and its awarded House points will be safely reversed.</p>
         <div className="grid gap-3">
           {recentAwards.map((award) => {
-            const learnerName = award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
+            const learnerName = award.recipientName || award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
             return <article key={award.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#dce4ed] bg-[#f8fafc] p-4"><div><p className="font-black text-[#22304a]">{award.title} · {learnerName}</p><p className="mt-1 text-sm text-[#617184]">{award.featuredWeek ? <span className="block font-semibold">Week: {recognitionWeekLabel(award.featuredWeek)}</span> : null}{award.evidence}</p><p className="mt-1 text-xs text-[#8793a3]">{award.awardedAt.toLocaleDateString("en-GB")} · {award.pointsBonus} points</p></div><div className="flex items-center gap-2"><a href={certificateTab ? `/certificates/${award.certificateCode}` : `/badges/${award.certificateCode}`} className="rounded-full border border-[#c8d5e3] bg-white px-4 py-2 text-xs font-bold text-[#24466e]">{certificateTab ? "Open certificate" : "View badge"}</a><details className="relative"><summary className="cursor-pointer list-none rounded-full border border-[#efb3b3] bg-white px-4 py-2 text-xs font-bold text-[#b24646]">Remove</summary><form action={removeAward} className="absolute right-0 z-20 mt-2 w-64 rounded-2xl border border-[#efb3b3] bg-white p-4 shadow-xl"><input type="hidden" name="awardId" value={award.id}/><p className="text-xs leading-5 text-[#617184]">Remove this certificate and reverse its awarded points?</p><button className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#b24646] px-4 py-2 text-xs font-bold text-white"><Trash2 className="h-3.5 w-3.5"/>Yes, remove award</button></form></details></div></article>;
           })}
           {!recentAwards.length ? <p className="rounded-2xl bg-[#f8fafc] p-5 text-sm text-[#617184]">You have not assigned any certificates or badges yet.</p> : null}

@@ -2,7 +2,7 @@ import "server-only";
 
 import { db } from "@/lib/db";
 
-export type NavActivity = { count: number; ids: string[]; tooltip: string };
+export type NavActivity = { count: number; ids: string[]; tooltip: string; persistent?: boolean };
 type NotificationRow = { id: string; title: string; body: string; href: string | null };
 const searchable = (item: NotificationRow) => `${item.title} ${item.body} ${item.href ?? ""}`.toLowerCase();
 function matchesNavigation(label: string, href: string, item: NotificationRow) {
@@ -26,7 +26,15 @@ function matchesNavigation(label: string, href: string, item: NotificationRow) {
 export async function getNavigationActivity<T extends { label: string; href: string }>(userId: string, items: T[]): Promise<Array<T & { activity?: NavActivity }>> {
   try {
     const unread = await db.notification.findMany({ where: { userId, readAt: null }, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, title: true, body: true, href: true } });
-    return items.map((item) => { const matches = unread.filter((notification) => matchesNavigation(item.label, item.href, notification)); const latest = matches[0]; return { ...item, activity: latest ? { count: matches.length, ids: matches.map((entry) => entry.id), tooltip: `${latest.title}: ${latest.body}` } : undefined }; });
+    return await Promise.all(items.map(async (item) => {
+      if (item.href.startsWith("/parent/curriculum")) {
+        const child = new URL(item.href, "https://local.invalid").searchParams.get("child");
+        const where = { userId, readAt: null, href: { startsWith: "/parent/curriculum?" }, ...(child ? { AND: [{ href: { contains: `&child=${encodeURIComponent(child)}&` } }] } : {}) };
+        const [count, rows] = await Promise.all([db.notification.count({ where }), db.notification.findMany({ where, orderBy: { createdAt: "desc" }, take: 100, select: { id: true, title: true, body: true } })]);
+        return { ...item, activity: count ? { count, ids: rows.map((row) => row.id), tooltip: "New or updated curriculum to review", persistent: true } : undefined };
+      }
+      const matches = unread.filter((notification) => matchesNavigation(item.label, item.href, notification)); const latest = matches[0]; return { ...item, activity: latest ? { count: matches.length, ids: matches.map((entry) => entry.id), tooltip: `${latest.title}: ${latest.body}` } : undefined };
+    }));
   } catch (error) {
     console.error("Navigation activity unavailable", error);
     return items;

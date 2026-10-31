@@ -1,6 +1,9 @@
 export function getTeacherNavItems() {
   return [
     { label: "Dashboard", href: "/teacher", icon: "home" },
+    { label: "Badges & Certificates", href: "/teacher/recognition", icon: "quiz" },
+    { label: "Curriculum Builder", href: "/teacher/course-builder", icon: "builder" },
+    { label: "Homework & Assignments", href: "/teacher/homework", icon: "lesson" },
     { label: "Roster", href: "/teacher/roster", icon: "check" },
     { label: "Live Sessions", href: "/teacher/live-sessions", icon: "video" },
     { label: "Classes", href: "/teacher/classes", icon: "classes" },
@@ -8,11 +11,9 @@ export function getTeacherNavItems() {
     { label: "Hours Log", href: "/teacher/hours-log", icon: "reports" },
     { label: "Recordings", href: "/teacher/recordings", icon: "video" },
     { label: "Schedule", href: "/teacher/schedule", icon: "calendar" },
-    { label: "Course Builder", href: "/teacher/course-builder", icon: "builder" },
     { label: "Lesson Log", href: "/teacher/lesson-log", icon: "lesson" },
     { label: "Qabila Community", href: "/teacher/community", icon: "classes" },
     { label: "Attendance", href: "/teacher/attendance", icon: "check" },
-    { label: "Badges, Certificates & Points", href: "/teacher/recognition", icon: "quiz" },
     { label: "Materials", href: "/teacher/materials", icon: "folder" },
     { label: "Quizzes", href: "/teacher/quizzes", icon: "quiz" },
     { label: "Journal", href: "/teacher/journal", icon: "journal" },

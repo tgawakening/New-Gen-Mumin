@@ -12,6 +12,12 @@ function resolveHref(path: string) {
   return new URL(path, env.data.APP_URL).toString();
 }
 
+export async function sendCurriculumUpdateEmail(input: { toEmail: string; recipientName: string; studentName: string; contentTitle: string; programTitle: string; kind: "lesson" | "material"; updated?: boolean; curriculumPath: string; deduplicationKey: string }) {
+  return sendTransactionalEmail({ toEmail: input.toEmail, subject: `${input.updated ? "Updated" : "New"} ${input.kind} for ${input.studentName}`, template: "curriculumUpdate", deduplicationKey: input.deduplicationKey,
+    html: renderGenMuminsEmailTemplate({ heading: "A curriculum update to review", preview: input.contentTitle, intro: `Assalamu alaikum ${input.recipientName}, a teacher ${input.updated ? "updated" : "shared"} a ${input.kind} for ${input.studentName}.`, sections: [{ label: "Programme", value: input.programTitle }, { label: "Lesson / material", value: input.contentTitle }, { label: "Next step", value: "Open Curriculum, review the content with your child, and mark it reviewed." }], callToAction: { label: "Review curriculum", href: resolveHref(input.curriculumPath) } }),
+  });
+}
+
 async function sendAdminFacingEmail(
   template: string,
   subject: string,
@@ -661,6 +667,7 @@ export async function sendStudentTaskAssignedEmail(input: {
   taskTitle: string;
   teacherName: string;
   dueDateLabel: string;
+  launchDateLabel?: string;
   completionPath: string;
 }) {
   await sendTransactionalEmail({
@@ -675,8 +682,9 @@ export async function sendStudentTaskAssignedEmail(input: {
         { label: "Student", value: input.studentName },
         { label: "Programme", value: input.programTitle },
         { label: "Task", value: input.taskTitle },
+        ...(input.launchDateLabel ? [{ label: "Available from", value: input.launchDateLabel }] : []),
         { label: "Due date", value: input.dueDateLabel },
-        { label: "Next step", value: "Open the task page, review the instructions, and submit the completed work." },
+        { label: "Next step", value: input.launchDateLabel ? "From the launch date, open the task page, review the instructions, and submit the completed work." : "Open the task page, review the instructions, and submit the completed work." },
       ],
       callToAction: { label: "Complete task", href: resolveHref(input.completionPath) },
     }),

@@ -3,6 +3,8 @@ import "server-only";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
+import { curriculumModule, loadModuleSharing, moduleIsShared } from "@/lib/curriculum/handover";
+import { notifyCurriculumParents } from "@/lib/curriculum/notifications";
 import { driveRequest, driveResumableUploadRequest, driveUpload, driveUploadResponse, getDriveRootFolderId } from "@/lib/google-drive/client";
 
 export type DriveMaterial = {
@@ -20,6 +22,7 @@ export type DriveMaterial = {
   uploadedByUserId: string | null;
   folderName: string | null;
   visibility: string | null;
+  termId?: string | null;
 };
 
 export type DriveUploadResult = {
@@ -281,6 +284,7 @@ export async function uploadTeacherMaterial(input: {
   publishToStudents?: boolean;
   purpose?: "material" | "lesson" | "task";
   suppressNotifications?: boolean;
+  termId?: string | null;
 }) {
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: input.teacherUserId },
@@ -313,6 +317,7 @@ export async function uploadTeacherMaterial(input: {
       uploadedByUserId: input.teacherUserId,
       uploadedByName: `${teacher.user.firstName} ${teacher.user.lastName ?? ""}`.trim(),
       folderName,
+      termId: curriculumModule(input.termId, folderName),
       status: input.publishToStudents === false ? "internal" : "approved",
       visibility: input.publishToStudents === false ? "internal" : "students_parents",
     },
@@ -357,7 +362,7 @@ export async function uploadTeacherMaterial(input: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role: "reader", type: "anyone" }),
     });
-    if (!input.suppressNotifications) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title, input.teacherUserId);
+    if (!input.suppressNotifications) await notifyMaterialLearners(uploaded.id, uploaded.name, input.programId, program.title, input.teacherUserId, metadata.appProperties.termId);
   }
 
   if (!input.suppressNotifications) await db.notification.create({
@@ -740,6 +745,7 @@ function mapDriveFile(file: DriveFile): DriveMaterial {
     uploadedByUserId: file.appProperties?.uploadedByUserId ?? null,
     folderName: file.appProperties?.folderName ?? "General",
     visibility: file.appProperties?.visibility ?? null,
+    termId: curriculumModule(file.appProperties?.termId, file.appProperties?.folderName),
   };
 }
 
@@ -798,7 +804,10 @@ export async function listMaterials(options: { status?: string; programId?: stri
     `/files?q=${encodeURIComponent(query)}&pageSize=${options.limit ?? 50}&orderBy=createdTime desc&fields=files(id,name,mimeType,webViewLink,webContentLink,thumbnailLink,createdTime,appProperties)`,
   );
 
-  return filterMaterialsForStudent(payload.files.map(mapDriveFile), options.studentId);
+  const materials = await filterMaterialsForStudent(payload.files.map(mapDriveFile), options.studentId);
+  if (!options.studentId) return materials;
+  const sharing = await loadModuleSharing([...new Set(materials.flatMap((item) => item.programId ? [item.programId] : []))]);
+  return materials.filter((item) => !item.programId || moduleIsShared(sharing, item.programId, item.termId, item.folderName));
 }
 
 export async function deleteMaterial(fileId: string) {
@@ -819,6 +828,22 @@ export async function deleteTeacherMaterial(fileId: string, teacherUserId: strin
   await deleteMaterial(fileId);
 }
 
+export async function updateTeacherMaterial(input: { fileId: string; teacherUserId: string; title: string; termId: string; publish: boolean }) {
+  const file = await driveRequest<DriveFile>(`/files/${encodeURIComponent(input.fileId)}?fields=id,name,appProperties`);
+  if (file.appProperties?.uploadedByUserId !== input.teacherUserId || !file.appProperties.programId) throw new Error("You can only update your own materials.");
+  const programId = file.appProperties.programId;
+  const teacher = await db.teacherProgram.findFirst({ where: { programId, teacher: { userId: input.teacherUserId } } });
+  if (!teacher) throw new Error("This programme is not assigned to you.");
+  const revision = new Date().toISOString();
+  const termId = curriculumModule(input.termId);
+  const updated = await driveRequest<DriveFile>(`/files/${encodeURIComponent(input.fileId)}?fields=id,name,appProperties`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: input.title.trim() || file.name, appProperties: { ...file.appProperties, termId, status: input.publish ? "approved" : "internal", visibility: input.publish ? "students_parents" : "internal", updatedAt: revision } }) });
+  if (input.publish) {
+    await driveRequest(`/files/${encodeURIComponent(input.fileId)}/permissions`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ role: "reader", type: "anyone" }) });
+    await notifyMaterialLearners(updated.id, updated.name, programId, file.appProperties.programTitle || "their programme", input.teacherUserId, termId, revision, true);
+  }
+  return updated;
+}
+
 async function getTeacherRosterStudentIdsForProgram(teacherUserId: string | null | undefined, programId: string) {
   if (!teacherUserId) return null;
 
@@ -836,7 +861,8 @@ async function getTeacherRosterStudentIdsForProgram(teacherUserId: string | null
   return new Set(teacher.programRosters.map((entry) => entry.studentId));
 }
 
-async function notifyMaterialLearners(fileId: string, fileName: string, programId: string, programTitle: string, teacherUserId?: string | null) {
+async function notifyMaterialLearners(fileId: string, fileName: string, programId: string, programTitle: string, teacherUserId?: string | null, termId?: string | null, version = fileId, updated = false) {
+  if (!moduleIsShared(await loadModuleSharing([programId]), programId, termId)) return;
   const rosterStudentIds = await getTeacherRosterStudentIdsForProgram(teacherUserId, programId);
   const enrollments = await db.enrollment.findMany({
     where: { programId, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] } },
@@ -846,7 +872,6 @@ async function notifyMaterialLearners(fileId: string, fileName: string, programI
   for (const enrollment of enrollments) {
     if (rosterStudentIds?.size && !rosterStudentIds.has(enrollment.studentId)) continue;
     userIds.add(enrollment.student.user.id);
-    if (enrollment.parent?.user.id) userIds.add(enrollment.parent.user.id);
   }
   if (!userIds.size) return;
 
@@ -858,6 +883,7 @@ async function notifyMaterialLearners(fileId: string, fileName: string, programI
       href: `/student/courses?material=${fileId}`,
     })),
   });
+  await notifyCurriculumParents({ programId, teacherUserId, termId, title: fileName, kind: "material", contentId: fileId, version, updated });
 }
 
 export async function approveMaterial(fileId: string, adminUserId: string) {
@@ -896,7 +922,7 @@ export async function approveMaterial(fileId: string, adminUserId: string) {
 
   const programId = updated.appProperties?.programId;
   if (programId && updated.appProperties?.visibility !== "internal") {
-    await notifyMaterialLearners(updated.id, updated.name, programId, programTitle, updated.appProperties?.uploadedByUserId);
+    await notifyMaterialLearners(updated.id, updated.name, programId, programTitle, updated.appProperties?.uploadedByUserId, updated.appProperties?.termId);
   }
 
   return updated;

@@ -42,7 +42,7 @@ export function getParentNavItems(childId?: string) {
     { label: "Qabila Chat", href: `/parent/community${suffix}${suffix ? "&" : "?"}mode=child`, icon: "sun" as const },
     { label: "Quizzes", href: `/parent/quizzes${suffix}`, icon: "sparkles" as const },
     { label: "Recordings", href: `/parent/recordings${suffix}`, icon: "video" as const },
-    { label: "Curriculum", href: `/parent/courses${suffix}`, icon: "book" as const },
+    { label: "Curriculum", href: `/parent/curriculum${suffix}`, icon: "book" as const },
     { label: "Progress", href: `/parent/progress${suffix}`, icon: "chart" as const },
     { label: "Monthly feedback", href: `/parent/feedback${suffix}`, icon: "journal" as const },
     { label: "Profile", href: `/parent/profile${suffix}`, icon: "profile" as const },

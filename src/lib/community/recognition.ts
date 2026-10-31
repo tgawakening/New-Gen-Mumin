@@ -1,13 +1,15 @@
 import { saveWeeklyRecognition } from "@/lib/community/weekly-recognition-save";
 import "server-only";
 
-import { Prisma } from "@prisma/client";
+import { saveCharacterRecognition } from "@/lib/community/character-recognition-save";
+import { BADGE_POINT_BONUSES } from "@/lib/community/recognition-points";
 
 import { db } from "@/lib/db";
 import { awardHousePointsOnce } from "@/lib/community/point-awards";
 import { ensureStudentHouseMembership, getRecentHousePointEvents } from "@/lib/community/house-points";
 import { qabilaProfile } from "@/lib/community/qabilas";
 import { sendRecognitionEarnedEmail } from "@/lib/email/notifications";
+import { notifyRosterTeachersOfAward } from "@/lib/teacher/recognition-roster";
 
 export const RECOGNITION_LEVELS = [
   { key: "ROOKIE", title: "Rookie Mumin", min: 0 },
@@ -44,6 +46,11 @@ export function recognitionLevel(points: number) {
   return [...RECOGNITION_LEVELS].reverse().find((level) => points >= level.min) ?? RECOGNITION_LEVELS[0];
 }
 
+async function alertRosterTeachers(input: Parameters<typeof notifyRosterTeachersOfAward>[0]) {
+  try { await notifyRosterTeachersOfAward(input); }
+  catch (error) { console.error("Teacher recognition alert failed; the award remains saved and delivery will be retried on recognition sync.", error); }
+}
+
 export async function awardRecognition(input: {
   studentId: string; badgeKey: string; evidence: string; awardedByUserId?: string; recipientName?: string;
   sourceType: string; sourceId: string; pointsBonus?: number; featuredWeek?: string; beneficiaryStudentId?: string;
@@ -53,29 +60,22 @@ export async function awardRecognition(input: {
   const isCrossHouseBadge = ["HOUSE_BUILDER", "ALLIANCE_CHAMPION"].includes(definition.key);
   if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another Qabila who benefited from this action.");
 
+  input = { ...input, pointsBonus: definition.key === "MUMIN_OF_WEEK" ? 150 : input.pointsBonus ?? BADGE_POINT_BONUSES[definition.key] ?? 10 };
   const recipientName = input.recipientName?.trim().replace(/\s+/g, " ").slice(0, 80) || undefined;
   let award;
   if (definition.key === "MUMIN_OF_WEEK") {
     input = { ...input, pointsBonus: 150 };
     const membership = await ensureStudentHouseMembership(input.studentId);
     const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek }, membership.houseId);
-    if (saved.existing) return saved.award;
+    if (saved.existing) { await alertRosterTeachers(saved.award); return saved.award; }
     award = saved.award;
   } else {
-    try {
-      award = await db.recognitionAward.create({
-        data: { studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus ?? 0, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId },
-      });
-    } catch (error) {
-      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-      const existing = await db.recognitionAward.findUnique({ where: { studentId_badgeKey_sourceType_sourceId: { studentId: input.studentId, badgeKey: definition.key, sourceType: input.sourceType, sourceId: input.sourceId } } });
-      if (!existing) throw error;
-      return existing;
-    }
-
+    const membership = await ensureStudentHouseMembership(input.studentId);
+    const saved = await saveCharacterRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId }, membership.houseId);
+    award = saved.award;
+    if (saved.existing) { await alertRosterTeachers(saved.award); return saved.award; }
   }
 
-  if (definition.key !== "MUMIN_OF_WEEK" && (input.pointsBonus ?? 0) > 0) await awardHousePointsOnce({ studentId: input.studentId, points: input.pointsBonus!, reason: definition.title + ": " + input.evidence, sourceType: "RECOGNITION_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
   if (input.beneficiaryStudentId && isCrossHouseBadge) {
     const otherBonus = definition.key === "ALLIANCE_CHAMPION" ? 30 : 20;
     await awardHousePointsOnce({ studentId: input.beneficiaryStudentId, points: otherBonus, reason: `${definition.title}: another Qabila helped this learner`, sourceType: "CROSS_HOUSE_" + definition.key, sourceId: award.id, notificationHref: "/student/rewards" });
@@ -83,6 +83,7 @@ export async function awardRecognition(input: {
   const student = await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } });
   if (student) {
     const studentName = student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim();
+    await alertRosterTeachers({ id: award.id, studentId: student.id, studentName, badgeKey: definition.key, title: definition.title, evidence: input.evidence });
     const certificateHref = `/certificates/${award.certificateCode}`;
     const isWeeklyCertificate = Boolean(input.featuredWeek);
     const recipients = [

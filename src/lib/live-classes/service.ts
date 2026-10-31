@@ -1,6 +1,7 @@
 import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import { archiveClassSchedule } from "@/lib/live-classes/archive";
 import "server-only";
+import { canSeeTeacherProgramme, scopeTeacherAssignments } from "@/lib/teacher/programme-scope";
 
 import { db } from "@/lib/db";
 import {
@@ -305,12 +306,13 @@ export function getTeacherRosterAssignments<T extends TeacherRosterAssignment>(t
   programAssignments: T[];
 }) {
   const identity = `${teacher.user.firstName} ${teacher.user.lastName ?? ""} ${teacher.user.email}`.toLowerCase();
-  const teachesArabicTajweed = teacher.programAssignments.some((assignment) =>
+  const scopedAssignments = scopeTeacherAssignments(teacher.user, teacher.programAssignments);
+  const teachesArabicTajweed = scopedAssignments.some((assignment) =>
     isArabicTajweedSlug(assignment.program.slug),
   );
   const visibleAssignments = !identity.includes("mehran") && teachesArabicTajweed
-    ? teacher.programAssignments.filter((assignment) => isArabicTajweedSlug(assignment.program.slug))
-    : teacher.programAssignments;
+    ? scopedAssignments.filter((assignment) => isArabicTajweedSlug(assignment.program.slug))
+    : scopedAssignments;
 
   let hasArabicTajweedRoster = false;
   return visibleAssignments.filter((assignment) => {
@@ -1068,6 +1070,8 @@ export async function requestTeacherLiveClass(input: CreateLiveClassInput, teach
 
   const program = await db.program.findUnique({ where: { id: input.programId } });
   if (!program) throw new Error("Program not found.");
+
+  if (!canSeeTeacherProgramme(teacher.user, program)) throw new Error("You can only create sessions for your current teaching programmes.");
 
   const meeting = await createZoomMeetingForTeacher(input, program.title, teacher.user.email);
 

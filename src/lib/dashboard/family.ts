@@ -1,3 +1,5 @@
+import { loadModuleSharing, moduleIsShared, type ModuleSharing } from "@/lib/curriculum/handover";
+import { homeworkIsOpen, homeworkTiming } from "@/lib/homework/timing";
 import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
 import "server-only";
 import { attendanceTotals } from "@/lib/live-classes/attendance-summary";
@@ -124,6 +126,10 @@ type ChildQuizSummary = {
 };
 
 type ChildAssignmentSummary = {
+  submissionTiming: string;
+  dueDateLabel: string;
+  submissionText: string | null;
+  attachmentUrl: string | null;
   id: string;
   programTitle: string;
   title: string;
@@ -825,6 +831,7 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
     enrollment.program.assignments.map((assignment: any) => {
       const submission = submissions.find((entry) => entry.assignmentId === assignment.id) ?? null;
       const parsedInstructions = parseTaskPayload(assignment.instructions ?? null);
+      if (!homeworkIsOpen(parsedInstructions.launchAt)) return null;
 
         return {
           id: assignment.id,
@@ -844,6 +851,10 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
         termId: parsedInstructions.termId,
         familyNote: parsedInstructions.familyNote,
         dueDate: assignment.dueDate,
+        dueDateLabel: assignment.dueDate ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: parsedInstructions.timezone || "Europe/London" }).format(assignment.dueDate) : "No deadline",
+        submissionTiming: homeworkTiming(submission?.submittedAt ?? null, assignment.dueDate),
+        submissionText: submission?.submissionText ?? null,
+        attachmentUrl: submission?.attachmentUrl ?? null,
         status: submission?.status ?? "NOT_STARTED",
         grade: submission?.grade ?? null,
         score: submission?.score ?? null,
@@ -853,7 +864,7 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
     }),
   );
 
-  return assignments.sort((left, right) => {
+  return assignments.filter((assignment): assignment is NonNullable<typeof assignment> => assignment !== null).sort((left, right) => {
     if (left.dueDate && right.dueDate) {
       return left.dueDate.getTime() - right.dueDate.getTime();
     }
@@ -895,8 +906,7 @@ function mapLessonUpdates(enrollments: any[]) {
       ),
     )
     .filter((update) => !["Module", "WeekTopic", "DeletedModule", "DeletedWeekTopic"].includes(update.contentType ?? ""))
-    .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime())
-    .slice(0, 8) satisfies ChildLessonUpdateSummary[];
+    .sort((left, right) => right.lessonDate.getTime() - left.lessonDate.getTime()) satisfies ChildLessonUpdateSummary[];
 }
 
 function buildChildBadges({
@@ -1002,9 +1012,12 @@ function buildChildBadges({
   return badges;
 }
 
-function mapChildSummary(child: any, accessLocked: boolean, resolvedRosters: ReadonlyMap<string, readonly string[]>): ChildSummary {
+function mapChildSummary(child: any, accessLocked: boolean, resolvedRosters: ReadonlyMap<string, readonly string[]>, sharing: ModuleSharing = {}): ChildSummary {
   const enrollments = Array.isArray(child.enrollments) ? child.enrollments : [];
-  const validEnrollments = enrollments.filter((enrollment: any) => enrollment?.program);
+  const validEnrollments = enrollments.filter((enrollment: any) => enrollment?.program).map((enrollment: any) => ({ ...enrollment, program: { ...enrollment.program,
+    assignments: (enrollment.program.assignments || []).filter((task: any) => { const parsed = parseTaskPayload(task.instructions); return moduleIsShared(sharing, enrollment.program.id, parsed.termId, parsed.weekLabel); }),
+    schedules: (enrollment.program.schedules || []).map((schedule: any) => ({ ...schedule, lessonLogs: (schedule.lessonLogs || []).filter((log: any) => { const parsed = parseLessonPayload(log.summary, log.homework); return moduleIsShared(sharing, enrollment.program.id, parsed.termId, parsed.weekLabel); }) })),
+  } }));
   const attendances = Array.isArray(child.attendances) ? child.attendances : [];
   const quizAttempts = Array.isArray(child.quizAttempts) ? child.quizAttempts : [];
   const assignmentSubmissions = Array.isArray(child.assignments) ? child.assignments : [];
@@ -1071,7 +1084,7 @@ function mapChildSummary(child: any, accessLocked: boolean, resolvedRosters: Rea
     weeklySchedule: genMProgrammeSchedule,
     wholePlanOutcomes: genMCoreOutcomes,
     policies: genMPolicies,
-    termPlans: getGenMTermPlansForProgramme(enrollment.program.title),
+    termPlans: getGenMTermPlansForProgramme(enrollment.program.title).filter((term) => moduleIsShared(sharing, enrollment.program.id, term.id)),
     teachers: getGenMTeachersForProgramme(enrollment.program.title).map((teacher) => ({
       name: teacher.name,
       title: teacher.title,
@@ -1267,7 +1280,7 @@ async function getParentProfile(userId: string) {
                           },
                           lessonLogs: {
                             orderBy: { lessonDate: "desc" },
-                            take: 6,
+                            take: 100,
                           },
                         },
                       },
@@ -1372,6 +1385,7 @@ export const getParentDashboardData = cache(async function getParentDashboardDat
     visibleChildren.length > 0 || hasCompletedRegistration || !!hasSuccessfulOrder;
   const resolvedChildren = visibleChildren;
   const resolvedRosters = await loadDashboardScheduleRosters(resolvedChildren, resolveRoster);
+  const sharing = await loadModuleSharing([...new Set(resolvedChildren.flatMap((child) => child.enrollments.map((enrollment: { programId: string }) => enrollment.programId)))]);
 
   const accessLocked = !hasUnlockedAccess && (!!latestOrder || parentStudentRelations.length > 0);
   const pendingReason = accessLocked
@@ -1421,6 +1435,7 @@ export const getParentDashboardData = cache(async function getParentDashboardDat
             },
             accessLocked,
             resolvedRosters,
+            sharing,
           ),
         ];
       } catch (error) {
@@ -1496,7 +1511,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
                   },
                   lessonLogs: {
                     orderBy: { lessonDate: "desc" },
-                    take: 6,
+                    take: 100,
                   },
                 },
               },
@@ -1548,6 +1563,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
   }
 
   const resolvedRosters = await loadDashboardScheduleRosters([studentProfile], createReadOnlyRosterResolver());
+  const sharing = await loadModuleSharing(studentProfile.enrollments.map((enrollment) => enrollment.programId));
   const latestOrder = studentProfile.parents[0]?.parent.orders[0] ?? null;
   const accessLocked = !studentProfile.enrollments.some((enrollment) =>
     ["ACTIVE", "COMPLETED", "CONFIRMED"].includes(enrollment.status),
@@ -1575,6 +1591,7 @@ export const getStudentDashboardData = cache(async function getStudentDashboardD
       },
       accessLocked,
       resolvedRosters,
+      sharing,
     ),
   } satisfies StudentDashboardData;
 });

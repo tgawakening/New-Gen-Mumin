@@ -4,7 +4,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
-import { deleteTeacherMaterial, uploadTeacherMaterial, listMaterials } from "@/lib/google-drive/materials";
+import { deleteTeacherMaterial, uploadTeacherMaterial, updateTeacherMaterial, listMaterials } from "@/lib/google-drive/materials";
+import { genMTerms } from "@/lib/genm/curriculum";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import { isGoogleDriveConfigured } from "@/lib/google-drive/client";
 import { getTeacherDashboardData } from "@/lib/teacher/dashboard";
 import { getTeacherNavItems } from "@/lib/teacher/nav";
@@ -61,6 +63,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
         title: String(formData.get("title") || file.name),
         folderName: String(formData.get("folderName") || "General"),
         publishToStudents: formData.get("publishToStudents") === "on",
+        termId: String(formData.get("termId") || ""),
         file,
       });
       revalidatePath("/teacher/materials");
@@ -70,6 +73,17 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
       redirect(noticeHref(message, "error"));
     }
     redirect(noticeHref("Material uploaded successfully."));
+  }
+
+  async function updateMaterialAction(formData: FormData) {
+    "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "TEACHER") redirect("/auth/login");
+    try {
+      await updateTeacherMaterial({ fileId: String(formData.get("fileId") || ""), teacherUserId: current.user.id, title: String(formData.get("title") || ""), termId: String(formData.get("termId") || ""), publish: formData.get("publishToStudents") === "on" });
+      for (const path of ["/teacher/materials", "/parent/curriculum", "/parent/courses", "/student/courses"]) revalidatePath(path);
+    } catch { redirect(noticeHref("Material could not be updated. Please try again.", "error")); }
+    redirect(noticeHref("Material updated. Shared content notifies the relevant parents."));
   }
 
   async function deleteMaterialAction(formData: FormData) {
@@ -110,6 +124,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
 
       <TeacherSection eyebrow="Upload" title="Add course material">
         <form action={uploadMaterialAction} className="grid gap-4 md:grid-cols-2">
+          <label className="grid gap-2 text-sm font-semibold text-[#22304a]">Module<select name="termId" className="rounded-2xl border border-[#dce4ed] p-3">{genMTerms.map((term) => <option key={term.id} value={term.id}>{term.title}</option>)}</select></label>
           <label className="space-y-2 text-sm font-semibold text-[#22304a]">
             Program folder
             <select name="programId" required defaultValue={defaultProgramId} className="w-full rounded-2xl border border-[#dce4ed] bg-white px-4 py-3 text-sm">
@@ -150,6 +165,7 @@ export default async function TeacherMaterialsPage({ searchParams }: PageProps) 
                 <div>
                   <p className="font-semibold text-[#22304a]">{material.name}</p>
                   <p className="mt-1 text-sm text-[#617184]">{material.programTitle ?? "Program"} - {material.folderName ?? "General"} - {material.status}</p>
+                  {material.uploadedByUserId === session.user.id ? <details className="mt-3"><summary className="cursor-pointer text-sm font-semibold text-[#24466e]">Edit material</summary><form action={updateMaterialAction} className="mt-3 grid gap-3 rounded-2xl bg-white p-4"><input type="hidden" name="fileId" value={material.id} /><label className="grid gap-1 text-sm">Title<input name="title" defaultValue={material.name} required className="rounded-xl border p-3" /></label><label className="grid gap-1 text-sm">Module<select name="termId" defaultValue={material.termId || genMTerms[0].id} className="rounded-xl border p-3">{genMTerms.map((term) => <option key={term.id} value={term.id}>{term.title}</option>)}</select></label><label className="flex items-center gap-2 text-sm"><input type="checkbox" name="publishToStudents" defaultChecked={material.visibility === "students_parents"} />Shared with families when module handover is on</label><FormSubmitButton pendingLabel="Saving..." className="min-h-11 rounded-full bg-[#22304a] px-4 py-2 text-sm font-semibold text-white">Save material</FormSubmitButton></form></details> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {material.webViewLink ? (

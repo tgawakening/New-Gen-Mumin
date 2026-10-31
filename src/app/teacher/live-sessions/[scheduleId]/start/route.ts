@@ -5,6 +5,7 @@ import { getCurrentSession } from "@/lib/auth/session";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { getZoomMeetingStartUrl } from "@/lib/zoom/client";
+import { canSeeTeacherProgramme } from "@/lib/teacher/programme-scope";
 
 type RouteContext = {
   params: Promise<{
@@ -41,7 +42,7 @@ export async function GET(_request: Request, context: RouteContext) {
   const { scheduleId } = await context.params;
   const teacher = await db.teacherProfile.findUnique({
     where: { userId: session.user.id },
-    select: { id: true },
+    select: { id: true, user: true },
   });
 
   if (!teacher) {
@@ -58,10 +59,11 @@ export async function GET(_request: Request, context: RouteContext) {
       meetingId: true,
       endsOn: true,
       meetingUrl: true,
+      program: { select: { slug: true } },
     },
   });
 
-  if (!schedule || hasScheduleEnded(schedule) || (!schedule.meetingId && !schedule.meetingUrl)) {
+  if (!schedule || !canSeeTeacherProgramme(teacher.user, schedule.program) || hasScheduleEnded(schedule) || (!schedule.meetingId && !schedule.meetingUrl)) {
     const params = new URLSearchParams({
       notice: "Zoom link is not available for this session yet.",
       tone: "error",

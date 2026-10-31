@@ -1,5 +1,9 @@
+import { loadModuleSharing } from "@/lib/curriculum/handover";
 import { hasScheduleEnded } from "@/lib/live-classes/schedule-lifecycle";
+import { parseTaskPayload } from "@/lib/genm/published-content";
+import { homeworkReviewRows } from "@/lib/homework/review-roster";
 import "server-only";
+import { canSeeTeacherProgramme, isSeerahParentalTeacher, scopeTeacherAssignments } from "@/lib/teacher/programme-scope";
 
 import { cache } from "react";
 
@@ -19,6 +23,7 @@ const PROGRAMME_LEAD_EMAIL = "globalawakeningchannel@gmail.com";
 
 export type TeacherDashboardData = {
   teacherName: string;
+  moduleSharing: Record<string, boolean>;
   profile: {
     bio: string | null;
     specialties: string[];
@@ -113,13 +118,18 @@ export type TeacherDashboardData = {
     programTitle: string;
     title: string;
     instructions: string | null;
+    launchAt: string | null;
     dueDate: Date | null;
     submissions: number;
     submissionDetails: Array<{
       id: string;
+      canReview: boolean;
+      submissionTiming: string;
+      submissionText: string | null;
       studentName: string;
       status: string;
       score: number | null;
+      homeworkPoints: number | null;
       grade: string | null;
       submittedAt: Date | null;
       feedback: string | null;
@@ -263,11 +273,15 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
     return null;
   }
   const isProgrammeLead = teacherProfile.user.email.toLowerCase() === PROGRAMME_LEAD_EMAIL;
+  teacherProfile.programAssignments = scopeTeacherAssignments(teacherProfile.user, teacherProfile.programAssignments);
+  teacherProfile.classSchedules = teacherProfile.classSchedules.filter(schedule => canSeeTeacherProgramme(teacherProfile.user, schedule.program));
+  const visibleProgramIds = teacherProfile.programAssignments.map(assignment => assignment.programId);
 
   const journals = await db.journalEntry.findMany({
     where: {
       enrollment: {
         program: {
+          id: { in: visibleProgramIds },
           teacherAssignments: {
             some: {
               teacherId: teacherProfile.id,
@@ -290,6 +304,7 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
   const reports = await db.progressReport.findMany({
     where: {
       program: {
+        id: { in: visibleProgramIds },
         teacherAssignments: {
           some: {
             teacherId: teacherProfile.id,
@@ -473,6 +488,12 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
     )
     .sort((left, right) => (right.recordingStart ?? right.availableAt).getTime() - (left.recordingStart ?? left.availableAt).getTime())
     .slice(0, 80);
+  const homeworkSubmissionIds = teacherProfile.programAssignments.flatMap(({ program }) => program.assignments.flatMap((task) => task.submissions.map(({ id }) => id)));
+  const homeworkAwards = homeworkSubmissionIds.length ? await db.housePointLedger.findMany({
+    where: { sourceType: "HOMEWORK_PERFORMANCE", sourceId: { in: homeworkSubmissionIds } },
+    select: { sourceId: true, points: true },
+  }) : [];
+  const homeworkPointsBySubmission = new Map(homeworkAwards.flatMap((award) => award.sourceId ? [[award.sourceId, award.points] as const] : []));
   const assignments = teacherProfile.programAssignments
     .flatMap((assignment) =>
       assignment.program.assignments.map((task) => ({
@@ -481,20 +502,10 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
         programTitle: displayProgramTitle(assignment.program.slug || assignment.program.title),
         title: task.title,
         instructions: task.instructions ?? null,
+        launchAt: parseTaskPayload(task.instructions).launchAt,
         dueDate: task.dueDate,
-        submissions: task.submissions.length,
-        submissionDetails: task.submissions.map((submission) => ({
-          id: submission.id,
-          studentName:
-            submission.student.displayName ||
-            `${submission.student.user.firstName} ${submission.student.user.lastName}`.trim(),
-          status: submission.status.replace(/_/g, " "),
-          score: submission.score,
-          grade: submission.grade ? submission.grade.replace(/_/g, " ") : null,
-          submittedAt: submission.submittedAt,
-          feedback: submission.feedback,
-          attachmentUrl: submission.attachmentUrl,
-        })),
+        submissions: task.submissions.filter((submission) => submission.submittedAt && rosterPrograms.find((roster) => roster.programId === assignment.program.id)?.students.some((student) => student.id === submission.studentId)).length,
+        submissionDetails: homeworkReviewRows(task.id, rosterPrograms.find((roster) => roster.programId === assignment.program.id)?.students ?? [], task.submissions, homeworkPointsBySubmission, task.dueDate),
       })),
     )
     .sort((left, right) => {
@@ -532,11 +543,12 @@ export const getTeacherDashboardData = cache(async function getTeacherDashboardD
       : {};
 
   return {
+    moduleSharing: await loadModuleSharing(visibleProgramIds),
     teacherName: `${teacherProfile.user.firstName} ${teacherProfile.user.lastName}`.trim(),
     profile: {
-      bio: teacherProfile.bio,
-      specialties: specialtyList,
-      curriculumOverrides,
+      bio: isSeerahParentalTeacher(teacherProfile.user) ? "Teaches Seerah and parental sessions." : teacherProfile.bio,
+      specialties: isSeerahParentalTeacher(teacherProfile.user) ? specialtyList.filter(value => !/arabic|tajweed/i.test(value)) : specialtyList,
+      curriculumOverrides: isSeerahParentalTeacher(teacherProfile.user) ? Object.fromEntries(Object.entries(curriculumOverrides).filter(([slug]) => canSeeTeacherProgramme(teacherProfile.user, { slug }))) : curriculumOverrides,
       timezone: teacherProfile.user.timezone,
       email: teacherProfile.user.email,
       phone:

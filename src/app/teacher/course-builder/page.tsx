@@ -47,7 +47,7 @@ export default async function TeacherCourseBuilderPage({ searchParams }: PagePro
 
   return (
     <TeacherDashboardFrame
-      title="Course Builder"
+      title="Curriculum Builder"
       subtitle="Choose one assigned programme workspace. Each teacher now works only inside their own programme builder instead of seeing the full teaching suite at once."
       navItems={getTeacherNavItems()}
     >

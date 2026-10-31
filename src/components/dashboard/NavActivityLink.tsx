@@ -10,12 +10,12 @@ export function clearNavActivity(ids: string[]) {
 }
 export function NavActivityBadge({ activity, active = false }: { activity?: NavActivity; active?: boolean }) {
   const [visible, setVisible] = useState(Boolean(activity?.count));
-  useEffect(() => { if (!active || !activity?.ids.length) return; const timer = window.setTimeout(() => { setVisible(false); clearNavActivity(activity.ids); }, 700); return () => window.clearTimeout(timer); }, [active, activity]);
-  if (!activity || !visible) return null;
+  useEffect(() => { if (activity?.persistent || !active || !activity?.ids.length) return; const timer = window.setTimeout(() => { setVisible(false); clearNavActivity(activity.ids); }, 700); return () => window.clearTimeout(timer); }, [active, activity]);
+  if (!activity || (!activity.persistent && !visible)) return null;
   return <span aria-label={`${activity.count} new updates`} className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#dc3434] px-1 text-[11px] font-bold text-white shadow-md">{activity.count > 9 ? "9+" : activity.count}</span>;
 }
 export function NavActivityLink({ href, title, activity, active, className, children, clearOnOpen = true }: { href: string; title: string; activity?: NavActivity; active?: boolean; className: string; children: ReactNode; clearOnOpen?: boolean }) {
   const [visible, setVisible] = useState(Boolean(activity?.count));
-  useEffect(() => { if (!clearOnOpen || !active || !activity?.ids.length) return; const timer = window.setTimeout(() => { setVisible(false); clearNavActivity(activity.ids); }, 700); return () => window.clearTimeout(timer); }, [active, activity, clearOnOpen]);
-  return <Link href={href} title={visible && activity ? activity.tooltip : title} onClick={() => { if (clearOnOpen && activity?.ids.length) { setVisible(false); clearNavActivity(activity.ids); } }} className={`${className} relative`}>{children}{visible ? <NavActivityBadge activity={activity} /> : null}</Link>;
+  useEffect(() => { if (activity?.persistent || !clearOnOpen || !active || !activity?.ids.length) return; const timer = window.setTimeout(() => { setVisible(false); clearNavActivity(activity.ids); }, 700); return () => window.clearTimeout(timer); }, [active, activity, clearOnOpen]);
+  return <Link href={href} title={visible && activity ? activity.tooltip : title} onClick={() => { if (clearOnOpen && !activity?.persistent && activity?.ids.length) { setVisible(false); clearNavActivity(activity.ids); } }} className={`${className} relative`}>{children}{visible ? <NavActivityBadge activity={activity} /> : null}</Link>;
 }

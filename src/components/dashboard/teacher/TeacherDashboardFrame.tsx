@@ -1,3 +1,5 @@
+import { TeacherLiveClassProvider } from "./TeacherLiveClassProvider";
+import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import Link from "next/link";
 import { ReactNode, Suspense } from "react";
 import { FamilyLogoutButton } from "@/components/dashboard/family/FamilyLogoutButton";
@@ -26,9 +28,10 @@ export async function TeacherDashboardFrame({
   children: ReactNode;
 }) {
   const session = await getCurrentSession();
+  const visibleNavItems = navItems.map(item => item.href === "/teacher/recognition" && (!session || !canAwardWeeklyCertificates(session.user)) ? { ...item, label: "Badges & Live Points" } : item);
 
   return (
-    <div className="min-h-screen bg-[#f7f2ea]">
+    <TeacherLiveClassProvider><div className="min-h-screen bg-[#f7f2ea]">
       <div className="border-b border-[#1c2b45] bg-[linear-gradient(135deg,#14243d_0%,#22304a_55%,#36536f_100%)] text-white shadow-[0_18px_50px_rgba(20,36,61,0.22)]">
         <div className="section-container py-5 sm:py-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -51,14 +54,14 @@ export async function TeacherDashboardFrame({
             </div>
           </div>
           <PwaInstallPrompt audience="teacher" />
-          <Suspense fallback={<MobileTeacherNavRailClient navItems={navItems} />}><TeacherActivityNavigation userId={session?.user.id} navItems={navItems} /></Suspense>
+          <Suspense fallback={<MobileTeacherNavRailClient navItems={visibleNavItems} />}><TeacherActivityNavigation userId={session?.user.id} navItems={visibleNavItems} /></Suspense>
         </div>
       </div>
 
       <div className="section-container py-5 sm:py-6 xl:py-8">
         <div className="min-w-0 space-y-5 sm:space-y-6">{children}</div>
       </div>
-    </div>
+    </div></TeacherLiveClassProvider>
   );
 }
 

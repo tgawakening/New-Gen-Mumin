@@ -24,7 +24,7 @@ const { TeacherRewardWorkspaceTabs } = load("src/components/dashboard/teacher/Te
   "lucide-react": { Award: icon, HeartHandshake: icon, Sparkles: icon },
 });
 test("badges are first and weekly certificates have their own active tab", () => {
-  const html = renderToStaticMarkup(React.createElement(TeacherRewardWorkspaceTabs, { active: "certificate" }));
+  const html = renderToStaticMarkup(React.createElement(TeacherRewardWorkspaceTabs, { active: "certificate", canAwardCertificates: true }));
   assert.ok(html.indexOf("Award badges") < html.indexOf("Mumin of the Week"));
   assert.match(html, /href="\/teacher\/recognition\?tab=certificate" aria-current="page"/);
   assert.equal((html.match(/aria-current="page"/g) || []).length, 1);
@@ -53,12 +53,14 @@ test("unassigned teachers see an explanation instead of an unusable form", () =>
   assert.doesNotMatch(html, /<form/);
 });
 
-async function workspace(params = {}) {
+async function workspace(params = {}, email = "mehranraziq@gmail.com") {
   const AwardForm = () => null;
   let writes = 0;
   const definition = [{ key: "MUMIN_OF_WEEK", title: "Mumin of the Week" }, ...badges];
   const { default: Page } = load("src/app/teacher/recognition/page.tsx", {
+    "@/lib/teacher/recognition-permissions": load("src/lib/teacher/recognition-permissions.ts", {}),
     "@/components/dashboard/teacher/AwardBadgeForm": { AwardBadgeForm: AwardForm },
+    "@/components/dashboard/teacher/RosterAwards": { RosterAwards: icon },
     "@/components/dashboard/teacher/TeacherBadgeOverview": { TeacherBadgeOverview: icon },
     "@/components/dashboard/teacher/RecognitionWeekSelector": { RecognitionWeekSelector: icon },
     "@/lib/community/recognition-week": { currentRecognitionWeek: () => "2026-10-19", validRecognitionWeek: () => true, recognitionWeekLabel: value => value },
@@ -69,7 +71,8 @@ async function workspace(params = {}) {
     "@/components/dashboard/FormSubmitButton": { FormSubmitButton: icon },
     "@/components/dashboard/teacher/TeacherDashboardFrame": { TeacherDashboardFrame: icon, TeacherMetricGrid: icon, TeacherSection: icon },
     "@/components/dashboard/teacher/TeacherRewardWorkspaceTabs": { TeacherRewardWorkspaceTabs: icon },
-    "@/lib/auth/session": { getCurrentSession: async () => ({ user: { id: "teacher", role: "TEACHER" } }), getDashboardHome: () => "/" },
+    "@/lib/auth/session": { getCurrentSession: async () => ({ user: { id: "teacher", role: "TEACHER", email } }), getDashboardHome: () => "/" },
+    "@/lib/community/recognition-points": { BADGE_POINT_BONUSES: { MUMIN_OF_WEEK: 150, HELPER: 10 } },
     "@/lib/community/recognition": { CHARACTER_BADGES: definition, awardRecognition: async () => { writes++; return { certificateCode: "code" }; } },
     "@/lib/community/point-awards": { pointDayKey: () => "2026-10-25" },
     "@/lib/teacher/dashboard": { getTeacherDashboardData: async () => ({ rosters: [{ students }] }) },
@@ -107,5 +110,19 @@ test("weekly badge cannot be forged through the ordinary badge form", async () =
 test("cross-Qabila awards reject missing beneficiaries before writing", async () => {
   const page = await workspace();
   await assert.rejects(page.form.props.action(payload({ badgeKey: "HOUSE_BUILDER" })), /different/);
+  assert.equal(page.writes(), 0);
+});
+test("ordinary teachers keep badge and point tabs without weekly certificate tabs", () => {
+  const html = renderToStaticMarkup(React.createElement(TeacherRewardWorkspaceTabs, { active: "recognition" }));
+  assert.match(html, /Award badges/);
+  assert.match(html, /Live House Points/);
+  assert.doesNotMatch(html, /Mumin of the Week|Mum of the Week/);
+});
+test("ordinary teachers cannot open the weekly certificate form", async () => {
+  await assert.rejects(workspace({ tab: "certificate" }, "other@example.test"), /Weekly/);
+});
+test("forged weekly certificate submissions are blocked server-side", async () => {
+  const page = await workspace({}, "other@example.test");
+  await assert.rejects(page.form.props.action(payload({ awardKind: "certificate", badgeKey: "MUMIN_OF_WEEK", featuredWeek: "2026-10-19" })), /permission/);
   assert.equal(page.writes(), 0);
 });

@@ -1,3 +1,5 @@
+import { db } from "@/lib/db";
+import { CurriculumReviewNotice, curriculumReviewIds } from "@/components/dashboard/family/CurriculumReviewNotice";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FileText, ImageIcon, Video } from "lucide-react";
@@ -8,7 +10,7 @@ import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { FULL_GENM_PROGRAM_SLUGS } from "@/lib/registration/catalog";
 import { getRegistrationOptions } from "@/lib/registration/service";
 import { listMaterials } from "@/lib/google-drive/materials";
-import { displayProgramTitle } from "@/lib/genm/curriculum";
+import { displayProgramTitle, genMTerms } from "@/lib/genm/curriculum";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import { AddChildEnrollmentModal } from "@/components/registration/AddChildEnrollmentModal";
 import {
@@ -121,7 +123,7 @@ function courseOwnsProgramTitle(course: ParentChild["courses"][number], programT
 function courseHref(childId: string, courseId: string, lessonId?: string) {
   const params = new URLSearchParams({ child: childId, course: courseId });
   if (lessonId) params.set("lesson", lessonId);
-  return `/parent/courses?${params.toString()}`;
+  return `/parent/curriculum?${params.toString()}`;
 }
 
 export default async function ParentCoursesPage({ searchParams }: PageProps) {
@@ -141,7 +143,8 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
   const params = searchParams ? await searchParams : undefined;
   const selectedChild =
     dashboard.children.find((child) => child.id === params?.child) ?? dashboard.children[0];
-  const selectedCourse = selectedChild.courses.find((course) => course.id === params?.course) ?? selectedChild.courses[0] ?? null;
+  const curriculumAlerts = await db.notification.findMany({ where: { userId: session.user.id, readAt: null, href: { startsWith: "/parent/curriculum?" }, AND: [{ href: { contains: `&child=${encodeURIComponent(selectedChild.id)}&` } }] }, select: { id: true, href: true }, take: 1000 });
+  const selectedCourse = selectedChild.courses.find((course) => (course.id === params?.course || course.programIds?.includes(params?.course || ""))) ?? selectedChild.courses[0] ?? null;
   const selectedProgramIds = selectedCourse?.programIds?.length ? selectedCourse.programIds : selectedCourse?.programId ? [selectedCourse.programId] : [];
   const showProgramEnrollmentModal = params?.enrollProgram === "1" && !hasFullGenM(selectedChild);
   const selectedLessonUpdates = selectedCourse
@@ -158,7 +161,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
       materials = (
         await Promise.all(
           selectedProgramIds.map((programId) =>
-            listMaterials({ programId, status: "approved", visibility: "students_parents", limit: 20, studentId: selectedChild.id }),
+            listMaterials({ programId, status: "approved", visibility: "students_parents", limit: 100, studentId: selectedChild.id }),
           ),
         )
       ).flat();
@@ -167,7 +170,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
     }
   }
   const groupedMaterials = materials.reduce<Record<string, typeof materials>>((groups, material) => {
-    const folderName = material.folderName ?? "General";
+    const folderName = (genMTerms.find((term) => term.id === material.termId)?.title || "General") + " / " + (material.folderName ?? "Materials");
     groups[folderName] = groups[folderName] ?? [];
     groups[folderName].push(material);
     return groups;
@@ -196,7 +199,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         action={
           !hasFullGenM(selectedChild) ? (
             <Link
-              href={`/parent/courses?child=${selectedChild.id}&enrollProgram=1`}
+              href={`/parent/curriculum?child=${selectedChild.id}&enrollProgram=1`}
               className="rounded-full bg-[#f39f5f] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#e07e2b]"
             >
               Explore other programmes
@@ -207,7 +210,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         <ChildSelector
           learners={dashboard.children.map((child) => ({ id: child.id, name: child.name }))}
           selectedChildId={selectedChild?.id}
-          basePath="/parent/courses"
+          basePath="/parent/curriculum"
         />
       </SectionCard>
 
@@ -245,7 +248,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         action={
           !hasFullGenM(selectedChild) ? (
             <Link
-              href={`/parent/courses?child=${selectedChild.id}&enrollProgram=1`}
+              href={`/parent/curriculum?child=${selectedChild.id}&enrollProgram=1`}
               className="rounded-full border border-[#d8e3ed] bg-white px-4 py-2 text-sm font-semibold text-[#22304a] transition hover:bg-[#f7fbff]"
             >
               Enroll another programme
@@ -442,7 +445,6 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
         </SectionCard>
       ) : null}
 
-      {false ? (
       <SectionCard eyebrow="Course library" title="Approved materials">
         <div className="space-y-4">
           {Object.entries(groupedMaterials).map(([folderName, folderMaterials]) => (
@@ -450,15 +452,14 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
               <p className="text-sm font-semibold text-[#22304a]">{folderName}</p>
               <div className="mt-3 grid gap-3 md:grid-cols-2">
                 {folderMaterials.map((material) => (
-                  <a
-                    key={material.id}
+                  <div key={material.id}><a
                     href={material.webViewLink ?? "#"}
                     target="_blank"
-                    className="rounded-[16px] border border-[#eadfce] bg-white px-4 py-3 text-sm"
+                    className="block rounded-[16px] border border-[#eadfce] bg-white px-4 py-3 text-sm"
                   >
                     <p className="font-semibold text-[#22304a]">{material.name}</p>
                     <p className="mt-1 text-xs text-[#617184]">{material.programTitle ?? "Program material"}</p>
-                  </a>
+                  </a><CurriculumReviewNotice ids={curriculumReviewIds(curriculumAlerts, "material", material.id)} /></div>
                 ))}
               </div>
             </div>
@@ -470,7 +471,6 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           ) : null}
         </div>
       </SectionCard>
-      ) : null}
 
       {false ? (
       <SectionCard eyebrow="Assignments" title="Coursework tracking">
@@ -483,7 +483,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                   <div>
                     <h3 className="text-lg font-semibold text-[#22304a]">{assignment.title}</h3>
                     <p className="mt-2 text-sm text-[#5f6b7a]">
-                      {assignment.programTitle} • {assignment.status.replace(/_/g, " ")} • Due {formatDate(assignment.dueDate)}
+                      {assignment.programTitle} • {assignment.submissionTiming} • Due {assignment.dueDateLabel}
                     </p>
                   </div>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
@@ -528,7 +528,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                               {weekLessons.map((lesson) => (
                                 <Link
                                   key={lesson.id}
-                                  href={`/parent/courses?child=${selectedChild.id}&course=${selectedCourse.id}&lesson=${lesson.id}`}
+                                  href={`/parent/curriculum?child=${selectedChild.id}&course=${selectedCourse.id}&lesson=${lesson.id}`}
                                   className={`block rounded-xl px-3 py-2 text-xs font-semibold ${
                                     selectedLesson?.id === lesson.id ? "bg-[#22304a] text-white" : "bg-white text-[#2a76aa]"
                                   }`}
@@ -565,6 +565,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                       <a href="#parent-assignments" className="rounded-full bg-[#fff4e8] px-3 py-1.5 text-xs font-semibold text-[#b46b1e]">Tasks</a>
                     </div>
                   </div>
+                  <CurriculumReviewNotice ids={curriculumReviewIds(curriculumAlerts, "lesson", selectedLesson.id)} />
                   <p className="mt-5 text-sm leading-7 text-[#4d5a6b]">{selectedLesson.summary}</p>
                   {selectedLesson.lessonObjective ? <p className="mt-3 rounded-2xl bg-[#fbf6ef] px-4 py-3 text-sm font-semibold text-[#22304a]">{selectedLesson.lessonObjective}</p> : null}
                   <AttachmentGrid attachments={selectedLesson.attachments} />
@@ -587,7 +588,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                     <div className="rounded-[18px] bg-[#fbf6ef] p-4">
                       <p className="text-sm font-semibold text-[#22304a]">Uploaded materials</p>
                       <div className="mt-3 grid gap-2">
-                        {materials.slice(0, 6).map((material) => (
+                        {materials.filter((material) => !selectedLesson.termId || material.termId === selectedLesson.termId).slice(0, 6).map((material) => (
                           <a key={material.id} href={material.webViewLink ?? "#"} target="_blank" className="rounded-2xl bg-white px-4 py-3 text-sm">
                             <p className="font-semibold text-[#22304a]">{material.name}</p>
                             <p className="mt-1 text-xs text-[#617184]">
@@ -605,7 +606,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
                           <div key={assignment.id} className="rounded-2xl bg-white px-4 py-3 text-sm">
                             <p className="font-semibold text-[#22304a]">{assignment.title}</p>
                             <p className="mt-1 text-xs text-[#617184]">
-                              {assignment.status.replace(/_/g, " ")} - Due {formatDate(assignment.dueDate)}
+                              {assignment.submissionTiming} - Due {assignment.dueDateLabel}
                             </p>
                           </div>
                         ))}
@@ -630,7 +631,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
           {selectedChild.courses.map((course) => (
             <Link
               key={`${course.id}-curriculum-tab`}
-              href={`/parent/courses?child=${selectedChild.id}&course=${course.id}`}
+              href={`/parent/curriculum?child=${selectedChild.id}&course=${course.id}`}
               className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${
                 selectedCourse?.id === course.id ? "bg-[#22304a] text-white" : "border border-[#eadfce] bg-white text-[#22304a]"
               }`}
@@ -704,7 +705,7 @@ export default async function ParentCoursesPage({ searchParams }: PageProps) {
             age: selectedChild.profile.age,
             gender: selectedChild.profile.gender,
           }}
-          closePath={`/parent/courses?child=${selectedChild.id}`}
+          closePath={`/parent/curriculum?child=${selectedChild.id}`}
         />
       ) : null}
     </FamilyDashboardFrame>

@@ -1,3 +1,9 @@
+import { HomeworkDateFields } from "@/components/dashboard/HomeworkDateFields";
+import { saveModuleSharing, loadModuleSharing, moduleIsShared } from "@/lib/curriculum/handover";
+import { notifyCurriculumParents } from "@/lib/curriculum/notifications";
+import { HomeworkStatus } from "@/components/dashboard/HomeworkStatus";
+import { reviewHomework } from "@/lib/teacher/homework-review";
+import { homeworkWindow } from "@/lib/homework/timing";
 import { archiveClassSchedule } from "@/lib/live-classes/archive";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
@@ -16,7 +22,7 @@ import { displayProgramTitle, genMTerms, getGenMProgrammeByTitle, getGenMTeacher
 import { buildLessonPayload, buildTaskPayload, parseLessonPayload, parseTaskPayload, type PublishedAttachment } from "@/lib/genm/published-content";
 import { uploadTeacherMaterial } from "@/lib/google-drive/materials";
 import { cleanLiveClassTitle, requestTeacherLiveClass } from "@/lib/live-classes/service";
-import type { TeacherDashboardData } from "@/lib/teacher/dashboard";
+import { getTeacherDashboardData, type TeacherDashboardData } from "@/lib/teacher/dashboard";
 
 type BuilderTab = "overview" | "plan" | "lesson" | "task" | "materials";
 type BuilderIconName = "layers" | "book" | "clipboard" | "plus" | "file" | "help";
@@ -92,12 +98,13 @@ function canSendTaskEmail(email: string | null | undefined) {
   return Boolean(email && !email.toLowerCase().endsWith("@genmumin.local"));
 }
 
-function formatTaskDueDate(dueDate: Date | null) {
+function formatTaskDueDate(dueDate: Date | null, timezone = "Europe/London") {
   if (!dueDate) return "No due date set";
   return dueDate.toLocaleDateString("en-GB", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: timezone,
   });
 }
 
@@ -148,6 +155,7 @@ async function uploadBuilderAttachments(input: {
   folderName: string;
   titlePrefix: string;
   purpose?: "material" | "lesson" | "task";
+  termId?: string | null;
 }) {
   const attachments: PublishedAttachment[] = [];
 
@@ -159,7 +167,8 @@ async function uploadBuilderAttachments(input: {
       folderName: input.folderName,
       publishToStudents: true,
       purpose: input.purpose,
-      suppressNotifications: input.purpose === "lesson",
+      termId: input.termId,
+      suppressNotifications: input.purpose === "lesson" || input.purpose === "task",
       file,
     });
 
@@ -308,7 +317,11 @@ async function notifyTaskLearners(input: {
   teacherName: string;
   taskTitle: string;
   dueDate: Date | null;
+  launchAt?: string | null;
+  timezone?: string;
+  termId?: string | null;
 }) {
+  if (!moduleIsShared(await loadModuleSharing([input.programId]), input.programId, input.termId)) return;
   const [program, teacher] = await Promise.all([
     db.program.findUnique({
       where: { id: input.programId },
@@ -352,7 +365,8 @@ async function notifyTaskLearners(input: {
 
   for (const enrollment of targetEnrollments) {
     const studentName = enrollment.student.displayName || userDisplayName(enrollment.student.user);
-    const body = `${input.taskTitle} is ready for ${studentName}.`;
+    const launchLabel = input.launchAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: input.timezone || "Europe/London" }).format(new Date(input.launchAt)) : null;
+    const body = input.launchAt && Date.parse(input.launchAt) > Date.now() ? `${input.taskTitle} is scheduled for ${studentName}. Available from ${launchLabel}.` : `${input.taskTitle} is ready for ${studentName}.`;
 
     notificationRows.push({
       userId: enrollment.student.userId,
@@ -393,7 +407,8 @@ async function notifyTaskLearners(input: {
         programTitle: displayProgramTitle(program.title),
         taskTitle: input.taskTitle,
         teacherName: input.teacherName,
-        dueDateLabel: formatTaskDueDate(input.dueDate),
+        dueDateLabel: formatTaskDueDate(input.dueDate, input.timezone),
+        launchDateLabel: input.launchAt ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: input.timezone || "Europe/London" }).format(new Date(input.launchAt)) : undefined,
         completionPath,
       }),
     ),
@@ -659,6 +674,8 @@ export function CourseBuilderWorkspace({
 
   async function publishLessonContent(formData: FormData) {
     "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "TEACHER" || current.user.id !== teacherUserId) redirect("/auth/login");
 
     const scheduleId = String(formData.get("scheduleId") || "");
     const lessonDateRaw = String(formData.get("lessonDate") || "");
@@ -699,6 +716,7 @@ export function CourseBuilderWorkspace({
           folderName: `${lessonFolderName} / Thumbnail`,
           titlePrefix: `${weekLabel || topic} thumbnail`,
           purpose: "lesson",
+          termId,
         })),
         ...(await uploadBuilderAttachments({
           files: videoFiles,
@@ -707,6 +725,7 @@ export function CourseBuilderWorkspace({
           folderName: `${lessonFolderName} / Video`,
           titlePrefix: `${weekLabel || topic} video`,
           purpose: "lesson",
+          termId,
         })),
         ...(await uploadBuilderAttachments({
           files: attachmentFiles,
@@ -715,6 +734,7 @@ export function CourseBuilderWorkspace({
           folderName: lessonFolderName,
           titlePrefix: weekLabel || topic,
           purpose: "lesson",
+          termId,
         })),
       ];
 
@@ -747,6 +767,7 @@ export function CourseBuilderWorkspace({
         homework: finalHomework,
       };
 
+      let savedLesson: { id: string; updatedAt: Date };
       if (lessonLogId) {
         const existing = await db.lessonLog.findFirst({
           where: {
@@ -764,12 +785,12 @@ export function CourseBuilderWorkspace({
         ) {
           throw new Error("Lesson is not available for this teacher.");
         }
-        await db.lessonLog.update({
+        savedLesson = await db.lessonLog.update({
           where: { id: lessonLogId },
           data: lessonPayload,
         });
       } else {
-        await db.lessonLog.create({ data: lessonPayload });
+        savedLesson = await db.lessonLog.create({ data: lessonPayload });
       }
 
       const admins = await db.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
@@ -793,6 +814,7 @@ export function CourseBuilderWorkspace({
         },
         select: { student: { select: { userId: true } } },
       });
+      const shared = moduleIsShared(await loadModuleSharing([schedule.programId]), schedule.programId, termId, weekLabel);
       const notifications = [
         {
           userId: teacherUserId,
@@ -806,14 +828,15 @@ export function CourseBuilderWorkspace({
           body: `${dashboard.teacherName} saved ${topic} for ${displayProgramTitle(selectedProgramme?.title ?? selectedRoster?.title ?? "a programme")}.`,
           href: "/admin/classes",
         })),
-        ...learnerUsers.map((learner) => ({
+        ...learnerUsers.filter(() => shared).map((learner) => ({
           userId: learner.student.userId,
           title: "New lesson published",
           body: `${topic} is available in ${displayProgramTitle(selectedProgramme?.title ?? selectedRoster?.title ?? "your course")}.`,
-          href: "/parent/courses",
+          href: "/student/courses",
         })),
       ];
       await db.notification.createMany({ data: notifications, skipDuplicates: true });
+      await notifyCurriculumParents({ programId: schedule.programId, teacherUserId, termId, label: weekLabel, title: topic, kind: "lesson", contentId: savedLesson.id, updated: Boolean(lessonLogId), version: savedLesson.updatedAt.toISOString() });
 
       revalidatePath("/teacher");
       revalidatePath("/teacher/course-builder");
@@ -924,12 +947,14 @@ export function CourseBuilderWorkspace({
       recordingAttachment,
     ];
 
-    await db.lessonLog.update({
+    const updatedLesson = await db.lessonLog.update({
       where: { id: existing.id },
       data: {
         summary: buildLessonPayload({ ...parsed, attachments }),
       },
     });
+
+    await notifyCurriculumParents({ programId: existing.schedule.programId, teacherUserId: session.user.id, termId: parsed.termId, label: parsed.weekLabel, title: parsed.topic || existing.topic, kind: "lesson", contentId: existing.id, updated: true, version: updatedLesson.updatedAt.toISOString() });
 
     revalidatePath("/teacher/course-builder");
     if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
@@ -938,6 +963,16 @@ export function CourseBuilderWorkspace({
     revalidatePath("/student/courses");
     redirect(`${successRedirectPath}?tab=plan&success=recording_attached`);
   }
+  async function saveHandoverAction(formData: FormData) {
+    "use server";
+    const current = await getCurrentSession();
+    if (!current || current.user.role !== "TEACHER") redirect("/auth/login");
+    await saveModuleSharing(current.user.id, selectedProgramId, String(formData.get("termId") || ""), formData.get("studentHandover") === "on");
+    for (const path of ["/teacher/course-builder", "/parent", "/parent/courses", "/parent/curriculum", "/student/courses"]) revalidatePath(path);
+    if (selectedProgrammeSlug) revalidatePath(`/teacher/course-builder/${selectedProgrammeSlug}`);
+    redirect(`${successRedirectPath}?tab=plan&success=handover`);
+  }
+
   async function saveCurriculumStructureAction(formData: FormData) {
     "use server";
 
@@ -971,6 +1006,7 @@ export function CourseBuilderWorkspace({
         where: { userId: session.user.id },
         data: {
           specialties: {
+            ...(teacher?.specialties && typeof teacher.specialties === "object" && !Array.isArray(teacher.specialties) ? teacher.specialties : {}),
             list: existingSpecialties,
             curriculumOverrides: {
               ...existingOverrides,
@@ -1085,6 +1121,8 @@ export function CourseBuilderWorkspace({
   async function publishStudentTask(formData: FormData) {
     "use server";
 
+    const currentSession = await getCurrentSession();
+    if (!currentSession || currentSession.user.role !== "TEACHER") redirect("/auth/login");
     const programId = String(formData.get("programId") || "");
     const title = String(formData.get("title") || "").trim();
     const dueDateRaw = cleanOptional(formData.get("dueDate"));
@@ -1098,6 +1136,10 @@ export function CourseBuilderWorkspace({
     const taskCategory = cleanOptional(formData.get("taskCategory"));
     const returnTab = String(formData.get("returnTab") || "task") === "plan" ? "plan" : "task";
     const attachmentFiles = getUploadFiles(formData, "taskFiles");
+    const currentDashboard = await getTeacherDashboardData(currentSession.user.id);
+    if (!currentDashboard?.rosters.some((program) => program.programId === programId)) throw new Error("Choose a programme assigned to you.");
+    const timezone = currentDashboard.profile.timezone || "Europe/London";
+    const { launchAt, dueDate } = homeworkWindow(cleanOptional(formData.get("launchDate")), dueDateRaw, timezone);
 
     if (!programId || !title || !instructions) {
       throw new Error("Please complete programme, task title, and instructions before publishing.");
@@ -1110,15 +1152,17 @@ export function CourseBuilderWorkspace({
       folderName: ["Tasks", weekLabel || title].filter(Boolean).join(" / "),
       titlePrefix: weekLabel || title,
       purpose: "task",
+      termId,
     });
 
-    const dueDate = dueDateRaw ? new Date(dueDateRaw) : null;
     const assignment = await db.assignment.create({
       data: {
         programId,
         title,
         instructions: buildTaskPayload({
           title,
+          launchAt,
+          timezone,
           instructions,
           instructorName: dashboard.teacherName,
           programmeFocus,
@@ -1142,6 +1186,9 @@ export function CourseBuilderWorkspace({
         teacherName: dashboard.teacherName,
         taskTitle: title,
         dueDate,
+        launchAt,
+        timezone,
+        termId,
       });
     } catch (error) {
       console.error("Unable to notify learners about assigned task", error);
@@ -1180,6 +1227,7 @@ export function CourseBuilderWorkspace({
       title: title || file.name,
       folderName: folderName || "Materials Kit",
       publishToStudents: formData.get("publishToStudents") === "on",
+      termId: cleanOptional(formData.get("materialTermId")),
       file,
     });
 
@@ -1337,63 +1385,22 @@ export function CourseBuilderWorkspace({
 
     const session = await getCurrentSession();
     if (!session || session.user.role !== "TEACHER") redirect("/auth/login");
-    const submissionId = String(formData.get("submissionId") || "");
-    const reviewStatus = String(formData.get("reviewStatus") || "REVIEWED");
-    const scoreRaw = String(formData.get("score") || "");
-    const feedback = String(formData.get("feedback") || "").trim();
-    const grade = String(formData.get("grade") || "");
-
-    const submission = await db.assignmentSubmission.findUnique({
-      where: { id: submissionId },
-      include: {
-        assignment: {
-          include: {
-            program: {
-              include: {
-                teacherAssignments: {
-                  include: { teacher: true },
-                },
-              },
-            },
-          },
-        },
-        student: { include: { user: true } },
-      },
-    });
-    if (!submission || !submission.assignment.program.teacherAssignments.some(({ teacher }) => teacher.userId === session.user.id)) {
-      throw new Error("Submission is not available for this teacher.");
-    }
-
-    const reviewed = await db.assignmentSubmission.update({
-      where: { id: submission.id },
-      data: {
-        status: reviewStatus === "PENDING" ? "SUBMITTED" : "REVIEWED",
-        grade: grade ? (grade as "EXCELLENT" | "GOOD" | "SATISFACTORY" | "NEEDS_IMPROVEMENT") : null,
-        score: scoreRaw ? Number(scoreRaw) : null,
-        feedback: feedback || null,
-        reviewedByUserId: session.user.id,
-      },
-    });
-
-    await db.notification.create({
-      data: {
-        userId: submission.student.user.id,
-        title: "Task reviewed",
-        body: `${submission.assignment.title} was marked ${reviewed.status.toLowerCase().replace(/_/g, " ")}${reviewed.score === null ? "." : ` with score ${reviewed.score}.`}`,
-        href: "/student/courses",
-      },
-    });
+    await reviewHomework(session.user.id, formData);
 
     revalidatePath("/teacher/course-builder");
     revalidatePath("/student/courses");
-    redirect(`${successRedirectPath}?tab=task&success=task`);
+    revalidatePath("/parent/community");
+    revalidatePath("/teacher/community");
+    redirect(`${successRedirectPath}?tab=task&success=review`);
   }
 
   return (
     <div className="space-y-6">
       <ActionToast
         message={
-          success === "lesson"
+          success === "handover" ? "Module handover updated for families." : success === "review"
+            ? "Homework review and points saved."
+            : success === "lesson"
             ? "Lesson content published with resources."
             : success === "lesson_updated"
               ? "Lesson updated successfully."
@@ -1543,7 +1550,7 @@ export function CourseBuilderWorkspace({
                 <div className="space-y-3">
                   {visibleAssignments.slice(0, 6).map((task) => {
                     const parsed = parseTaskPayload(task.instructions);
-                    const due = task.dueDate ? task.dueDate.toLocaleDateString("en-GB") : "No due date";
+                    const due = formatTaskDueDate(task.dueDate, parsed.timezone || dashboard.profile.timezone || "Europe/London");
                     const label = parsed.weekLabel ? `${parsed.weekLabel} - ` : "";
                     return (
                       <details key={task.id} className="rounded-[18px] bg-[#fbf6ef] p-4">
@@ -1554,8 +1561,9 @@ export function CourseBuilderWorkspace({
                           {task.submissionDetails.map((submission) => (
                             <div key={submission.id} className="rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[#4d5a6b]">
                               <p className="font-semibold text-[#22304a]">{submission.studentName}</p>
-                              <p>Status: {submission.status} {submission.submittedAt ? `- ${submission.submittedAt.toLocaleDateString("en-GB")}` : ""}</p>
+                              <HomeworkStatus status={submission.submissionTiming} /><p>Review: {submission.status} {submission.submittedAt ? `- ${submission.submittedAt.toLocaleDateString("en-GB")}` : ""}</p>
                               <p>Score: {submission.score ?? "Pending"} {submission.grade ? `- ${submission.grade}` : ""}</p>
+                            <p className="font-semibold text-[#28634b]">Homework performance: {submission.homeworkPoints === null ? "Not awarded" : `${submission.homeworkPoints} Qabila points`}</p>
                               {submission.feedback ? <p>Feedback: {submission.feedback}</p> : null}
                             </div>
                           ))}
@@ -1647,6 +1655,11 @@ export function CourseBuilderWorkspace({
                           <input name="title" defaultValue={moduleTitle} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Module title" />
                           <input name="description" defaultValue={moduleDescription} className="rounded-xl border border-[#d8e3ed] px-3 py-2 text-sm" aria-label="Module description" />
                           <FormSubmitButton pendingLabel="Saving..." className="rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white disabled:opacity-70">Save changes</FormSubmitButton>
+                        </form>
+                        <form action={saveHandoverAction} className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-[#d9e7dc] bg-[#f4fbf5] p-4">
+                          <input type="hidden" name="termId" value={term.id} />
+                          <label className="flex flex-1 items-start gap-3 text-sm text-[#22304a]"><input name="studentHandover" type="checkbox" defaultChecked={moduleIsShared(dashboard.moduleSharing ?? {}, selectedProgramId, term.id)} className="mt-1 h-5 w-5" /><span><strong>Student handover</strong><span className="mt-1 block text-xs leading-5 text-[#617184]">Show this module, its lessons and materials to parents and students. When switched off, they are hidden and no new curriculum notifications or emails are sent.</span></span></label>
+                          <FormSubmitButton pendingLabel="Saving..." className="min-h-11 rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save handover</FormSubmitButton>
                         </form>
                         <div className="mt-4 space-y-3">
                           {highlights.map((highlight, index) => {
@@ -2173,10 +2186,7 @@ export function CourseBuilderWorkspace({
                       Task title
                       <input name="title" required defaultValue={prefillTopic ?? ""} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
                     </label>
-                    <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                      Due date
-                      <input type="date" name="dueDate" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" />
-                    </label>
+                    <HomeworkDateFields timezone={dashboard.profile.timezone || "Europe/London"} />
                   </div>
                   <textarea name="instructions" rows={4} required className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Clear task instructions for students and parents." />
                   <div className="grid gap-4 md:grid-cols-2">
@@ -2308,10 +2318,7 @@ export function CourseBuilderWorkspace({
                       required
                     />
                   </label>
-                  <label className="grid gap-2 text-sm font-medium text-[#2a3f56]">
-                    Due date
-                    <input type="date" name="dueDate" className="rounded-[18px] border border-[#d8e3ed] bg-white px-4 py-3 text-sm text-[#22304a]" />
-                  </label>
+                  <HomeworkDateFields timezone={dashboard.profile.timezone || "Europe/London"} />
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -2407,22 +2414,26 @@ export function CourseBuilderWorkspace({
 
               <div className="mt-8 border-t border-[#eadfce] pt-6">
                 <h3 className="text-lg font-semibold text-[#22304a]">Submission tracker</h3>
+                <p className="text-sm text-[#617184]">On-time, late and missing work are shown for your roster students. Review an answer and award performance points below.</p>
                 <div className="mt-4 space-y-3">
                   {visibleAssignments.map((task) => (
                     <details key={task.id} className="rounded-[18px] bg-[#fbf6ef] p-4">
                       <summary className="cursor-pointer text-sm font-semibold text-[#22304a]">
                         {task.title} - {task.submissions} submissions
                       </summary>
+                      <p className="mt-2 text-xs text-[#617184]">Launch: {task.launchAt ? new Date(task.launchAt).toLocaleDateString("en-GB", { timeZone: dashboard.profile.timezone || "Europe/London" }) : "Available now"} - Due: {formatTaskDueDate(task.dueDate, parseTaskPayload(task.instructions).timezone || dashboard.profile.timezone || "Europe/London")}</p>
                       <div className="mt-3 grid gap-3 md:grid-cols-2">
                         {task.submissionDetails.map((submission) => (
                           <div key={submission.id} className="rounded-2xl bg-white px-4 py-3 text-sm leading-6 text-[#4d5a6b]">
                             <p className="font-semibold text-[#22304a]">{submission.studentName}</p>
-                            <p>Status: {submission.status}</p>
+                            <HomeworkStatus status={submission.submissionTiming} /><p>Review: {submission.status}</p>
                             <p>Submitted: {submission.submittedAt ? submission.submittedAt.toLocaleDateString("en-GB") : "Not submitted"}</p>
                             <p>Score: {submission.score ?? "Pending"} {submission.grade ? `- ${submission.grade}` : ""}</p>
+                            <p className="font-semibold text-[#28634b]">Homework performance: {submission.homeworkPoints === null ? "Not awarded" : `${submission.homeworkPoints} Qabila points`}</p>
+                            {submission.submissionText ? <p className="whitespace-pre-wrap break-words rounded-xl bg-[#f8fafc] p-3">{submission.submissionText}</p> : null}
                             {submission.attachmentUrl ? <a href={submission.attachmentUrl} target="_blank" className="font-semibold text-[#2a76aa]">Open uploaded file</a> : null}
                             {submission.feedback ? <p>Feedback: {submission.feedback}</p> : null}
-                            <form action={reviewSubmissionAction} className="mt-3 grid gap-2 rounded-2xl bg-[#fbf6ef] p-3">
+                            {submission.canReview ? <form action={reviewSubmissionAction} className="mt-3 grid gap-2 rounded-2xl bg-[#fbf6ef] p-3">
                               <input type="hidden" name="submissionId" value={submission.id} />
                               <div className="grid gap-2 sm:grid-cols-3">
                                 <select name="reviewStatus" className="rounded-xl border border-[#eadfce] px-3 py-2">
@@ -2438,9 +2449,14 @@ export function CourseBuilderWorkspace({
                                 </select>
                                 <input name="score" type="number" min="0" placeholder="Score" defaultValue={submission.score ?? ""} className="rounded-xl border border-[#eadfce] px-3 py-2" />
                               </div>
+                              <label className="grid gap-1 text-sm font-semibold text-[#22304a]">
+                                Homework performance points
+                                <input name="homeworkPoints" type="number" min="0" max="500" step="1" defaultValue={submission.homeworkPoints ?? ""} placeholder="Enter points (0-500)" className="rounded-xl border border-[#eadfce] px-3 py-2" />
+                                <span className="text-xs font-normal text-[#617184]">Awarded when marked Complete. Counts towards the student&apos;s Qabila, in addition to any submission reward. Saving again updates this award without adding it twice. Use 0 to remove performance points; leave blank to keep them unchanged. Pending reviews do not change points.</span>
+                              </label>
                               <textarea name="feedback" rows={2} placeholder="Feedback for student" defaultValue={submission.feedback ?? ""} className="rounded-xl border border-[#eadfce] px-3 py-2" />
-                              <button className="w-fit rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save review</button>
-                            </form>
+                              <FormSubmitButton pendingLabel="Saving..." className="w-fit rounded-full bg-[#22304a] px-4 py-2 text-xs font-semibold text-white">Save review &amp; points</FormSubmitButton>
+                            </form> : <p className="mt-3 text-xs text-[#617184]">Waiting for the student to submit this homework.</p>}
                           </div>
                         ))}
                         {!task.submissionDetails.length ? (
@@ -2514,6 +2530,7 @@ export function CourseBuilderWorkspace({
 
                 <form action={uploadMaterialKitAction} className="grid gap-4 md:grid-cols-2">
                   <input type="hidden" name="programId" value={selectedProgramId} />
+                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">Module<select name="materialTermId" defaultValue={prefillTermId || genMTerms[0].id} className="rounded-2xl border border-[#d8e3ed] p-3">{genMTerms.map((term) => <option key={term.id} value={term.id}>{term.title}</option>)}</select></label>
                   <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
                     Display title
                     <input name="title" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Arabic Week 1 slides" />

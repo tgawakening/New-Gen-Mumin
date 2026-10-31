@@ -1,3 +1,9 @@
+import { HomeworkSubmissionFields } from "@/components/dashboard/family/HomeworkSubmissionFields";
+import { saveHomeworkSubmission } from "@/lib/homework/submission";
+import { HomeworkStatus } from "@/components/dashboard/HomeworkStatus";
+import { homeworkIsOpen } from "@/lib/homework/timing";
+import { parseTaskPayload } from "@/lib/genm/published-content";
+import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -20,7 +26,7 @@ import {
 } from "@/components/dashboard/family/FamilyDashboardFrame";
 
 type PageProps = {
-  searchParams?: Promise<{ course?: string; lesson?: string; submitted?: string; task?: string }>;
+  searchParams?: Promise<{ course?: string; lesson?: string; submitted?: string; task?: string; error?: string }>;
 };
 
 type Attachment = {
@@ -159,11 +165,12 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       },
     });
     if (!assignment) throw new Error("Assignment not found.");
+    if (!homeworkIsOpen(parseTaskPayload(assignment.instructions).launchAt)) redirect(`/student/courses?course=${assignment.programId}&error=not_launched#student-assignments`);
 
     const enrollment = await db.enrollment.findUnique({
       where: { studentId_programId: { studentId: student.id, programId: assignment.programId } },
     });
-    if (!enrollment) throw new Error("You are not enrolled in this program.");
+    if (!enrollment || !["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status)) throw new Error("You are not enrolled in this program.");
 
     let attachmentUrl: string | null = null;
     if (file instanceof File && file.size > 0) {
@@ -180,32 +187,10 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       attachmentUrl = uploaded.webViewLink;
     }
 
-    const existing = await db.assignmentSubmission.findFirst({
-      where: { assignmentId: assignment.id, studentId: student.id },
+    const submission = await saveHomeworkSubmission({ assignmentId: assignment.id, studentId: student.id, enrollmentId: enrollment.id, submissionText, attachmentUrl }).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "Add an answer or upload a file before submitting.") redirect(`/student/courses?course=${assignment.programId}&task=${assignment.id}&error=empty#student-assignments`);
+      throw error;
     });
-
-    const submission = existing
-      ? await db.assignmentSubmission.update({
-          where: { id: existing.id },
-          data: {
-            enrollmentId: enrollment.id,
-            submissionText,
-            attachmentUrl: attachmentUrl ?? existing.attachmentUrl,
-            status: "SUBMITTED",
-            submittedAt: new Date(),
-          },
-        })
-      : await db.assignmentSubmission.create({
-          data: {
-            assignmentId: assignment.id,
-            enrollmentId: enrollment.id,
-            studentId: student.id,
-            submissionText,
-            attachmentUrl,
-            status: "SUBMITTED",
-            submittedAt: new Date(),
-          },
-        });
 
     await awardHousePointsOnce({
       studentId: student.id,
@@ -240,7 +225,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
       navItems={getStudentNavItems()}
       pendingReason={dashboard.pendingReason}
     >
-      <ActionToast message={params.submitted ? "Task submitted successfully. Your teacher has been notified." : undefined} />
+      <ActionToast message={params.error === "not_launched" ? "This homework is scheduled for a future launch date. Please return when it opens." : params.error === "empty" ? "Add an answer or upload your homework file before submitting." : params.submitted ? "Homework submitted successfully. Your teacher has been notified." : undefined} tone={params.error ? "error" : "success"} />
 
       <MetricGrid
         metrics={[
@@ -497,8 +482,9 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h3 className="text-lg font-semibold text-[#22304a]">{assignment.title}</h3>
+                    <HomeworkStatus status={assignment.submissionTiming} />
                     <p className="mt-2 text-sm text-[#5f6b7a]">
-                      {assignment.programTitle} - {assignment.status.replace(/_/g, " ")} - Due {formatDate(assignment.dueDate)}
+                      {assignment.programTitle} - Due {assignment.dueDateLabel}
                     </p>
                   </div>
                   <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
@@ -519,6 +505,8 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                   </div>
                 ) : null}
                 {assignment.feedback ? <p>{assignment.feedback}</p> : null}
+                {assignment.attachmentUrl ? <a href={assignment.attachmentUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#24466e] underline">View your submitted file</a> : null}
+                <p className="mt-3 text-xs text-[#617184]">Earn {HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.points} automatic Qabila points once for this homework. Your teacher can award extra performance points with feedback. Your first submission determines whether homework is on time; later updates keep that date.</p>
                 <form action={submitAssignmentAction} className="mt-4 grid gap-3 rounded-[18px] border border-[#eadfce] bg-white p-4">
                   <input type="hidden" name="assignmentId" value={assignment.id} />
                   <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
@@ -529,15 +517,8 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                       <option value="assignment">Assignment</option>
                     </select>
                   </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                    Your answer / notes
-                    <textarea name="submissionText" rows={3} className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm" placeholder="Write a short answer or note for your teacher." />
-                  </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                    Upload evidence
-                    <input name="submissionFile" type="file" accept="image/*,video/*,.pdf,.ppt,.pptx,.doc,.docx" className="text-sm file:mr-3 file:rounded-full file:border-0 file:bg-[#22304a] file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white" />
-                  </label>
-                  <button className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">Submit task</button>
+                  <HomeworkSubmissionFields answer={assignment.submissionText ?? ""} hasAttachment={Boolean(assignment.attachmentUrl)} />
+                  <FormSubmitButton pendingLabel="Submitting..." className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">{assignment.submittedAt ? "Update submission" : "Submit homework"}</FormSubmitButton>
                 </form>
               </div>
             </details>
