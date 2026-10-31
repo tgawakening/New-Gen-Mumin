@@ -83,7 +83,7 @@ export function FamilyNavLinkClient({
         href={href}
         prefetch={false}
         title={activity?.tooltip ?? label}
-        onClick={() => activity?.ids.length && clearNavActivity(activity.ids)}
+        onClick={() => !activity?.persistent && activity?.ids.length && clearNavActivity(activity.ids)}
         aria-current={isActive ? "page" : undefined}
         className={`relative flex min-w-0 min-h-12 snap-start items-center gap-2 rounded-2xl px-3 py-3 text-sm font-semibold shadow-sm transition ${
           isActive

@@ -69,7 +69,7 @@ test('revoked badges cannot regain credits on retry', async () => {
 test('homework uses a 10-point submission rule, separate from teacher performance credits', () => {
   const rules = load('src/lib/community/point-rules.ts', { '@/lib/live-classes/attendance-policy': { ATTENDANCE_POINTS: 10 } }).HOUSE_POINT_RULES;
   assert.equal(rules.HOMEWORK_SUBMITTED.points, 10);
-  const action = fs.readFileSync('src/app/student/courses/page.tsx', 'utf8');
+  const action = fs.readFileSync('src/lib/homework/student-action.ts', 'utf8');
   assert.match(action, /points: HOUSE_POINT_RULES\.HOMEWORK_SUBMITTED\.points/);
   assert.match(action, /sourceType: "HOMEWORK_SUBMITTED",\s*sourceId: assignment\.id/);
   assert.match(fs.readFileSync('src/lib/teacher/homework-review.ts', 'utf8'), /sourceType: "HOMEWORK_PERFORMANCE"/);

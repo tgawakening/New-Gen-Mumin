@@ -11,7 +11,7 @@ export async function POST(request: Request) {
   const ids = Array.isArray(payload?.ids) ? payload.ids.filter((id): id is string => typeof id === "string" && id.length > 0).slice(0, 100) : [];
 
   await db.notification.updateMany({
-    where: { userId: session.user.id, readAt: null, OR: [{ href: null }, { NOT: { href: { startsWith: "/parent/curriculum?" } } }], ...(ids.length ? { id: { in: ids } } : {}) },
+    where: { userId: session.user.id, readAt: null, OR: [{ href: null }, { AND: [{ NOT: { href: { startsWith: "/parent/curriculum?" } } }, { NOT: { href: { startsWith: "/parent/homework?" } } }] }], ...(ids.length ? { id: { in: ids } } : {}) },
     data: { readAt: new Date() },
   });
 

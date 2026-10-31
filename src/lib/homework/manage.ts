@@ -39,11 +39,19 @@ export async function updateTeacherHomework(userId: string, formData: FormData) 
     catch { throw new Error("Use a full http or https URL for each resource link."); }
   }
   // Updating the assignment leaves submissions, feedback and point awards untouched.
-  return db.assignment.update({ where: { id: task.id }, data: { title, dueDate: dates.dueDate, instructions: buildTaskPayload({ ...saved, title, instructions, launchAt: dates.launchAt, timezone: saved.timezone || timezone, attachments, resourceLinks, familyNote: String(formData.get("familyNote") || "").trim() || null }) } });
+  return db.$transaction(async tx => {
+    const updated = await tx.assignment.update({ where: { id: task.id }, data: { title, dueDate: dates.dueDate, instructions: buildTaskPayload({ ...saved, title, instructions, launchAt: dates.launchAt, timezone: saved.timezone || timezone, attachments, resourceLinks, familyNote: String(formData.get("familyNote") || "").trim() || null }) } });
+    await tx.billingEmailJob.updateMany({ where: { kind: "HOMEWORK_LAUNCH", recordId: task.id, status: "HOMEWORK_PENDING" }, data: { nextAttemptAt: dates.launchAt ? new Date(dates.launchAt) : new Date() } });
+    return updated;
+  });
 }
 
 export async function deleteTeacherHomework(userId: string, taskId: string) {
   const { task } = await teacherHomeworkForManagement(userId, taskId);
   // The assignment relation cascades to submissions. Earned Qabila ledger entries remain intact.
-  await db.assignment.delete({ where: { id: task.id } });
+  await db.$transaction(async tx => {
+    await tx.assignment.delete({ where: { id: task.id } });
+    await tx.billingEmailJob.updateMany({ where: { kind: "HOMEWORK_LAUNCH", recordId: task.id, status: { in: ["HOMEWORK_PENDING", "HOMEWORK_PROCESSING"] } }, data: { status: "CANCELLED", lockedUntil: null, lockToken: null } });
+    await tx.notification.deleteMany({ where: { href: { startsWith: "/parent/homework?" }, AND: [{ href: { contains: `&task=${encodeURIComponent(task.id)}` } }] } });
+  });
 }

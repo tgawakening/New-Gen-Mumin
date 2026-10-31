@@ -38,12 +38,12 @@ test("parent mobile navigation keeps both trackers and Curriculum outside More",
   const { MobileFamilyNavRailClient } = load("src/components/dashboard/family/MobileFamilyNavRailClient.tsx", {
     "./FamilyNavigation": { FamilyPortalLink: link },
     "next/navigation": { usePathname: () => "/parent" },
-    "lucide-react": { Home: icon, CalendarDays: icon, CheckCircle2: icon, Sun: icon, Menu: icon, X: icon, BookOpen: icon },
+    "lucide-react": { Home: icon, CalendarDays: icon, CheckCircle2: icon, Sun: icon, Menu: icon, X: icon, BookOpen: icon, ClipboardList: icon },
     "@/components/dashboard/family/FamilyNavLinkClient": { FamilyNavLinkClient: ({ href, label }) => React.createElement("a", { href }, label) },
   });
   const html = renderToStaticMarkup(React.createElement(MobileFamilyNavRailClient, { navItems: getParentNavItems("child") }));
   const quick = html.match(/<nav aria-label="Quick access"[\s\S]*?<\/nav>/)?.[0] || "";
-  for (const route of ["sunnah-tracker", "fardh-tracker", "curriculum"]) assert.ok(quick.includes(`/parent/${route}?child=child`));
+  for (const route of ["sunnah-tracker", "fardh-tracker", "curriculum", "homework"]) assert.ok(quick.includes(`/parent/${route}?child=child`));
 });
 const { MobileTeacherNavRailClient } = load("src/components/dashboard/teacher/MobileTeacherNavRailClient.tsx", {
   "lucide-react": { ChevronDown: () => null, ChevronUp: () => null, LayoutGrid: () => null },

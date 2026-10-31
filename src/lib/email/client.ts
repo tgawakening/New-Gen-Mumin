@@ -41,7 +41,7 @@ function getOptionalEmailConfig() {
 }
 
 export async function sendTransactionalEmail(input: SendEmailInput) {
-  const durableDeduplication = ["billing:", "payroll:", "feedback:"].some(prefix => input.deduplicationKey?.startsWith(prefix));
+  const durableDeduplication = ["billing:", "payroll:", "feedback:", "homework:"].some(prefix => input.deduplicationKey?.startsWith(prefix));
   const config = getOptionalEmailConfig();
 
   if (!config) {

@@ -15,6 +15,7 @@ export function getStudentNavItems() {
   return [
     { label: "Dashboard", href: "/student", icon: "home" as const },
     { label: "Join Classes", href: "/student/schedule", icon: "calendar" as const },
+    { label: "Homework & Tasks", href: "/student/homework", icon: "pen" as const },
     { label: "Attendance", href: "/student/attendance", icon: "check" as const },
     { label: "House & Rewards", href: "/student/rewards", icon: "sparkles" as const },
     { label: "Sunnah Tracker", href: "/student/missions?type=sunnah", icon: "check" as const },
@@ -35,6 +36,7 @@ export function getParentNavItems(childId?: string) {
   return [
     { label: "Dashboard", href: `/parent${suffix}`, icon: "home" as const },
     { label: "Join Classes", href: `/parent/schedule${suffix}`, icon: "calendar" as const },
+    { label: "Homework & Tasks", href: `/parent/homework${suffix}`, icon: "pen" as const },
     { label: "Attendance", href: `/parent/attendance${suffix}`, icon: "check" as const },
     { label: "House & Rewards", href: `/parent/rewards${suffix}`, icon: "sparkles" as const },
     { label: "Sunnah Tracker", href: `/parent/sunnah-tracker${suffix}`, icon: "check" as const },

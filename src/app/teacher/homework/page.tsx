@@ -16,7 +16,7 @@ import { HomeworkEditDialog } from "@/components/dashboard/teacher/HomeworkEditD
 import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 
-export default async function TeacherHomeworkPage({ searchParams }: { searchParams?: Promise<{ edit?: string; saved?: string; deleted?: string; error?: string; page?: string }> } = {}) {
+export default async function TeacherHomeworkPage({ searchParams }: { searchParams?: Promise<{ edit?: string; task?: string; saved?: string; deleted?: string; error?: string; page?: string }> } = {}) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
@@ -24,7 +24,8 @@ export default async function TeacherHomeworkPage({ searchParams }: { searchPara
   if (!dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const pages = Math.max(1, Math.ceil(dashboard.assignments.length / 12));
-  const page = Math.min(pages, Math.max(1, Number.parseInt(params.page || "1", 10) || 1));
+  const linkedIndex = params.task ? dashboard.assignments.findIndex(task => task.id === params.task) : -1;
+  const page = linkedIndex >= 0 ? Math.floor(linkedIndex / 12) + 1 : Math.min(pages, Math.max(1, Number.parseInt(params.page || "1", 10) || 1));
   const editing = params.edit ? await teacherHomeworkForManagement(session.user.id, params.edit).catch(() => null) : null;
   async function saveHomework(formData: FormData) {
     "use server";
@@ -70,7 +71,7 @@ export default async function TeacherHomeworkPage({ searchParams }: { searchPara
         const late = task.submissionDetails.filter((submission) => submission.submissionTiming === "Submitted late").length;
         const files = content.attachments.filter((file) => file && typeof file.name === "string" && safeResource(file.url));
         const links = content.resourceLinks.map(safeResource).filter((href): href is string => Boolean(href));
-        return <article key={task.id} className="min-w-0 rounded-3xl border border-[#eadfce] bg-white p-4 sm:p-5">
+        return <article id={`homework-${task.id}`} key={task.id} className="min-w-0 rounded-3xl border border-[#eadfce] bg-white p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold text-[#aa6822]">{task.programTitle}{content.weekLabel ? ` / ${content.weekLabel}` : ""}</p><h3 className="mt-1 text-lg font-bold text-[#22304a]">{task.title}</h3></div><span className={`rounded-full px-3 py-1 text-xs font-semibold ${scheduled ? "bg-blue-50 text-blue-800" : "bg-emerald-50 text-emerald-800"}`}>{!shared ? "Hidden from families" : scheduled ? "Scheduled" : "Available to students"}</span></div>
           <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-[#526175]">{typeof content.instructions === "string" && !content.instructions.startsWith("__GENM_TASK__:") ? content.instructions : "Open the homework workspace to check or update the instructions."}</p>
           <dl className="mt-4 grid gap-3 rounded-2xl bg-[#fbf6ef] p-4 text-sm sm:grid-cols-3"><div><dt className="text-xs text-[#617184]">Launch</dt><dd className="mt-1 font-semibold text-[#22304a]">{date(content.launchAt, content.timezone) || "Available now"}</dd></div><div><dt className="text-xs text-[#617184]">Due date</dt><dd className="mt-1 font-semibold text-[#22304a]">{date(task.dueDate, content.timezone) || "No deadline"}</dd></div><div><dt className="text-xs text-[#617184]">Roster submissions</dt><dd className="mt-1 font-semibold text-[#22304a]">{received} received · {missing} not submitted{late ? ` · ${late} late` : ""}</dd></div></dl>

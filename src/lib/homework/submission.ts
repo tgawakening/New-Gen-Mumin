@@ -14,8 +14,12 @@ export async function saveHomeworkSubmission(input: { assignmentId: string; stud
       status: "SUBMITTED" as const,
       submittedAt: existing?.submittedAt ?? new Date(),
     };
-    return existing
+    const submission = existing
       ? tx.assignmentSubmission.update({ where: { id: existing.id }, data })
       : tx.assignmentSubmission.create({ data: { ...data, assignmentId: input.assignmentId, studentId: input.studentId } });
+    const saved = await submission;
+    const version = saved.updatedAt.toISOString();
+    await tx.billingEmailJob.upsert({ where: { key: `homework-submission:${saved.id}:${version}` }, update: {}, create: { key: `homework-submission:${saved.id}:${version}`, kind: "HOMEWORK_SUBMISSION", recordId: saved.id, toEmail: "", payload: { version }, status: "HOMEWORK_PENDING" } });
+    return saved;
   });
 }

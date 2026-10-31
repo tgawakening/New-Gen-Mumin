@@ -1,21 +1,12 @@
-import { HomeworkSubmissionFields } from "@/components/dashboard/family/HomeworkSubmissionFields";
-import { saveHomeworkSubmission } from "@/lib/homework/submission";
-import { HomeworkStatus } from "@/components/dashboard/HomeworkStatus";
-import { homeworkIsOpen } from "@/lib/homework/timing";
-import { parseTaskPayload } from "@/lib/genm/published-content";
-import { FormSubmitButton } from "@/components/dashboard/FormSubmitButton";
 import Link from "next/link";
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { FileText, ImageIcon, Video } from "lucide-react";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
 import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
-import { db } from "@/lib/db";
-import { awardHousePointsOnce, HOUSE_POINT_RULES } from "@/lib/community/point-awards";
 import { displayProgramTitle } from "@/lib/genm/curriculum";
-import { listMaterials, uploadStudentSubmissionFile } from "@/lib/google-drive/materials";
+import { listMaterials } from "@/lib/google-drive/materials";
 import { ActionToast } from "@/components/dashboard/ActionToast";
 import { LiveClassCountdown } from "@/components/dashboard/family/LiveClassCountdown";
 import {
@@ -95,13 +86,16 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
 
   if (!session) redirect("/auth/login");
+  const legacyParams = searchParams ? await searchParams : {};
+  if (session.user.role === "PARENT" && legacyParams.task) redirect(`/parent/homework?task=${encodeURIComponent(legacyParams.task)}`);
   if (session.user.role !== "STUDENT") redirect(getDashboardHome(session.user.role));
 
   const dashboard = await getStudentDashboardData(session.user.id);
   if (!dashboard) redirect("/auth/login");
 
   const child = dashboard.child;
-  const params = searchParams ? await searchParams : {};
+  const params = legacyParams;
+  if (params.task) redirect(`/student/homework?task=${encodeURIComponent(params.task)}`);
   const linkedTask = params.task ? child.assignments.find((assignment) => assignment.id === params.task) ?? null : null;
   const linkedTaskCourse = linkedTask
     ? child.courses.find((course) => courseOwnsProgramTitle(course, linkedTask.programTitle)) ?? null
@@ -133,89 +127,8 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
     : [];
   const selectedLesson =
     selectedLessonUpdates.find((lesson) => lesson.id === params.lesson) ?? selectedLessonUpdates[0] ?? null;
-  const selectedAssignments = selectedCourse
-    ? child.assignments.filter((assignment) => courseOwnsProgramTitle(selectedCourse, assignment.programTitle))
-    : child.assignments;
 
-  async function submitAssignmentAction(formData: FormData) {
-    "use server";
 
-    const currentSession = await getCurrentSession();
-    if (!currentSession || currentSession.user.role !== "STUDENT") redirect("/auth/login");
-
-    const student = await db.studentProfile.findUnique({
-      where: { userId: currentSession.user.id },
-      include: { user: true },
-    });
-    if (!student) redirect("/auth/login");
-
-    const assignmentId = String(formData.get("assignmentId") || "");
-    const submissionText = String(formData.get("submissionText") || "").trim();
-    const submissionType = String(formData.get("submissionType") || "task") as "task" | "homework" | "assignment";
-    const file = formData.get("submissionFile");
-
-    const assignment = await db.assignment.findUnique({
-      where: { id: assignmentId },
-      include: {
-        program: {
-          include: {
-            teacherAssignments: { include: { teacher: { include: { user: true } } } },
-          },
-        },
-      },
-    });
-    if (!assignment) throw new Error("Assignment not found.");
-    if (!homeworkIsOpen(parseTaskPayload(assignment.instructions).launchAt)) redirect(`/student/courses?course=${assignment.programId}&error=not_launched#student-assignments`);
-
-    const enrollment = await db.enrollment.findUnique({
-      where: { studentId_programId: { studentId: student.id, programId: assignment.programId } },
-    });
-    if (!enrollment || !["ACTIVE", "CONFIRMED", "COMPLETED"].includes(enrollment.status)) throw new Error("You are not enrolled in this program.");
-
-    let attachmentUrl: string | null = null;
-    if (file instanceof File && file.size > 0) {
-      const uploaded = await uploadStudentSubmissionFile({
-        studentId: student.id,
-        studentName: student.displayName || `${student.user.firstName} ${student.user.lastName}`.trim(),
-        programId: assignment.programId,
-        programTitle: assignment.program.title,
-        assignmentId: assignment.id,
-        assignmentTitle: assignment.title,
-        submissionType,
-        file,
-      });
-      attachmentUrl = uploaded.webViewLink;
-    }
-
-    const submission = await saveHomeworkSubmission({ assignmentId: assignment.id, studentId: student.id, enrollmentId: enrollment.id, submissionText, attachmentUrl }).catch((error: unknown) => {
-      if (error instanceof Error && error.message === "Add an answer or upload a file before submitting.") redirect(`/student/courses?course=${assignment.programId}&task=${assignment.id}&error=empty#student-assignments`);
-      throw error;
-    });
-
-    await awardHousePointsOnce({
-      studentId: student.id,
-      points: HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.points,
-      reason: HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.label + ": " + assignment.title,
-      sourceType: "HOMEWORK_SUBMITTED",
-      sourceId: assignment.id,
-      notificationHref: "/student/courses?course=" + assignment.programId,
-    });
-
-    if (assignment.program.teacherAssignments.length) {
-      await db.notification.createMany({
-        data: assignment.program.teacherAssignments.map(({ teacher }) => ({
-          userId: teacher.user.id,
-          title: "Student task submitted",
-          body: `${student.displayName || student.user.firstName} submitted ${assignment.title}.`,
-          href: "/teacher/course-builder?tab=task",
-        })),
-      });
-    }
-
-    revalidatePath("/student/courses");
-    revalidatePath("/teacher/course-builder");
-    redirect(`/student/courses?course=${assignment.programId}&submitted=${submission.id}`);
-  }
 
   return (
     <FamilyDashboardFrame
@@ -440,7 +353,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Link href="/student/quizzes" className="rounded-full bg-[#eef5fb] px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">Quizzes</Link>
-                      <a href="#student-assignments" className="rounded-full bg-[#fff4e8] px-3 py-1.5 text-xs font-semibold text-[#b46b1e]">Tasks</a>
+                      <a href="/student/homework" className="rounded-full bg-[#fff4e8] px-3 py-1.5 text-xs font-semibold text-[#b46b1e]">Tasks</a>
                       <a href="#student-live-classes" className="rounded-full bg-[#eef8f0] px-3 py-1.5 text-xs font-semibold text-[#2c7a48]">Live</a>
                     </div>
                   </div>
@@ -473,63 +386,7 @@ export default async function StudentCoursesPage({ searchParams }: PageProps) {
         </SectionCard>
       ) : null}
 
-      <SectionCard eyebrow="Assignments" title="Coursework and submissions">
-        <div id="student-assignments" />
-        <div className={`space-y-4 ${child.accessLocked ? "opacity-60" : ""}`}>
-          {selectedAssignments.map((assignment) => (
-            <details key={assignment.id} className="rounded-[24px] bg-[#fbf6ef] p-5" open={assignment.id === params.task}>
-              <summary className="cursor-pointer list-none">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-lg font-semibold text-[#22304a]">{assignment.title}</h3>
-                    <HomeworkStatus status={assignment.submissionTiming} />
-                    <p className="mt-2 text-sm text-[#5f6b7a]">
-                      {assignment.programTitle} - Due {assignment.dueDateLabel}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#22304a]">
-                    {assignment.score === null ? "Pending" : `${assignment.score} pts`}
-                  </span>
-                </div>
-              </summary>
-              <div className="mt-4 space-y-3 text-sm leading-7 text-[#4d5a6b]">
-                {assignment.instructions ? <p>{assignment.instructions}</p> : null}
-                <AttachmentGrid attachments={assignment.attachments} />
-                {assignment.resourceLinks.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {assignment.resourceLinks.map((resource) => (
-                      <a key={resource} href={resource} target="_blank" className="rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#2a76aa]">
-                        Resource link
-                      </a>
-                    ))}
-                  </div>
-                ) : null}
-                {assignment.feedback ? <p>{assignment.feedback}</p> : null}
-                {assignment.attachmentUrl ? <a href={assignment.attachmentUrl} target="_blank" rel="noopener noreferrer" className="font-semibold text-[#24466e] underline">View your submitted file</a> : null}
-                <p className="mt-3 text-xs text-[#617184]">Earn {HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.points} automatic Qabila points once for this homework. Your teacher can award extra performance points with feedback. Your first submission determines whether homework is on time; later updates keep that date.</p>
-                <form action={submitAssignmentAction} className="mt-4 grid gap-3 rounded-[18px] border border-[#eadfce] bg-white p-4">
-                  <input type="hidden" name="assignmentId" value={assignment.id} />
-                  <label className="grid gap-2 text-sm font-semibold text-[#22304a]">
-                    Submission type
-                    <select name="submissionType" defaultValue="task" className="rounded-2xl border border-[#d8e3ed] px-4 py-3 text-sm">
-                      <option value="task">Task</option>
-                      <option value="homework">Homework</option>
-                      <option value="assignment">Assignment</option>
-                    </select>
-                  </label>
-                  <HomeworkSubmissionFields answer={assignment.submissionText ?? ""} hasAttachment={Boolean(assignment.attachmentUrl)} />
-                  <FormSubmitButton pendingLabel="Submitting..." className="w-fit rounded-full bg-[#22304a] px-5 py-2.5 text-sm font-semibold text-white">{assignment.submittedAt ? "Update submission" : "Submit homework"}</FormSubmitButton>
-                </form>
-              </div>
-            </details>
-          ))}
-          {!selectedAssignments.length ? (
-            <p className="rounded-[24px] bg-[#fbf6ef] p-5 text-sm text-[#5f6b7a]">
-              Assignments will appear once teachers publish coursework.
-            </p>
-          ) : null}
-        </div>
-      </SectionCard>
+      <SectionCard eyebrow="Assignments" title="Homework & Tasks"><div id="student-assignments" /><p className="text-sm text-[#617184]">Homework has its own section. Find your latest tasks by programme and submit your work there.</p><Link href="/student/homework" className="mt-4 inline-flex min-h-12 items-center rounded-full bg-[#22304a] px-5 py-3 text-sm font-bold text-white">Open Homework & Tasks</Link></SectionCard>
     </FamilyDashboardFrame>
   );
 }

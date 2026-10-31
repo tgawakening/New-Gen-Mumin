@@ -55,9 +55,10 @@ function submissionFixture() {
   let saved = null, locks = 0;
   const tx = { $queryRaw: async () => { locks++; }, assignmentSubmission: {
     findFirst: async () => saved,
-    create: async ({ data }) => saved = { id: 'submission', ...data },
+    create: async ({ data }) => saved = { id: 'submission', updatedAt: new Date(), ...data },
     update: async ({ data }) => saved = { ...saved, ...data },
   } };
+  tx.billingEmailJob = { upsert: async () => ({}) };
   const service = load('src/lib/homework/submission.ts', { '@/lib/db': { db: { $transaction: fn => fn(tx) } } });
   return { ...service, saved: () => saved, locks: () => locks };
 }
@@ -89,14 +90,14 @@ function awardFixture() {
   } });
   return { ...service, notifications };
 }
-test('badge and certificate alerts reach only the relevant saved/fallback rosters and do not repeat on retry', async () => {
+test('badge alerts reach relevant rosters without duplicate certificate badges or retry alerts', async () => {
   const f = awardFixture();
   for (const badgeKey of ['CONSISTENT', 'HELPER', 'MUMIN_OF_WEEK']) {
     const award = { id: badgeKey, studentId: 'child', studentName: 'Learner', badgeKey, title: badgeKey, evidence: 'Helpful effort.' };
     await f.notifyRosterTeachersOfAward(award);
     await f.notifyRosterTeachersOfAward(award);
   }
-  assert.equal(f.notifications.length, 6);
+  assert.equal(f.notifications.length, 4);
   assert.deepEqual([...new Set(f.notifications.map(row => row.userId))].sort(), ['teacher1', 'teacher3']);
   assert.ok(f.notifications.every(row => row.href.includes('badgeImage=') && row.href.includes('awardStudent=child') && row.body.includes('in class')));
 });

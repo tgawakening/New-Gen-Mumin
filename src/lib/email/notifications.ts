@@ -670,25 +670,36 @@ export async function sendStudentTaskAssignedEmail(input: {
   dueDateLabel: string;
   launchDateLabel?: string;
   completionPath: string;
+  weekLabel?: string;
+  parentView?: boolean;
+  deduplicationKey?: string;
 }) {
-  await sendTransactionalEmail({
+  return sendTransactionalEmail({
     toEmail: input.toEmail,
-    subject: "New task assigned",
+    subject: `${input.programTitle}: ${input.weekLabel || "This week's"} homework is live - ${input.studentName}`,
+    deduplicationKey: input.deduplicationKey,
     template: "studentTaskAssigned",
     html: renderGenMuminsEmailTemplate({
-      heading: "New task assigned",
-      preview: `${input.taskTitle} has been uploaded for ${input.studentName}.`,
-      intro: `Assalamu alaikum ${input.recipientName}, ${input.teacherName} uploaded a new task for ${input.studentName}.`,
+      heading: "Homework is live now",
+      preview: `${input.taskTitle} is live now for ${input.studentName}.`,
+      intro: `Assalamu alaikum ${input.recipientName}, ${input.studentName}'s task for ${input.programTitle} is live now. ${input.teacherName} has shared the instructions and resources.`,
       sections: [
         { label: "Student", value: input.studentName },
         { label: "Programme", value: input.programTitle },
         { label: "Task", value: input.taskTitle },
+        ...(input.weekLabel ? [{ label: "Week", value: input.weekLabel }] : []),
         ...(input.launchDateLabel ? [{ label: "Available from", value: input.launchDateLabel }] : []),
         { label: "Due date", value: input.dueDateLabel },
-        { label: "Next step", value: input.launchDateLabel ? "From the launch date, open the task page, review the instructions, and submit the completed work." : "Open the task page, review the instructions, and submit the completed work." },
+        { label: "Next step", value: input.parentView ? "Open Homework to review your child's instructions, resources and deadline." : input.launchDateLabel ? "From the launch date, open the task page, review the instructions, and submit the completed work." : "Open the task page, review the instructions, and submit the completed work." },
       ],
-      callToAction: { label: "Complete task", href: resolveHref(input.completionPath) },
+      callToAction: { label: input.parentView ? "View your child's homework" : "Complete task", href: resolveHref(input.completionPath) },
     }),
+  });
+}
+
+export async function sendHomeworkSubmittedEmail(input: { toEmail: string; teacherName: string; studentName: string; programTitle: string; taskTitle: string; reviewPath: string; deduplicationKey: string }) {
+  return sendTransactionalEmail({ toEmail: input.toEmail, subject: `Homework submitted: ${input.studentName} - ${input.programTitle}`, template: "homeworkSubmitted", deduplicationKey: input.deduplicationKey,
+    html: renderGenMuminsEmailTemplate({ heading: "Student homework submitted", preview: `${input.studentName} submitted ${input.taskTitle}.`, intro: `Assalamu alaikum ${input.teacherName}, a student has submitted work for you to review.`, sections: [{ label: "Student", value: input.studentName }, { label: "Programme", value: input.programTitle }, { label: "Task", value: input.taskTitle }, { label: "Next step", value: "Review the submission, give feedback and award performance points." }], callToAction: { label: "Review homework", href: resolveHref(input.reviewPath) } }),
   });
 }
 
