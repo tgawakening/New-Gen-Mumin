@@ -20,12 +20,15 @@ function fixture() {
   sql.function("CONCAT", (...values) => values.join(""));
   sql.function("JSON_UNQUOTE", value => value);
   sql.exec(`CREATE TABLE HousePointLedger(id TEXT, studentId TEXT, points INTEGER, reason TEXT, sourceType TEXT, sourceId TEXT, awardedAt TEXT);
-    CREATE TABLE QuizLiveSession(id TEXT, quizId TEXT);
+    CREATE TABLE QuizLiveSession(id TEXT, quizId TEXT, status TEXT, endedAt TEXT);
+    CREATE TABLE QuizLiveSeat(sessionId TEXT, studentId TEXT, joinedAt TEXT);
+    CREATE TABLE QuizAttempt(id TEXT, quizId TEXT, studentId TEXT, submittedAt TEXT, autoScore INTEGER, manualScore INTEGER);
+    CREATE TABLE QuizAnswer(id TEXT, attemptId TEXT, isCorrect INTEGER, answer TEXT);
     CREATE TABLE Quiz(id TEXT, title TEXT);
     CREATE TABLE QuizQuestion(id TEXT, quizId TEXT);
     CREATE TABLE QuizLiveResponse(id TEXT, sessionId TEXT, studentId TEXT, isCorrect INTEGER, earnedPoints INTEGER, answer TEXT, answeredAt TEXT);
     INSERT INTO Quiz VALUES('quiz','Seerah quiz');
-    INSERT INTO QuizLiveSession VALUES('session','quiz');
+    INSERT INTO QuizLiveSession VALUES('session','quiz','ENDED','2026-10-28T10:05:00.000Z');
     INSERT INTO QuizQuestion VALUES('q1','quiz'),('q2','quiz'),('q3','quiz'),('q4-added-later','quiz');`);
   const at = "2026-10-28T10:00:00.000Z";
   const insertResponse = sql.prepare("INSERT INTO QuizLiveResponse VALUES(?,?,?,?,?,?,?)");
@@ -94,6 +97,44 @@ test("history keeps orphaned old ledger credit rather than silently dropping poi
     const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
     assert.equal(history.totalPoints, 87);
     assert.equal(history.events.reduce((sum, event) => sum + event.points, 0), 87);
+  } finally { f.close(); }
+});
+
+test("ordinary quiz marks are shown once, including students with zero-score submissions", async () => {
+  const f = fixture(); try {
+    f.sql.exec(`INSERT INTO QuizAttempt VALUES('normal','quiz','b','2026-10-28T11:00:00.000Z',20,20),('zero','quiz','a','2026-10-28T11:05:00.000Z',0,0);
+      INSERT INTO QuizAnswer VALUES('a1','normal',1,'{"questionCount":5}'),('a2','normal',1,'{"questionCount":5}'),('a3','normal',0,'{"questionCount":5}'),('a4','normal',0,'{"questionCount":5}'),('a5','normal',0,'{"questionCount":5}'),('zero1','zero',0,'{"questionCount":5}');`);
+    f.add('normal-credit', 20, 'QUIZ', 'normal', 'b');
+    const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
+    const normal = history.events.find(event => event.id === 'quiz-attempt:normal');
+    assert.equal(normal.points, 20); assert.equal(normal.quizEarnedPoints, 20); assert.equal(normal.score.correct, 2); assert.equal(normal.score.total, 5); assert.equal(normal.score.historicalTotal, false);
+    assert.equal(history.events.filter(event => event.id === 'normal-credit').length, 0);
+    const zero = history.events.find(event => event.id === 'quiz-attempt:zero');
+    assert.equal(zero.points, 0); assert.equal(zero.score.correct, 0);
+    assert.equal(history.totalPoints, 100); assert.equal(history.events.reduce((sum, event) => sum + event.points, 0), 100);
+  } finally { f.close(); }
+});
+
+test("joined learners without saved answers are visible without inventing quiz marks", async () => {
+  const f = fixture(); try {
+    f.sql.exec(`INSERT INTO QuizLiveSession VALUES('no-answers','quiz','ENDED','2026-10-28T11:00:00.000Z'),('ongoing','quiz','LIVE',NULL);
+      INSERT INTO QuizLiveSeat VALUES('no-answers','b','2026-10-28T10:15:00.000Z'),('no-answers','a',NULL),('ongoing','a','2026-10-28T11:15:00.000Z'),('session','a','2026-10-28T09:00:00.000Z');`);
+    const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
+    const joined = history.events.find(event => event.id === 'quiz-joined:no-answers:b');
+    assert.match(joined.label, /joined, but no answers recorded/); assert.equal(joined.score, null); assert.equal(joined.quizEarnedPoints, null); assert.equal(joined.points, 0);
+    assert.equal(history.events.filter(event => event.id.startsWith('quiz-joined:')).length, 1);
+    assert.equal(history.totalPoints, 80);
+  } finally { f.close(); }
+});
+
+test("manually graded answers retain their score without a fabricated zero-correct fraction", async () => {
+  const f = fixture(); try {
+    f.sql.exec(`INSERT INTO QuizAttempt VALUES('manual','quiz','b','2026-10-28T11:00:00.000Z',0,30);
+      INSERT INTO QuizAnswer VALUES('reflection','manual',NULL,'{"questionCount":5}');`);
+    f.add('manual-result', 30, 'QUIZ', 'manual', 'b');
+    const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
+    const result = history.events.find(event => event.id === 'quiz-attempt:manual');
+    assert.equal(result.quizEarnedPoints, 30); assert.equal(result.points, 30); assert.equal(result.score, null);
   } finally { f.close(); }
 });
 function endpoint(user) {

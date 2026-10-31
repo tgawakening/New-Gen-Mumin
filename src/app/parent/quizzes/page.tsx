@@ -131,7 +131,7 @@ export default async function ParentQuizzesPage({ searchParams }: PageProps) {
         data: {
           attemptId: attempt.id,
           questionId: question.id,
-          answer: { value: answer },
+          answer: { value: answer, questionCount: quiz.questions.length },
           isCorrect: isObjective ? isCorrect : null,
           earnedPoints: isObjective ? (isCorrect ? question.points : 0) : null,
         },

@@ -20,7 +20,7 @@ export function activityLabel(source: string, reason: string) {
   if (source === "TEACHER_POSITIVE_PARTICIPATION") return "Positive class participation";
   if (source === "TEACHER_LIVE_QUIZ_ANSWER") return "Teacher-observed quiz answer";
   if (source === "TEACHER_MANUAL_REVERSAL") return "Teacher award removed: points adjustment";
-  if (source === "QUIZ_LIVE_SESSION" || source === "QUIZ" || source === "QUIZ_LIVE_COMPLETE") return reason;
+  if (["QUIZ_LIVE_SESSION", "QUIZ_ATTEMPT", "QUIZ_LIVE_JOIN", "QUIZ", "QUIZ_LIVE_COMPLETE"].includes(source)) return reason;
   if (source.startsWith("SUNNAH")) return source === "SUNNAH_DAILY" ? "Daily Sunnah tracker submitted" : "Sunnah activity completed";
   if (source.startsWith("FARDH")) return reason;
   if (source.includes("ATTENDANCE")) return source === "ATTENDANCE_PARENT" ? "Attendance confirmed by parent" : "Live class attendance";
@@ -42,6 +42,7 @@ function eventQuery(ids: string[], asOf: Date) {
       l.sourceType, MAX(l.awardedAt) AS occurredAt, NULL AS correctCount, NULL AS questionCount, NULL AS quizEarnedPoints, NULL AS snapshotCount
     FROM HousePointLedger l
     WHERE l.studentId IN (${learners}) AND l.awardedAt <= ${asOf} AND l.sourceType <> 'QUIZ_LIVE_ANSWER'
+      AND (l.sourceType <> 'QUIZ' OR NOT EXISTS (SELECT 1 FROM QuizAttempt a WHERE a.id = l.sourceId AND a.studentId = l.studentId AND a.submittedAt <= ${asOf} AND (a.autoScore IS NOT NULL OR a.manualScore IS NOT NULL)))
     GROUP BY l.studentId, l.sourceType,
       CASE WHEN l.sourceType = 'FARDH_PRAYER' THEN CONCAT('prayer:', l.studentId, ':', LEFT(l.sourceId, 10)) ELSE l.id END
     UNION ALL
@@ -59,6 +60,31 @@ function eventQuery(ids: string[], asOf: Date) {
     WHERE r.studentId IN (${learners}) AND r.answeredAt <= ${asOf}
     GROUP BY r.studentId, r.sessionId, s.quizId
     UNION ALL
+    SELECT CONCAT('quiz-attempt:', a.id) AS id, a.studentId,
+      COALESCE(MAX(l.points), 0) AS points, MAX(q.title) AS reason,
+      'QUIZ_ATTEMPT' AS sourceType, MAX(a.submittedAt) AS occurredAt,
+      CASE WHEN COUNT(answer.id) > 0 AND COUNT(answer.isCorrect) = COUNT(answer.id)
+        THEN SUM(CASE WHEN answer.isCorrect = 1 THEN 1 ELSE 0 END) ELSE NULL END AS correctCount,
+      COALESCE(MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(answer.answer, '$.questionCount')) AS UNSIGNED)), (SELECT COUNT(*) FROM QuizQuestion qq WHERE qq.quizId = a.quizId)) AS questionCount,
+      COALESCE(MAX(a.manualScore), MAX(a.autoScore), 0) AS quizEarnedPoints,
+      MAX(CAST(JSON_UNQUOTE(JSON_EXTRACT(answer.answer, '$.questionCount')) AS UNSIGNED)) AS snapshotCount
+    FROM QuizAttempt a
+    JOIN Quiz q ON q.id = a.quizId
+    LEFT JOIN QuizAnswer answer ON answer.attemptId = a.id
+    LEFT JOIN HousePointLedger l ON l.studentId = a.studentId AND l.sourceType = 'QUIZ' AND l.sourceId = a.id AND l.awardedAt <= ${asOf}
+    WHERE a.studentId IN (${learners}) AND a.submittedAt <= ${asOf} AND (a.autoScore IS NOT NULL OR a.manualScore IS NOT NULL)
+    GROUP BY a.id, a.studentId, a.quizId
+    UNION ALL
+    SELECT CONCAT('quiz-joined:', seat.sessionId, ':', seat.studentId) AS id, seat.studentId,
+      0 AS points, CONCAT(q.title, ': joined, but no answers recorded') AS reason,
+      'QUIZ_LIVE_JOIN' AS sourceType, s.endedAt AS occurredAt,
+      NULL AS correctCount, NULL AS questionCount, NULL AS quizEarnedPoints, NULL AS snapshotCount
+    FROM QuizLiveSeat seat
+    JOIN QuizLiveSession s ON s.id = seat.sessionId
+    JOIN Quiz q ON q.id = s.quizId
+    WHERE seat.studentId IN (${learners}) AND seat.joinedAt <= ${asOf} AND s.status = 'ENDED' AND s.endedAt <= ${asOf}
+      AND NOT EXISTS (SELECT 1 FROM QuizLiveResponse r WHERE r.sessionId = seat.sessionId AND r.studentId = seat.studentId AND r.answeredAt <= ${asOf})
+    UNION ALL
     SELECT l.id, l.studentId, l.points, l.reason, l.sourceType, l.awardedAt, NULL, NULL, NULL, NULL
     FROM HousePointLedger l
     WHERE l.studentId IN (${learners}) AND l.awardedAt <= ${asOf} AND l.sourceType = 'QUIZ_LIVE_ANSWER'
@@ -73,7 +99,7 @@ export async function readContributionEvents(members: Array<{ id: string; name: 
   return rows.map(row => ({
     id: row.id, studentId: row.studentId, name: names.get(row.studentId) || "Learner",
     points: Number(row.points), label: activityLabel(row.sourceType, row.reason), occurredAt: new Date(row.occurredAt).toISOString(),
-    score: row.sourceType === "QUIZ_LIVE_SESSION" && Number(row.questionCount) > 0 ? { correct: Number(row.correctCount), total: Number(row.questionCount), historicalTotal: !Number(row.snapshotCount) } : null,
+    score: ["QUIZ_LIVE_SESSION", "QUIZ_ATTEMPT"].includes(row.sourceType) && row.correctCount !== null && Number(row.questionCount) > 0 ? { correct: Number(row.correctCount), total: Number(row.questionCount), historicalTotal: !Number(row.snapshotCount) } : null,
     quizEarnedPoints: row.quizEarnedPoints === null ? null : Number(row.quizEarnedPoints),
   }));
 }

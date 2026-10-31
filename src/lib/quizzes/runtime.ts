@@ -75,6 +75,7 @@ async function context(sessionId: string, user: SessionUser, studentId?: string)
   return { session, quiz, seat: null };
  }
  if (!quiz.isPublished || !['PARENT','STUDENT'].includes(user.role)) throw new QuizError('This quiz is not available.', 403);
+ if (user.role === 'PARENT' && !studentId) throw new QuizError('Choose the child taking this quiz before continuing.', 400);
  const seat = await db.quizLiveSeat.findFirst({ where: { sessionId, ...(studentId ? { studentId } : {}), student: { ...(user.role === 'STUDENT' ? { userId: user.id } : { parents: { some: { parent: { userId: user.id } } } }), user: { status: 'ACTIVE' }, enrollments: { some: { programId: quiz.programId, status: { in: [...activeEnrollments] } } } } }, include: { student: { select: { id: true, displayName: true, user: { select: { firstName: true, avatarUrl: true } } } } } });
  if (!seat) throw new QuizError('This learner is not on the roster for this live quiz.', 403);
  return { session, quiz, seat };
