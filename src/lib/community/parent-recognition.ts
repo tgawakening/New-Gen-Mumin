@@ -1,8 +1,6 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { awardHousePointsOnce } from "@/lib/community/point-awards";
-import { sendParentRecognitionEmail } from "@/lib/email/notifications";
 
 export const MUM_CHARACTER_BADGES = [
   { key: "MUM_OF_WEEK", title: "Mum of the Week", description: "Recognises exceptional encouragement, participation, and support for her children and the Gen-Mumin community." },
@@ -17,7 +15,7 @@ export async function awardParentRecognition(input: { parentId: string; badgeKey
   if (!badge) throw new Error("Choose an approved Mum character badge.");
   let award;
   try {
-    award = await db.parentRecognitionAward.create({ data: { parentId: input.parentId, badgeKey: badge.key, title: badge.title, description: badge.description, evidence: input.evidence, recipientName: input.recipientName, awardedByUserId: input.awardedByUserId, sourceId: input.sourceId, featuredWeek: input.featuredWeek } });
+    award = await db.parentRecognitionAward.create({ data: { parentId: input.parentId, pointsStudentId: input.studentIdForPoints, badgeKey: badge.key, title: badge.title, description: badge.description, evidence: input.evidence, recipientName: input.recipientName, awardedByUserId: input.awardedByUserId, sourceId: input.sourceId, featuredWeek: input.featuredWeek, isPublic: false } });
   } catch (error) {
     if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
     const existing = await db.parentRecognitionAward.findUnique({ where: { parentId_badgeKey_sourceId: { parentId: input.parentId, badgeKey: badge.key, sourceId: input.sourceId } } });
@@ -30,22 +28,13 @@ export async function awardParentRecognition(input: { parentId: string; badgeKey
         evidence: input.evidence,
         recipientName: input.recipientName,
         featuredWeek: input.featuredWeek,
-        isPublic: true,
+        pointsStudentId: existing.pointsStudentId || input.studentIdForPoints,
+        isPublic: existing.isPublic,
         revokedAt: null,
         revokedByUserId: null,
         awardedAt: new Date(),
       },
     });
-  }
-  if (badge.key === "MUM_OF_WEEK" && input.studentIdForPoints) {
-    await awardHousePointsOnce({ studentId: input.studentIdForPoints, points: 150, reason: `Mum of the Week — ${input.recipientName || "parent recognition"}: ${input.evidence}`, sourceType: "PARENT_RECOGNITION_MUM_OF_WEEK", sourceId: award.id, notificationHref: "/parent/rewards" });
-  }
-  const parent = await db.parentProfile.findUnique({ where: { id: input.parentId }, include: { user: true } });
-  if (parent) {
-    const name = input.recipientName || `${parent.user.firstName} ${parent.user.lastName ?? ""}`.trim() || parent.user.email;
-    const href = `/parent-certificates/${award.certificateCode}`;
-    await db.notification.create({ data: { userId: parent.userId, title: "Mum of the Week recognition awarded!", body: `${badge.title}: ${input.evidence}`, href } });
-    if (!parent.user.email.toLowerCase().endsWith("@genmumin.local")) await sendParentRecognitionEmail({ toEmail: parent.user.email, recipientName: name, badgeTitle: badge.title, evidence: input.evidence, certificatePath: href });
   }
   return award;
 }

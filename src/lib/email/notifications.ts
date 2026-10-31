@@ -566,6 +566,7 @@ export async function sendRecognitionEarnedEmail(input: {
   evidence: string;
   pointsBonus: number;
   rewardsPath: string;
+  awardKind?: "badge" | "certificate";
 }) {
   await sendTransactionalEmail({
     toEmail: input.toEmail,
@@ -573,15 +574,15 @@ export async function sendRecognitionEarnedEmail(input: {
     template: "characterRecognitionEarned",
     html: renderGenMuminsEmailTemplate({
       heading: "Character recognition earned!",
-      preview: `${input.studentName} earned the ${input.badgeTitle} badge.`,
+      preview: `${input.studentName} earned the ${input.badgeTitle} ${input.awardKind === "certificate" ? "certificate" : "badge"}.`,
       intro: `Assalamu alaikum ${input.recipientName}, wonderful news: ${input.studentName} has received meaningful character recognition from Gen-Mumin faculty.`,
       sections: [
-        { label: "Badge", value: input.badgeTitle },
+        { label: input.awardKind === "certificate" ? "Certificate" : "Badge", value: input.badgeTitle },
         { label: "Why it was awarded", value: input.evidence },
         { label: "House contribution", value: input.pointsBonus > 0 ? `+${input.pointsBonus} House points` : "Character badge and certificate earned" },
         { label: "Next step", value: "Open Rewards to celebrate the achievement and view the certificate." },
       ],
-      callToAction: { label: "View badge and certificate", href: resolveHref(input.rewardsPath) },
+      callToAction: { label: input.awardKind === "certificate" ? "View certificate" : "View badge and certificate", href: resolveHref(input.rewardsPath) },
     }),
   });
 }
@@ -598,7 +599,7 @@ export async function sendParentRecognitionEmail(input: {
     template: "parentRecognitionEarned",
     html: renderGenMuminsEmailTemplate({
       heading: "Mum of the Week recognition!",
-      preview: `${input.recipientName} earned the ${input.badgeTitle} badge.`,
+      preview: `${input.recipientName} earned the ${input.badgeTitle} certificate.`,
       intro: `Assalamu alaikum ${input.recipientName}, Gen-Mumin faculty is delighted to recognise your positive example and support.`,
       sections: [
         { label: "Recognition", value: input.badgeTitle },

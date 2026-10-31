@@ -1,3 +1,4 @@
+import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import { RecognitionCertificate } from "@/components/dashboard/RecognitionCertificate";
 import { recognitionWeekLabel } from "@/lib/community/recognition-week";
 import { notFound, redirect } from "next/navigation";
@@ -10,7 +11,7 @@ export default async function CertificatePage({ params }: Props) {
   const session = await getCurrentSession(); if (!session) redirect("/auth/login");
   const { code } = await params;
   const award = await db.recognitionAward.findUnique({ where: { certificateCode: code }, include: { student: { include: { user: true, parents: { include: { parent: true } }, houseMembership: true, registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } });
-  if (!award || !award.isPublic || award.revokedAt) notFound();
+  if (!award || (!award.isPublic && session.user.role !== "ADMIN" && !canAwardWeeklyCertificates(session.user)) || award.revokedAt) notFound();
   const allowed = session.user.role === "ADMIN" || session.user.role === "TEACHER" || award.student.userId === session.user.id || award.student.parents.some((link) => link.parent.userId === session.user.id); if (!allowed) notFound();
   const teacher = award.awardedByUserId ? await db.user.findUnique({ where: { id: award.awardedByUserId }, select: { firstName: true, lastName: true } }) : null;
   const name = award.recipientName?.trim() || award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();

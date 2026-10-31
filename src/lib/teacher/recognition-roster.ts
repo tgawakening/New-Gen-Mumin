@@ -18,7 +18,7 @@ export async function teacherRecognitionStudentIds(userId: string) {
 }
 
 export async function notifyRosterTeachersOfAward(input: { id: string; studentId: string; studentName?: string; badgeKey: string; title: string; evidence: string | null; isPublic?: boolean; revokedAt?: Date | null }) {
-  if (input.isPublic === false || input.revokedAt) return;
+  if (input.badgeKey === "MUMIN_OF_WEEK" || input.isPublic === false || input.revokedAt) return;
   const href = `/teacher/recognition?award=${encodeURIComponent(input.id)}&awardStudent=${encodeURIComponent(input.studentId)}&badgeImage=${encodeURIComponent(input.badgeKey)}#roster-awards`;
   if (await db.notification.findFirst({ where: { href }, select: { id: true } })) return;
   const student = input.studentName ? null : await db.studentProfile.findUnique({ where: { id: input.studentId }, include: { user: true } });

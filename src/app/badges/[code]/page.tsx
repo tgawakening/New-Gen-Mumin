@@ -14,6 +14,7 @@ export default async function BadgePage({ params, searchParams }: { params: Prom
   const status = await searchParams;
   const award = await db.recognitionAward.findUnique({ where: { certificateCode: code }, include: { student: { include: { user: true, parents: { include: { parent: true } }, houseMembership: true, registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } });
   if (!award || !award.isPublic || award.revokedAt) notFound();
+  if (award.badgeKey === "MUMIN_OF_WEEK") redirect(`/certificates/${code}`);
   const admin = session.user.role === "ADMIN";
   if (!admin && session.user.role !== "TEACHER" && award.student.userId !== session.user.id && !award.student.parents.some(link => link.parent.userId === session.user.id)) notFound();
   const name = award.recipientName || award.student.displayName || [award.student.user.firstName, award.student.user.lastName].filter(Boolean).join(" ");

@@ -66,9 +66,8 @@ export async function awardRecognition(input: {
   if (definition.key === "MUMIN_OF_WEEK") {
     input = { ...input, pointsBonus: 150 };
     const membership = await ensureStudentHouseMembership(input.studentId);
-    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek }, membership.houseId);
-    if (saved.existing) { await alertRosterTeachers(saved.award); return saved.award; }
-    award = saved.award;
+    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek, isPublic: false }, membership.houseId);
+    return saved.award;
   } else {
     const membership = await ensureStudentHouseMembership(input.studentId);
     const saved = await saveCharacterRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, pointsBonus: input.pointsBonus, featuredWeek: input.featuredWeek, beneficiaryStudentId: input.beneficiaryStudentId }, membership.houseId);

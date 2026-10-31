@@ -10,7 +10,7 @@ function fixture(initial = null, rejectLedger = false) {
     const draft = structuredClone(state);
     const result = await fn({ recognitionAward: {
       findUnique: async () => draft.award,
-      upsert: async ({ create, update }) => draft.award ? Object.assign(draft.award, update) : (draft.award = { ...create, id: "award-1", isPublic: true, revokedAt: null, awardedAt: new Date() }),
+      upsert: async ({ create, update }) => draft.award ? Object.assign(draft.award, update) : (draft.award = { id: "award-1", isPublic: true, revokedAt: null, awardedAt: new Date(), ...create }),
     }, housePointLedger: { createMany: async ({ data }) => {
       if (rejectLedger) throw Error("database failure");
       for (const row of data) if (!draft.ledger.some(x => x.sourceId === row.sourceId && x.studentId === row.studentId)) draft.ledger.push(row);
@@ -44,3 +44,5 @@ test("certificate name can be set and corrected without another points award", a
   await f.save(data, "house-1");
   assert.equal(f.state().award.recipientName, "Updated Student Name");
 });
+
+test("private certificates save without any Qabila credit", async () => { const f = fixture(); await f.save({ ...data, isPublic: false }, "house-1"); assert.equal(f.state().award.isPublic, false); assert.equal(f.state().ledger.length, 0); });

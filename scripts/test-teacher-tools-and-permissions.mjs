@@ -93,6 +93,9 @@ function mumFixture(email) {
   let dashboardReads = 0;
   const empty = () => null;
   const { default: Page } = load("src/app/teacher/parent-recognition/page.tsx", {
+    "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: empty, CertificatePublicationControl: empty, HideWeeklyCertificates: empty },
+    "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
+    "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },
     "@/lib/teacher/recognition-permissions": permission,
     "@/components/dashboard/teacher/RecognitionWeekSelector": { RecognitionWeekSelector: empty },
     "@/lib/community/recognition-week": { currentRecognitionWeek: () => "2026-10-26", validRecognitionWeek: () => true, recognitionWeekLabel: value => value },

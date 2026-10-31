@@ -75,7 +75,7 @@ function BadgeMedallion({ index, earned }: { index: number; earned: boolean }) {
 export function InteractiveRewardsDashboard({ data, parentView = false }: { data: Data; parentView?: boolean }) {
   const name = studentName(data);
   const featured = currentWeeklyRecognition(data.awards);
-  const earnedByKey = new Map([...data.awards].reverse().map((award) => [award.badgeKey, award]));
+  const earnedByKey = new Map([...data.awards].filter(award => award.badgeKey !== "MUMIN_OF_WEEK").reverse().map((award) => [award.badgeKey, award]));
   const nextPoints = data.nextUnlock ? Math.max(0, data.nextUnlock.milestone - data.collective) : 0;
   const unlockTarget = data.nextUnlock?.milestone ?? Math.max(100, data.collective);
   const unlockProgress = data.nextUnlock ? Math.min(100, (data.collective / data.nextUnlock.milestone) * 100) : 100;
@@ -185,7 +185,7 @@ export function InteractiveRewardsDashboard({ data, parentView = false }: { data
         <div className="rounded-[30px] border border-[#eadfce] bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[0.22em] text-[#d2691e]">Collectible character badges</p><h3 className="mt-2 text-2xl font-black text-[#14233e]">What {name} is becoming</h3></div><span className="rounded-full bg-[#fff2de] px-3 py-2 text-xs font-bold text-[#b9651e]">{earnedByKey.size} earned</span></div>
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {data.badgeDefinitions.map((badge, index) => {
+            {data.badgeDefinitions.filter(badge => badge.key !== "MUMIN_OF_WEEK").map((badge, index) => {
               const award = earnedByKey.get(badge.key);
               if (award) return <article key={badge.key} className="min-w-0 rounded-3xl border border-[#eadfce] bg-white p-2 shadow-sm"><EarnedBadgeArtwork name={award.recipientName || name} title={award.title} badgeKey={award.badgeKey} reason={award.evidence || award.description} qabila={data.membership.qabilaGroup} gender={data.resolvedGender} date={new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeZone:"Asia/Karachi"}).format(award.awardedAt)}/><Link href={"/badges/" + award.certificateCode} className="m-2 flex min-h-11 items-center justify-center rounded-full bg-[#22304a] px-3 py-2 text-xs font-bold text-white">View & download badge PNG</Link></article>;
               return (

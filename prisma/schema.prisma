@@ -1205,6 +1205,7 @@ model RecognitionAward {
 model ParentRecognitionAward {
   id                String        @id @default(cuid())
   parentId          String
+  pointsStudentId   String?
   badgeKey          String
   title             String
   description       String
