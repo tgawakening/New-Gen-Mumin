@@ -16,6 +16,7 @@ export function QabilaContributionExplorer({ qabila, highlighted, preview }: { q
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [studentId, setStudentId] = useState("");
+  const [activity, setActivity] = useState("all");
   const [reload, setReload] = useState(0);
   const [data, setData] = useState<QabilaHistory | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,7 +36,7 @@ export function QabilaContributionExplorer({ qabila, highlighted, preview }: { q
     const timeout = window.setTimeout(() => controller.abort(), 15000);
     async function load() {
       setLoading(true); setError("");
-      const query = new URLSearchParams({ qabila, page: String(page) });
+      const query = new URLSearchParams({ qabila, page: String(page), activity });
       if (studentId) query.set("studentId", studentId);
       if (asOf.current) query.set("asOf", asOf.current);
       try {
@@ -48,10 +49,10 @@ export function QabilaContributionExplorer({ qabila, highlighted, preview }: { q
     }
     void load();
     return () => { disposed = true; window.clearTimeout(timeout); controller.abort(); };
-  }, [open, qabila, page, studentId, reload]);
+  }, [open, qabila, page, studentId, activity, reload]);
 
   function showHistory() {
-    asOf.current = null; setPage(1); setStudentId(""); setData(null); setError("");
+    asOf.current = null; setPage(1); setStudentId(""); setActivity("all"); setData(null); setError("");
     dialog.current?.showModal(); setOpen(true);
   }
   function refresh() { asOf.current = null; setPage(1); setReload(value => value + 1); }
@@ -70,14 +71,14 @@ export function QabilaContributionExplorer({ qabila, highlighted, preview }: { q
           <div className="grid grid-cols-3 gap-3">{[["Qabila points", data.totalPoints], ["Members", data.members.length], ["Activities shown", data.totalEvents]].map(([label, value]) => <div key={label} className="rounded-2xl border bg-white p-3"><p className="text-xs text-[#617184]">{label}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>)}</div>
           <details className="rounded-2xl border border-[#dce4ed] bg-white p-4"><summary className="min-h-8 cursor-pointer font-bold">All members and total contributions</summary><p className="mt-2 text-xs leading-5 text-[#617184]">Totals include all recorded credits and adjustments. No recorded points does not necessarily mean no effort.</p><div className="mt-3 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2">{data.members.map(member => <button key={member.id} onClick={() => { setStudentId(member.id); setPage(1); }} className={`flex min-h-11 items-center justify-between gap-3 rounded-xl border p-3 text-left text-sm ${studentId === member.id ? "border-[#c79134] bg-[#fff7df]" : "border-[#e4e9ef] bg-[#f8fafc] hover:border-[#c79134]"}`}><span>{member.name}</span><strong className="shrink-0 tabular-nums">{member.points} pts</strong></button>)}</div></details>
         </> : null}
-        <div className="flex flex-wrap items-end justify-between gap-3"><label className="grid min-w-0 flex-1 gap-2 text-sm font-semibold">Learner<select value={studentId} onChange={event => { setStudentId(event.target.value); setPage(1); }} className="min-h-11 w-full min-w-0 rounded-xl border border-[#d8e3ed] bg-white px-3 py-2"><option value="">All Qabila members</option>{data?.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label><button type="button" disabled={loading} onClick={refresh} className="inline-flex min-h-11 items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" />Refresh</button></div>
+        <div className="flex flex-wrap items-end justify-between gap-3"><label className="grid min-w-0 flex-1 gap-2 text-sm font-semibold">Activity<select value={activity} onChange={event => { setActivity(event.target.value); setPage(1); }} className="min-h-11 w-full min-w-0 rounded-xl border border-[#d8e3ed] bg-white px-3 py-2"><option value="all">All contributions</option><option value="certificates">Weekly certificates</option></select></label><label className="grid min-w-0 flex-1 gap-2 text-sm font-semibold">Learner<select value={studentId} onChange={event => { setStudentId(event.target.value); setPage(1); }} className="min-h-11 w-full min-w-0 rounded-xl border border-[#d8e3ed] bg-white px-3 py-2"><option value="">All Qabila members</option>{data?.members.map(member => <option key={member.id} value={member.id}>{member.name}</option>)}</select></label><button type="button" disabled={loading} onClick={refresh} className="inline-flex min-h-11 items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-semibold disabled:opacity-50"><RefreshCw className="h-4 w-4" />Refresh</button></div>
         {loading ? <p role="status" className="text-sm text-[#617184]">Loading contribution history…</p> : null}
         {error ? <div role="alert" className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">{error}<button onClick={refresh} className="ml-3 font-bold underline">Try again</button></div> : null}
         {data && !error ? <div className={loading ? "opacity-50" : ""} aria-busy={loading}>
-          <div className="space-y-3">{data.events.map(event => <article key={event.id} className="flex items-start justify-between gap-4 rounded-2xl border border-[#dce4ed] bg-white p-4"><div className="min-w-0"><h3 className="font-bold">{event.name}</h3><p className="mt-1 break-words text-sm text-[#617184]">{event.label}</p><Score event={event} /><time dateTime={event.occurredAt} className="mt-2 block text-xs text-[#788596]">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Karachi" }).format(new Date(event.occurredAt))} PKT</time></div><strong className={`shrink-0 text-lg tabular-nums ${event.points < 0 ? "text-[#a54b36]" : "text-[#2d7650]"}`}>{pointsText(event.points)}<span className="block text-right text-xs font-normal text-[#617184]">points</span></strong></article>)}{!data.events.length ? <p className="rounded-2xl border bg-white p-5 text-sm text-[#617184]">No recorded activity for this selection yet.</p> : null}</div>
+          <div className="space-y-3">{data.events.map(event => <article key={event.id} className="flex items-start justify-between gap-4 rounded-2xl border border-[#dce4ed] bg-white p-4"><div className="min-w-0"><h3 className="font-bold">{event.name}</h3><p className="mt-1 break-words text-sm text-[#617184]">{event.label}</p><Score event={event} /><time dateTime={event.occurredAt} className="mt-2 block text-xs text-[#788596]">{new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Karachi" }).format(new Date(event.occurredAt))} PKT</time></div><strong className={`shrink-0 text-lg tabular-nums ${event.points < 0 ? "text-[#a54b36]" : "text-[#2d7650]"}`}>{pointsText(event.points)}<span className="block text-right text-xs font-normal text-[#617184]">points</span></strong></article>)}{!data.events.length ? <p className="rounded-2xl border bg-white p-5 text-sm text-[#617184]">No recorded contributions for this selection. Weekly certificate points appear after publication; private certificates do not contribute points.</p> : null}</div>
           <nav aria-label="Contribution history pages" className="mt-5 flex items-center justify-between gap-2"><button disabled={loading || data.page <= 1} onClick={() => setPage(data.page - 1)} className="inline-flex min-h-11 items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"><ChevronLeft className="h-4 w-4" />Previous</button><span className="text-center text-xs text-[#617184]">Page {data.page} of {data.totalPages}<br />{data.totalEvents} activities</span><button disabled={loading || data.page >= data.totalPages} onClick={() => setPage(data.page + 1)} className="inline-flex min-h-11 items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">Next<ChevronRight className="h-4 w-4" /></button></nav>
         </div> : null}
-        <p className="text-xs leading-5 text-[#788596]">Attendance, tracker submissions, homework and quiz credits come from the points ledger. Quiz bonuses appear separately. History stays at the same snapshot while paging; refresh to see newer activity.</p>
+        <p className="text-xs leading-5 text-[#788596]">Attendance, tracker submissions, homework, quiz and published weekly certificate credits come from the points ledger. Mum certificate points are recorded under the linked child credited to the Qabila. Use the Weekly certificates filter to find older awards. Quiz bonuses appear separately. History stays at the same snapshot while paging; refresh to see newer activity.</p>
       </div>
     </dialog>
   </div>;

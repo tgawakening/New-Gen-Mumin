@@ -14,6 +14,11 @@ export type QabilaHistory = {
 };
 type RawEvent = { id: string; studentId: string; points: number | bigint; reason: string; sourceType: string; occurredAt: Date; correctCount: number | bigint | null; questionCount: number | bigint | null; quizEarnedPoints: number | bigint | null; snapshotCount: number | bigint | null };
 
+export type ContributionActivity = "all" | "certificates";
+function activityFilter(activity: ContributionActivity) {
+  return activity === "certificates" ? Prisma.sql`WHERE sourceType IN ('RECOGNITION_MUMIN_OF_WEEK', 'PARENT_RECOGNITION_MUM_OF_WEEK')` : Prisma.sql``;
+}
+
 export function activityLabel(source: string, reason: string) {
   if (source === "QUIZ_LIVE_ANSWER") return "Live quiz credit (older record)";
   if (source === "TEACHER_CAMERA_STUDY_READY") return "Ready to learn: camera, books and study space";
@@ -92,9 +97,9 @@ function eventQuery(ids: string[], asOf: Date) {
   `;
 }
 
-export async function readContributionEvents(members: Array<{ id: string; name: string }>, asOf: Date, take = 10, skip = 0) {
+export async function readContributionEvents(members: Array<{ id: string; name: string }>, asOf: Date, take = 10, skip = 0, activity: ContributionActivity = "all") {
   if (!members.length) return [];
-  const rows = await db.$queryRaw<RawEvent[]>(Prisma.sql`SELECT * FROM (${eventQuery(members.map(m => m.id), asOf)}) events ORDER BY occurredAt DESC, id DESC LIMIT ${take} OFFSET ${skip}`);
+  const rows = await db.$queryRaw<RawEvent[]>(Prisma.sql`SELECT * FROM (${eventQuery(members.map(m => m.id), asOf)}) events ${activityFilter(activity)} ORDER BY occurredAt DESC, id DESC LIMIT ${take} OFFSET ${skip}`);
   const names = new Map(members.map(m => [m.id, m.name]));
   return rows.map(row => ({
     id: row.id, studentId: row.studentId, name: names.get(row.studentId) || "Learner",
@@ -104,7 +109,7 @@ export async function readContributionEvents(members: Array<{ id: string; name: 
   }));
 }
 
-export async function getQabilaHistory(input: { qabila: QabilaName; page: number; studentId?: string; asOf: Date }): Promise<QabilaHistory> {
+export async function getQabilaHistory(input: { qabila: QabilaName; page: number; studentId?: string; asOf: Date; activity?: ContributionActivity }): Promise<QabilaHistory> {
   const profile = qabilaProfile(input.qabila)!;
   const membership = await db.houseMembership.findMany({
     where: { qabilaGroup: { in: [profile.name, ...profile.legacyNames] } },
@@ -116,10 +121,10 @@ export async function getQabilaHistory(input: { qabila: QabilaName; page: number
   const points = new Map(sums.map(row => [row.studentId, row._sum.points ?? 0]));
   const members = membership.map(m => ({ id: m.studentId, name: m.student.displayName || `${m.student.user.firstName} ${m.student.user.lastName ?? ""}`.trim(), points: points.get(m.studentId) ?? 0 })).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
   const selected = input.studentId ? members.filter(m => m.id === input.studentId) : members;
-  const counts = selected.length ? await db.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`SELECT COUNT(*) AS total FROM (${eventQuery(selected.map(m => m.id), input.asOf)}) events`) : [];
+  const counts = selected.length ? await db.$queryRaw<Array<{ total: bigint }>>(Prisma.sql`SELECT COUNT(*) AS total FROM (${eventQuery(selected.map(m => m.id), input.asOf)}) events ${activityFilter(input.activity ?? "all")}`) : [];
   const totalEvents = Number(counts[0]?.total ?? 0);
   const totalPages = Math.max(1, Math.ceil(totalEvents / 10));
   const page = Math.min(input.page, totalPages);
-  const events = await readContributionEvents(selected, input.asOf, 10, (page - 1) * 10);
+  const events = await readContributionEvents(selected, input.asOf, 10, (page - 1) * 10, input.activity);
   return { qabila: input.qabila, page, pageSize: 10, totalPages, totalEvents, totalPoints: members.reduce((sum, m) => sum + m.points, 0), members, events, asOf: input.asOf.toISOString() };
 }

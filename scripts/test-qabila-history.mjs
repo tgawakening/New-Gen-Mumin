@@ -91,6 +91,34 @@ test("learner filtering returns only that member and rejects unrelated IDs", asy
     await assert.rejects(f.service.getQabilaHistory({ qabila, page: 1, studentId: "outsider", asOf }), /not in this Qabila/);
   } finally { f.close(); }
 });
+
+test("weekly certificate history shows both 150-point credits on the credited child's Qabila without unrelated activity", async () => {
+  const f = fixture(); try {
+    f.add('mumin-certificate', 150, 'RECOGNITION_MUMIN_OF_WEEK', 'mumin-award');
+    f.add('mum-certificate', 150, 'PARENT_RECOGNITION_MUM_OF_WEEK', 'mum-award');
+    for (let i = 0; i < 20; i++) f.add(`newer-homework-${i}`, 10, 'HOMEWORK_SUBMITTED');
+    const history = await f.service.getQabilaHistory({ qabila: 'Qabila Banu Asad', page: 1, asOf, activity: 'certificates' });
+    assert.equal(history.totalEvents, 2); assert.equal(history.totalPages, 1);
+    assert.equal(history.events.reduce((sum, event) => sum + event.points, 0), 300);
+    assert.equal(history.totalPoints, 580);
+    assert.deepEqual(Array.from(history.events, event => event.label).sort(), ['Mum of the Week certificate', 'Mumin of the Week certificate']);
+    assert.ok(history.events.every(event => event.studentId === 'a' && event.name === 'Learner A'));
+    const empty = await f.service.getQabilaHistory({ qabila: 'Qabila Banu Asad', page: 1, asOf, activity: 'certificates', studentId: 'b' });
+    assert.equal(empty.events.length, 0);
+  } finally { f.close(); }
+});
+
+test("weekly certificate filter paginates older credits without changing the Qabila total", async () => {
+  const f = fixture(); try {
+    for (let i = 0; i < 15; i++) f.add(`certificate-${i}`, 150, 'RECOGNITION_MUMIN_OF_WEEK');
+    const first = await f.service.getQabilaHistory({ qabila, page: 1, asOf, activity: 'certificates' });
+    const second = await f.service.getQabilaHistory({ qabila, page: 2, asOf, activity: 'certificates' });
+    assert.equal(first.totalEvents, 15); assert.equal(second.totalPages, 2);
+    assert.equal(first.events.length, 10); assert.equal(second.events.length, 5);
+    assert.equal(new Set([...first.events,...second.events].map(event => event.id)).size,15);
+    assert.equal(first.totalPoints, second.totalPoints);
+  } finally { f.close(); }
+});
 test("history keeps orphaned old ledger credit rather than silently dropping points", async () => {
   const f = fixture(); try {
     f.add("orphan", 7, "QUIZ_LIVE_ANSWER", "removed-response");
@@ -157,4 +185,13 @@ test("contribution endpoint requires a parent, teacher or admin session", async 
 test("endpoint rejects invalid Qabila names, pages and future snapshots", async () => {
   const parent = endpoint({ role: "PARENT" });
   for (const query of ["qabila=unknown", "qabila=Boys%20Qabila%20A&page=-1", "qabila=Boys%20Qabila%20A&page=1.5", "qabila=Boys%20Qabila%20A&asOf=2999-01-01"]) assert.equal((await parent.run(query)).status, 400);
+});
+
+test("certificate activity filter reaches the shared endpoint for every authorized portal", async () => {
+  for (const role of ['PARENT', 'TEACHER', 'ADMIN']) {
+    const route = endpoint({ role });
+    assert.ok((await route.run('qabila=Qabila%20Banu%20Asad&activity=certificates')).body.events);
+    assert.equal(route.received().activity, 'certificates');
+    assert.equal((await route.run('qabila=Qabila%20Banu%20Asad&activity=unknown')).status,400);
+  }
 });

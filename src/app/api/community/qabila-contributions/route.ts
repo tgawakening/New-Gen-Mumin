@@ -13,11 +13,12 @@ export async function GET(request: Request) {
   const query = new URL(request.url).searchParams;
   const qabila = canonicalQabilaName(query.get("qabila"));
   const page = Number(query.get("page") || 1);
+  const activity = query.get("activity") || "all";
   const now = new Date();
   const asOf = query.get("asOf") ? new Date(query.get("asOf")!) : now;
-  if (!qabila || !Number.isSafeInteger(page) || page < 1 || page > 100000 || !Number.isFinite(asOf.getTime()) || asOf > now) return NextResponse.json({ error: "Choose a valid Qabila and page." }, { status: 400, headers });
+  if (!qabila || !["all", "certificates"].includes(activity) || !Number.isSafeInteger(page) || page < 1 || page > 100000 || !Number.isFinite(asOf.getTime()) || asOf > now) return NextResponse.json({ error: "Choose a valid Qabila, activity and page." }, { status: 400, headers });
   try {
-    const history = await getQabilaHistory({ qabila, page, studentId: query.get("studentId") || undefined, asOf });
+    const history = await getQabilaHistory({ qabila, page, studentId: query.get("studentId") || undefined, asOf, activity: activity as "all" | "certificates" });
     return NextResponse.json(history, { headers });
   } catch (error) {
     if (error instanceof Error && error.message === "Learner is not in this Qabila.") return NextResponse.json({ error: error.message }, { status: 400, headers });
