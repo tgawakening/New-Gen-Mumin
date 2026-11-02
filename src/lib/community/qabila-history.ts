@@ -26,6 +26,7 @@ export function activityLabel(source: string, reason: string) {
   if (source === "TEACHER_LIVE_QUIZ_ANSWER") return "Teacher-observed quiz answer";
   if (source === "TEACHER_MANUAL_REVERSAL") return "Teacher award removed: points adjustment";
   if (["QUIZ_LIVE_SESSION", "QUIZ_ATTEMPT", "QUIZ_LIVE_JOIN", "QUIZ", "QUIZ_LIVE_COMPLETE"].includes(source)) return reason;
+  if (source === "SUNNAH_TRACKER") return reason;
   if (source.startsWith("SUNNAH")) return source === "SUNNAH_DAILY" ? "Daily Sunnah tracker submitted" : "Sunnah activity completed";
   if (source.startsWith("FARDH")) return reason;
   if (source.includes("ATTENDANCE")) return source === "ATTENDANCE_PARENT" ? "Attendance confirmed by parent" : "Live class attendance";
@@ -43,13 +44,28 @@ function eventQuery(ids: string[], asOf: Date) {
   const learners = Prisma.join(ids);
   return Prisma.sql`
     SELECT MIN(l.id) AS id, l.studentId, SUM(l.points) AS points,
-      CASE WHEN l.sourceType = 'FARDH_PRAYER' THEN CONCAT('Daily Salah: ', COUNT(*), '/5 prayers (', LEFT(MAX(l.sourceId), 10), ')') ELSE MAX(l.reason) END AS reason,
+      CASE WHEN l.sourceType = 'FARDH_PRAYER' THEN CONCAT('Fardh tracker: ', COUNT(*), '/5 prayers completed (', LEFT(MAX(l.sourceId), 10), ')') ELSE MAX(l.reason) END AS reason,
       l.sourceType, MAX(l.awardedAt) AS occurredAt, NULL AS correctCount, NULL AS questionCount, NULL AS quizEarnedPoints, NULL AS snapshotCount
     FROM HousePointLedger l
-    WHERE l.studentId IN (${learners}) AND l.awardedAt <= ${asOf} AND l.sourceType <> 'QUIZ_LIVE_ANSWER'
+    WHERE l.studentId IN (${learners}) AND l.awardedAt <= ${asOf} AND l.sourceType NOT IN ('QUIZ_LIVE_ANSWER', 'SUNNAH_DAILY', 'SUNNAH_TASK')
       AND (l.sourceType <> 'QUIZ' OR NOT EXISTS (SELECT 1 FROM QuizAttempt a WHERE a.id = l.sourceId AND a.studentId = l.studentId AND a.submittedAt <= ${asOf} AND (a.autoScore IS NOT NULL OR a.manualScore IS NOT NULL)))
     GROUP BY l.studentId, l.sourceType,
       CASE WHEN l.sourceType = 'FARDH_PRAYER' THEN CONCAT('prayer:', l.studentId, ':', LEFT(l.sourceId, 10)) ELSE l.id END
+    UNION ALL
+    SELECT t.id, t.studentId, t.points,
+      CASE WHEN (SELECT COUNT(*) FROM MissionAnswer answer WHERE answer.attemptId = a.id AND answer.createdAt <= ${asOf}) > 0
+        THEN CONCAT('Daily Sunnah tracker: ', t.completedCount, '/', (SELECT COUNT(*) FROM MissionAnswer answer WHERE answer.attemptId = a.id AND answer.createdAt <= ${asOf}), ' Sunnahs completed (', t.dayKey, ')')
+        ELSE CONCAT('Daily Sunnah tracker: ', t.completedCount, ' Sunnahs completed (', t.dayKey, ')') END AS reason,
+      'SUNNAH_TRACKER' AS sourceType, t.occurredAt, NULL, NULL, NULL, NULL
+    FROM (
+      SELECT MIN(l.id) AS id, l.studentId, SUM(l.points) AS points, LEFT(l.sourceId, 10) AS dayKey,
+        COUNT(DISTINCT CASE WHEN l.sourceType = 'SUNNAH_TASK' THEN l.sourceId ELSE NULL END) AS completedCount,
+        MAX(l.awardedAt) AS occurredAt
+      FROM HousePointLedger l
+      WHERE l.studentId IN (${learners}) AND l.awardedAt <= ${asOf} AND l.sourceType IN ('SUNNAH_DAILY', 'SUNNAH_TASK')
+      GROUP BY l.studentId, LEFT(l.sourceId, 10)
+    ) t
+    LEFT JOIN MissionAttempt a ON a.studentId = t.studentId AND a.submissionDay = t.dayKey AND a.submittedAt <= ${asOf}
     UNION ALL
     SELECT CONCAT('quiz:', r.sessionId, ':', r.studentId) AS id, r.studentId,
       COALESCE(SUM(l.points), 0) AS points, COALESCE(MAX(q.title), 'Live quiz') AS reason,

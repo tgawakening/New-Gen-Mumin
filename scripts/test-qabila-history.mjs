@@ -20,6 +20,8 @@ function fixture() {
   sql.function("CONCAT", (...values) => values.join(""));
   sql.function("JSON_UNQUOTE", value => value);
   sql.exec(`CREATE TABLE HousePointLedger(id TEXT, studentId TEXT, points INTEGER, reason TEXT, sourceType TEXT, sourceId TEXT, awardedAt TEXT);
+    CREATE TABLE MissionAttempt(id TEXT, studentId TEXT, submissionDay TEXT, submittedAt TEXT);
+    CREATE TABLE MissionAnswer(id TEXT, attemptId TEXT, createdAt TEXT);
     CREATE TABLE QuizLiveSession(id TEXT, quizId TEXT, status TEXT, endedAt TEXT);
     CREATE TABLE QuizLiveSeat(sessionId TEXT, studentId TEXT, joinedAt TEXT);
     CREATE TABLE QuizAttempt(id TEXT, quizId TEXT, studentId TEXT, submittedAt TEXT, autoScore INTEGER, manualScore INTEGER);
@@ -82,6 +84,54 @@ test("pagination has no duplicate events and excludes activity newer than its sn
     assert.equal(first.events.length, 10); assert.equal(second.events.length, 10);
     assert.equal(new Set([...first.events, ...second.events].map(event => event.id)).size, 20);
     assert.equal(second.totalPoints, 105);
+  } finally { f.close(); }
+});
+
+test("Sunnah daily submission and completed tasks appear once with saved 7/8 count and total credit", async () => {
+  const f = fixture(); try {
+    f.sql.exec("INSERT INTO MissionAttempt VALUES('sunnah','a','2026-10-28','2026-10-28T10:00:00.000Z')");
+    for (let i = 0; i < 8; i++) f.sql.prepare('INSERT INTO MissionAnswer VALUES(?,?,?)').run(`answer-${i}`,'sunnah','2026-10-28T10:00:00.000Z');
+    f.sql.prepare('INSERT INTO MissionAnswer VALUES(?,?,?)').run('future-answer','sunnah','2026-10-30T10:00:00.000Z');
+    f.add('daily',5,'SUNNAH_DAILY','2026-10-28');
+    for (let i = 0; i < 7; i++) f.add(`sunnah-${i}`,10,'SUNNAH_TASK',`2026-10-28:task-${i}`);
+    const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
+    const tracker = history.events.filter(event => event.label.startsWith('Daily Sunnah tracker:'));
+    assert.equal(tracker.length,1);
+    assert.equal(tracker[0].label,'Daily Sunnah tracker: 7/8 Sunnahs completed (2026-10-28)');
+    assert.equal(tracker[0].points,75);
+    assert.equal(history.totalPoints,155); assert.equal(history.totalEvents,7);
+    assert.equal(history.events.reduce((sum,event) => sum + event.points,0),155);
+  } finally { f.close(); }
+});
+
+test("tracker grouping keeps children and days separate and does not invent a missing denominator", async () => {
+  const f = fixture(); try {
+    f.add('daily-a',5,'SUNNAH_DAILY','2026-10-28');
+    f.add('task-a',10,'SUNNAH_TASK','2026-10-28:task');
+    f.add('daily-b',5,'SUNNAH_DAILY','2026-10-28','b');
+    f.add('yesterday',10,'SUNNAH_TASK','2026-10-27:task');
+    const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
+    const tracker = history.events.filter(event => event.label.startsWith('Daily Sunnah tracker:'));
+    assert.equal(tracker.length,3);
+    assert.ok(tracker.some(event => event.studentId === 'b' && event.points === 5 && event.label.includes('0 Sunnahs completed')));
+    assert.ok(tracker.some(event => event.studentId === 'a' && event.points === 15 && event.label.includes('2026-10-28')));
+    assert.ok(tracker.some(event => event.points === 10 && event.label.includes('2026-10-27')));
+    assert.ok(tracker.every(event => !event.label.includes('/')));
+  } finally { f.close(); }
+});
+
+test("Fardh rows combine same-day prayers while certificates remain individual and date descending", async () => {
+  const f = fixture(); try {
+    f.add('mumin-award',150,'RECOGNITION_MUMIN_OF_WEEK','award-a','a','2026-10-28T12:00:00.000Z');
+    f.add('mum-award',150,'PARENT_RECOGNITION_MUM_OF_WEEK','award-b','a','2026-10-28T13:00:00.000Z');
+    const history = await f.service.getQabilaHistory({ qabila, page: 1, asOf });
+    assert.equal(history.events[0].label,'Mum of the Week certificate');
+    assert.equal(history.events[1].label,'Mumin of the Week certificate');
+    assert.equal(history.events[0].points,150); assert.equal(history.events[1].points,150);
+    const prayer = history.events.filter(event => event.label.startsWith('Fardh tracker:'));
+    assert.equal(prayer.length,1); assert.equal(prayer[0].points,40);
+    assert.equal(prayer[0].label,'Fardh tracker: 2/5 prayers completed (2026-10-28)');
+    assert.ok(history.events.every((event,i,events) => !i || event.occurredAt <= events[i-1].occurredAt));
   } finally { f.close(); }
 });
 test("learner filtering returns only that member and rejects unrelated IDs", async () => {
