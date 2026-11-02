@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+import ts from 'typescript';
+import * as jsx from 'react/jsx-runtime';
+
+test('admin uses complete shared dated history and separately fetches older certificate credits', async () => {
+  const exports = {}, dependencies = {}, calls = [], qabila = 'Qabila Banu Asad';
+  const source = fs.readFileSync('src/app/admin/rewards/page.tsx','utf8');
+  for (const match of source.matchAll(/from "([^"]+)"/g)) dependencies[match[1]] = new Proxy({}, { get: () => () => null });
+  const Explorer = () => null;
+  const event = { id:'prayer',studentId:'child',name:'Rehan',points:95,label:'Fardh tracker: 5/5 prayers completed (2026-10-20)',occurredAt:'2026-10-28T12:00:00Z',score:null,quizEarnedPoints:null };
+  const certificate = {...event,id:'certificate',points:150,label:'Mumin of the Week certificate'};
+  dependencies['react/jsx-runtime'] = jsx;
+  dependencies['@/lib/auth/session'] = { getCurrentSession: async () => ({user:{id:'admin',role:'ADMIN'}}) };
+  dependencies['@/lib/community/qabilas'] = { QABILA_NAMES:[qabila],canonicalQabilaName:value=>value===qabila?qabila:null,qabilaProfile:()=>({color:'#087242',image:'/qabila.png',mentor:'Teacher'}) };
+  dependencies['@/lib/community/recognition'] = { HOUSE_UNLOCKS:[] };
+  dependencies['@/lib/community/qabila-duplicates'] = {repairQabilaDuplicates:async()=>{}};
+  dependencies['@/lib/admin/qabila-members'] = {getAdminQabilaMemberships:async()=>[{studentId:'child',qabilaGroup:qabila,student:{displayName:'Rehan',user:{firstName:'Rehan',lastName:''}}}],groupQabilaMembers:()=>[]};
+  dependencies['@/lib/community/qabila-history'] = {readContributionEvents:async(...args)=>{calls.push(args);return args[4]==='certificates'?[certificate]:[event];}};
+  dependencies['@/components/dashboard/family/QabilaContributionExplorer'] = {QabilaContributionExplorer:Explorer};
+  dependencies['@/lib/db'] = {db:{housePointLedger:{groupBy:async()=>[],findMany:async()=>[]},houseUnlock:{findMany:async()=>[]},recognitionAward:{findMany:async()=>[]},notification:{findMany:async()=>[]}}};
+  vm.runInNewContext(ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX}}).outputText,{exports,require:id=>dependencies[id],console,URL});
+  const tree = await exports.default({searchParams:Promise.resolve({qabila})});
+  const nodes=[]; const walk=node=>{if(Array.isArray(node)){node.forEach(walk);return;}if(node&&typeof node==='object'){nodes.push(node);walk(node.props?.children);}};walk(tree);
+  const explorer=nodes.find(node=>node.type===Explorer);
+  assert.ok(explorer);
+  assert.equal(explorer.props.preview[0].label,event.label);
+  assert.equal(explorer.props.certificatePreview[0].points,150);
+  assert.equal(calls.length,2);
+  assert.equal(calls[0][0][0].id,'child');
+  assert.equal(calls[1][4],'certificates');
+});

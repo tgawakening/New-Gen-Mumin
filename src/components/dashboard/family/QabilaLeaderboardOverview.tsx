@@ -34,8 +34,12 @@ async function renderQabilaLeaderboard({ audience }: { audience: "parent" | "tea
   for (const row of weeklyTotals) { const name = qabilaByStudent.get(row.studentId); if (name) weeklyScores.set(name, (weeklyScores.get(name) ?? 0) + (row._sum.points ?? 0)); }
   const rows = (await Promise.all(QABILA_NAMES.map(async (name) => {
     const members = memberships.filter(item => canonicalQabilaName(item.qabilaGroup) === name);
-    const activity = await readContributionEvents(members.map(m => ({ id: m.studentId, name: m.student.displayName || `${m.student.user.firstName} ${m.student.user.lastName ?? ""}`.trim() })), asOf, 3);
-    return { name, profile: qabilaProfile(name)!, points: scores.get(name) ?? 0, weekly: weeklyScores.get(name) ?? 0, members: members.length, activity, highlighted: ownQabilas.has(name) };
+    const learners = members.map(m => ({ id: m.studentId, name: m.student.displayName || `${m.student.user.firstName} ${m.student.user.lastName ?? ""}`.trim() }));
+    const [activity, certificates] = await Promise.all([
+      readContributionEvents(learners, asOf, 3),
+      readContributionEvents(learners, asOf, 2, 0, "certificates"),
+    ]);
+    return { name, profile: qabilaProfile(name)!, points: scores.get(name) ?? 0, weekly: weeklyScores.get(name) ?? 0, members: members.length, activity, certificates, highlighted: ownQabilas.has(name) };
   }))).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));
   const max = Math.max(1, ...rows.map((row) => row.points));
   return <section className="overflow-hidden rounded-[30px] border border-[#d7e1eb] bg-white shadow-[0_18px_50px_rgba(25,48,77,.1)]">
@@ -44,7 +48,7 @@ async function renderQabilaLeaderboard({ audience }: { audience: "parent" | "tea
       <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.05fr)_minmax(210px,.75fr)_minmax(280px,1.2fr)]">
         <div className="flex min-w-0 items-start gap-2 sm:items-center sm:gap-4"><span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base font-black sm:h-12 sm:w-12 sm:rounded-2xl sm:text-xl ${index===0?"bg-[#f1b94f] text-[#142b4a]":"bg-[#e7edf3] text-[#53667d]"}`}>#{index+1}</span><Image src={row.profile.image} alt={row.name} width={62} height={62} className="h-14 w-14 shrink-0 rounded-xl object-cover shadow-sm sm:h-16 sm:w-16 sm:rounded-2xl"/><div className="min-w-0 flex-1"><p className="text-[10px] font-black uppercase tracking-[.16em] text-[#a46626]">Qabila</p><h3 className="mt-0.5 break-words text-base font-black leading-tight text-[#1c304d] sm:text-lg">{row.name.replace(/^Qabila\s+/i, "")}</h3>{index===0?<span className="mt-2 inline-flex rounded-full bg-[#fff0c7] px-2.5 py-1 text-[10px] font-black uppercase tracking-[.1em] text-[#94600d]">Leading</span>:null}<p className="mt-1 text-xs text-[#6d7a8b]">{row.profile.mentor}</p><p className="mt-1 flex items-center gap-1 text-xs font-bold text-[#5e6c7e]"><Users className="h-3.5 w-3.5"/>{row.members} learners</p></div></div>
         <div><div className="flex items-end justify-between gap-3"><div><p className="text-3xl font-black tabular-nums text-[#142b4a]">{row.points}</p><p className="text-[11px] font-bold uppercase tracking-[.12em] text-[#7a8797]">total points</p></div><span className="shrink-0 rounded-full bg-[#eaf7ef] px-3 py-1.5 text-xs font-black text-[#2d7650]"><TrendingUp className="mr-1 inline h-3.5 w-3.5"/>{row.weekly > 0 ? "+" : ""}{row.weekly}</span></div><div className="mt-3 h-2.5 overflow-hidden rounded-full bg-[#e7edf3]"><div className="h-full rounded-full transition-[width] duration-500" style={{width:`${Math.max(4,(row.points/max)*100)}%`,backgroundColor:row.profile.color}}/></div><p className="mt-1 text-right text-[10px] text-[#8490a0]">7-day growth</p></div>
-        <QabilaContributionExplorer qabila={row.name} highlighted={row.highlighted} preview={row.activity} />
+        <QabilaContributionExplorer qabila={row.name} highlighted={row.highlighted} preview={row.activity} certificatePreview={row.certificates} />
       </div>
     </article>)}</div>    <footer className="flex items-center justify-center gap-2 border-t border-[#e3e9ef] bg-[#fffaf2] px-5 py-3 text-center text-xs font-bold text-[#6c604f]"><Sparkles className="h-4 w-4 text-[#c37a27]"/>We compete in good deeds, support one another, and grow together.</footer>
   </section>;

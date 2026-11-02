@@ -134,6 +134,25 @@ test("Fardh rows combine same-day prayers while certificates remain individual a
     assert.ok(history.events.every((event,i,events) => !i || event.occurredAt <= events[i-1].occurredAt));
   } finally { f.close(); }
 });
+
+test("46 prayers entered together remain ten actual tracker days, never 46 prayers for one day", async () => {
+  const f = fixture(); try {
+    f.sql.exec('DELETE FROM HousePointLedger');
+    const prayers = [['fajr',25],['dhuhr',15],['asr',15],['maghrib',15],['isha',25]];
+    for (let i = 0; i < 46; i++) {
+      const day = `2026-10-${18 + Math.floor(i / 5)}`;
+      const [prayer,points] = prayers[i % 5];
+      f.add(`backfill-${i}`,points,'FARDH_PRAYER',`${day}:${prayer}`);
+    }
+    const events = await f.service.readContributionEvents([{id:'a',name:'Learner A'}],asOf,100);
+    const tracker = events.filter(event => event.label.startsWith('Fardh tracker:'));
+    assert.equal(tracker.length,10);
+    assert.equal(tracker.reduce((sum,event) => sum + event.points,0),880);
+    assert.ok(tracker.every(event => /[1-5]\/5 prayers completed/.test(event.label)));
+    assert.ok(tracker.some(event => event.label.includes('2026-10-18')));
+    assert.ok(tracker.some(event => event.label.includes('2026-10-27')));
+  } finally { f.close(); }
+});
 test("learner filtering returns only that member and rejects unrelated IDs", async () => {
   const f = fixture(); try {
     const history = await f.service.getQabilaHistory({ qabila, page: 1, studentId: "b", asOf });

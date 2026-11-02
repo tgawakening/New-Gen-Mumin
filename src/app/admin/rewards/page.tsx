@@ -10,6 +10,8 @@ import { ActionToast } from "@/components/dashboard/ActionToast";
 import { ActivityShortcutLink } from "@/components/dashboard/family/ActivityShortcutLink";
 import { getCurrentSession } from "@/lib/auth/session";
 import { QABILA_NAMES, canonicalQabilaName, qabilaProfile } from "@/lib/community/qabilas";
+import { readContributionEvents } from "@/lib/community/qabila-history";
+import { QabilaContributionExplorer } from "@/components/dashboard/family/QabilaContributionExplorer";
 import { HOUSE_UNLOCKS } from "@/lib/community/recognition";
 import { db } from "@/lib/db";
 import { repairQabilaDuplicates } from "@/lib/community/qabila-duplicates";
@@ -19,16 +21,6 @@ type Props = { searchParams?: Promise<{ notice?: string; tone?: string; qabila?:
 const go = (notice: string, tone: "success" | "error" = "success") => "/admin/rewards?" + new URLSearchParams({ notice, tone });
 const studentName = (student: { displayName: string | null; user: { firstName: string; lastName: string | null } }) => student.displayName || `${student.user.firstName} ${student.user.lastName || ""}`.trim();
 const dayMs = 24 * 60 * 60 * 1000;
-
-function sourceLabel(source: string) {
-  if (source.startsWith("SUNNAH")) return "Sunnah tracker";
-  if (source.startsWith("FARDH")) return "Fardh tracker";
-  if (source.includes("ATTENDANCE")) return "Attendance";
-  if (source.includes("QUIZ")) return "Quiz";
-  if (source.includes("HOMEWORK")) return "Learning task";
-  if (source.includes("RECOGNITION") || source.includes("CROSS_HOUSE")) return "Recognition";
-  return source.replaceAll("_", " ").toLowerCase();
-}
 
 export default async function Page({ searchParams }: Props) {
   const session = await getCurrentSession();
@@ -96,62 +88,12 @@ export default async function Page({ searchParams }: Props) {
     };
   });
   const activeSummary = summaries.find((summary) => summary.name === activeQabila)!;
-  const qabilaLedgerRows = recentLedger.filter((entry) => canonicalQabilaName(entry.student.houseMembership?.qabilaGroup) === activeQabila);
-  type ActivitySummary = {
-    id: string;
-    student: (typeof recentLedger)[number]["student"];
-    studentId: string;
-    points: number;
-    reason: string;
-    sourceType: string;
-    awardedAt: Date;
-    occurrences: number;
-    sunnahTasks: number;
-    sunnahSubmission: boolean;
-  };
-  const activitySummaries = new Map<string, ActivitySummary>();
-  for (const entry of qabilaLedgerRows) {
-    const day = entry.awardedAt.toISOString().slice(0, 10);
-    const category = entry.sourceType.startsWith("SUNNAH_")
-      ? "SUNNAH_SUMMARY"
-      : entry.sourceType.startsWith("FARDH_")
-        ? "FARDH_SUMMARY"
-        : entry.sourceType;
-    const key = `${entry.studentId}:${category}:${day}`;
-    const existing = activitySummaries.get(key);
-    if (existing) {
-      existing.points += entry.points;
-      existing.occurrences += 1;
-      existing.sunnahTasks += entry.sourceType.includes("TASK") ? 1 : 0;
-      existing.sunnahSubmission ||= entry.sourceType.includes("DAILY");
-      continue;
-    }
-    activitySummaries.set(key, {
-      id: entry.id,
-      student: entry.student,
-      studentId: entry.studentId,
-      points: entry.points,
-      reason: entry.reason,
-      sourceType: category,
-      awardedAt: entry.awardedAt,
-      occurrences: 1,
-      sunnahTasks: entry.sourceType.includes("TASK") ? 1 : 0,
-      sunnahSubmission: entry.sourceType.includes("DAILY"),
-    });
-  }
-  const activeLedger = [...activitySummaries.values()]
-    .sort((left, right) => right.awardedAt.getTime() - left.awardedAt.getTime())
-    .slice(0, 40)
-    .map((entry) => ({
-      ...entry,
-      reason: entry.sourceType === "SUNNAH_SUMMARY"
-        ? `${entry.sunnahSubmission ? "Submitted the daily Sunnah tracker" : "Updated the Sunnah tracker"}${entry.sunnahTasks ? ` and completed ${entry.sunnahTasks} Sunnah task${entry.sunnahTasks === 1 ? "" : "s"}` : ""}`
-        : entry.sourceType === "FARDH_SUMMARY"
-          ? `Recorded ${entry.occurrences} Fardh prayer${entry.occurrences === 1 ? "" : "s"} for the day`
-          : entry.occurrences > 1
-            ? `${entry.reason} · ${entry.occurrences} related point entries combined`
-            : entry.reason,
-    }));
+  const historyMembers = memberships.filter(entry => canonicalQabilaName(entry.qabilaGroup) === activeQabila)
+    .map(entry => ({ id: entry.studentId, name: studentName(entry.student) }));
+  const [activeLedger, certificatePreview] = await Promise.all([
+    readContributionEvents(historyMembers, now, 5),
+    readContributionEvents(historyMembers, now, 2, 0, "certificates"),
+  ]);
   const activeAwards = awards.filter((award) => canonicalQabilaName(award.student.houseMembership?.qabilaGroup) === activeQabila).slice(0, 24);
   const overallPoints = summaries.reduce((sum, item) => sum + item.points, 0);
   const overallGrowth = summaries.reduce((sum, item) => sum + item.weeklyGrowth, 0);
@@ -230,8 +172,7 @@ export default async function Page({ searchParams }: Props) {
     </section>
 
     <div className="grid gap-5 xl:grid-cols-[1.25fr_.75fr]">
-      <section className="rounded-[26px] border border-[#dce4ed] bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b66922]">Point ledger</p><h2 className="mt-1 text-xl font-black text-[#22304a]">Recent student contributions</h2></div><Clock3 className="h-7 w-7 text-[#d28738]"/></div><div className="mt-4 space-y-3">{activeLedger.map((entry) => <article id={`activity-${entry.id}`} key={entry.id} className="rounded-2xl border border-[#e4e9ef] bg-[#fbfcfe] p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-black text-[#22304a]">{studentName(entry.student)}</p><p className="mt-1 text-sm leading-5 text-[#617184]">{entry.reason}</p><div className="mt-2 flex flex-wrap gap-2 text-[11px]"><span className="rounded-full bg-[#eef4fa] px-2.5 py-1 font-bold text-[#41607d]">{sourceLabel(entry.sourceType)}</span><span className="px-1 py-1 text-[#8994a2]">{entry.awardedAt.toLocaleString("en-GB")}</span></div></div><span className={`shrink-0 rounded-full px-3 py-1.5 text-sm font-black ${entry.points >= 0 ? "bg-[#e9f7ee] text-[#2f7a4f]" : "bg-[#fff0f0] text-[#b34242]"}`}>{entry.points >= 0 ? "+" : ""}{entry.points}</span></div></article>)}{!activeLedger.length ? <p className="rounded-2xl bg-[#fbf6ef] p-5 text-sm text-[#617184]">No verified point activity for this Qabila yet.</p> : null}</div></section>
-
+      <section className="rounded-[26px] border border-[#dce4ed] bg-white p-5 shadow-sm"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#b66922]">Point ledger</p><h2 className="mt-1 text-xl font-black text-[#22304a]">Student contributions</h2></div><Clock3 className="h-7 w-7 text-[#d28738]"/></div><p className="mt-2 text-sm text-[#617184]">Tracker entries are grouped by learner and tracker date. Open the history to see all dates and certificate credits.</p><div className="mt-4"><QabilaContributionExplorer qabila={activeQabila} highlighted preview={activeLedger} certificatePreview={certificatePreview}/></div></section>
       <section className="rounded-[26px] border border-[#dce4ed] bg-white p-5 shadow-sm"><div><p className="text-xs font-bold uppercase tracking-[.2em] text-[#7a4bb5]">Badges & recognition</p><h2 className="mt-1 text-xl font-black text-[#22304a]">Recent awards</h2></div><div className="mt-4 space-y-3">{activeAwards.map((award) => <article id={`award-${award.id}`} key={award.id} className={`rounded-2xl border p-4 ${award.revokedAt ? "border-[#efcaca] bg-[#fff5f5]" : "border-[#ddd2ef] bg-[#faf7ff]"}`}><div className="flex gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#eee5fb] text-[#7546ad]"><Award className="h-5 w-5"/></span><div><p className="font-black text-[#22304a]">{award.title}</p><p className="text-sm font-semibold text-[#5e6d80]">{studentName(award.student)}</p></div></div><p className="mt-3 text-sm leading-5 text-[#697789]">{award.evidence || award.description}</p>{!award.revokedAt && award.isPublic && <AdminBadgePreview code={award.certificateCode} name={award.recipientName || studentName(award.student)} title={award.title} badgeKey={award.badgeKey} reason={award.evidence || award.description} qabila={award.student.houseMembership?.qabilaGroup} date={new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeZone:"Asia/Karachi"}).format(award.awardedAt)}/>}<div className="mt-3 flex items-center justify-between text-[11px] text-[#8792a0]"><span>{award.sourceType === "AUTOMATIC" ? "Automatic" : "Teacher/Admin"}</span><span>{award.awardedAt.toLocaleDateString("en-GB")}</span></div></article>)}{!activeAwards.length ? <p className="rounded-2xl bg-[#faf7ff] p-5 text-sm text-[#617184]">No recognition recorded for this Qabila yet.</p> : null}</div></section>
     </div>
 
