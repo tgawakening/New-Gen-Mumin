@@ -9,7 +9,7 @@ function fixture({ parent = false, allowed = true, published = false } = {}) {
   const ledger = new Map(published ? [['award', { points: 150 }]] : []), notices = [], emails = [], locks = [];
   const user = { id: 'teacher', role: 'TEACHER', email: allowed ? 'mehranraziq@gmail.com' : 'other@example.com' };
   const awardModel = { findUnique: async () => award, update: async ({ data }) => Object.assign(award, data), findMany: async () => award.isPublic ? [{ id: award.id }] : [] };
-  const student = { id: 'child', userId: 'learner', displayName: 'Learner', user: { email: 'child@example.com', firstName: 'Learner' }, houseMembership: { houseId: 'house' }, parents: [{ parent: { userId: 'mother', user: { email: 'mum@example.com', firstName: 'Mum' } } }] };
+  const student = { id: 'child', userId: 'learner', displayName: 'Learner', user: { email: 'child@example.com', firstName: 'Learner' }, houseMembership: { houseId: 'house', qabilaGroup: 'Qabila Banu Asad' }, parents: [{ parent: { userId: 'mother', user: { email: 'mum@example.com', firstName: 'Mum' } } }] };
   const db = {
     user: { findUnique: async () => user },
     $queryRaw: async (...args) => locks.push(args),
@@ -24,10 +24,23 @@ function fixture({ parent = false, allowed = true, published = false } = {}) {
   db.$transaction = async fn => fn(db);
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/community/certificate-publication.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: id => ({ 'server-only': {}, '@/lib/db': { db }, '@/lib/teacher/recognition-permissions': { canAwardWeeklyCertificates: user => user.email === 'mehranraziq@gmail.com' && user.role === 'TEACHER' }, '@/lib/email/notifications': { sendParentRecognitionEmail: async x => emails.push(x), sendRecognitionEarnedEmail: async x => emails.push(x) } })[id] });
-  return { ...exports, award, ledger, notices, emails, locks, input: { userId: 'teacher', awardId: 'award', parent, isPublic: true } };
+  return { ...exports, award, student, ledger, notices, emails, locks, input: { userId: 'teacher', awardId: 'award', parent, isPublic: true } };
 }
 
 for (const parent of [false, true]) {
+  test(`${parent ? 'Mum' : 'Mumin'} missing public credit is repaired without resending notices; long reasons fit the ledger`, async () => {
+    const f = fixture({ parent, published: true }); f.ledger.clear(); f.award.evidence = 'Excellent effort '.repeat(15);
+    await f.setCertificatePublication(f.input);
+    assert.equal(f.ledger.get('award').points, 150);
+    assert.ok(f.ledger.get('award').reason.length <= 191);
+    assert.equal(f.notices.length, 0); assert.equal(f.emails.length, 0);
+    if (parent) assert.equal(f.award.pointsStudentId, 'child');
+  });
+  test(`${parent ? 'Mum' : 'Mumin'} cannot silently publish without a Qabila credit`, async () => {
+    const f = fixture({ parent }); f.student.houseMembership.qabilaGroup = null;
+    await assert.rejects(f.setCertificatePublication(f.input), /Assign.*Qabila/);
+    assert.equal(f.ledger.size, 0); assert.equal(f.emails.length, 0);
+  });
   test(`${parent ? 'Mum' : 'Mumin'} publication is private until published; retries never duplicate points or notifications`, async () => {
     const f = fixture({ parent });
     assert.equal(f.ledger.size, 0); assert.equal(f.emails.length, 0);

@@ -34,7 +34,12 @@ export async function setCertificatePublication(input: { userId: string; awardId
     const links = parent ? await tx.parentStudent.findMany({ where: { parentId: parent.id }, orderBy: { studentId: "asc" }, include: { student: { include: { houseMembership: true } } } }) : [];
     const studentId = "studentId" in award ? award.studentId : ("pointsStudentId" in award && award.pointsStudentId) || (links.find(link => link.student.houseMembership?.qabilaGroup) ?? links[0])?.studentId;
     const student = studentId ? await tx.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } }) : null;
-    if (student?.houseMembership && (!input.parent || award.badgeKey === "MUM_OF_WEEK")) await tx.housePointLedger.createMany({ data: [{ studentId: student.id, houseId: student.houseMembership.houseId, sourceType, sourceId: award.id, points: 150, reason: `${award.title}: ${award.evidence || "Weekly recognition"}`, awardedAt: award.awardedAt }], skipDuplicates: true });
+    const weekly = !input.parent || award.badgeKey === "MUM_OF_WEEK";
+    if (weekly && !student?.houseMembership?.qabilaGroup) throw new Error("Assign the recipient's child to a Qabila before publishing this weekly certificate. Its 150 points cannot be credited yet.");
+    if (weekly && student?.houseMembership) {
+      if (input.parent) await tx.parentRecognitionAward.update({ where: { id: award.id }, data: { pointsStudentId: student.id } });
+      await tx.housePointLedger.createMany({ data: [{ studentId: student.id, houseId: student.houseMembership.houseId, sourceType, sourceId: award.id, points: 150, reason: `${award.title}: ${award.evidence || "Weekly recognition"}`.slice(0, 191), awardedAt: award.awardedAt }], skipDuplicates: true });
+    }
     const recipients = parent ? [{ userId: parent.userId, email: parent.user.email, name: award.recipientName || parent.user.firstName }]
       : student ? [{ userId: student.userId, email: student.user.email, name: student.displayName || student.user.firstName }, ...student.parents.map(link => ({ userId: link.parent.userId, email: link.parent.user.email, name: link.parent.user.firstName }))] : [];
     if (changed && recipients.length) await tx.notification.createMany({ data: recipients.map(recipient => ({ userId: recipient.userId, title: `${award.title} certificate published!`, body: award.evidence || award.description, href })) });

@@ -16,7 +16,7 @@ export async function saveWeeklyRecognition(data: Prisma.RecognitionAwardUncheck
       await tx.housePointLedger.createMany({ data: [{
         studentId: award.studentId, houseId, points: 150,
         sourceType: "RECOGNITION_MUMIN_OF_WEEK", sourceId: award.id,
-        reason: award.title + ": " + (award.evidence ?? "Weekly character recognition"),
+        reason: (award.title + ": " + (award.evidence ?? "Weekly character recognition")).slice(0, 191),
         awardedAt: award.awardedAt,
       }], skipDuplicates: true });
     }
