@@ -92,7 +92,7 @@ export default async function Page({ searchParams }: Props) {
     .map(entry => ({ id: entry.studentId, name: studentName(entry.student) }));
   const [activeLedger, certificatePreview] = await Promise.all([
     readContributionEvents(historyMembers, now, 5),
-    readContributionEvents(historyMembers, now, 2, 0, "certificates"),
+    readContributionEvents(historyMembers, now, 1, 0, "certificates"),
   ]);
   const activeAwards = awards.filter((award) => canonicalQabilaName(award.student.houseMembership?.qabilaGroup) === activeQabila).slice(0, 24);
   const overallPoints = summaries.reduce((sum, item) => sum + item.points, 0);

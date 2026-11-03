@@ -31,4 +31,5 @@ test('admin uses complete shared dated history and separately fetches older cert
   assert.equal(calls.length,2);
   assert.equal(calls[0][0][0].id,'child');
   assert.equal(calls[1][4],'certificates');
+  assert.equal(calls[1][2],1);
 });

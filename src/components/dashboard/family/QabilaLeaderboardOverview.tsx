@@ -37,7 +37,7 @@ async function renderQabilaLeaderboard({ audience }: { audience: "parent" | "tea
     const learners = members.map(m => ({ id: m.studentId, name: m.student.displayName || `${m.student.user.firstName} ${m.student.user.lastName ?? ""}`.trim() }));
     const [activity, certificates] = await Promise.all([
       readContributionEvents(learners, asOf, 3),
-      readContributionEvents(learners, asOf, 2, 0, "certificates"),
+      readContributionEvents(learners, asOf, 1, 0, "certificates"),
     ]);
     return { name, profile: qabilaProfile(name)!, points: scores.get(name) ?? 0, weekly: weeklyScores.get(name) ?? 0, members: members.length, activity, certificates, highlighted: ownQabilas.has(name) };
   }))).sort((a, b) => b.points - a.points || a.name.localeCompare(b.name));

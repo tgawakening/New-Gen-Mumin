@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import { sendRecognitionEarnedEmail, sendParentRecognitionEmail } from "@/lib/email/notifications";
+import { mumCertificateShares } from "@/lib/community/mum-certificate-points";
 
 // A single switch controls family visibility, notifications and the Qabila credit.
 // Lock the award so concurrent publish requests cannot duplicate notifications.
@@ -20,10 +21,6 @@ export async function setCertificatePublication(input: { userId: string; awardId
     const changed = award.isPublic !== input.isPublic;
     if (input.parent) await tx.parentRecognitionAward.update({ where: { id: award.id }, data: { isPublic: input.isPublic } });
     else await tx.recognitionAward.update({ where: { id: award.id }, data: { isPublic: input.isPublic } });
-    if (input.parent && "parentId" in award && !award.pointsStudentId) {
-      const credit = await tx.housePointLedger.findFirst({ where: { sourceType, sourceId: award.id }, select: { studentId: true } });
-      if (credit) { await tx.parentRecognitionAward.update({ where: { id: award.id }, data: { pointsStudentId: credit.studentId } }); award.pointsStudentId = credit.studentId; }
-    }
     if (!input.isPublic) {
       const legacyParent = input.parent && "parentId" in award ? await tx.parentProfile.findUnique({ where: { id: award.parentId }, select: { userId: true } }) : null;
       await tx.housePointLedger.deleteMany({ where: { sourceType, sourceId: award.id } });
@@ -32,12 +29,19 @@ export async function setCertificatePublication(input: { userId: string; awardId
     }
     const parent = input.parent && "parentId" in award ? await tx.parentProfile.findUnique({ where: { id: award.parentId }, include: { user: true } }) : null;
     const links = parent ? await tx.parentStudent.findMany({ where: { parentId: parent.id }, orderBy: { studentId: "asc" }, include: { student: { include: { houseMembership: true } } } }) : [];
-    const studentId = "studentId" in award ? award.studentId : ("pointsStudentId" in award && award.pointsStudentId) || (links.find(link => link.student.houseMembership?.qabilaGroup) ?? links[0])?.studentId;
+    const studentId = "studentId" in award ? award.studentId : undefined;
     const student = studentId ? await tx.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } }) : null;
-    const weekly = !input.parent || award.badgeKey === "MUM_OF_WEEK";
-    if (weekly && !student?.houseMembership?.qabilaGroup) throw new Error("Assign the recipient's child to a Qabila before publishing this weekly certificate. Its 150 points cannot be credited yet.");
-    if (weekly && student?.houseMembership) {
-      if (input.parent) await tx.parentRecognitionAward.update({ where: { id: award.id }, data: { pointsStudentId: student.id } });
+    if (input.parent && award.badgeKey === "MUM_OF_WEEK") {
+      const shares = mumCertificateShares(links);
+      if (!shares.length) throw new Error("Assign at least one linked child to a Qabila before publishing this Mum certificate.");
+      await tx.housePointLedger.deleteMany({ where: { sourceType, sourceId: award.id } });
+      await tx.housePointLedger.createMany({ data: shares.filter(share => share.points > 0).map(share => ({ ...share,
+        id: `mum-share-${award.id}-${share.studentId}`, sourceType, sourceId: award.id,
+        reason: `${award.title}: family bonus share (${share.points}/150 points)`.slice(0, 191), awardedAt: award.awardedAt,
+      })) });
+      await tx.parentRecognitionAward.update({ where: { id: award.id }, data: { pointsStudentId: null } });
+    } else if (!input.parent) {
+      if (!student?.houseMembership?.qabilaGroup) throw new Error("Assign the recipient's child to a Qabila before publishing this weekly certificate. Its 150 points cannot be credited yet.");
       await tx.housePointLedger.createMany({ data: [{ studentId: student.id, houseId: student.houseMembership.houseId, sourceType, sourceId: award.id, points: 150, reason: `${award.title}: ${award.evidence || "Weekly recognition"}`.slice(0, 191), awardedAt: award.awardedAt }], skipDuplicates: true });
     }
     const recipients = parent ? [{ userId: parent.userId, email: parent.user.email, name: award.recipientName || parent.user.firstName }]
