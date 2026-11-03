@@ -6,6 +6,7 @@ import { qabilaProfile, type QabilaName } from "./qabilas";
 export type ContributionEvent = {
   id: string; studentId: string; name: string; points: number; label: string; occurredAt: string;
   score: { correct: number; total: number; historicalTotal: boolean } | null; quizEarnedPoints: number | null;
+  familyName?: string; familyLabel?: "Mother" | "Parent" | "Parents";
 };
 export type ContributionMember = { id: string; name: string; points: number };
 export type QabilaHistory = {
@@ -117,8 +118,33 @@ export async function readContributionEvents(members: Array<{ id: string; name: 
   if (!members.length) return [];
   const rows = await db.$queryRaw<RawEvent[]>(Prisma.sql`SELECT * FROM (${eventQuery(members.map(m => m.id), asOf)}) events ${activityFilter(activity)} ORDER BY occurredAt DESC, id DESC LIMIT ${take} OFFSET ${skip}`);
   const names = new Map(members.map(m => [m.id, m.name]));
+  const mumRows = rows.filter(row => row.sourceType === "PARENT_RECOGNITION_MUM_OF_WEEK");
+  const muminIds = [...new Set(rows.filter(row => row.sourceType === "RECOGNITION_MUMIN_OF_WEEK").map(row => row.studentId))];
+  const [mumCredits, parentLinks] = await Promise.all([
+    mumRows.length ? db.housePointLedger.findMany({ where: { id: { in: mumRows.map(row => row.id) } }, select: { id: true, sourceId: true } }) : [],
+    muminIds.length ? db.parentStudent.findMany({ where: { studentId: { in: muminIds } }, select: { studentId: true, relation: true, parent: { select: { user: { select: { firstName: true, lastName: true } } } } }, orderBy: { parentId: "asc" } }) : [],
+  ]);
+  const mumAwards = mumCredits.length ? await db.parentRecognitionAward.findMany({
+    where: { id: { in: mumCredits.map(credit => credit.sourceId).filter((id): id is string => Boolean(id)) }, badgeKey: "MUM_OF_WEEK", isPublic: true, revokedAt: null },
+    select: { id: true, recipientName: true, parent: { select: { user: { select: { firstName: true, lastName: true } } } } },
+  }) : [];
+  const fullName = (user: { firstName: string; lastName: string | null }) => `${user.firstName} ${user.lastName || ""}`.trim();
+  const family = (row: RawEvent): { familyName?: string; familyLabel?: "Mother" | "Parent" | "Parents" } => {
+    if (row.sourceType === "PARENT_RECOGNITION_MUM_OF_WEEK") {
+      const award = mumAwards.find(award => award.id === mumCredits.find(credit => credit.id === row.id)?.sourceId);
+      const name = award && (award.recipientName?.trim() || fullName(award.parent.user));
+      return name ? { familyName: name, familyLabel: "Mother" } : {};
+    }
+    if (row.sourceType !== "RECOGNITION_MUMIN_OF_WEEK") return {};
+    const links = parentLinks.filter(link => link.studentId === row.studentId);
+    const mothers = links.filter(link => /^(mother|mum|mom)$/i.test(link.relation?.trim() || ""));
+    const selected = mothers.length ? mothers : links;
+    const parentNames = [...new Set(selected.map(link => fullName(link.parent.user)).filter(Boolean))];
+    return parentNames.length ? { familyName: parentNames.join(", "), familyLabel: mothers.length ? "Mother" : parentNames.length > 1 ? "Parents" : "Parent" } : {};
+  };
   return rows.map(row => ({
     id: row.id, studentId: row.studentId, name: names.get(row.studentId) || "Learner",
+    ...family(row),
     points: Number(row.points), label: activityLabel(row.sourceType, row.reason), occurredAt: new Date(row.occurredAt).toISOString(),
     score: ["QUIZ_LIVE_SESSION", "QUIZ_ATTEMPT"].includes(row.sourceType) && row.correctCount !== null && Number(row.questionCount) > 0 ? { correct: Number(row.correctCount), total: Number(row.questionCount), historicalTotal: !Number(row.snapshotCount) } : null,
     quizEarnedPoints: row.quizEarnedPoints === null ? null : Number(row.quizEarnedPoints),

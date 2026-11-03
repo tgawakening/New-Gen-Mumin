@@ -41,10 +41,13 @@ function fixture() {
   add("prayer1", 25, "FARDH_PRAYER", "2026-10-28:fajr"); add("prayer2", 15, "FARDH_PRAYER", "2026-10-28:dhuhr");
   add("attendance", 20, "ATTENDANCE_ON_TIME"); add("bonus", 10, "QUIZ_LIVE_COMPLETE", "quiz"); add("adjustment", -5, "TEACHER_MANUAL_REVERSAL");
   let membershipQuery;
+  const familyLinks = [], mumAwards = [];
   const names = [{ studentId: "a", student: { displayName: "Learner A", user: { firstName: "A", lastName: "" } } }, { studentId: "b", student: { displayName: "Learner B", user: { firstName: "B", lastName: "" } } }];
   const db = {
+    parentStudent: { findMany: async query => familyLinks.filter(link => query.where.studentId.in.includes(link.studentId)) },
+    parentRecognitionAward: { findMany: async query => mumAwards.filter(award => query.where.id.in.includes(award.id) && award.isPublic && !award.revokedAt) },
     houseMembership: { findMany: async query => { membershipQuery = query; return names; } },
-    housePointLedger: { groupBy: async query => sql.prepare(`SELECT studentId, SUM(points) total FROM HousePointLedger WHERE studentId IN (${query.where.studentId.in.map(() => "?").join(",")}) AND awardedAt <= ? GROUP BY studentId`).all(...query.where.studentId.in, query.where.awardedAt.lte.toISOString()).map(row => ({ studentId: row.studentId, _sum: { points: row.total } })) },
+    housePointLedger: { findMany: async query => sql.prepare(`SELECT id, sourceId FROM HousePointLedger WHERE id IN (${query.where.id.in.map(() => '?').join(',')})`).all(...query.where.id.in), groupBy: async query => sql.prepare(`SELECT studentId, SUM(points) total FROM HousePointLedger WHERE studentId IN (${query.where.studentId.in.map(() => "?").join(",")}) AND awardedAt <= ? GROUP BY studentId`).all(...query.where.studentId.in, query.where.awardedAt.lte.toISOString()).map(row => ({ studentId: row.studentId, _sum: { points: row.total } })) },
     $queryRaw: async query => {
       // Exercise the real grouped query with SQLite fixtures. Adapt only MySQL's LEFT function.
       const text = query.sql.replace(/LEFT\(([^,]+),\s*(\d+)\)/g, "SUBSTR($1, 1, $2)");
@@ -52,7 +55,7 @@ function fixture() {
     },
   };
   const service = load("src/lib/community/qabila-history.ts", { "@prisma/client": { Prisma }, "@/lib/db": { db }, "./qabilas": qabilas });
-  return { service, sql, add, membershipQuery: () => membershipQuery, close: () => sql.close() };
+  return { service, sql, add, familyLinks, mumAwards, membershipQuery: () => membershipQuery, close: () => sql.close() };
 }
 test("history totals reconcile with full quiz scores, prayers, attendance, bonuses and negative adjustments", async () => {
   const f = fixture(); try {
@@ -186,6 +189,33 @@ test("weekly certificate filter paginates older credits without changing the Qab
     assert.equal(first.events.length, 10); assert.equal(second.events.length, 5);
     assert.equal(new Set([...first.events,...second.events].map(event => event.id)).size,15);
     assert.equal(first.totalPoints, second.totalPoints);
+  } finally { f.close(); }
+});
+
+test("certificate rows show the awarded mum's name and a recorded mother below the child's name", async () => {
+  const f = fixture(); try {
+    f.add('mum-share',75,'PARENT_RECOGNITION_MUM_OF_WEEK','mum-award');
+    f.add('mumin-credit',150,'RECOGNITION_MUMIN_OF_WEEK');
+    f.mumAwards.push({id:'mum-award',recipientName:'Javeria Khurram',isPublic:true,revokedAt:null,parent:{user:{firstName:'Account',lastName:'Name'}}});
+    f.familyLinks.push({studentId:'a',relation:'Father',parent:{user:{firstName:'Father',lastName:'Name'}}},{studentId:'a',relation:'Mother',parent:{user:{firstName:'Recorded',lastName:'Mother'}}});
+    const events = await f.service.readContributionEvents([{id:'a',name:'Child'}],asOf,20);
+    const mum=events.find(event=>event.id==='mum-share'), mumin=events.find(event=>event.id==='mumin-credit');
+    assert.equal(mum.name,'Child'); assert.equal(mum.familyName,'Javeria Khurram'); assert.equal(mum.familyLabel,'Mother'); assert.equal(mum.points,75);
+    assert.equal(mumin.familyName,'Recorded Mother'); assert.equal(mumin.familyLabel,'Mother');
+    assert.ok(events.filter(event=>!['mum-share','mumin-credit'].includes(event.id)).every(event=>!event.familyName));
+  } finally { f.close(); }
+});
+
+test("an unspecified guardian is labelled Parent and private mum details are not disclosed", async () => {
+  const f = fixture(); try {
+    f.add('mumin-credit',150,'RECOGNITION_MUMIN_OF_WEEK');
+    f.add('old-mum-credit',75,'PARENT_RECOGNITION_MUM_OF_WEEK','private-award');
+    f.familyLinks.push({studentId:'a',relation:'Guardian',parent:{user:{firstName:'Linked',lastName:'Parent'}}});
+    f.mumAwards.push({id:'private-award',recipientName:'Private Mum',isPublic:false,revokedAt:null,parent:{user:{firstName:'Private',lastName:'Mum'}}});
+    const events=await f.service.readContributionEvents([{id:'a',name:'Child'}],asOf,20);
+    assert.equal(events.find(event=>event.id==='mumin-credit').familyLabel,'Parent');
+    assert.equal(events.find(event=>event.id==='mumin-credit').familyName,'Linked Parent');
+    assert.equal(events.find(event=>event.id==='old-mum-credit').familyName,undefined);
   } finally { f.close(); }
 });
 test("history keeps orphaned old ledger credit rather than silently dropping points", async () => {
