@@ -12,6 +12,7 @@ function load(file, mocks = {}) {
   return exports;
 }
 const policy = load("src/lib/payments/billing-policy.ts");
+const schedules = load("src/lib/payments/manual-billing-schedule.ts");
 test("anniversary on the 31st uses actual month end, then returns to 31st", () => {
   const anchor = new Date("2026-01-31T00:00:00Z");
   const period = policy.recurringPeriod(anchor, new Date("2026-02-28T12:00:00Z"));
@@ -49,7 +50,7 @@ function mailFixture(status = "PENDING", outcome = {skipped:false,failed:false})
   const record = {id:"r",method:"MANUAL",status,billingKey:"b",billingPeriodEnd:new Date(Date.now()+policy.DAY),billingPeriodStart:new Date(),dueDate:new Date(Date.now()+5*policy.DAY),amount:20,currency:"GBP",childName:"Child",programmeTitle:"Gen-Mumin",parent:{user:{email:"parent@example.test",firstName:"Parent",lastName:null}}};
   const changes=[]; let calls=0;
   const db={billingEmailJob:{findMany:async()=>[job],updateMany:async args=>{changes.push(args.data);return {count:1}}},monthlyPaymentRecord:{findUnique:async()=>record,updateMany:async()=>({count:1})}};
-  const mod=load("src/lib/payments/billing-mail.ts",{"@prisma/client":{},"@/lib/db":{db},"@/lib/payments/billing-policy":policy,"@/lib/email/notifications":{sendMonthlyPaymentPendingEmail:async()=>{calls++;return outcome},sendMonthlyPaymentReceiptEmail:async()=>outcome}});
+  const mod=load("src/lib/payments/billing-mail.ts",{"@prisma/client":{},"@/lib/db":{db},"@/lib/payments/billing-policy":policy,"@/lib/payments/manual-billing-schedule":schedules,"@/lib/email/notifications":{sendMonthlyPaymentPendingEmail:async()=>{calls++;return outcome},sendMonthlyPaymentReceiptEmail:async()=>outcome}});
   return {mod,changes,calls:()=>calls};
 }
 test("paid confirmations suppress an already queued reminder",async()=>{const f=mailFixture("ADMIN_ACTIVATED");await f.mod.deliverBillingEmails();assert.equal(f.calls(),0);assert.ok(f.changes.some(c=>c.status==="CANCELLED"));});
@@ -57,7 +58,7 @@ test("failed or skipped provider delivery remains retryable, never sent",async()
 test("successful delivery marks the job sent only after provider success",async()=>{const f=mailFixture();const result=await f.mod.deliverBillingEmails();assert.equal(result.sent,1);assert.equal(f.calls(),1);assert.ok(f.changes.some(c=>c.status==="SENT"&&c.sentAt));});
 test("another worker cannot deliver a job it failed to claim",async()=>{
  const db={billingEmailJob:{findMany:async()=>[{id:"j"}],updateMany:async()=>({count:0})}};
- const mod=load("src/lib/payments/billing-mail.ts",{"@prisma/client":{},"@/lib/db":{db},"@/lib/payments/billing-policy":policy,"@/lib/email/notifications":{sendMonthlyPaymentPendingEmail:async()=>{throw new Error("Must not send")}}});
+ const mod=load("src/lib/payments/billing-mail.ts",{"@prisma/client":{},"@/lib/db":{db},"@/lib/payments/billing-policy":policy,"@/lib/payments/manual-billing-schedule":schedules,"@/lib/email/notifications":{sendMonthlyPaymentPendingEmail:async()=>{throw new Error("Must not send")}}});
  assert.equal((await mod.deliverBillingEmails()).sent,0);
 });
 
@@ -67,8 +68,8 @@ function cycleFixture(gateway = "BANK_TRANSFER") {
  const target={programs:["p"],subscription:null,item:{id:"item",order:{...order,gateway}},student:{id:"student"},amount:20,childName:"Child",programmeTitle:"Gen-Mumin - Full Programme"};
  const db={subscription:{findUnique:async()=>({id:"sub",orderItem:{order,description:"Gen-Mumin"}})},monthlyPaymentRecord:{findMany:async()=>[],findFirst:async({where})=>[...records.values()].find(r=>r.orderItemId===where.orderItemId&&r.monthKey===where.monthKey),findUnique:async({where})=>records.get(where.billingKey),upsert:async({where,update,create})=>{const row=records.has(where.billingKey)?{...records.get(where.billingKey),...update}:{id:"record",...create};records.set(where.billingKey,row);return row;},updateMany:async()=>({count:0})}};
  db.$transaction=async callback=>callback(db);
- const mod=load("src/lib/payments/billing-cycle.ts",{"@prisma/client":{},"@/lib/db":{db},"@/lib/payments/billing-targets":{getBillingTargets:async()=>[target]},"@/lib/payments/billing-policy":policy,"@/lib/payments/billing-mail":{money:(amount,currency)=>currency+" "+amount.toFixed(2),queueBillingReceipt:async(key,payload)=>{if(!receipts.has(key))receipts.set(key,payload)}},"@/lib/payments/charity":{recordCharitySubscriptionPayment:async()=>false}});
- return {mod,records,receipts};
+ const mod=load("src/lib/payments/billing-cycle.ts",{"@prisma/client":{},"@/lib/db":{db},"@/lib/payments/billing-targets":{getBillingTargets:async()=>[target]},"@/lib/payments/billing-policy":policy,"@/lib/payments/manual-billing-schedule":schedules,"@/lib/payments/billing-mail":{money:(amount,currency)=>currency+" "+amount.toFixed(2),queueBillingReceipt:async(key,payload)=>{if(!receipts.has(key))receipts.set(key,payload)}},"@/lib/payments/charity":{recordCharitySubscriptionPayment:async()=>false}});
+ return {mod,records,receipts,target};
 }
 const event={providerSubscriptionId:"sub",providerInvoiceId:"invoice",gateway:"STRIPE",amount:20.99,currency:"GBP",paidAt:new Date("2026-09-01"),initialPayment:false};
 test("a real renewal without enrolment FK queues one exact receipt on replay",async()=>{const f=cycleFixture();await f.mod.recordBillingEvent(event);await f.mod.recordBillingEvent(event);assert.equal(f.records.size,1);assert.equal(f.receipts.size,1);assert.equal([...f.records.values()][0].amount,20.99);assert.equal([...f.receipts.values()][0].totalLabel,"GBP 20.99");});
@@ -98,3 +99,10 @@ test("manual first month is covered; next anniversary creates one pending fee on
 });
 
 test("automatic accounts never get speculative monthly pending fees",async()=>{const f=cycleFixture("STRIPE");await f.mod.createBillingCycleRecords(new Date("2026-09-20"));assert.equal(f.records.size,0);});
+
+test("a fixed-date reminder can prepare the upcoming renewal two days early without rebilling the paid first month",async()=>{
+ const f=cycleFixture();f.target.student.countryCode='PK';f.target.item.order.currency='PKR';f.target.item.order.paidAt=new Date('2026-10-20');f.target.item.order.createdAt=new Date('2026-10-20');
+ await f.mod.createBillingCycleRecords(new Date('2026-11-17T04:00:00Z'));assert.equal(f.records.size,0);
+ await f.mod.createBillingCycleRecords(new Date('2026-11-18T04:00:00Z'));await f.mod.createBillingCycleRecords(new Date('2026-11-18T04:00:00Z'));
+ assert.equal(f.records.size,1);const row=[...f.records.values()][0];assert.equal(row.billingPeriodStart.toISOString(),'2026-11-20T00:00:00.000Z');assert.equal(row.dueDate.toISOString(),'2026-11-20T18:59:59.999Z');assert.equal(row.metadata.manualBillingSchedule.reminderAt,'2026-11-18T04:00:00.000Z');assert.equal(row.amount,20);
+});

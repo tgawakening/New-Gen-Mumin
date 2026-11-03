@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { sendMonthlyPaymentPendingEmail, sendMonthlyPaymentReceiptEmail } from "@/lib/email/notifications";
 import { DAY } from "@/lib/payments/billing-policy";
+import { manualBillingDates, scheduledManualStage } from "@/lib/payments/manual-billing-schedule";
 
 type Receipt = Parameters<typeof sendMonthlyPaymentReceiptEmail>[0];
 export async function queueBillingReceipt(key: string, payload: Receipt) {
@@ -20,17 +21,22 @@ export async function deliverBillingEmails(limit = 20) {
     try {
       let result;
       if (job.kind === "MANUAL") {
-        const record = await db.monthlyPaymentRecord.findUnique({ where: { id: job.recordId! }, include: { parent: { include: { user: true } } } });
+        const record = await db.monthlyPaymentRecord.findUnique({ where: { id: job.recordId! }, include: { parent: { include: { user: true } }, student: { include: { user: true } } } });
         // Never remind paid, cancelled, superseded or automatic-payment accounts.
         if (!record || record.method !== "MANUAL" || record.status !== "PENDING" || !record.billingKey || record.billingPeriodEnd <= now) {
           await db.billingEmailJob.updateMany({ where: { id: job.id, lockToken: token }, data: { status: "CANCELLED", lockedUntil: null } }); continue;
         }
         const data = job.payload as { stage: string };
+        const schedule = manualBillingDates(record, record.billingPeriodStart);
+        if (schedule && scheduledManualStage(schedule, now) !== data.stage) {
+          await db.billingEmailJob.updateMany({ where: { id: job.id, lockToken: token }, data: { status: "CANCELLED", lockedUntil: null } }); continue;
+        }
+        const dueDate = schedule?.dueDate ?? record.dueDate;
         result = await sendMonthlyPaymentPendingEmail({
           toEmail: record.parent.user.email, parentName: [record.parent.user.firstName, record.parent.user.lastName].filter(Boolean).join(" "),
           monthLabel: record.billingPeriodStart.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "Asia/Karachi" }),
-          totalLabel: money(record.amount, record.currency), dueDateLabel: record.dueDate.toLocaleDateString("en-GB", { timeZone: "Asia/Karachi", dateStyle: "long" }),
-          reference: record.id, reminder: data.stage !== "initial", overdue: now > record.dueDate,
+          totalLabel: money(record.amount, record.currency), dueDateLabel: dueDate.toLocaleDateString("en-GB", { timeZone: "Asia/Karachi", dateStyle: "long" }),
+          reference: record.id, reminder: data.stage !== "initial", overdue: now > dueDate,
           rows: [{ childName: record.childName, programmeTitle: record.programmeTitle, amountLabel: money(record.amount, record.currency) }],
           deduplicationKey: job.key,
         });

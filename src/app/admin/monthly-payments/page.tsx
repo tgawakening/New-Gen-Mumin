@@ -40,6 +40,14 @@ function formatDate(value: Date | null) {
   return value ? new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: "UTC" }).format(value) : "Pending";
 }
 
+function reminderLabel(metadata: unknown) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const schedule = (metadata as { manualBillingSchedule?: { reminderAt?: unknown } }).manualBillingSchedule;
+  if (typeof schedule?.reminderAt !== "string") return null;
+  const date = new Date(schedule.reminderAt);
+  return Number.isFinite(+date) ? formatDate(date) : null;
+}
+
 function noticeHref(message: string, tone: "success" | "error" = "success", month?: string, status?: string) {
   const params = new URLSearchParams({ notice: message, tone });
   if (month) params.set("month", month);
@@ -166,7 +174,7 @@ export default async function AdminMonthlyPaymentsPage({ searchParams }: PagePro
                     <td className="px-4 py-3">{record.programmeTitle}</td>
                     <td className="px-4 py-3">{record.method} {record.gateway ? `- ${record.gateway}` : ""}</td>
                     <td className="px-4 py-3 font-semibold text-[#22304a]">{monthlyPaymentDisplay(record)}</td>
-                    <td className="px-4 py-3">{formatDate(record.dueDate)}</td>
+                    <td className="px-4 py-3">{formatDate(record.dueDate)}{reminderLabel(record.metadata)&&<span className="mt-1 block text-xs text-[#617184]">Reminder: {reminderLabel(record.metadata)}</span>}</td>
                     <td className="px-4 py-3">{formatDate(record.paidAt ?? record.activatedAt)}</td>
                     <td className="px-4 py-3">
                       {record.gateway === "STRIPE" && record.providerSubscriptionId ? (

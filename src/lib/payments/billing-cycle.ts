@@ -1,13 +1,32 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { PaymentGateway } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getBillingTargets } from "@/lib/payments/billing-targets";
 import { allocateAmount, DAY, recurringPeriod, reminderStage, trustedReceiptUrl } from "@/lib/payments/billing-policy";
 import { money, queueBillingReceipt } from "@/lib/payments/billing-mail";
 import { recordCharitySubscriptionPayment } from "@/lib/payments/charity";
+import { manualBillingDates, manualScheduleMetadata, scheduledManualStage } from "@/lib/payments/manual-billing-schedule";
+
+export async function reconcileManualBillingDates(parentId?: string) {
+  const records = await db.monthlyPaymentRecord.findMany({ where: { ...(parentId ? { parentId } : {}), method: "MANUAL", status: { in: ["PENDING", "FAILED"] }, billingPeriodEnd: { gt: new Date("2026-11-01T00:00:00Z") } }, include: { parent: { include: { user: true } }, student: { include: { user: true } } } });
+  let updated = 0;
+  for (const record of records) {
+    const schedule = manualBillingDates(record, record.billingPeriodStart);
+    if (!schedule) continue;
+    const metadata = record.metadata && typeof record.metadata === "object" && !Array.isArray(record.metadata) ? record.metadata : {};
+    const next = manualScheduleMetadata(schedule);
+    const saved = metadata.manualBillingSchedule;
+    if (+record.dueDate === +schedule.dueDate && saved && typeof saved === "object" && !Array.isArray(saved) && saved.version === next.version && saved.rule === next.rule && saved.reminderAt === next.reminderAt && saved.dueDate === next.dueDate) continue;
+    const result = await db.monthlyPaymentRecord.updateMany({ where: { id: record.id, method: "MANUAL", status: record.status, dueDate: record.dueDate }, data: { dueDate: schedule.dueDate, metadata: { ...metadata, manualBillingSchedule: next } as Prisma.InputJsonValue } });
+    updated += result.count;
+  }
+  return updated;
+}
 
 export async function createBillingCycleRecords(now = new Date(), parentId?: string) {
+  const schedulesUpdated = await reconcileManualBillingDates(parentId);
   const targets = await getBillingTargets(parentId);
   const selected = new Set(targets.map(t => t.item.id));
   const old = await db.monthlyPaymentRecord.findMany({ where: { ...(parentId ? { parentId } : {}), status: "PENDING", method: "MANUAL" }, select: { id: true, orderItemId: true } });
@@ -21,7 +40,14 @@ export async function createBillingCycleRecords(now = new Date(), parentId?: str
     if (!manual) continue;
     if (target.amount <= 0) continue;
     const anchor = item.order.paidAt ?? item.order.createdAt;
-    const period = recurringPeriod(anchor, now);
+    const current = recurringPeriod(anchor, now);
+    const upcoming = recurringPeriod(anchor, new Date(now.getTime() + 2 * DAY));
+    const upcomingSchedule = manualBillingDates({ ...target, parent: item.order.parent, currency: item.order.currency }, upcoming.start);
+    const periods = [current];
+    if (+upcoming.start > +now && upcoming.key !== current.key && upcomingSchedule && upcomingSchedule.reminderDate <= now) periods.push(upcoming);
+    for (const period of periods) {
+    const schedule = manualBillingDates({ ...target, parent: item.order.parent, currency: item.order.currency }, period.start);
+    const dueDate = schedule?.dueDate ?? period.due;
     // The original completed order already pays for the first billing period.
     if (period.start <= anchor || period.start.toISOString().slice(0,10) === anchor.toISOString().slice(0,10)) continue;
     const billingKey = "cycle:" + createHash("sha256").update(student.id + ":" + target.programs.slice().sort().join(",") + ":" + period.key).digest("hex");
@@ -31,7 +57,7 @@ export async function createBillingCycleRecords(now = new Date(), parentId?: str
       if (["PAID", "ADMIN_ACTIVATED", "ACTIVE"].includes(legacy.status)) continue;
       if (legacy.billingKey !== billingKey && legacy.status === "PENDING") {
         const existing = await db.monthlyPaymentRecord.findUnique({ where: { billingKey } });
-        if (!existing) await db.monthlyPaymentRecord.update({ where: { id: legacy.id }, data: { billingKey, method: manual ? "MANUAL" : "AUTO", dueDate: manual ? period.due : period.start, amount: target.amount, programmeTitle: target.programmeTitle, billingPeriodStart: period.start, billingPeriodEnd: period.end } });
+        if (!existing) await db.monthlyPaymentRecord.update({ where: { id: legacy.id }, data: { billingKey, method: "MANUAL", dueDate, amount: target.amount, programmeTitle: target.programmeTitle, billingPeriodStart: period.start, billingPeriodEnd: period.end } });
       }
       await db.monthlyPaymentRecord.updateMany({ where: { orderItemId: item.id, monthKey: period.key, id: { not: legacy.id }, status: "PENDING", billingKey: null }, data: { status: "CANCELLED", adminNote: "Duplicate pending billing row superseded." } });
       continue;
@@ -40,24 +66,32 @@ export async function createBillingCycleRecords(now = new Date(), parentId?: str
       billingKey, parentId: item.order.parentId, studentId: student.id, orderItemId: item.id,
       subscriptionId: subscription?.id, providerSubscriptionId: subscription?.providerSubscriptionId,
       monthKey: period.key, billingPeriodStart: period.start, billingPeriodEnd: period.end,
-      dueDate: manual ? period.due : period.start, status: "PENDING", method: manual ? "MANUAL" : "AUTO", gateway: item.order.gateway,
+      dueDate, status: "PENDING", method: "MANUAL", gateway: item.order.gateway,
       amount: target.amount, currency: item.order.currency, childName: target.childName, programmeTitle: target.programmeTitle,
-      metadata: { source: "billing-cycle-v2", orderNumber: item.order.orderNumber },
+      metadata: { source: "billing-cycle-v2", orderNumber: item.order.orderNumber, ...(schedule ? { manualBillingSchedule: manualScheduleMetadata(schedule) } : {}) },
     } }); created++;
+    }
   }
-  return { created };
+  return { created, schedulesUpdated };
 }
 
 export async function queueManualReminders(now = new Date()) {
-  const records = await db.monthlyPaymentRecord.findMany({ where: { method: "MANUAL", status: "PENDING", billingKey: { not: null }, billingPeriodStart: { lte: now }, billingPeriodEnd: { gt: now } }, include: { parent: { include: { user: true } } } });
+  const records = await db.monthlyPaymentRecord.findMany({ where: { method: "MANUAL", status: "PENDING", billingKey: { not: null }, billingPeriodStart: { lte: new Date(now.getTime() + 2 * DAY) }, billingPeriodEnd: { gt: now } }, include: { parent: { include: { user: true } }, student: { include: { user: true } } } });
+  let reminded = 0;
   for (const record of records) {
-    const stage = reminderStage(record.billingPeriodStart, now)!;
+    const schedule = manualBillingDates(record, record.billingPeriodStart);
+    const stage = schedule ? scheduledManualStage(schedule, now) : reminderStage(record.billingPeriodStart, now);
+    if (!stage) {
+      await db.billingEmailJob.updateMany({ where: { recordId: record.id, kind: "MANUAL", status: { in: ["PENDING", "PROCESSING"] } }, data: { status: "CANCELLED" } });
+      continue;
+    }
     // Cancel older queued reminder stages so a provider outage cannot cause a burst.
     const key = "billing:manual:" + record.id + ":" + stage;
     await db.billingEmailJob.updateMany({ where: { recordId: record.id, kind: "MANUAL", status: "PENDING", key: { not: key } }, data: { status: "CANCELLED" } });
     await db.billingEmailJob.upsert({ where: { key }, update: {}, create: { key, kind: "MANUAL", recordId: record.id, toEmail: record.parent.user.email, payload: { stage } } });
+    reminded++;
   }
-  return { reminded: records.length };
+  return { reminded };
 }
 
 export type AutoBillingEvent = {
