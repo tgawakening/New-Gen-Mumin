@@ -33,4 +33,9 @@ test('teachers cannot download another teacher receipt or draft evidence',async(
 test('only finance admins can view draft receipts; download is private',async()=>{const admin=proofHarness({user:{id:'admin',role:'ADMIN'},finance:true});const response=await admin.run('?draft=1&download=1');assert.equal(admin.downloaded,'draft-receipt');assert.match(response.headers.get('content-disposition'),/^attachment/);assert.equal(response.headers.get('cache-control'),'private, no-store');const denied=proofHarness({user:{id:'admin',role:'ADMIN'}});assert.equal((await denied.run()).status,404);});
 test('signed-out receipt access is denied',async()=>{const h=proofHarness({user:null});assert.equal((await h.run()).status,401);assert.equal(h.downloaded,null);});
 
+test('Communications can view only their own published receipt, never another recipient or draft',async()=>{
+ const owner=proofHarness({user:{id:'owner',role:'COMMUNICATIONS'}});assert.equal((await owner.run('?draft=1')).status,200);assert.equal(owner.downloaded,'published-receipt');
+ const other=proofHarness({user:{id:'other',role:'COMMUNICATIONS'}});assert.equal((await other.run()).status,404);assert.equal(other.downloaded,null);
+});
+
 test('only publication queues one durable teacher email per published revision',async()=>{const h=harness();await h.service.savePayroll(h.form());assert.equal(h.emails.length,0);await h.service.savePayroll(h.form('publish',1));assert.equal(h.emails.length,1);assert.equal(h.emails[0].key,'payroll:slip:2');assert.equal(h.emails[0].toEmail,'teacher@example.test');assert.equal(h.emails[0].status,'PAYROLL_PENDING');await h.service.savePayroll(h.form('save',2));assert.equal(h.emails.length,1);await h.service.savePayroll(h.form('publish',3));assert.equal(h.emails.length,2);assert.equal(h.emails[1].key,'payroll:slip:4');});

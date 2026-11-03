@@ -12,6 +12,7 @@ export async function POST(request: NextRequest) {
   const result = await savePayroll(await request.formData());
   if (result.published) after(async () => { try { await deliverPayrollEmails(10,result.id); } catch (error) { console.error("[teacher-payroll] Email remains queued",error); } });
   revalidatePath("/admin/payroll"); revalidatePath("/teacher"); revalidatePath("/teacher/payroll");
+  revalidatePath("/communications"); revalidatePath("/communications/payroll");
   return NextResponse.json(result);
  } catch(error) {
   console.error("[teacher-payroll] Save failed",error);

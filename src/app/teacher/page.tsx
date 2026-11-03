@@ -2,11 +2,12 @@ import { TeacherTeachingTools } from "@/components/dashboard/teacher/TeacherTeac
 import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import { Suspense } from "react";
 import { TeacherBadgeOverview } from "@/components/dashboard/teacher/TeacherBadgeOverview";
-import Link from "next/link";
+
 import { publishedPayslips } from "@/lib/payroll/service";
-import { PayslipCard } from "@/components/payroll/PayslipCard";
-import { monthLabel, pounds, type PayrollSnapshot } from "@/lib/payroll/calculation";
-import { ChevronDown } from "lucide-react";
+import { PayrollOverview } from "@/components/payroll/PayrollOverview";
+import { payslipInitiallyOpen } from "@/lib/payroll/presentation";
+import { type PayrollSnapshot } from "@/lib/payroll/calculation";
+
 import { redirect } from "next/navigation";
 
 import { getCurrentSession, getDashboardHome } from "@/lib/auth/session";
@@ -25,8 +26,7 @@ export default async function TeacherDashboardPage() {
 
   const dashboard = await getTeacherDashboardData(session.user.id);
   if (!dashboard) redirect("/teacher-registration");
-  const latestPayslip = (await publishedPayslips(session.user.id, 1))[0];
-  const payslipSnapshot = latestPayslip?.publishedData as unknown as PayrollSnapshot | undefined;
+  const payslips = (await publishedPayslips(session.user.id, 120)).map(slip => ({id:slip.id,month:slip.month,publishedAt:slip.publishedAt!.toISOString(),snapshot:slip.publishedData as unknown as PayrollSnapshot}));
   const qabilas = await db.communityRoomSupervisor.findMany({
     where: { userId: session.user.id, room: { isActive: true, type: "PROJECT_TEAM" } },
     orderBy: { room: { title: "asc" } },
@@ -40,26 +40,9 @@ export default async function TeacherDashboardPage() {
       navItems={getTeacherNavItems()}
     >
       <FamilyJourneyLinks role="teacher" />
+      {payslips.length > 0 && <PayrollOverview userId={session.user.id} slips={payslips} initiallyOpen={payslipInitiallyOpen(payslips[0].publishedAt,null)}/>}
       <TeacherTeachingTools canAwardCertificates={canAwardWeeklyCertificates(session.user)} />
       <TeacherBadgeOverview canAwardCertificates={canAwardWeeklyCertificates(session.user)} />
-      {latestPayslip && payslipSnapshot && (
-        <details className="group rounded-2xl border border-[#eadfce] bg-white shadow-sm">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-2xl px-4 py-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#22304a] sm:px-5 [&::-webkit-details-marker]:hidden">
-            <span className="min-w-0">
-              <span className="block text-sm font-semibold text-[#22304a]">{monthLabel(payslipSnapshot.month)} payslip</span>
-              <span className="mt-1 block text-xs text-[#617184]"><span className="group-open:hidden">View payslip details</span><span className="hidden group-open:inline">Hide payslip details</span></span>
-            </span>
-            <span className="flex shrink-0 items-center gap-3">
-              <span className="whitespace-nowrap text-sm font-semibold text-emerald-800">{pounds(payslipSnapshot.totals.totalPence)} paid</span>
-              <ChevronDown aria-hidden="true" className="h-5 w-5 text-[#617184] transition-transform group-open:rotate-180" />
-            </span>
-          </summary>
-          <div className="space-y-3 border-t border-[#eadfce] p-3 sm:p-4">
-            <PayslipCard id={latestPayslip.id} snapshot={payslipSnapshot} />
-            <Link href="/teacher/payroll" className="inline-block text-sm font-semibold underline">View all payslips</Link>
-          </div>
-        </details>
-      )}
       <TeacherHomeDashboard dashboard={dashboard} leaderboard={<Suspense fallback={<p className="text-sm text-slate-500">Loading community overview...</p>}><QabilaLeaderboardOverview audience="teacher" /></Suspense>} qabilas={qabilas.map(({ room }) => ({ id: room.id, title: room.title, members: room.memberships.map((member) => ({ id: member.student.id, name: member.student.displayName || "Learner", role: member.role, active: room.messages.some((message) => message.authorUserId === member.student.userId) })), recentActivity: room.messages.length }))} />
     </TeacherDashboardFrame>
   );

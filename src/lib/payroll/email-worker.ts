@@ -9,7 +9,7 @@ import type { PayrollSnapshot } from "./calculation";
 
 /** Catch up previously published slips, using the published revision, never a later draft version. */
 export async function queuePublishedPayrollEmails() {
- const slips = await db.teacherPayslip.findMany({ where: { publishedAt: { not: null }, teacher: { user: { status: "ACTIVE", role: "TEACHER" } } }, include: { teacher: { include: { user: true } }, revisions: { orderBy: { version: "desc" }, take: 1 } } });
+ const slips = await db.teacherPayslip.findMany({ where: { publishedAt: { not: null }, teacher: { user: { status: "ACTIVE", role: { in: ["TEACHER", "COMMUNICATIONS"] } } } }, include: { teacher: { include: { user: true } }, revisions: { orderBy: { version: "desc" }, take: 1 } } });
  for (const slip of slips) {
   const revision = slip.revisions[0];
   if (slip.publishedData && revision) await queuePayrollEmail(db, slip.id, revision.version, slip.teacher.user.email);
@@ -29,11 +29,11 @@ export async function deliverPayrollEmails(limit = 10, payslipId?: string) {
   try {
    const slip = job.recordId ? await db.teacherPayslip.findUnique({ where: { id: job.recordId }, include: { teacher: { include: { user: true } }, revisions: { orderBy: { version: "desc" }, take: 1 } } }) : null;
    const revision = slip?.revisions[0];
-   if (!slip?.publishedAt || !slip.publishedData || !revision || revision.version !== (job.payload as { version?: number }).version || slip.teacher.user.status !== "ACTIVE" || slip.teacher.user.role !== "TEACHER") {
+   if (!slip?.publishedAt || !slip.publishedData || !revision || revision.version !== (job.payload as { version?: number }).version || slip.teacher.user.status !== "ACTIVE" || !["TEACHER", "COMMUNICATIONS"].includes(slip.teacher.user.role)) {
     await db.billingEmailJob.updateMany({ where: { id: job.id, lockToken: token }, data: { status: "CANCELLED", lockedUntil: null, lockToken: null } }); continue;
    }
    if (!env.success) throw new Error("Payroll email configuration is unavailable");
-   const content = payrollEmailContent(revision.snapshot as unknown as PayrollSnapshot, env.data.APP_URL);
+   const content = payrollEmailContent(revision.snapshot as unknown as PayrollSnapshot, env.data.APP_URL, slip.teacher.user.role === "COMMUNICATIONS" ? "/communications/payroll" : "/teacher/payroll");
    const result = await sendTransactionalEmail({ toEmail: slip.teacher.user.email, ...content, template: "teacherPayrollPublished", deduplicationKey: job.key });
    if (result.skipped || result.failed) throw new Error(result.skipped ? "Payroll email deferred: provider configuration or quota" : "Payroll email provider declined delivery");
    await db.billingEmailJob.updateMany({ where: { id: job.id, lockToken: token }, data: { status: "SENT", toEmail: slip.teacher.user.email, sentAt: new Date(), lockedUntil: null, lockToken: null, lastError: null } });

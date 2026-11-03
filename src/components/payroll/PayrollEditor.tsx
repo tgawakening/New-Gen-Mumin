@@ -1,9 +1,9 @@
 "use client";
 import { useRef, useState } from "react";
-import { calculatePayroll, minutesLabel, type PayrollInput, type PayrollLine, type PayrollSnapshot } from "@/lib/payroll/calculation";
+import { calculatePayroll, minutesLabel, type PayrollInput, type PayrollSnapshot } from "@/lib/payroll/calculation";
 import { PayslipCard } from "./PayslipCard";
 const field="w-full rounded-xl border border-[#cbd9e8] bg-white px-3 py-2 text-sm";
-export function PayrollEditor({teacherId,teacherName,month,initial,initialVersion,initialId,initialFolder,portalMinutes,publishedAt,templates}:{teacherId:string;teacherName:string;month:string;initial:PayrollInput;initialVersion:number;initialId?:string;initialFolder:string;portalMinutes:number;publishedAt:string|null;templates:Array<{key:string;name:string;lines:PayrollLine[]}>}) {
+export function PayrollEditor({teacherId,teacherName,month,initial,initialVersion,initialId,initialFolder,portalMinutes,publishedAt,reference}:{teacherId:string;teacherName:string;month:string;initial:PayrollInput;initialVersion:number;initialId?:string;initialFolder:string;portalMinutes:number;publishedAt:string|null;reference?:PayrollInput}) {
  const [input,setInput]=useState(initial),[version,setVersion]=useState(initialVersion),[id,setId]=useState(initialId),[folder,setFolder]=useState(initialFolder),[pending,setPending]=useState(false),[message,setMessage]=useState(""),[confirmed,setConfirmed]=useState(false),[removeProof,setRemoveProof]=useState(false);
  const file=useRef<HTMLInputElement>(null);
  const paymentDate=useRef<HTMLInputElement>(null);
@@ -32,7 +32,7 @@ export function PayrollEditor({teacherId,teacherName,month,initial,initialVersio
  }
  return <div className="space-y-6"><section className="space-y-5 rounded-3xl border border-[#dce4ec] bg-[#f5f8fa] p-5">
   <div><h2 className="text-xl font-semibold">Prepare {teacherName}&apos;s payslip</h2><p className="mt-1 text-sm text-[#617184]">Edit the proposed figures, review the preview, then publish after payment. Portal recorded time: {minutesLabel(portalMinutes)}.</p>{publishedAt&&<p className="mt-1 text-xs text-emerald-800">A published version exists. Saved draft edits will not change it until you publish again.</p>}</div>
-  {month==="2026-09"&&<label className="block text-sm font-medium">September reference template (optional)<select className={field+" mt-2"} defaultValue="" disabled={pending} onChange={e=>{const t=templates.find(t=>t.key===e.target.value);if(t){setInput(prev=>({...prev,lines:t.lines.map(l=>({...l})),fxRate:prev.fxRate||"375.116",fxDate:prev.fxDate||"2026-09-14",sourceNote:"September payroll reference, reviewed 2 October 2026"}));setConfirmed(false);}e.target.value="";}}><option value="">Choose only if the template matches this teacher</option>{templates.map(t=><option key={t.key} value={t.key}>{t.name}</option>)}</select></label>}
+  {reference&&<div className="flex flex-wrap items-center gap-3 rounded-2xl border bg-white p-4"><p className="flex-1 text-sm text-[#617184]">This teacher&apos;s approved {month} figures are available. Reloading replaces the figures in this editor; review before publishing.</p><button type="button" disabled={pending} onClick={()=>{setInput(prev=>({...prev,...reference,lines:reference.lines.map(line=>({...line})),paidOn:prev.paidOn,paymentReference:prev.paymentReference,note:prev.note}));setConfirmed(false);setMessage("Reference figures loaded. Review and save or publish when ready.");}} className="rounded-full border px-4 py-2 text-sm font-semibold">Load month defaults</button></div>}
   <fieldset disabled={pending} className="space-y-4"><legend className="sr-only">Payroll details</legend>
   {input.lines.map((l,i)=><div key={i} className="rounded-2xl border bg-white p-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
    <label className="text-xs font-semibold">Programme<input className={field+" mt-1"} value={l.label} maxLength={120} onChange={e=>line(i,"label",e.target.value)}/></label>

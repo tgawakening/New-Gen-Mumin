@@ -19,7 +19,7 @@ function fixture({outcome={skipped:false,failed:false},claimed=true,version=2,ac
  return {db,jobs,sent,slip,worker,calls:()=>calls};
 }
 test('email includes exact published hours, sessions, rates, paid amount and private portal link',()=>{
- const {html,subject}=template.payrollEmailContent(snapshot,'https://genmumin.com');assert.match(subject,/September 2026/);for(const text of ['1 hr 50 min','2 hours','5.30110263','\u00a310.60','PKR','30 September 2026','TEST-123','View my payroll slip'])assert.ok(html.includes(text),text);assert.match(html,/https:\/\/genmumin.com\/teacher\/payroll\?month=2026-09/);assert.ok(html.includes('Teacher &lt;script&gt;'));assert.ok(!html.includes('secret-drive-file'));
+ const {html,subject}=template.payrollEmailContent(snapshot,'https://genmumin.com');assert.match(subject,/September 2026/);for(const text of ['2 hours','5.30110263','\u00a310.60','PKR','30 September 2026','TEST-123','View my payroll slip'])assert.ok(html.includes(text),text);assert.match(html,/https:\/\/genmumin.com\/teacher\/payroll\?month=2026-09/);assert.ok(html.includes('Teacher &lt;script&gt;'));assert.ok(!html.includes('secret-drive-file'));assert.ok(!html.includes('Actual teaching time'));assert.ok(!html.includes('1 hr 50 min'));
 });
 test('existing published slips are caught up once; later drafts do not change the email version',async()=>{
  const f=fixture();await f.worker.queuePublishedPayrollEmails();await f.worker.queuePublishedPayrollEmails();assert.equal(f.jobs.length,1);assert.equal(f.jobs[0].key,'payroll:slip:2');await f.worker.deliverPayrollEmails();assert.equal(f.calls(),1);assert.equal(f.jobs[0].status,'SENT');assert.ok(!f.sent[0].html.includes('PRIVATE DRAFT'));await f.worker.queuePublishedPayrollEmails();await f.worker.deliverPayrollEmails();assert.equal(f.calls(),1);
@@ -42,4 +42,13 @@ test('payroll emails reuse the configured sender and permanent delivery deduplic
  const quota={reserveEmailSend:async input=>{assert.equal(input.durableDeduplication,true);return logs.some(l=>l.status==='SENT'&&l.payload?.deduplicationKey===input.deduplicationKey)?{kind:'already-sent'}:{kind:'reserved',id:'reservation'};}};
  const client=load('src/lib/email/client.ts',{'@/lib/email/quota':quota,'@/lib/db':{db},'@/lib/env':{env:{success:true,data:{RESEND_API_KEY:'test-key',EMAIL_FROM:'TGA Finance <finance@example.test>'}}}},{fetch:async(url,options)=>{requests++;assert.equal(JSON.parse(options.body).from,'TGA Finance <finance@example.test>');assert.equal(options.headers['Idempotency-Key'],'payroll:slip:2');return{ok:true,json:async()=>({id:'provider-id'})};}});
  const mail={toEmail:'teacher@example.test',subject:'Payroll',html:'Summary',template:'teacherPayrollPublished',deduplicationKey:'payroll:slip:2'};await client.sendTransactionalEmail(mail);await client.sendTransactionalEmail(mail);assert.equal(requests,1);
+});
+
+test('Communications payroll email links to the existing staff portal without changing account role',async()=>{
+ const f=fixture();f.slip.teacher.user.role='COMMUNICATIONS';
+ await f.worker.queuePublishedPayrollEmails();await f.worker.deliverPayrollEmails();
+ assert.equal(f.calls(),1);assert.ok(f.sent[0].html.includes('/communications/payroll?month=2026-09'));
+ assert.ok(!f.sent[0].html.includes('Actual teaching time'));
+ const {safeJoinReturn}=load('src/lib/auth/join-return.ts');assert.equal(safeJoinReturn('/communications/payroll?month=2026-10'),'/communications/payroll?month=2026-10');
+ assert.equal(safeJoinReturn('/communications/payroll?month=2026-10&next=https://evil.test'),null);
 });

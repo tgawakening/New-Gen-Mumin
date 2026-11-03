@@ -8,7 +8,7 @@ export async function GET(request:NextRequest,{params}:{params:Promise<{id:strin
  const session=await getCurrentSession();
  if(!session)return new NextResponse("Sign in to view payment evidence.",{status:401});
  const admin=session.user.role==="ADMIN" && await canAccessAdminFinance(session.user.id);
- if(!admin && session.user.role!=="TEACHER")return new NextResponse("Not found",{status:404});
+ if(!admin && !["TEACHER","COMMUNICATIONS"].includes(session.user.role))return new NextResponse("Not found",{status:404});
  const {id}=await params;
  const slip=await db.teacherPayslip.findFirst({where:{id,...(!admin?{teacher:{userId:session.user.id,user:{status:"ACTIVE"}},publishedAt:{not:null}}:{})}});
  if(!slip)return new NextResponse("Not found",{status:404});
