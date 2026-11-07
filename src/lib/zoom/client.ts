@@ -544,13 +544,13 @@ export async function getZoomPastMeetingParticipants(meetingId: string) {
   const participants: Array<{ id?: string; user_id?: string; name?: string; user_email?: string; join_time?: string; leave_time?: string; duration?: number }> = [];
   let nextPageToken = "";
   do {
-    const url = new URL("https://api.zoom.us/v2/past_meetings/" + (meetingId.includes("/") ? encodeURIComponent(encodeURIComponent(meetingId)) : encodeURIComponent(meetingId)) + "/participants");
+    const url = new URL("https://api.zoom.us/v2/past_meetings/" + (meetingId.startsWith("/") || meetingId.includes("//") ? encodeURIComponent(encodeURIComponent(meetingId)) : encodeURIComponent(meetingId)) + "/participants");
     url.searchParams.set("page_size", "300");
     if (nextPageToken) url.searchParams.set("next_page_token", nextPageToken);
     const response = await fetch(url, { headers: { Authorization: "Bearer " + accessToken }, cache: "no-store" });
     if (!response.ok) throw new Error("Zoom participant report failed: " + await readZoomError(response));
     const payload = await response.json() as { participants?: typeof participants; next_page_token?: string };
-    participants.push(...(payload.participants ?? []));
+    participants.push(...(payload.participants ?? []).map(row => ({ id: row.id, user_id: row.user_id, name: row.name, user_email: row.user_email, join_time: row.join_time, leave_time: row.leave_time, duration: row.duration })));
     nextPageToken = payload.next_page_token ?? "";
   } while (nextPageToken);
   return participants;
@@ -603,4 +603,12 @@ export async function getZoomTranscriptText(input: { meetingId: string; recordin
   try { for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length; if (size > 2_000_000) throw new Error('Transcript is too large.'); chunks.push(part.value); } }
   finally { await reader.cancel(); }
   return Buffer.concat(chunks).toString('utf8');
+}
+
+export async function getZoomPastMeetingInstances(meetingId: string) {
+  const accessToken = await getZoomAccessToken();
+  const response = await fetch("https://api.zoom.us/v2/past_meetings/" + encodeURIComponent(meetingId) + "/instances", { headers: { Authorization: "Bearer " + accessToken }, cache: "no-store", signal: AbortSignal.timeout(20_000) });
+  if (!response.ok) throw new Error("Zoom occurrence discovery failed: " + await readZoomError(response));
+  const payload = await response.json() as { meetings?: Array<{ uuid: string; start_time: string }> };
+  return payload.meetings ?? [];
 }

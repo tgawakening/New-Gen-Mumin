@@ -1,3 +1,4 @@
+import { ZoomPresenceReport } from "@/components/dashboard/family/ZoomPresenceReport";
 import { AttendanceRecordStatus } from "@/components/dashboard/family/AttendanceRecordStatus";
 import { db } from "@/lib/db";
 import { AttendanceMonthlyReport } from "@/components/dashboard/family/AttendanceMonthlyReport";
@@ -10,7 +11,8 @@ import { getStudentDashboardData } from "@/lib/dashboard/family";
 import { getStudentNavItems } from "@/lib/dashboard/family-nav";
 import { listStudentAttendanceByUser } from "@/lib/live-classes/attendance-reports";
 
-export default async function StudentAttendancePage() {
+export default async function StudentAttendancePage({ searchParams }: { searchParams?: Promise<{ month?: string }> }) {
+  const params = await searchParams ?? {};
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
   if (session.user.role !== "STUDENT") redirect(getDashboardHome(session.user.role));
@@ -21,5 +23,5 @@ export default async function StudentAttendancePage() {
   const totals = attendanceTotals(history, reports);
   const attended = totals.present;
   const minutes = history.reduce((sum, item) => sum + (item.durationMinutes ?? 0), 0);
-  return <FamilyDashboardFrame roleLabel="Student Dashboard" title="Attendance" subtitle="Review every class and your verified Zoom participation time." navItems={getStudentNavItems()} pendingReason={dashboard.pendingReason}><AttendanceRecordStatus records={history} reports={reports}/><MetricGrid metrics={[{ label: "Sessions", value: String(history.length), hint: "Recorded classes." }, { label: "Attended", value: String(attended), hint: "Joined the class." }, { label: "Class time", value: `${minutes} min`, hint: "Verified Zoom time." }, { label: "Confirmed attendance", value: totals.rate === null ? "Pending" : `${totals.rate}%`, hint: `${totals.pending} sessions still unconfirmed.` }]} /><AttendanceMonthlyReport records={history} reports={reports} /><SectionCard eyebrow="Session history" title="My recent attendance"><p className="mb-4 text-sm text-[#617184]">Seerah and Life Skills each count once per Pakistan calendar day. Attend either time slot; joining at any time counts as present. Connection time excludes recorded disconnect gaps. A parent can confirm missing attendance from their Attendance page.</p><AttendanceHistory records={history} /></SectionCard></FamilyDashboardFrame>;
+  return <FamilyDashboardFrame roleLabel="Student Dashboard" title="Attendance" subtitle="Review every class and your verified Zoom participation time." navItems={getStudentNavItems()} pendingReason={dashboard.pendingReason}><ZoomPresenceReport user={session.user} studentId={dashboard.child.id} month={params.month} basePath="/student/attendance"/><AttendanceRecordStatus records={history} reports={reports}/><MetricGrid metrics={[{ label: "Sessions", value: String(history.length), hint: "Recorded classes." }, { label: "Attended", value: String(attended), hint: "Joined the class." }, { label: "Class time", value: `${minutes} min`, hint: "Verified Zoom time." }, { label: "Confirmed attendance", value: totals.rate === null ? "Pending" : `${totals.rate}%`, hint: `${totals.pending} sessions still unconfirmed.` }]} /><AttendanceMonthlyReport records={history} reports={reports} /><SectionCard eyebrow="Session history" title="My recent attendance"><p className="mb-4 text-sm text-[#617184]">Seerah and Life Skills each count once per Pakistan calendar day. Attend either time slot; joining at any time counts as present. Connection time excludes recorded disconnect gaps. A parent can confirm missing attendance from their Attendance page.</p><AttendanceHistory records={history} /></SectionCard></FamilyDashboardFrame>;
 }
