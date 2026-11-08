@@ -97,7 +97,8 @@ model StudentProfile {
   enrollments             Enrollment[]
   houseMembership         HouseMembership?
   housePointLedger        HousePointLedger[]
-  recognitionAwards      RecognitionAward[]
+  recognitionAwards      RecognitionAward[] @relation("PrimaryRecognitionRecipient")
+  sharedRecognitionAwards RecognitionAward[] @relation("SecondaryRecognitionRecipient")
   journalEntries          JournalEntry[]
   missionAttempts         MissionAttempt[]
   parents                 ParentStudent[]
@@ -1186,6 +1187,8 @@ model RecognitionAward {
   evidence        String?
   awardedByUserId String?
   beneficiaryStudentId String?
+  secondStudentId String?
+  certificateKind String?
   sourceType      String
   sourceId        String
   pointsBonus     Int            @default(0)
@@ -1195,8 +1198,10 @@ model RecognitionAward {
   revokedByUserId String?
   certificateCode String         @unique @default(cuid())
   awardedAt       DateTime       @default(now())
-  student         StudentProfile @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  student         StudentProfile @relation("PrimaryRecognitionRecipient", fields: [studentId], references: [id], onDelete: Cascade)
+  secondStudent   StudentProfile? @relation("SecondaryRecognitionRecipient", fields: [secondStudentId], references: [id], onDelete: Restrict)
 
+  @@index([secondStudentId])
   @@unique([studentId, badgeKey, sourceType, sourceId], map: "RecognitionAward_student_badge_source_key")
   @@index([studentId, awardedAt])
   @@index([featuredWeek, isPublic])

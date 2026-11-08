@@ -11,8 +11,9 @@ export async function saveWeeklyRecognition(data: Prisma.RecognitionAwardUncheck
       sourceType: data.sourceType, sourceId: data.sourceId,
     } };
     const previous = await tx.recognitionAward.findUnique({ where });
-    const award = await tx.recognitionAward.upsert({ where, create: { ...data, pointsBonus: 150 }, update: data.recipientName ? { recipientName: data.recipientName } : {} });
-    if (award.isPublic && !award.revokedAt) {
+    if (previous && (previous.secondStudentId ?? null) !== (data.secondStudentId ?? null)) throw new Error("This certificate already has different recipients.");
+    const award = await tx.recognitionAward.upsert({ where, create: { ...data, pointsBonus: 150 }, update: { ...(data.recipientName ? { recipientName: data.recipientName } : {}), ...(data.certificateKind ? { certificateKind: data.certificateKind } : {}) } });
+    if (award.isPublic && !award.revokedAt && !award.secondStudentId) {
       await tx.housePointLedger.createMany({ data: [{
         studentId: award.studentId, houseId, points: 150,
         sourceType: "RECOGNITION_MUMIN_OF_WEEK", sourceId: award.id,

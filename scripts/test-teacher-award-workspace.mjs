@@ -55,9 +55,12 @@ test("unassigned teachers see an explanation instead of an unusable form", () =>
 
 async function workspace(params = {}, email = "mehranraziq@gmail.com") {
   const AwardForm = () => null;
-  let writes = 0;
+  let writes = 0; const inputs = [];
   const definition = [{ key: "MUMIN_OF_WEEK", title: "Mumin of the Week" }, ...badges];
   const { default: Page } = load("src/app/teacher/recognition/page.tsx", {
+    "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: icon, CertificatePublicationControl: icon, HideWeeklyCertificates: icon },
+    "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
+    "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },
     "@/lib/teacher/recognition-permissions": load("src/lib/teacher/recognition-permissions.ts", {}),
     "@/components/dashboard/teacher/AwardBadgeForm": { AwardBadgeForm: AwardForm },
     "@/components/dashboard/teacher/RosterAwards": { RosterAwards: icon },
@@ -73,7 +76,7 @@ async function workspace(params = {}, email = "mehranraziq@gmail.com") {
     "@/components/dashboard/teacher/TeacherRewardWorkspaceTabs": { TeacherRewardWorkspaceTabs: icon },
     "@/lib/auth/session": { getCurrentSession: async () => ({ user: { id: "teacher", role: "TEACHER", email } }), getDashboardHome: () => "/" },
     "@/lib/community/recognition-points": { BADGE_POINT_BONUSES: { MUMIN_OF_WEEK: 150, HELPER: 10 } },
-    "@/lib/community/recognition": { CHARACTER_BADGES: definition, awardRecognition: async () => { writes++; return { certificateCode: "code" }; } },
+    "@/lib/community/recognition": { CHARACTER_BADGES: definition, awardRecognition: async input => { writes++; inputs.push(input); return { certificateCode: "code" }; } },
     "@/lib/community/point-awards": { pointDayKey: () => "2026-10-25" },
     "@/lib/teacher/dashboard": { getTeacherDashboardData: async () => ({ rosters: [{ students }] }) },
     "@/lib/teacher/nav": { getTeacherNavItems: () => [] },
@@ -82,11 +85,11 @@ async function workspace(params = {}, email = "mehranraziq@gmail.com") {
   const tree = await Page({ searchParams: Promise.resolve(params) });
   function find(node) {
     if (!node || typeof node !== "object") return null;
-    if (node.type === AwardForm) return node;
+    if (node.type === AwardForm || node.type === "form" && params.tab === "certificate") return node;
     for (const child of [node.props?.children].flat(Infinity)) { const result = find(child); if (result) return result; }
     return null;
   }
-  return { form: find(tree), writes: () => writes };
+  return { form: find(tree), tree, inputs, writes: () => writes };
 }
 function payload(patch) {
   const data = new FormData();
@@ -95,7 +98,7 @@ function payload(patch) {
 }
 test("badge form is the default and certificate tab hides it", async () => {
   assert.ok((await workspace()).form);
-  assert.equal((await workspace({ tab: "certificate" })).form, null);
+  assert.equal((await workspace({ tab: "certificate" })).form.type, "form");
 });
 test("award action rejects students outside the teacher roster before writing", async () => {
   const page = await workspace();
@@ -125,4 +128,25 @@ test("forged weekly certificate submissions are blocked server-side", async () =
   const page = await workspace({}, "other@example.test");
   await assert.rejects(page.form.props.action(payload({ awardKind: "certificate", badgeKey: "MUMIN_OF_WEEK", featuredWeek: "2026-10-19" })), /permission/);
   assert.equal(page.writes(), 0);
+});
+
+test('joint form rejects duplicate and non-roster second children', async () => {
+  for (const secondStudentId of ['one', 'outsider']) {
+    const page = await workspace({ tab: 'certificate' });
+    await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK', featuredWeek: '2026-10-19', secondStudentId })), /different/);
+    assert.equal(page.writes(), 0);
+  }
+});
+test('joint selection saves one award, both names and a stable pair identity in either order', async () => {
+  const submissions = [];
+  for (const [studentId, secondStudentId] of [['one', 'two'], ['two', 'one']]) {
+    const page = await workspace({ tab: 'certificate' });
+    await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK', featuredWeek: '2026-10-19', studentId, secondStudentId, certificateKind: 'girl' })), /certificate=code/);
+    assert.equal(page.writes(), 1);
+    submissions.push(page.inputs[0]);
+  }
+  assert.equal(submissions[0].sourceId, submissions[1].sourceId);
+  assert.equal(submissions[0].studentId, 'one'); assert.equal(submissions[0].secondStudentId, 'two');
+  assert.equal(submissions[0].recipientName, 'Learner One & Learner Two');
+  assert.equal(submissions[0].certificateKind, 'girl');
 });

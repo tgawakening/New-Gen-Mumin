@@ -118,6 +118,11 @@ export default async function Page({ searchParams }: Props) {
       const original = await tx.housePointLedger.findFirst({ where: { studentId: award.studentId, sourceId: id, sourceType: "RECOGNITION_" + award.badgeKey } });
       const reversed = await tx.housePointLedger.findFirst({ where: { studentId: award.studentId, sourceId: id, sourceType: "RECOGNITION_REVERSAL" } });
       if (original && !reversed && original.points > 0) await tx.housePointLedger.create({ data: { houseId: original.houseId, studentId: original.studentId, points: -original.points, reason: "Revoked: " + award.title, sourceType: "RECOGNITION_REVERSAL", sourceId: id } });
+      if (award.secondStudentId) {
+        const originalShare = await tx.housePointLedger.findFirst({ where: { studentId: award.secondStudentId, sourceId: id, sourceType: "RECOGNITION_MUMIN_OF_WEEK" } });
+        const reversedShare = await tx.housePointLedger.findFirst({ where: { studentId: award.secondStudentId, sourceId: id, sourceType: "RECOGNITION_REVERSAL" } });
+        if (originalShare && !reversedShare && originalShare.points > 0) await tx.housePointLedger.create({ data: { houseId: originalShare.houseId, studentId: originalShare.studentId, points: -originalShare.points, reason: "Revoked: " + award.title, sourceType: "RECOGNITION_REVERSAL", sourceId: id } });
+      }
       if (award.beneficiaryStudentId) {
         const other = await tx.housePointLedger.findFirst({ where: { studentId: award.beneficiaryStudentId, sourceId: id, sourceType: { startsWith: "CROSS_HOUSE_" } } });
         const undone = await tx.housePointLedger.findFirst({ where: { studentId: award.beneficiaryStudentId, sourceId: id, sourceType: "CROSS_HOUSE_REVERSAL" } });

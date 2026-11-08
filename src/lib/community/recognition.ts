@@ -52,7 +52,7 @@ async function alertRosterTeachers(input: Parameters<typeof notifyRosterTeachers
 }
 
 export async function awardRecognition(input: {
-  studentId: string; badgeKey: string; evidence: string; awardedByUserId?: string; recipientName?: string;
+  studentId: string; badgeKey: string; evidence: string; awardedByUserId?: string; recipientName?: string; secondStudentId?: string; certificateKind?: "boy" | "girl";
   sourceType: string; sourceId: string; pointsBonus?: number; featuredWeek?: string; beneficiaryStudentId?: string;
 }) {
   const definition = CHARACTER_BADGES.find((badge) => badge.key === input.badgeKey);
@@ -61,12 +61,13 @@ export async function awardRecognition(input: {
   if (isCrossHouseBadge && !input.beneficiaryStudentId) throw new Error("Choose the learner from another Qabila who benefited from this action.");
 
   input = { ...input, pointsBonus: definition.key === "MUMIN_OF_WEEK" ? 150 : input.pointsBonus ?? BADGE_POINT_BONUSES[definition.key] ?? 10 };
-  const recipientName = input.recipientName?.trim().replace(/\s+/g, " ").slice(0, 80) || undefined;
+  const recipientName = input.recipientName?.trim().replace(/\s+/g, " ").slice(0, input.secondStudentId ? 170 : 80) || undefined;
   let award;
   if (definition.key === "MUMIN_OF_WEEK") {
+    if (input.secondStudentId === input.studentId) throw new Error("Choose two different children.");
     input = { ...input, pointsBonus: 150 };
     const membership = await ensureStudentHouseMembership(input.studentId);
-    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek, isPublic: false }, membership.houseId);
+    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, secondStudentId: input.secondStudentId, certificateKind: input.certificateKind, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek, isPublic: false }, membership.houseId);
     return saved.award;
   } else {
     const membership = await ensureStudentHouseMembership(input.studentId);
@@ -140,7 +141,7 @@ export async function getRecognitionDashboard(studentId: string) {
   const collectiveStudentIds = qabilaMembers.length ? qabilaMembers.map((item) => item.studentId) : [studentId];
   const [student, awards, studentPoints, housePoints, activity, pointRows] = await Promise.all([
     db.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, registrationStudents: { orderBy: { createdAt: "desc" }, select: { firstName: true, lastName: true, displayName: true, gender: true } } } }),
-    db.recognitionAward.findMany({ where: { studentId, isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" } }),
+    db.recognitionAward.findMany({ where: { OR: [{ studentId }, { secondStudentId: studentId }], isPublic: true, revokedAt: null }, orderBy: { awardedAt: "desc" } }),
     db.housePointLedger.aggregate({ where: { studentId }, _sum: { points: true } }),
     db.housePointLedger.aggregate({ where: { studentId: { in: collectiveStudentIds } }, _sum: { points: true } }),
     getRecentHousePointEvents(membership.houseId, 8, membership.qabilaGroup),

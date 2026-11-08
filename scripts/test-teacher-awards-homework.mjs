@@ -120,7 +120,8 @@ test('award history remains scoped to roster IDs and applies bounded pagination 
   const { RosterAwards } = load('src/components/dashboard/teacher/RosterAwards.tsx', { '@/lib/db': { db }, 'next/link': { default: 'a' }, '@/components/badges/BadgeEmblem': { BadgeEmblem: () => null }, '@/components/badges/EarnedBadgeArtwork': { EarnedBadgeArtwork: () => null } });
   await RosterAwards({ students: [{ id: 'child', name: 'Learner' }], filters: { awardStudent: 'outsider', awardPage: '99999999', awardKind: 'certificate' } });
   const query = queries.at(-1);
-  assert.deepEqual(Array.from(query.where.studentId.in), ['child']);
+  assert.deepEqual(Array.from(query.where.OR[0].studentId.in), ['child']);
+  assert.deepEqual(Array.from(query.where.OR[1].secondStudentId.in), ['child']);
   assert.equal(query.where.badgeKey, 'MUMIN_OF_WEEK');
   assert.equal(query.where.revokedAt, null);
   assert.equal(query.skip, 20);

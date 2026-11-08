@@ -46,3 +46,14 @@ test("certificate name can be set and corrected without another points award", a
 });
 
 test("private certificates save without any Qabila credit", async () => { const f = fixture(); await f.save({ ...data, isPublic: false }, "house-1"); assert.equal(f.state().award.isPublic, false); assert.equal(f.state().ledger.length, 0); });
+
+test("joint certificate retries preserve both recipients and do not add a single-child 150 point credit", async () => {
+  const f = fixture();
+  const joint = { ...data, secondStudentId: "child-2", recipientName: "Aisha & Fatima", certificateKind: "girl" };
+  await f.save(joint, "house-1");
+  await f.save(joint, "house-1");
+  assert.equal(f.state().award.secondStudentId, "child-2");
+  assert.equal(f.state().award.certificateKind, "girl");
+  assert.equal(f.state().ledger.length, 0);
+  await assert.rejects(f.save(data, "house-1"), /different recipients/);
+});

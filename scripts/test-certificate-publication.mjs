@@ -18,7 +18,7 @@ function fixture({ parent = false, allowed = true, published = false } = {}) {
     $queryRaw: async (...args) => locks.push(args),
     recognitionAward: parent ? { ...awardModel, findMany: async () => [] } : awardModel,
     parentRecognitionAward: parent ? awardModel : { ...awardModel, findMany: async () => [] },
-    studentProfile: { findUnique: async () => student },
+    studentProfile: { findUnique: async ({ where }) => where.id === student.id ? student : links.find(link => link.studentId === where.id)?.student ?? null },
     parentProfile: { findUnique: async () => ({ id: 'mum', userId: 'mother', user: { email: 'mum@example.com', firstName: 'Mum' } }) },
     parentStudent: { findMany: async () => links },
     housePointLedger: { createMany: async ({ data }) => { for (const row of data) { const key = row.studentId === 'child' ? row.sourceId : `${row.sourceId}:${row.studentId}`; if (!ledger.has(key)) ledger.set(key, row); } }, deleteMany: async () => ledger.clear() },
@@ -100,4 +100,30 @@ test('Mum shares retain 150 total with deterministic whole-point remainders and 
   assert.deepEqual(Array.from(shares,row=>row.points),[38,38,37,37]);
   assert.equal(shares.reduce((sum,row)=>sum+row.points,0),150);
   assert.deepEqual(Array.from(shares,row=>row.studentId),['a','b','c','d']);
+});
+
+test('joint weekly certificate gives 75 points to each child and notifies a shared parent once', async () => {
+  const f = fixture();
+  f.award.secondStudentId = 'sibling';
+  const sibling = { ...f.student, id: 'sibling', userId: 'sibling-user', displayName: 'Sibling', user: { email: 'sibling@example.com', firstName: 'Sibling' }, houseMembership: { houseId: 'other-house', qabilaGroup: 'Other Qabila' } };
+  f.links.push({ studentId: 'sibling', student: sibling });
+  await f.setCertificatePublication(f.input);
+  assert.equal(f.ledger.size, 2);
+  assert.equal(f.ledger.get('award').points, 75);
+  assert.equal(f.ledger.get('award:sibling').points, 75);
+  assert.equal(f.ledger.get('award:sibling').houseId, 'other-house');
+  assert.deepEqual(f.notices.map(n => n.userId).sort(), ['learner', 'mother', 'sibling-user']);
+  assert.equal(f.emails.length, 3);
+  assert.ok(f.emails.every(email => email.pointsBonus === 75 && email.rewardsPath === '/certificates/code'));
+  await f.setCertificatePublication(f.input);
+  assert.equal(f.ledger.size, 2); assert.equal(f.emails.length, 3);
+  await f.setCertificatePublication({ ...f.input, isPublic: false });
+  assert.equal(f.ledger.size, 0); assert.equal(f.notices.length, 0);
+});
+test('joint publication requires both children and both Qabilas', async () => {
+  const f = fixture(); f.award.secondStudentId = 'sibling';
+  await assert.rejects(f.setCertificatePublication(f.input), /Assign.*Qabila/);
+  f.links.push({ studentId: 'sibling', student: { ...f.student, id: 'sibling', houseMembership: null } });
+  await assert.rejects(f.setCertificatePublication(f.input), /Assign.*Qabila/);
+  assert.equal(f.ledger.size, 0); assert.equal(f.notices.length, 0);
 });

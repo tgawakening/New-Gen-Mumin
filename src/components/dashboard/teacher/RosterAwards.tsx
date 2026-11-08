@@ -11,10 +11,10 @@ export async function RosterAwards({ students, filters }: { students: Array<{ id
   const selected = students.find(({ id }) => id === filters.awardStudent);
   const kind = filters.awardKind === "badge" || filters.awardKind === "certificate" ? filters.awardKind : "all";
   const active = { isPublic: true, revokedAt: null } as const;
-  const where = { ...active, studentId: { in: selected ? [selected.id] : ids }, ...(kind === "certificate" ? { badgeKey: "MUMIN_OF_WEEK" } : kind === "badge" ? { badgeKey: { not: "MUMIN_OF_WEEK" } } : {}), ...(filters.award ? { id: filters.award } : {}) };
+  const where = { ...active, OR: [{ studentId: { in: selected ? [selected.id] : ids } }, { secondStudentId: { in: selected ? [selected.id] : ids } }], ...(kind === "certificate" ? { badgeKey: "MUMIN_OF_WEEK" } : kind === "badge" ? { badgeKey: { not: "MUMIN_OF_WEEK" } } : {}), ...(filters.award ? { id: filters.award } : {}) };
   const [count, grouped] = await Promise.all([
     db.recognitionAward.count({ where }),
-    ids.length ? db.recognitionAward.groupBy({ by: ["studentId", "badgeKey"], where: { ...active, studentId: { in: ids } }, _count: { _all: true } }) : [],
+    ids.length ? db.recognitionAward.groupBy({ by: ["studentId", "secondStudentId", "badgeKey"], where: { ...active, OR: [{ studentId: { in: ids } }, { secondStudentId: { in: ids } }] }, _count: { _all: true } }) : [],
   ]);
   const pages = Math.max(1, Math.ceil(count / 10));
   const page = Math.min(pageNumber(filters.awardPage), pages);
@@ -35,7 +35,7 @@ export async function RosterAwards({ students, filters }: { students: Array<{ id
     <div><p className="text-xs font-bold uppercase tracking-widest text-[#aa6822]">Celebrate your students</p><h2 className="mt-2 text-2xl font-bold text-[#22304a]">Roster badges & certificates</h2><p className="mt-2 text-sm leading-6 text-[#617184]">Automatic badges and awards from any teacher appear here. Discuss the achievement in class and encourage the effort behind it.</p></div>
     <details className="rounded-2xl border border-[#eadfce] p-4" open><summary className="cursor-pointer font-bold text-[#22304a]">Your students ({students.length})</summary>
       <ul className="mt-3 grid gap-2 sm:grid-cols-2">{students.slice((rosterPage - 1) * 10, rosterPage * 10).map((student) => {
-        const totals = grouped.filter((row) => row.studentId === student.id);
+        const totals = grouped.filter((row) => row.studentId === student.id || row.secondStudentId === student.id);
         const certificates = totals.filter((row) => row.badgeKey === "MUMIN_OF_WEEK").reduce((sum, row) => sum + row._count._all, 0);
         const badges = totals.filter((row) => row.badgeKey !== "MUMIN_OF_WEEK").reduce((sum, row) => sum + row._count._all, 0);
         return <li key={student.id}><Link href={href({ awardStudent: student.id, awardPage: null, award: null })} className={`block min-h-11 rounded-xl border p-3 text-sm ${selected?.id === student.id ? "border-[#d5af5b] bg-[#fff8e8]" : "border-[#e4e9ed] bg-[#f8fafc]"}`}><span className="font-bold text-[#22304a]">{student.name}</span><span className="mt-1 block text-xs text-[#617184]">{badges} badges · {certificates} certificates · View achievements</span></Link></li>;
@@ -52,7 +52,7 @@ export async function RosterAwards({ students, filters }: { students: Array<{ id
     </form>
     <p className="text-sm text-[#617184]">{count} achievements{selected ? ` for ${selected.name}` : " across your roster"}</p>
     <div className="grid gap-3">{awards.map((award) => {
-      const name = award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
+      const name = award.recipientName || award.student.displayName || `${award.student.user.firstName} ${award.student.user.lastName ?? ""}`.trim();
       const certificate = award.badgeKey === "MUMIN_OF_WEEK";
       return <article key={award.id} className="rounded-2xl border border-[#eadfce] bg-[#fffcf5] p-4"><div className="flex items-start gap-3"><BadgeEmblem badgeKey={award.badgeKey} title={award.title} /><div className="min-w-0 flex-1"><h3 className="font-bold text-[#22304a]">{name}</h3><p className="mt-1 font-semibold text-[#946219]">{award.title}</p><p className="mt-2 break-words text-sm leading-6 text-[#617184]">{award.evidence}</p><p className="mt-2 text-xs text-[#617184]">{date(award.awardedAt)} · {award.sourceType === "AUTOMATIC" ? "Earned automatically" : "Teacher / team award"}{award.pointsBonus ? ` · +${award.pointsBonus} points` : ""}</p><div className="mt-3 flex flex-wrap gap-3 text-sm font-bold text-[#24466e]">{!certificate ? <Link className="min-h-11 content-center underline" href={`/badges/${award.certificateCode}`}>View / download badge</Link> : null}{certificate ? <Link className="min-h-11 content-center underline" href={`/certificates/${award.certificateCode}`}>Open certificate</Link> : null}</div></div></div>{!certificate ? <details className="mt-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-[#24466e]">Preview badge artwork</summary><div className="mx-auto mt-3 max-w-sm"><EarnedBadgeArtwork name={award.recipientName || name} title={award.title} badgeKey={award.badgeKey} reason={award.evidence || award.description} qabila={award.student.houseMembership?.qabilaGroup} date={date(award.awardedAt)} /></div></details> : null}</article>;
     })}</div>

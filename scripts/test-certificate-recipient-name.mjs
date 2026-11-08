@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
@@ -69,3 +69,23 @@ test('character awards retain their badge description', async () => {
 });
 
 test("private certificates cannot be viewed by the learner or a parent, but authorized teachers can preview", async () => { const f = fixture("Draft Name"); f.award.isPublic = false; await assert.rejects(f.render(), /not found/); f.actor.role = "PARENT"; await assert.rejects(f.render(), /not found/); f.actor.role = "TEACHER"; f.actor.email = "other@example.com"; await assert.rejects(f.render(), /not found/); f.actor.email = "mehranraziq@gmail.com"; assert.ok(await f.render()); });
+
+test('both joint recipients and their parents can open the same certificate, but outsiders cannot', async () => {
+  const f = fixture(null);
+  f.award.secondStudent = { displayName: 'Sibling Name', userId: 'sibling', user: { firstName: 'Sibling' }, parents: [{ parent: { userId: 'sibling-parent' } }] };
+  f.award.certificateKind = 'girl';
+  for (const id of ['student', 'sibling', 'sibling-parent']) {
+    f.actor.id = id; f.actor.role = id.endsWith('parent') ? 'PARENT' : 'STUDENT';
+    const tree = await f.render();
+    assert.equal(find(tree, f.Certificate).props.name, 'Registered Name & Sibling Name');
+    assert.equal(find(tree, f.Certificate).props.title, 'Mumina of the Week');
+    assert.equal(find(tree, f.Actions).props.filename, 'Registered Name & Sibling Name Mumina of the Week');
+  }
+  f.actor.id = 'outsider'; await assert.rejects(f.render(), /not found/);
+  f.actor.id = 'sibling'; f.award.isPublic = false; await assert.rejects(f.render(), /not found/);
+});
+test('explicit boys artwork works for a shared certificate', async () => {
+  const f = fixture('Ahmed & Umar'); f.award.certificateKind = 'boy';
+  const certificate = find(await f.render(), f.Certificate).props;
+  assert.equal(certificate.kind, 'boy'); assert.equal(certificate.title, 'Mumin of the Week');
+});

@@ -31,6 +31,8 @@ export async function setCertificatePublication(input: { userId: string; awardId
     const links = parent ? await tx.parentStudent.findMany({ where: { parentId: parent.id }, orderBy: { studentId: "asc" }, include: { student: { include: { houseMembership: true } } } }) : [];
     const studentId = "studentId" in award ? award.studentId : undefined;
     const student = studentId ? await tx.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } }) : null;
+    const secondStudent = "secondStudentId" in award && award.secondStudentId ? await tx.studentProfile.findUnique({ where: { id: award.secondStudentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } }) : null;
+    const students = [student, secondStudent].filter((child): child is NonNullable<typeof student> => child !== null);
     if (input.parent && award.badgeKey === "MUM_OF_WEEK") {
       const shares = mumCertificateShares(links);
       if (!shares.length) throw new Error("Assign at least one linked child to a Qabila before publishing this Mum certificate.");
@@ -41,17 +43,20 @@ export async function setCertificatePublication(input: { userId: string; awardId
       })) });
       await tx.parentRecognitionAward.update({ where: { id: award.id }, data: { pointsStudentId: null } });
     } else if (!input.parent) {
-      if (!student?.houseMembership?.qabilaGroup) throw new Error("Assign the recipient's child to a Qabila before publishing this weekly certificate. Its 150 points cannot be credited yet.");
-      await tx.housePointLedger.createMany({ data: [{ studentId: student.id, houseId: student.houseMembership.houseId, sourceType, sourceId: award.id, points: 150, reason: `${award.title}: ${award.evidence || "Weekly recognition"}`.slice(0, 191), awardedAt: award.awardedAt }], skipDuplicates: true });
+      if (!student || ("secondStudentId" in award && award.secondStudentId && !secondStudent) || students.some(child => !child.houseMembership?.qabilaGroup)) throw new Error("Assign every recipient to a Qabila before publishing this weekly certificate. Its 150 points cannot be credited yet.");
+      // Replace all shares under the award lock, so retries and hiding stay safe.
+      await tx.housePointLedger.deleteMany({ where: { sourceType, sourceId: award.id } });
+      await tx.housePointLedger.createMany({ data: students.map(child => ({ studentId: child.id, houseId: child.houseMembership!.houseId, sourceType, sourceId: award.id, points: 150 / students.length, reason: `${award.title}: ${award.evidence || "Weekly recognition"}`.slice(0, 191), awardedAt: award.awardedAt })) });
     }
-    const recipients = parent ? [{ userId: parent.userId, email: parent.user.email, name: award.recipientName || parent.user.firstName }]
-      : student ? [{ userId: student.userId, email: student.user.email, name: student.displayName || student.user.firstName }, ...student.parents.map(link => ({ userId: link.parent.userId, email: link.parent.user.email, name: link.parent.user.firstName }))] : [];
+    const recipientList = parent ? [{ userId: parent.userId, email: parent.user.email, name: award.recipientName || parent.user.firstName }]
+      : students.flatMap(child => [{ userId: child.userId, email: child.user.email, name: child.displayName || child.user.firstName }, ...child.parents.map(link => ({ userId: link.parent.userId, email: link.parent.user.email, name: link.parent.user.firstName }))]);
+    const recipients = [...new Map(recipientList.map(recipient => [recipient.userId, recipient])).values()];
     if (changed && recipients.length) await tx.notification.createMany({ data: recipients.map(recipient => ({ userId: recipient.userId, title: `${award.title} certificate published!`, body: award.evidence || award.description, href })) });
     return { changed, award, recipients, href };
   });
   if (input.isPublic && result.changed) await Promise.allSettled(result.recipients.filter(recipient => !recipient.email.toLowerCase().endsWith("@genmumin.local")).map(recipient => input.parent
     ? sendParentRecognitionEmail({ toEmail: recipient.email, recipientName: recipient.name, badgeTitle: result.award.title, evidence: result.award.evidence || result.award.description, certificatePath: result.href })
-    : sendRecognitionEarnedEmail({ toEmail: recipient.email, recipientName: recipient.name, studentName: result.award.recipientName || result.recipients[0]?.name || "Student", badgeTitle: result.award.title, evidence: result.award.evidence || result.award.description, awardKind: "certificate", pointsBonus: 150, rewardsPath: result.href })));
+    : sendRecognitionEarnedEmail({ toEmail: recipient.email, recipientName: recipient.name, studentName: result.award.recipientName || result.recipients[0]?.name || "Student", badgeTitle: result.award.title, evidence: result.award.evidence || result.award.description, awardKind: "certificate", pointsBonus: "secondStudentId" in result.award && result.award.secondStudentId ? 75 : 150, rewardsPath: result.href })));
   return result.award;
 }
 
