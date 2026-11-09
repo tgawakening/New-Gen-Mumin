@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-const migration = fs.readFileSync('prisma/migrations/20261109160000_assign_laiba_girls_qabila/migration.sql', 'utf8');
+const migration = fs.readFileSync('scripts/sql/assign-laiba-girls-qabila.sql', 'utf8');
 function fixture() {
   const db = new DatabaseSync(':memory:');
   db.function('CONCAT', (...values) => values.join(''));

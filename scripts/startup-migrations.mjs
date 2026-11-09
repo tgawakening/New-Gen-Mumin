@@ -18,10 +18,10 @@ const db = new PrismaClient();
 try {
   const failed = await db.$queryRawUnsafe('SELECT migration_name, checksum, logs, finished_at, rolled_back_at FROM _prisma_migrations WHERE finished_at IS NULL AND rolled_back_at IS NULL');
   if (!canRecoverLaibaMigration(failed)) {
-    console.error('Migration requires manual review; it is not the known Laiba collation failure.');
+    console.error('Migration requires manual review; it is not a recognised retired Laiba data-repair attempt.');
     process.exitCode = first.status ?? 1;
   } else {
-    console.log('Recovering the known interrupted Laiba collation migration, then retrying the corrected script.');
+    console.log('Retiring the interrupted Laiba data-repair attempt. Schema migrations will continue; the family repair is now a separate command.');
     run(['resolve', '--rolled-back', LAIBA_MIGRATION]);
     // Another instance may have resolved it concurrently. Deploy still verifies
     // migration state and fails normally if recovery did not succeed.

@@ -1509,7 +1509,7 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                     <div className="text-sm text-[#22304a]">
                       <p className="font-semibold uppercase tracking-[0.12em] text-[#6f7d8f]">Parent</p>
                       <p className="mt-2">{student.parentName}</p>
-                      <p className="mt-1 text-[#617184]">{student.email}</p>
+                      <p className="mt-1 text-[#617184]">{student.parentEmail}</p>
                       <p className="mt-1 text-[#617184]">City: {student.city ?? "Pending"}</p>
                       <p className="mt-1 text-[#617184]">Parent phone: {student.phone}</p>
                     </div>

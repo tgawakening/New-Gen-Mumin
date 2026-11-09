@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { randomUUID, createHash } from 'node:crypto';
 import { PrismaClient } from '@prisma/client';
 import { fixture, migration } from './test-laiba-qabila-assignment.mjs';
 
 const raw = process.env.LAIBA_MIGRATION_TEST_URL;
-test('Prisma applies the collation-safe Laiba migration and recovers its prior failed state', { skip: !raw && 'Requires an empty local genmumin_laiba_test_ database via LAIBA_MIGRATION_TEST_URL.' }, async () => {
+test('Prisma restores app startup before an explicit Laiba data repair', { skip: !raw && 'Requires an empty local genmumin_laiba_test_ database via LAIBA_MIGRATION_TEST_URL.' }, async () => {
   const url = new URL(raw);
   assert.ok(['localhost','127.0.0.1','[::1]'].includes(url.hostname), 'Only a local test database is allowed');
   assert.match(url.pathname, /^\/genmumin_laiba_test_[a-z0-9_]+$/i);
@@ -33,17 +34,34 @@ test('Prisma applies the collation-safe Laiba migration and recovers its prior f
     const file = path.join(scratch,'migrations',name,'migration.sql');
     const run = args => spawnSync(process.execPath,[path.resolve('node_modules/prisma/build/index.js'),'migrate',...args,'--schema',schema],{env:{...process.env,DATABASE_URL:raw},encoding:'utf8'});
     assert.equal(run(['resolve','--applied','00000000000000_fixture_baseline']).status,0);
-    fs.writeFileSync(file,migration.replaceAll(' COLLATE utf8mb4_unicode_ci',''));
-    const failed = run(['deploy']);
-    assert.notEqual(failed.status,0);
-    assert.match(failed.stderr,/P3018/); assert.match(failed.stderr,/1267/);
+    if (process.env.LAIBA_TEST_FAILED_REVISION === 'corrected') {
+      // A failed attempt of the second shipped repair must also stop blocking
+      // startup, regardless of the operational/data error that interrupted it.
+      await db.$executeRawUnsafe('INSERT INTO _prisma_migrations (id,checksum,migration_name,started_at,logs,applied_steps_count) VALUES (?,?,?,NOW(),?,0)',randomUUID(),createHash('sha256').update(migration).digest('hex'),name,'Operational data repair interrupted');
+      const failed = run(['deploy']);
+      assert.notEqual(failed.status,0); assert.match(failed.stderr,/P3009/);
+    } else {
+      fs.writeFileSync(file,migration.replaceAll(' COLLATE utf8mb4_unicode_ci',''));
+      const failed = run(['deploy']);
+      assert.notEqual(failed.status,0);
+      assert.match(failed.stderr,/P3018/); assert.match(failed.stderr,/1267/);
+    }
     assert.equal(Number((await db.$queryRawUnsafe("SELECT COUNT(*) AS n FROM HouseMembership WHERE studentId='laiba'"))[0].n),0,'Failed transaction must not assign Laiba');
-    fs.writeFileSync(file,migration);
+    fs.copyFileSync('prisma/migrations/'+name+'/migration.sql',file);
     const recovered = spawnSync(process.execPath,[path.resolve('scripts/startup-migrations.mjs'),'--schema',schema],{env:{...process.env,DATABASE_URL:raw},encoding:'utf8'});
     assert.equal(recovered.status,0,recovered.stderr);
+    assert.equal(Number((await db.$queryRawUnsafe("SELECT COUNT(*) AS n FROM HouseMembership WHERE studentId='laiba'"))[0].n),0,'Startup must leave the operational assignment deferred');
+    const repair = spawnSync(process.execPath,[path.resolve('scripts/assign-laiba-qabila.mjs'),'--apply','--schema',schema],{env:{...process.env,DATABASE_URL:raw},encoding:'utf8'});
+    assert.equal(repair.status,0,repair.stderr);
     assert.equal((await db.$queryRawUnsafe("SELECT qabilaGroup FROM HouseMembership WHERE studentId='laiba'"))[0].qabilaGroup,'Qabila Banu Zuhra');
     const records = await db.$queryRawUnsafe('SELECT finished_at, rolled_back_at FROM _prisma_migrations WHERE migration_name = ?',name);
     assert.equal(records.filter(row=>row.finished_at).length,1); assert.equal(records.filter(row=>row.rolled_back_at).length,1);
+    // A site that already completed the historical repair must still boot and
+    // preserve that assignment when the startup slot becomes a no-op.
+    await db.$executeRawUnsafe('UPDATE _prisma_migrations SET checksum = ? WHERE migration_name = ? AND finished_at IS NOT NULL',createHash('sha256').update(migration).digest('hex'),name);
+    const alreadyApplied = spawnSync(process.execPath,[path.resolve('scripts/startup-migrations.mjs'),'--schema',schema],{env:{...process.env,DATABASE_URL:raw},encoding:'utf8'});
+    assert.equal(alreadyApplied.status,0,alreadyApplied.stderr);
+    assert.equal((await db.$queryRawUnsafe("SELECT qabilaGroup FROM HouseMembership WHERE studentId='laiba'"))[0].qabilaGroup,'Qabila Banu Zuhra');
   } finally {
     f.db.close(); await db.$disconnect(); fs.rmSync(scratch,{recursive:true,force:true});
   }
