@@ -57,3 +57,14 @@ test("joint certificate retries preserve both recipients and do not add a single
   assert.equal(f.state().ledger.length, 0);
   await assert.rejects(f.save(data, "house-1"), /different recipients/);
 });
+
+test("resaving an existing shared certificate corrects its weekly title without duplicating the award", async () => {
+  const f = fixture();
+  const joint = { ...data, secondStudentId: "child-2", recipientName: "Aisha & Fatima", isPublic: false };
+  await f.save(joint, "house-1");
+  const id = f.state().award.id;
+  await f.save({ ...joint, title: "Muminas of the Week", certificateKind: "girl" }, "house-1");
+  assert.equal(f.state().award.title, "Muminas of the Week");
+  assert.equal(f.state().award.id, id);
+  assert.equal(f.state().ledger.length, 0);
+});

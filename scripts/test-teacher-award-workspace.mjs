@@ -61,6 +61,8 @@ async function workspace(params = {}, email = "mehranraziq@gmail.com") {
     "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: icon, CertificatePublicationControl: icon, HideWeeklyCertificates: icon },
     "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
     "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },
+    "@/lib/teacher/weekly-certificate-students": { getWeeklyCertificateStudents: async () => [...students.map(student => ({ ...student, gender: "Girl" })), { id: "amna", name: "Amna Ali", gender: "Girl" }] },
+    "@/lib/community/qabilas": { qabilaProfile: () => null },
     "@/lib/teacher/recognition-permissions": load("src/lib/teacher/recognition-permissions.ts", {}),
     "@/components/dashboard/teacher/AwardBadgeForm": { AwardBadgeForm: AwardForm },
     "@/components/dashboard/teacher/RosterAwards": { RosterAwards: icon },
@@ -149,4 +151,22 @@ test('joint selection saves one award, both names and a stable pair identity in 
   assert.equal(submissions[0].studentId, 'one'); assert.equal(submissions[0].secondStudentId, 'two');
   assert.equal(submissions[0].recipientName, 'Learner One & Learner Two');
   assert.equal(submissions[0].certificateKind, 'girl');
+});
+
+for (const email of ['mehranraziq@gmail.com', 'umm.abdissamee@gmail.com']) {
+  test(`weekly certificates include and accept Amna outside the class roster for ${email}`, async () => {
+    const page = await workspace({ tab: 'certificate' }, email);
+    const html = renderToStaticMarkup(page.form);
+    assert.match(html, /value="amna">Amna Ali/);
+    assert.match(html, /name="secondStudentId"/);
+    await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK', featuredWeek: '2026-10-19', studentId: 'amna', secondStudentId: 'one' })), /certificate=code/);
+    assert.equal(page.writes(), 1);
+    assert.equal(page.inputs[0].recipientName, 'Amna Ali & Learner One');
+    assert.equal(page.inputs[0].certificateKind, 'girl');
+  });
+}
+test('ordinary badges continue to reject Amna when she is outside the class roster', async () => {
+  const page = await workspace();
+  await assert.rejects(page.form.props.action(payload({ studentId: 'amna' })), /error=/);
+  assert.equal(page.writes(), 0);
 });

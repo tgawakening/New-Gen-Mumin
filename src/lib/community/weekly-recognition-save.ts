@@ -12,7 +12,7 @@ export async function saveWeeklyRecognition(data: Prisma.RecognitionAwardUncheck
     } };
     const previous = await tx.recognitionAward.findUnique({ where });
     if (previous && (previous.secondStudentId ?? null) !== (data.secondStudentId ?? null)) throw new Error("This certificate already has different recipients.");
-    const award = await tx.recognitionAward.upsert({ where, create: { ...data, pointsBonus: 150 }, update: { ...(data.recipientName ? { recipientName: data.recipientName } : {}), ...(data.certificateKind ? { certificateKind: data.certificateKind } : {}) } });
+    const award = await tx.recognitionAward.upsert({ where, create: { ...data, pointsBonus: 150 }, update: { title: data.title, ...(data.recipientName ? { recipientName: data.recipientName } : {}), ...(data.certificateKind ? { certificateKind: data.certificateKind } : {}) } });
     if (award.isPublic && !award.revokedAt && !award.secondStudentId) {
       await tx.housePointLedger.createMany({ data: [{
         studentId: award.studentId, houseId, points: 150,

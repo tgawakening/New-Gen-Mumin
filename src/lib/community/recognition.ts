@@ -66,8 +66,9 @@ export async function awardRecognition(input: {
   if (definition.key === "MUMIN_OF_WEEK") {
     if (input.secondStudentId === input.studentId) throw new Error("Choose two different children.");
     input = { ...input, pointsBonus: 150 };
+    const weeklyTitle = `${input.certificateKind === "girl" ? "Mumina" : "Mumin"}${input.secondStudentId ? "s" : ""} of the Week`;
     const membership = await ensureStudentHouseMembership(input.studentId);
-    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: definition.title, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, secondStudentId: input.secondStudentId, certificateKind: input.certificateKind, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek, isPublic: false }, membership.houseId);
+    const saved = await saveWeeklyRecognition({ studentId: input.studentId, badgeKey: definition.key, title: weeklyTitle, category: definition.category, description: definition.description, evidence: input.evidence, recipientName, secondStudentId: input.secondStudentId, certificateKind: input.certificateKind, awardedByUserId: input.awardedByUserId, sourceType: input.sourceType, sourceId: input.sourceId, featuredWeek: input.featuredWeek, isPublic: false }, membership.houseId);
     return saved.award;
   } else {
     const membership = await ensureStudentHouseMembership(input.studentId);

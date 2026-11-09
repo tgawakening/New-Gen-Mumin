@@ -1,3 +1,5 @@
+import { getWeeklyCertificateStudents } from "@/lib/teacher/weekly-certificate-students";
+import { qabilaProfile } from "@/lib/community/qabilas";
 import { CertificatePublicField, CertificatePublicationControl, HideWeeklyCertificates } from "@/components/dashboard/teacher/CertificatePublication";
 import { setCertificatePublication } from "@/lib/community/certificate-publication";
 import { refreshCertificatePortals } from "@/app/teacher/certificate-actions";
@@ -43,7 +45,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
   const certificateTab = params.tab === "certificate" || Boolean(params.certificate);
   if (certificateTab && !canAwardCertificates) redirect("/teacher/recognition?error=Weekly%20certificates%20are%20awarded%20by%20Sister%20Saba%20or%20Ustadh%20Mehran.");
   const selectedBadge = MANUAL.some((badge) => badge.key === params.badge) ? params.badge : "";
-  const students = Array.from(new Map(dashboard.rosters.flatMap((roster) => roster.students).map((student) => [student.id, student])).values()).sort((a, b) => a.name.localeCompare(b.name));
+  const students = certificateTab ? await getWeeklyCertificateStudents(session.user) : Array.from(new Map(dashboard.rosters.flatMap((roster) => roster.students).map((student) => [student.id, student])).values()).sort((a, b) => a.name.localeCompare(b.name));
   const recentAwards = await db.recognitionAward.findMany({
     where: { ...(certificateTab ? { badgeKey: WEEKLY_BADGE_KEY } : { awardedByUserId: session.user.id, sourceType: "TEACHER_NOMINATION", isPublic: true }), revokedAt: null },
     orderBy: { awardedAt: "desc" },
@@ -73,14 +75,16 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     const selectedWeek = String(formData.get("featuredWeek") || "");
     if (weekly && !validRecognitionWeek(selectedWeek)) redirect(errorBase + encodeURIComponent("Choose a valid current or past week."));
     const permittedBadges = new Set(weekly ? [WEEKLY_BADGE_KEY] : MANUAL.map((badge) => badge.key));
-    const eligible = new Set(currentDashboard.rosters.flatMap((roster) => roster.students.map((student) => student.id)));
+    const certificateStudents = weekly ? await getWeeklyCertificateStudents(current.user) : [];
+    const eligibleStudents = weekly ? certificateStudents : currentDashboard.rosters.flatMap(roster => roster.students);
+    const eligible = new Set(eligibleStudents.map(student => student.id));
 
     if (!eligible.has(studentId) || (beneficiaryStudentId && !eligible.has(beneficiaryStudentId)) || !permittedBadges.has(badgeKey) || evidence.length < 12) {
-      redirect(errorBase + encodeURIComponent("Choose a roster student and badge, and write a specific reason of at least 12 characters."));
+      redirect(errorBase + encodeURIComponent("Choose an eligible student and badge, and write a specific reason of at least 12 characters."));
     }
 
     if (secondStudentId && (secondStudentId === studentId || !eligible.has(secondStudentId))) {
-      redirect(errorBase + encodeURIComponent("Choose a different roster child as the second recipient."));
+      redirect(errorBase + encodeURIComponent("Choose a different eligible child as the second recipient."));
     }
     // Canonical order makes submitting the same pair in reverse a safe retry.
     const recipients = secondStudentId ? [studentId, secondStudentId].sort() : [studentId];
@@ -93,13 +97,17 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       if (!own || !other || own === other) redirect(errorBase + encodeURIComponent("This badge needs a learner from a different assigned Qabila."));
     }
 
+    const firstRecipient = certificateStudents.find(student => student.id === recipients[0]);
+    const gender = firstRecipient?.gender?.trim().toLowerCase();
+    const qabilaGender = qabilaProfile(firstRecipient?.qabilaGroup)?.gender;
+    const inferredKind = ["girl", "female", "f"].includes(gender ?? "") ? "girl" : ["boy", "male", "m"].includes(gender ?? "") ? "boy" : qabilaGender === "GIRLS" ? "girl" : qabilaGender === "BOYS" ? "boy" : undefined;
     const award = await awardRecognition({
       studentId: weekly ? recipients[0] : studentId,
       secondStudentId: weekly ? recipients[1] : undefined,
-      certificateKind,
+      certificateKind: weekly ? certificateKind ?? inferredKind : undefined,
       badgeKey,
       evidence,
-      recipientName: recipientName || (secondStudentId ? recipients.map(id => currentDashboard.rosters.flatMap(roster => roster.students).find(student => student.id === id)!.name).join(" & ").slice(0, 170) : undefined),
+      recipientName: recipientName || (secondStudentId ? recipients.map(id => eligibleStudents.find(student => student.id === id)!.name).join(" & ").slice(0, 170) : undefined),
       awardedByUserId: current.user.id,
       sourceType: weekly ? "WEEKLY_NOMINATION" : "TEACHER_NOMINATION",
       sourceId: weekly ? `${current.user.id}:${badgeKey}:${selectedWeek}${secondStudentId ? `:pair:${recipients.join(":")}` : ""}` : `${current.user.id}:${badgeKey}:${pointDayKey()}`,
@@ -139,7 +147,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       <ActionToast message={params.awarded ? (certificateTab ? "Certificate saved. Its visibility is shown in the certificate history." : "Badge awarded. The learner can find it in their rewards.") : params.removed ? "Award, certificate, and its related House points removed." : params.error} tone={params.error ? "error" : "success"} />
       <TeacherRewardWorkspaceTabs active={certificateTab ? "certificate" : "recognition"} canAwardCertificates={canAwardCertificates} />
       <TeacherMetricGrid metrics={[
-        { label: "Roster students", value: String(students.length), hint: "Unique eligible learners." },
+        { label: certificateTab ? "All students" : "Roster students", value: String(students.length), hint: certificateTab ? "All student accounts, across every class." : "Unique eligible learners." },
         certificateTab ? { label: "Weekly Qabila bonus", value: "150 pts", hint: "Added only while the certificate is public." } : { label: "Character badges", value: String(MANUAL.length), hint: "Choose a badge for an action you observed." },
         { label: "Family alert", value: certificateTab ? "On publish" : "Automatic", hint: "Portal notification and deliverable email." },
         certificateTab ? { label: "Print / PDF", value: "Included", hint: "Open after awarding." } : { label: "Badge guide", value: "Below", hint: "See what each badge recognises." },
@@ -153,14 +161,14 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
         <form action={nominate} className="grid gap-4 lg:grid-cols-2">
           <input type="hidden" name="awardKind" value="certificate" /><RecognitionWeekSelector currentWeek={currentRecognitionWeek()} currentMonth={pointDayKey().slice(0,7)} />
           <label className="grid gap-2 text-sm font-bold text-[#22304a]">Certificate recipient
-            <select name="studentId" required className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Choose roster student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
+            <select name="studentId" required className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Choose student</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
           </label>
           <label className="grid gap-2 text-sm font-bold text-[#22304a]">Second child (optional)
             <select name="secondStudentId" className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">One child only</option>{students.map((student) => <option key={student.id} value={student.id}>{student.name}</option>)}</select>
             <span className="text-xs font-normal text-[#7a8797]">Choose a different child to put both names on one certificate. Both families can open it. The 150-point bonus is shared equally.</span>
           </label>
           <label className="grid gap-2 text-sm font-bold text-[#22304a]">Certificate title and artwork
-            <select name="certificateKind" className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Use student&apos;s gender</option><option value="girl">Mumina of the Week — girls</option><option value="boy">Mumin of the Week — boys</option></select>
+            <select name="certificateKind" className="rounded-2xl border border-[#d8e3ed] bg-white px-4 py-3 font-normal"><option value="">Use student&apos;s gender</option><option value="girl">Mumina / Muminas of the Week — girls</option><option value="boy">Mumin / Mumins of the Week — boys</option></select>
           </label>
           <input type="hidden" name="badgeKey" value={WEEKLY_BADGE_KEY} />
           <label className="grid gap-2 text-sm font-bold text-[#22304a] lg:col-span-2">Name(s) shown on certificate

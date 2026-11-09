@@ -78,8 +78,9 @@ test('both joint recipients and their parents can open the same certificate, but
     f.actor.id = id; f.actor.role = id.endsWith('parent') ? 'PARENT' : 'STUDENT';
     const tree = await f.render();
     assert.equal(find(tree, f.Certificate).props.name, 'Registered Name & Sibling Name');
-    assert.equal(find(tree, f.Certificate).props.title, 'Mumina of the Week');
-    assert.equal(find(tree, f.Actions).props.filename, 'Registered Name & Sibling Name Mumina of the Week');
+    assert.equal(find(tree, f.Certificate).props.title, 'Muminas of the Week');
+    assert.equal(find(tree, f.Certificate).props.recognition, 'Muminas of the Week');
+    assert.equal(find(tree, f.Actions).props.filename, 'Registered Name & Sibling Name Muminas of the Week');
   }
   f.actor.id = 'outsider'; await assert.rejects(f.render(), /not found/);
   f.actor.id = 'sibling'; f.award.isPublic = false; await assert.rejects(f.render(), /not found/);
@@ -89,3 +90,15 @@ test('explicit boys artwork works for a shared certificate', async () => {
   const certificate = find(await f.render(), f.Certificate).props;
   assert.equal(certificate.kind, 'boy'); assert.equal(certificate.title, 'Mumin of the Week');
 });
+
+for (const [gender, title] of [['Girl', 'Muminas of the Week'], ['Boy', 'Mumins of the Week']]) {
+  test(`two ${gender} recipients use the plural title and filename automatically`, async () => {
+    const f = fixture('Sibling One & Sibling Two');
+    f.award.student.registrationStudents = [{ gender }];
+    f.award.secondStudent = { ...f.award.student, userId: 'second-child' };
+    const tree = await f.render();
+    assert.equal(find(tree, f.Certificate).props.title, title);
+    assert.equal(find(tree, f.Certificate).props.recognition, title);
+    assert.equal(find(tree, f.Actions).props.filename, 'Sibling One & Sibling Two ' + title);
+  });
+}
