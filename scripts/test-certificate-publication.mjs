@@ -21,7 +21,7 @@ function fixture({ parent = false, allowed = true, published = false, delegate =
     $queryRaw: async (...args) => locks.push(args),
     recognitionAward: parent ? { ...awardModel, findMany: async () => [] } : awardModel,
     parentRecognitionAward: parent ? awardModel : { ...awardModel, findMany: async () => [] },
-    studentProfile: { findUnique: async ({ where }) => where.id === student.id ? student : links.find(link => link.studentId === where.id)?.student ?? null },
+    studentProfile: { findMany: async ({ where }) => links.filter(link => where.id.in.includes(link.studentId)).map(link => ({ ...link.student, id: link.studentId })), findUnique: async ({ where }) => where.id === student.id ? student : links.find(link => link.studentId === where.id)?.student ?? null },
     parentProfile: { findUnique: async () => ({ id: 'mum', userId: 'mother', user: { email: 'mum@example.com', firstName: 'Mum' } }) },
     parentStudent: { findMany: async () => links },
     housePointLedger: { createMany: async ({ data }) => { for (const row of data) { const key = row.studentId === 'child' ? row.sourceId : `${row.sourceId}:${row.studentId}`; if (!ledger.has(key)) ledger.set(key, row); } }, deleteMany: async () => ledger.clear() },
@@ -29,8 +29,8 @@ function fixture({ parent = false, allowed = true, published = false, delegate =
   };
   db.$transaction = async fn => fn(db);
   const exports = {};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/community/certificate-publication.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: id => ({ 'server-only': {}, '@/lib/db': { db }, '@/lib/community/mum-certificate-points':sharesModule, '@/lib/teacher/recognition-permissions': permission, '@/lib/email/notifications': { sendParentRecognitionEmail: async x => emails.push(x), sendRecognitionEarnedEmail: async x => emails.push(x) } })[id] });
-  return { ...exports, award, student, actor: user, links, ledger, notices, emails, locks, input: { userId: 'teacher', awardId: 'award', parent, isPublic: true } };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/community/certificate-publication.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: id => ({ 'server-only': {}, '@/lib/db': { db }, '@/lib/community/mum-certificate-points':sharesModule, '@/lib/teacher/weekly-certificate-parents': { getWeeklyCertificateParents: async () => [{ id: 'mum', children: links.map(link => ({ id: link.studentId })) }] }, '@/lib/teacher/recognition-permissions': permission, '@/lib/email/notifications': { sendParentRecognitionEmail: async x => emails.push(x), sendRecognitionEarnedEmail: async x => emails.push(x) } })[id] });
+  return { ...exports, db, award, student, actor: user, links, ledger, notices, emails, locks, input: { userId: 'teacher', awardId: 'award', parent, isPublic: true } };
 }
 
 for (const parent of [false, true]) {
@@ -139,4 +139,14 @@ for (const parent of [false, true]) test(`Maliha can publish/hide ${parent ? 'Mu
   assert.equal(f.ledger.size, 0);
   f.actor.status = 'SUSPENDED';
   await assert.rejects(f.setCertificatePublication(f.input), /cannot manage/);
+});
+
+test('Mum certificate publication credits an eligible enrolled child even without a direct ParentStudent row', async () => {
+  const f = fixture({ parent: true });
+  f.db.parentStudent.findMany = async () => { throw Error('The direct parent link is missing'); };
+  await f.setCertificatePublication(f.input);
+  assert.equal(f.award.isPublic, true);
+  assert.equal(f.ledger.get('award').points, 150);
+  assert.equal(f.ledger.get('award').studentId, 'child');
+  assert.equal(f.notices[0].userId, 'mother');
 });

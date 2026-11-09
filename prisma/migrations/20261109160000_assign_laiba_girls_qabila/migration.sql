@@ -89,9 +89,9 @@ INSERT INTO `CommunityRoom` (`id`, `title`, `description`, `type`, `visibility`,
 SELECT CONCAT('laiba-girls-room-', CASE WHEN c.`qabilaGroup` = 'Qabila Banu Makhzum' THEN 'a' ELSE 'b' END),
   c.`qabilaGroup`, 'A supervised Qabila team room for mentor-guided planning, encouragement, and safe community projects.',
   'PROJECT_TEAM', 'STUDENTS', 'GENERAL', 'GIRLS', false, true, NOW(), NOW()
-FROM `_LaibaChoice` c WHERE NOT EXISTS (SELECT 1 FROM `CommunityRoom` r WHERE r.`title` = c.`qabilaGroup` AND r.`type` = 'PROJECT_TEAM' AND r.`isActive` = true);
+FROM `_LaibaChoice` c WHERE NOT EXISTS (SELECT 1 FROM `CommunityRoom` r WHERE r.`title` COLLATE utf8mb4_unicode_ci = c.`qabilaGroup` COLLATE utf8mb4_unicode_ci AND r.`type` = 'PROJECT_TEAM' AND r.`isActive` = true);
 CREATE TEMPORARY TABLE `_LaibaRoom` AS
-SELECT r.`id` AS `roomId`, c.`studentId`, c.`role` FROM `CommunityRoom` r JOIN `_LaibaChoice` c ON c.`qabilaGroup` = r.`title`
+SELECT r.`id` AS `roomId`, c.`studentId`, c.`role` FROM `CommunityRoom` r JOIN `_LaibaChoice` c ON c.`qabilaGroup` COLLATE utf8mb4_unicode_ci = r.`title` COLLATE utf8mb4_unicode_ci
 WHERE r.`type` = 'PROJECT_TEAM' AND r.`isActive` = true ORDER BY r.`createdAt`, r.`id` LIMIT 1;
 UPDATE `CommunityRoom` SET `genderScope` = 'GIRLS', `isReadOnly` = false, `visibility` = 'STUDENTS', `updatedAt` = NOW()
 WHERE `id` IN (SELECT `roomId` FROM `_LaibaRoom`);

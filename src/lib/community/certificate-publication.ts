@@ -1,4 +1,5 @@
 import "server-only";
+import { getWeeklyCertificateParents } from "@/lib/teacher/weekly-certificate-parents";
 import { db } from "@/lib/db";
 import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
 import { sendRecognitionEarnedEmail, sendParentRecognitionEmail } from "@/lib/email/notifications";
@@ -9,6 +10,7 @@ import { mumCertificateShares } from "@/lib/community/mum-certificate-points";
 export async function setCertificatePublication(input: { userId: string; awardId: string; parent: boolean; isPublic: boolean }) {
   const actor = await db.user.findUnique({ where: { id: input.userId } });
   if (!actor || !canAwardWeeklyCertificates(actor)) throw new Error("You cannot manage weekly certificates.");
+  const eligibleFamilies = input.parent && input.isPublic ? await getWeeklyCertificateParents(actor) : [];
   const result = await db.$transaction(async (tx) => {
     if (input.parent) await tx.$queryRaw`SELECT id FROM ParentRecognitionAward WHERE id = ${input.awardId} FOR UPDATE`;
     else await tx.$queryRaw`SELECT id FROM RecognitionAward WHERE id = ${input.awardId} FOR UPDATE`;
@@ -28,7 +30,9 @@ export async function setCertificatePublication(input: { userId: string; awardId
       return { changed, award, recipients: [], href };
     }
     const parent = input.parent && "parentId" in award ? await tx.parentProfile.findUnique({ where: { id: award.parentId }, include: { user: true } }) : null;
-    const links = parent ? await tx.parentStudent.findMany({ where: { parentId: parent.id }, orderBy: { studentId: "asc" }, include: { student: { include: { houseMembership: true } } } }) : [];
+    const family = parent ? eligibleFamilies.find(candidate => candidate.id === parent.id) : null;
+    const familyStudents = parent && family ? await tx.studentProfile.findMany({ where: { id: { in: family.children.map(child => child.id) } }, include: { houseMembership: true } }) : [];
+    const links = familyStudents.map(student => ({ studentId: student.id, student }));
     const studentId = "studentId" in award ? award.studentId : undefined;
     const student = studentId ? await tx.studentProfile.findUnique({ where: { id: studentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } }) : null;
     const secondStudent = "secondStudentId" in award && award.secondStudentId ? await tx.studentProfile.findUnique({ where: { id: award.secondStudentId }, include: { user: true, houseMembership: true, parents: { include: { parent: { include: { user: true } } } } } }) : null;

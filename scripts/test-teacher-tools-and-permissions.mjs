@@ -95,7 +95,15 @@ function mumFixture(email, role = "TEACHER", allLinks) {
   const empty = () => null;
   const { default: Page } = load("src/app/teacher/parent-recognition/page.tsx", {
     "@/components/dashboard/communications/CommunicationsCertificateFrame": { CommunicationsCertificateFrame: empty },
-    "@/lib/teacher/weekly-certificate-students": { getWeeklyCertificateStudents: async () => eligibleStudents },
+    "@/lib/teacher/weekly-certificate-parents": { getWeeklyCertificateParents: async () => {
+      const parents = new Map();
+      for (const link of links.filter(link => eligibleStudents.some(student => student.id === link.studentId))) {
+        const parent = parents.get(link.parentId) ?? { id: link.parentId, name: link.parent.user.firstName, email: link.parent.user.email, children: [] };
+        if (!parent.children.some(child => child.id === link.studentId)) parent.children.push({ id: link.studentId, name: link.student.displayName, qabilaGroup: link.student.houseMembership?.qabilaGroup ?? null });
+        parents.set(parent.id, parent);
+      }
+      return [...parents.values()];
+    } },
     "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: empty, CertificatePublicationControl: empty, HideWeeklyCertificates: empty },
     "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
     "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },

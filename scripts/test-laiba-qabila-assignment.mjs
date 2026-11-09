@@ -43,7 +43,7 @@ INSERT INTO Notification VALUES('existing-notice');`;
   function girls(a,b) {
     for (const [qabila,count] of [['Qabila Banu Makhzum',a],['Qabila Banu Zuhra',b]]) for(let i=0;i<count;i++) add(qabila+i,{ mother:'Other Mother', email:'other@example.test', name:'Girl '+qabila+i, qabila });
   }
-  const apply = () => db.exec(migration.replaceAll('TEMPORARY TABLE','TEMP TABLE').replaceAll('DROP TEMP TABLE','DROP TABLE').replace('START TRANSACTION','BEGIN TRANSACTION'));
+  const apply = () => db.exec(migration.replaceAll(' COLLATE utf8mb4_unicode_ci','').replaceAll('TEMPORARY TABLE','TEMP TABLE').replaceAll('DROP TEMP TABLE','DROP TABLE').replace('START TRANSACTION','BEGIN TRANSACTION'));
   return { db, schema, add, girls, apply };
 }
 for (const [a,b,expected] of [[3,1,'Qabila Banu Zuhra'],[1,3,'Qabila Banu Makhzum'],[2,2,'Qabila Banu Makhzum'],[0,0,'Qabila Banu Makhzum']]) test(`Laiba joins the smaller girls Qabila (${a}/${b}), with deterministic ties`, () => {
