@@ -88,10 +88,10 @@ test("Mehran's obsolete Arabic classes cannot trigger his reminder", async () =>
   f.setRows([liveRow("seerah")]); assert.equal((await f.GET()).data.live, true);
 });
 
-function mumFixture(email, role = "TEACHER") {
+function mumFixture(email, role = "TEACHER", allLinks) {
   let actor = { id: "creator", role, email, status: "ACTIVE" };
   let dashboardReads = 0; const writes = []; let eligibleStudents = [{ id: "amna", name: "Amna Ali" }];
-  const links = role === "COMMUNICATIONS" ? [{ parentId: "mum", studentId: "amna", parent: { id: "mum", user: { firstName: "Mother", lastName: "Ali", email: "mum@example.test" } }, student: { displayName: "Amna Ali", user: { firstName: "Amna" }, houseMembership: { qabilaGroup: "Qabila Banu Makhzum" } } }] : [];
+  const links = allLinks ?? (role === "COMMUNICATIONS" ? [{ parentId: "mum", studentId: "amna", parent: { id: "mum", user: { firstName: "Mother", lastName: "Ali", email: "mum@example.test" } }, student: { displayName: "Amna Ali", user: { firstName: "Amna" }, houseMembership: { qabilaGroup: "Qabila Banu Makhzum" } } }] : []);
   const empty = () => null;
   const { default: Page } = load("src/app/teacher/parent-recognition/page.tsx", {
     "@/components/dashboard/communications/CommunicationsCertificateFrame": { CommunicationsCertificateFrame: empty },
@@ -159,4 +159,15 @@ test('a stale Mum form rejects a family whose child is no longer eligible', asyn
   for (const [key,value] of Object.entries({ parentId: 'mum', badgeKey: 'MUM_OF_WEEK', evidence: 'Supporting her children with kindness.', featuredWeek: '2026-10-26' })) form.set(key,value);
   await assert.rejects(findForm(tree).props.action(form), /error=/);
   assert.equal(f.writes.length, 0);
+});
+
+for (const [email, role] of [['umm.abdissamee@gmail.com','TEACHER'], ['mehranraziq@gmail.com','TEACHER'], ['emancheman413@gmail.com','COMMUNICATIONS']]) test(`Mum roster lists every linked parent across classes for ${email}`, async () => {
+  const row = (parentId,studentId,name) => ({ parentId,studentId,parent:{id:parentId,user:{firstName:name,lastName:'',email:parentId+'@example.test'}},student:{displayName:studentId,user:{firstName:studentId},houseMembership:null} });
+  const f = mumFixture(email,role,[row('mother','amna','Mother Ali'),row('father','amna','Father Ali'),row('anum','laiba','Anum Sheikh'),row('mother','amna','Mother Ali'),row('pending-parent','pending-child','Pending Parent')]);
+  f.setEligibleStudents([{id:'amna',name:'Amna Ali'},{id:'laiba',name:'Laiba'}]);
+  const tree = await f.Page();
+  const html = renderToStaticMarkup(findForm(tree));
+  for (const id of ['mother','father','anum']) assert.match(html,new RegExp('value="'+id+'"'));
+  assert.equal((html.match(/value="mother"/g)||[]).length,1);
+  assert.doesNotMatch(html,/pending-parent/);
 });
