@@ -152,7 +152,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
       <ActionToast message={params.awarded ? (certificateTab ? "Certificate saved. Its visibility is shown in the certificate history." : "Badge awarded. The learner can find it in their rewards.") : params.removed ? "Award, certificate, and its related House points removed." : params.error} tone={params.error ? "error" : "success"} />
       <TeacherRewardWorkspaceTabs communications={communications} active={certificateTab ? "certificate" : "recognition"} canAwardCertificates={canAwardCertificates} />
       <TeacherMetricGrid metrics={[
-        { label: certificateTab ? "All students" : "Roster students", value: String(students.length), hint: certificateTab ? "All student accounts, across every class." : "Unique eligible learners." },
+        { label: certificateTab ? "Enrolled students" : "Roster students", value: String(students.length), hint: certificateTab ? "Approved, enrolled learners across every class." : "Unique eligible learners." },
         certificateTab ? { label: "Weekly Qabila bonus", value: "150 pts", hint: "Added only while the certificate is public." } : { label: "Character badges", value: String(MANUAL.length), hint: "Choose a badge for an action you observed." },
         { label: "Family alert", value: certificateTab ? "On publish" : "Automatic", hint: "Portal notification and deliverable email." },
         certificateTab ? { label: "Print / PDF", value: "Included", hint: "Open after awarding." } : { label: "Badge guide", value: "Below", hint: "See what each badge recognises." },

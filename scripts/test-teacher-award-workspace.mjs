@@ -57,13 +57,14 @@ async function workspace(params = {}, email = "mehranraziq@gmail.com", role = "T
   const AwardForm = () => null;
   let writes = 0; const inputs = []; let dashboardReads = 0;
   const actor = { id: "teacher", role, email, status };
+  let certificateStudents = [...students.map(student => ({ ...student, gender: "Girl" })), { id: "amna", name: "Amna Ali", gender: "Girl" }];
   const definition = [{ key: "MUMIN_OF_WEEK", title: "Mumin of the Week" }, ...badges];
   const { default: Page } = load("src/app/teacher/recognition/page.tsx", {
     "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: icon, CertificatePublicationControl: icon, HideWeeklyCertificates: icon },
     "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
     "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },
     "@/components/dashboard/communications/CommunicationsCertificateFrame": { CommunicationsCertificateFrame: icon },
-    "@/lib/teacher/weekly-certificate-students": { getWeeklyCertificateStudents: async () => [...students.map(student => ({ ...student, gender: "Girl" })), { id: "amna", name: "Amna Ali", gender: "Girl" }] },
+    "@/lib/teacher/weekly-certificate-students": { getWeeklyCertificateStudents: async () => certificateStudents },
     "@/lib/community/qabilas": { qabilaProfile: () => null },
     "@/lib/teacher/recognition-permissions": load("src/lib/teacher/recognition-permissions.ts", {}),
     "@/components/dashboard/teacher/AwardBadgeForm": { AwardBadgeForm: AwardForm },
@@ -93,7 +94,7 @@ async function workspace(params = {}, email = "mehranraziq@gmail.com", role = "T
     for (const child of [node.props?.children].flat(Infinity)) { const result = find(child); if (result) return result; }
     return null;
   }
-  return { form: find(tree), tree, inputs, actor, dashboardReads: () => dashboardReads, writes: () => writes };
+  return { form: find(tree), tree, inputs, actor, setCertificateStudents: value => { certificateStudents = value; }, dashboardReads: () => dashboardReads, writes: () => writes };
 }
 function payload(patch) {
   const data = new FormData();
@@ -186,4 +187,13 @@ test('Maliha cannot use the certificate action for ordinary badges or after susp
   page.actor.status = 'SUSPENDED';
   await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK' })), /auth\/login/);
   assert.equal(page.writes(), 0);
+});
+
+test('stale certificate forms reject a first or second child who is no longer approved/enrolled', async () => {
+  for (const second of [false,true]) {
+    const page = await workspace({ tab: 'certificate' });
+    page.setCertificateStudents([{ id: 'one', name: 'Learner One' }]);
+    await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK', featuredWeek: '2026-10-19', studentId: second ? 'one' : 'amna', secondStudentId: second ? 'amna' : '' })), /error=/);
+    assert.equal(page.writes(), 0);
+  }
 });
