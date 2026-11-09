@@ -154,6 +154,7 @@ test('Maliha creates a Mum certificate in Communications without any teaching ro
   for (const [key,value] of Object.entries({ parentId: 'mum', badgeKey: 'MUM_OF_WEEK', evidence: 'Supporting her children with kindness.', featuredWeek: '2026-10-26' })) form.set(key,value);
   await assert.rejects(findForm(tree).props.action(form), /communications\/parent-recognition\?awarded/);
   assert.equal(f.writes.length, 1); assert.equal(f.writes[0].awardedByUserId, 'creator');
+  assert.equal(f.writes[0].recipientName, 'Mother');
   assert.equal(f.dashboardReads(), 0);
   f.setActor({ id: 'creator', role: 'COMMUNICATIONS', email: 'emancheman413@gmail.com', status: 'SUSPENDED' });
   await assert.rejects(findForm(tree).props.action(form), /auth\/login/);

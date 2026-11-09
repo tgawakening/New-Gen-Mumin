@@ -24,7 +24,7 @@ export async function getWeeklyCertificateStudents(user: { role: string; email: 
       user: { select: { firstName: true, lastName: true, email: true, role: true, status: true } },
       enrollments: { select: { status: true } },
       registrationStudents: {
-        select: { firstName: true, lastName: true, gender: true, registration: { select: { status: true, createdAt: true, parentEmail: true } } },
+        select: { firstName: true, lastName: true, gender: true, registration: { select: { status: true, createdAt: true, parentEmail: true, parentFirstName: true, parentLastName: true } } },
       },
       parents: { select: { parent: { select: { user: { select: { email: true } } } } } },
       houseMembership: { select: { qabilaGroup: true } },
@@ -51,6 +51,11 @@ export async function getWeeklyCertificateStudents(user: { role: string; email: 
   return [...unique.values()].map(({ student, name, registration }) => ({
     id: student.id, name,
     gender: registration?.gender ?? null,
+    parentContact: registration ? {
+      email: registration.registration.parentEmail.trim().toLowerCase(),
+      name: `${registration.registration.parentFirstName ?? ""} ${registration.registration.parentLastName ?? ""}`.trim(),
+      approvedAt: registration.registration.createdAt.getTime(),
+    } : null,
     qabilaGroup: student.houseMembership?.qabilaGroup ?? null,
   })).sort((a, b) => a.name.localeCompare(b.name));
 }

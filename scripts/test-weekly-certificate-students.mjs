@@ -10,7 +10,7 @@ function learner(id, name, options = {}) {
     id, displayName: name, createdAt: new Date(options.createdAt ?? '2026-10-01'),
     user: { firstName, lastName: last.join(' '), email: id + '@example.test', role: options.role ?? 'STUDENT', status: options.status ?? 'ACTIVE' },
     enrollments: options.enrollment === null ? [] : [{ status: options.enrollment ?? 'ACTIVE' }],
-    registrationStudents: options.registration === null ? [] : [{ firstName, lastName: last.join(' '), gender: 'Girl', registration: { status: options.registration ?? 'CONVERTED', createdAt: new Date(options.approvedAt ?? '2026-10-01'), parentEmail: options.family ?? 'mother@example.test' } }],
+    registrationStudents: options.registration === null ? [] : [{ firstName, lastName: last.join(' '), gender: 'Girl', registration: { status: options.registration ?? 'CONVERTED', createdAt: new Date(options.approvedAt ?? '2026-10-01'), parentEmail: options.family ?? 'mother@example.test', parentFirstName: 'Anum', parentLastName: 'Sheikh' } }],
     parents: [{ parent: { user: { email: options.family ?? 'mother@example.test' } } }],
     houseMembership: { qabilaGroup: 'Qabila Banu Makhzum' },
   };
@@ -68,7 +68,10 @@ test('registered name, normalized spacing and case identify duplicates even when
 test('pending renewal data does not replace the approved registration identity or gender', async () => {
   const child = learner('amna', 'Amna Ali');
   child.registrationStudents.unshift({ firstName: 'Random', lastName: 'Draft', gender: 'Boy', registration: { status: 'DRAFT', createdAt: new Date('2026-11-01'), parentEmail: 'other@example.test' } });
-  assert.equal((await fixture([child]).getWeeklyCertificateStudents(teacher))[0].gender, 'Girl');
+  const result = (await fixture([child]).getWeeklyCertificateStudents(teacher))[0];
+  assert.equal(result.gender, 'Girl');
+  assert.equal(result.parentContact.email, 'mother@example.test');
+  assert.equal(result.parentContact.name, 'Anum Sheikh');
 });
 for (const user of [{ role: 'TEACHER', email: 'other@example.com' }, { role: 'STUDENT', email: 'mehranraziq@gmail.com' }]) test(`certificate list rejects ${user.role} ${user.email}`, async () => {
   const f = fixture(); await assert.rejects(f.getWeeklyCertificateStudents(user), /cannot award/); assert.equal(f.queries.length, 0);

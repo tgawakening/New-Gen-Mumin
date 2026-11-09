@@ -8,8 +8,12 @@ export async function getWeeklyCertificateParents(user: { role: string; email: s
   const students = await getWeeklyCertificateStudents(user);
   if (!students.length) return [];
   const ids = students.map(student => student.id);
+  const contacts = students.filter(student => student.parentContact?.email)
+    .sort((a, b) => (b.parentContact?.approvedAt ?? 0) - (a.parentContact?.approvedAt ?? 0));
+  const emails = [...new Set(contacts.map(student => student.parentContact!.email))];
   const parents = await db.parentProfile.findMany({
     where: { OR: [
+      ...(emails.length ? [{ user: { email: { in: emails } } }] : []),
       { students: { some: { studentId: { in: ids } } } },
       { enrollments: { some: { studentId: { in: ids }, status: { in: ["CONFIRMED", "ACTIVE", "COMPLETED"] } } } },
       { registrations: { some: { status: { in: ["PAID", "CONVERTED"] }, students: { some: { studentProfileId: { in: ids } } } } } },
@@ -23,7 +27,11 @@ export async function getWeeklyCertificateParents(user: { role: string; email: s
   });
   const byId = new Map(students.map(student => [student.id, student]));
   return parents.flatMap(parent => {
+    const email = parent.user.email.trim().toLowerCase();
+    const registeredChildren = contacts.filter(student => student.parentContact?.email === email);
+    const registeredName = registeredChildren.find(student => student.parentContact?.name)?.parentContact?.name;
     const childIds = new Set([
+      ...registeredChildren.map(student => student.id),
       ...parent.students.map(link => link.studentId),
       ...parent.enrollments.filter(enrollment => ["CONFIRMED", "ACTIVE", "COMPLETED"].includes(enrollment.status)).map(enrollment => enrollment.studentId),
       ...parent.registrations.filter(registration => ["PAID", "CONVERTED"].includes(registration.status)).flatMap(registration => registration.students.map(child => child.studentProfileId)),
@@ -31,7 +39,7 @@ export async function getWeeklyCertificateParents(user: { role: string; email: s
     const children = [...childIds].flatMap(id => id && byId.has(id) ? [byId.get(id)!] : []);
     return children.length ? [{
       id: parent.id,
-      name: `${parent.user.firstName} ${parent.user.lastName ?? ""}`.trim() || parent.user.email,
+      name: registeredName || `${parent.user.firstName} ${parent.user.lastName ?? ""}`.trim() || parent.user.email,
       email: parent.user.email, children,
     }] : [];
   }).sort((a, b) => a.name.localeCompare(b.name));

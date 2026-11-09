@@ -43,3 +43,14 @@ test('both actual parent owners appear, while unrelated accounts sharing the nam
  const result=await f.getWeeklyCertificateParents({});assert.deepEqual(Array.from(result,parent=>parent.id),['anum','father']);
 });
 test('no eligible learners avoids querying parent accounts',async()=>{const f=fixture([],[]);assert.equal((await f.getWeeklyCertificateParents({})).length,0);assert.equal(f.queries.length,0);});
+
+test('approved parent email resolves Anum when all legacy parent ID links are missing',async()=>{
+ const child={...laiba,parentContact:{email:'anum@example.test',name:'Anum Sheikh',approvedAt:100}};
+ const account=parent('anum',{user:{firstName:'Legacy',lastName:'Account label',email:'Anum@Example.test'}});
+ const f=fixture([account,parent('same-name')],[child]);const result=await f.getWeeklyCertificateParents({});
+ assert.equal(result.length,1);assert.equal(result[0].id,'anum');assert.equal(result[0].name,'Anum Sheikh');assert.equal(result[0].children[0].id,'laiba');
+ assert.deepEqual(Array.from(f.queries[0].where.OR[0].user.email.in),['anum@example.test']);
+});
+test('unapproved contacts and matching names alone never add a parent account',async()=>{
+ const f=fixture([parent('anum')],[{...laiba,parentContact:null}]);assert.equal((await f.getWeeklyCertificateParents({})).length,0);
+});
