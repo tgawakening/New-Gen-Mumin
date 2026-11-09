@@ -53,14 +53,16 @@ test("unassigned teachers see an explanation instead of an unusable form", () =>
   assert.doesNotMatch(html, /<form/);
 });
 
-async function workspace(params = {}, email = "mehranraziq@gmail.com") {
+async function workspace(params = {}, email = "mehranraziq@gmail.com", role = "TEACHER", status = "ACTIVE") {
   const AwardForm = () => null;
-  let writes = 0; const inputs = [];
+  let writes = 0; const inputs = []; let dashboardReads = 0;
+  const actor = { id: "teacher", role, email, status };
   const definition = [{ key: "MUMIN_OF_WEEK", title: "Mumin of the Week" }, ...badges];
   const { default: Page } = load("src/app/teacher/recognition/page.tsx", {
     "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: icon, CertificatePublicationControl: icon, HideWeeklyCertificates: icon },
     "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
     "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },
+    "@/components/dashboard/communications/CommunicationsCertificateFrame": { CommunicationsCertificateFrame: icon },
     "@/lib/teacher/weekly-certificate-students": { getWeeklyCertificateStudents: async () => [...students.map(student => ({ ...student, gender: "Girl" })), { id: "amna", name: "Amna Ali", gender: "Girl" }] },
     "@/lib/community/qabilas": { qabilaProfile: () => null },
     "@/lib/teacher/recognition-permissions": load("src/lib/teacher/recognition-permissions.ts", {}),
@@ -76,22 +78,22 @@ async function workspace(params = {}, email = "mehranraziq@gmail.com") {
     "@/components/dashboard/FormSubmitButton": { FormSubmitButton: icon },
     "@/components/dashboard/teacher/TeacherDashboardFrame": { TeacherDashboardFrame: icon, TeacherMetricGrid: icon, TeacherSection: icon },
     "@/components/dashboard/teacher/TeacherRewardWorkspaceTabs": { TeacherRewardWorkspaceTabs: icon },
-    "@/lib/auth/session": { getCurrentSession: async () => ({ user: { id: "teacher", role: "TEACHER", email } }), getDashboardHome: () => "/" },
+    "@/lib/auth/session": { getCurrentSession: async () => ({ user: actor }), getDashboardHome: () => "/" },
     "@/lib/community/recognition-points": { BADGE_POINT_BONUSES: { MUMIN_OF_WEEK: 150, HELPER: 10 } },
     "@/lib/community/recognition": { CHARACTER_BADGES: definition, awardRecognition: async input => { writes++; inputs.push(input); return { certificateCode: "code" }; } },
     "@/lib/community/point-awards": { pointDayKey: () => "2026-10-25" },
-    "@/lib/teacher/dashboard": { getTeacherDashboardData: async () => ({ rosters: [{ students }] }) },
+    "@/lib/teacher/dashboard": { getTeacherDashboardData: async () => { dashboardReads++; return { rosters: [{ students }] }; } },
     "@/lib/teacher/nav": { getTeacherNavItems: () => [] },
     "@/lib/db": { db: { recognitionAward: { findMany: async () => [] } } },
   });
   const tree = await Page({ searchParams: Promise.resolve(params) });
   function find(node) {
     if (!node || typeof node !== "object") return null;
-    if (node.type === AwardForm || node.type === "form" && params.tab === "certificate") return node;
+    if (node.type === AwardForm || node.type === "form" && (params.tab === "certificate" || role === "COMMUNICATIONS")) return node;
     for (const child of [node.props?.children].flat(Infinity)) { const result = find(child); if (result) return result; }
     return null;
   }
-  return { form: find(tree), tree, inputs, writes: () => writes };
+  return { form: find(tree), tree, inputs, actor, dashboardReads: () => dashboardReads, writes: () => writes };
 }
 function payload(patch) {
   const data = new FormData();
@@ -168,5 +170,20 @@ for (const email of ['mehranraziq@gmail.com', 'umm.abdissamee@gmail.com']) {
 test('ordinary badges continue to reject Amna when she is outside the class roster', async () => {
   const page = await workspace();
   await assert.rejects(page.form.props.action(payload({ studentId: 'amna' })), /error=/);
+  assert.equal(page.writes(), 0);
+});
+
+test('Maliha can create a shared child certificate from Communications without a teaching roster', async () => {
+  const page = await workspace({}, 'emancheman413@gmail.com', 'COMMUNICATIONS');
+  assert.equal(page.form.type, 'form'); assert.equal(page.dashboardReads(), 0);
+  await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK', featuredWeek: '2026-10-19', studentId: 'amna', secondStudentId: 'one' })), /communications\/recognition\?awarded/);
+  assert.equal(page.writes(), 1); assert.equal(page.dashboardReads(), 0);
+  assert.equal(page.inputs[0].awardedByUserId, 'teacher');
+});
+test('Maliha cannot use the certificate action for ordinary badges or after suspension', async () => {
+  const page = await workspace({}, 'emancheman413@gmail.com', 'COMMUNICATIONS');
+  await assert.rejects(page.form.props.action(payload({})), /communications\/recognition/);
+  page.actor.status = 'SUSPENDED';
+  await assert.rejects(page.form.props.action(payload({ awardKind: 'certificate', badgeKey: 'MUMIN_OF_WEEK' })), /auth\/login/);
   assert.equal(page.writes(), 0);
 });

@@ -4,24 +4,27 @@ import vm from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import * as jsxRuntime from 'react/jsx-runtime';
+const permission = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/teacher/recognition-permissions.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: permission });
 function fixture(recipientName, displayName = 'Registered Name') {
   const award = { recipientName, student: { displayName, userId: 'student', user: { firstName: 'Account', lastName: 'Name' }, parents: [], registrationStudents: [], houseMembership: null }, isPublic: true, revokedAt: null, featuredWeek: '2026-10-19', awardedAt: new Date(), title: 'Mumin of the Week', evidence: 'Helping classmates', certificateCode: 'certificate' };
   const actor = { id: "student", role: "STUDENT", email: "student@example.com" };
+  const author = { firstName: "Maliha", lastName: "", email: "emancheman413@gmail.com" };
   const Certificate = () => null, Actions = () => null;
   const dependencies = {
     'react/jsx-runtime': jsxRuntime,
-    '@/lib/teacher/recognition-permissions': { canAwardWeeklyCertificates: user => user.role === 'TEACHER' && ['mehranraziq@gmail.com', 'umm.abdissamee@gmail.com'].includes(user.email) },
+    '@/lib/teacher/recognition-permissions': permission,
     '@/components/dashboard/RecognitionCertificate': { RecognitionCertificate: Certificate },
     '@/components/dashboard/CertificateActions': { CertificateActions: Actions },
     '@/lib/community/recognition-week': { recognitionWeekLabel: () => 'Week of 19 October' },
     'next/navigation': { notFound: () => { throw Error('not found'); }, redirect: () => { throw Error('login'); } },
     '@/lib/auth/session': { getCurrentSession: async () => ({ user: actor }) },
     '@/lib/community/qabilas': { qabilaProfile: () => award.student.houseMembership?.profile ?? null },
-    '@/lib/db': { db: { recognitionAward: { findUnique: async () => award } } },
+    '@/lib/db': { db: { recognitionAward: { findUnique: async () => award }, user: { findUnique: async () => author } } },
   };
   const exports = {};
   vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/app/certificates/[code]/page.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, require: name => { if (!(name in dependencies)) throw Error(name); return dependencies[name]; } });
-  return { render: () => exports.default({ params: Promise.resolve({ code: 'certificate' }) }), Certificate, Actions, award, actor };
+  return { render: () => exports.default({ params: Promise.resolve({ code: 'certificate' }) }), Certificate, Actions, award, actor, author };
 }
 function find(tree, type) {
   if (!tree || typeof tree !== 'object') return null;
@@ -102,3 +105,12 @@ for (const [gender, title] of [['Girl', 'Muminas of the Week'], ['Boy', 'Mumins 
     assert.equal(find(tree, f.Actions).props.filename, 'Sibling One & Sibling Two ' + title);
   });
 }
+
+test('Maliha can preview a private child certificate and the printed signatory is Sister Saba', async () => {
+  const f = fixture('Amna Ali'); f.award.badgeKey = 'MUMIN_OF_WEEK'; f.award.isPublic = false; f.award.awardedByUserId = 'maliha';
+  Object.assign(f.actor, { id: 'maliha', role: 'COMMUNICATIONS', email: 'emancheman413@gmail.com', status: 'ACTIVE' });
+  assert.equal(find(await f.render(), f.Certificate).props.teacher, 'Sister Saba');
+  f.actor.status = 'SUSPENDED'; await assert.rejects(f.render(), /not found/);
+  f.actor.status = 'ACTIVE'; f.actor.email = 'other@example.com'; await assert.rejects(f.render(), /not found/);
+  f.actor.email = 'emancheman413@gmail.com'; f.award.badgeKey = 'HELPER'; await assert.rejects(f.render(), /not found/);
+});

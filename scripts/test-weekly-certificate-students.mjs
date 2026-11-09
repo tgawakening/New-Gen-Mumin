@@ -34,3 +34,10 @@ for (const user of [{ role: 'TEACHER', email: 'other@example.com' }, { role: 'ST
   await assert.rejects(f.getWeeklyCertificateStudents(user), /cannot award/);
   assert.equal(f.queries.length, 0);
 });
+
+test('active Maliha receives the full student list, while other or inactive Communications users are rejected', async () => {
+  const f = fixture(); const actor = { role: 'COMMUNICATIONS', email: 'emancheman413@gmail.com', status: 'ACTIVE' };
+  assert.equal((await f.getWeeklyCertificateStudents(actor)).length, 2);
+  for (const user of [{ ...actor, status: 'SUSPENDED' }, { ...actor, email: 'other@example.com' }]) await assert.rejects(f.getWeeklyCertificateStudents(user), /cannot award/);
+  assert.equal(f.queries.length, 1);
+});

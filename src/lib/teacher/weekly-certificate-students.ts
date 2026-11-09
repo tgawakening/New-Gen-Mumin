@@ -4,7 +4,7 @@ import { canAwardWeeklyCertificates } from "./recognition-permissions";
 
 // Weekly certificate teachers recognise the whole school, regardless of class,
 // payment status or whether a learner has logged in yet.
-export async function getWeeklyCertificateStudents(user: { role: string; email: string }) {
+export async function getWeeklyCertificateStudents(user: { role: string; email: string; status?: string }) {
   if (!canAwardWeeklyCertificates(user)) throw new Error("You cannot award weekly certificates.");
   const students = await db.studentProfile.findMany({
     select: {

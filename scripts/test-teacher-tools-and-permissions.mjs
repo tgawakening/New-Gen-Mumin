@@ -88,11 +88,14 @@ test("Mehran's obsolete Arabic classes cannot trigger his reminder", async () =>
   f.setRows([liveRow("seerah")]); assert.equal((await f.GET()).data.live, true);
 });
 
-function mumFixture(email) {
-  let actor = { id: "teacher", role: "TEACHER", email };
-  let dashboardReads = 0;
+function mumFixture(email, role = "TEACHER") {
+  let actor = { id: "creator", role, email, status: "ACTIVE" };
+  let dashboardReads = 0; const writes = [];
+  const links = role === "COMMUNICATIONS" ? [{ parentId: "mum", studentId: "amna", parent: { id: "mum", user: { firstName: "Mother", lastName: "Ali", email: "mum@example.test" } }, student: { displayName: "Amna Ali", user: { firstName: "Amna" }, houseMembership: { qabilaGroup: "Qabila Banu Makhzum" } } }] : [];
   const empty = () => null;
   const { default: Page } = load("src/app/teacher/parent-recognition/page.tsx", {
+    "@/components/dashboard/communications/CommunicationsCertificateFrame": { CommunicationsCertificateFrame: empty },
+    "@/lib/teacher/weekly-certificate-students": { getWeeklyCertificateStudents: async () => [{ id: "amna", name: "Amna Ali" }] },
     "@/components/dashboard/teacher/CertificatePublication": { CertificatePublicField: empty, CertificatePublicationControl: empty, HideWeeklyCertificates: empty },
     "@/lib/community/certificate-publication": { setCertificatePublication: async () => {} },
     "@/app/teacher/certificate-actions": { refreshCertificatePortals: async () => {} },
@@ -107,13 +110,13 @@ function mumFixture(email) {
     "@/components/dashboard/teacher/TeacherDashboardFrame": { TeacherDashboardFrame: empty, TeacherMetricGrid: empty, TeacherSection: empty },
     "@/components/dashboard/teacher/TeacherRewardWorkspaceTabs": { TeacherRewardWorkspaceTabs: empty },
     "@/lib/auth/session": { getCurrentSession: async () => ({ user: actor }), getDashboardHome: () => "/" },
-    "@/lib/community/parent-recognition": { MUM_CHARACTER_BADGES: [], awardParentRecognition: () => { throw Error("Unexpected write"); } },
+    "@/lib/community/parent-recognition": { MUM_CHARACTER_BADGES: [{ key: "MUM_OF_WEEK", title: "Mum of the Week" }], awardParentRecognition: async input => { writes.push(input); return { id: "award", certificateCode: "code" }; } },
     "@/lib/community/point-awards": { pointDayKey: () => "2026-10-29" },
-    "@/lib/db": { db: { parentStudent: { findMany: async () => [] }, parentRecognitionAward: { findMany: async () => [] } } },
+    "@/lib/db": { db: { parentStudent: { findMany: async () => links }, parentRecognitionAward: { findMany: async () => [] } } },
     "@/lib/teacher/dashboard": { getTeacherDashboardData: async () => { dashboardReads++; return { rosters: [] }; } },
     "@/lib/teacher/nav": { getTeacherNavItems: () => [] },
   });
-  return { Page: () => Page({}), dashboardReads: () => dashboardReads, setActor: value => { actor = value; } };
+  return { Page: () => Page({}), writes, dashboardReads: () => dashboardReads, setActor: value => { actor = value; } };
 }
 function findForm(node) {
   if (!node || typeof node !== "object") return null;
@@ -133,4 +136,18 @@ test("Mum award action rechecks identity when an old form is submitted", async (
   const reads = fixture.dashboardReads();
   await assert.rejects(findForm(tree).props.action(new FormData()), /\/teacher\/recognition/);
   assert.equal(fixture.dashboardReads(), reads);
+});
+
+test('Maliha creates a Mum certificate in Communications without any teaching roster', async () => {
+  const f = mumFixture('emancheman413@gmail.com', 'COMMUNICATIONS');
+  const tree = await f.Page();
+  assert.equal(f.dashboardReads(), 0);
+  const form = new FormData();
+  for (const [key,value] of Object.entries({ parentId: 'mum', badgeKey: 'MUM_OF_WEEK', evidence: 'Supporting her children with kindness.', featuredWeek: '2026-10-26' })) form.set(key,value);
+  await assert.rejects(findForm(tree).props.action(form), /communications\/parent-recognition\?awarded/);
+  assert.equal(f.writes.length, 1); assert.equal(f.writes[0].awardedByUserId, 'creator');
+  assert.equal(f.dashboardReads(), 0);
+  f.setActor({ id: 'creator', role: 'COMMUNICATIONS', email: 'emancheman413@gmail.com', status: 'SUSPENDED' });
+  await assert.rejects(findForm(tree).props.action(form), /auth\/login/);
+  assert.equal(f.writes.length, 1);
 });

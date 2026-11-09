@@ -15,6 +15,7 @@ export type SessionUser = {
   firstName: string;
   lastName: string;
   role: UserRole;
+  status: string;
 };
 
 const ACTIVE_ENROLLMENT_STATUSES = ["ACTIVE", "CONFIRMED", "COMPLETED"] as const;
@@ -52,6 +53,7 @@ export const getCurrentSession = cache(async () => {
       firstName: session.user.firstName,
       lastName: session.user.lastName,
       role: session.user.role,
+      status: session.user.status,
     } satisfies SessionUser,
   };
 });

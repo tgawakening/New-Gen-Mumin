@@ -6,10 +6,13 @@ import ts from 'typescript';
 const sharesModule = {};
 vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/community/mum-certificate-points.ts','utf8'), {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{exports:sharesModule});
 
-function fixture({ parent = false, allowed = true, published = false } = {}) {
+const permission = {};
+vm.runInNewContext(ts.transpileModule(fs.readFileSync("src/lib/teacher/recognition-permissions.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { exports: permission });
+
+function fixture({ parent = false, allowed = true, published = false, delegate = false } = {}) {
   const award = { id: 'award', badgeKey: parent ? 'MUM_OF_WEEK' : 'MUMIN_OF_WEEK', ...(parent ? { parentId: 'mum' } : { studentId: 'child' }), title: 'Weekly certificate', evidence: 'Kindness in class', description: 'Recognition', certificateCode: 'code', isPublic: published, revokedAt: null, awardedAt: new Date() };
   const ledger = new Map(published ? [['award', { points: 150 }]] : []), notices = [], emails = [], locks = [];
-  const user = { id: 'teacher', role: 'TEACHER', email: allowed ? 'mehranraziq@gmail.com' : 'other@example.com' };
+  const user = { id: 'teacher', role: delegate ? 'COMMUNICATIONS' : 'TEACHER', status: 'ACTIVE', email: allowed ? (delegate ? 'emancheman413@gmail.com' : 'mehranraziq@gmail.com') : 'other@example.com' };
   const awardModel = { findUnique: async () => award, update: async ({ data }) => Object.assign(award, data), findMany: async () => award.isPublic ? [{ id: award.id }] : [] };
   const student = { id: 'child', userId: 'learner', displayName: 'Learner', user: { email: 'child@example.com', firstName: 'Learner' }, houseMembership: { houseId: 'house', qabilaGroup: 'Qabila Banu Asad' }, parents: [{ parent: { userId: 'mother', user: { email: 'mum@example.com', firstName: 'Mum' } } }] };
   const links = [{ studentId: 'child', student }];
@@ -26,8 +29,8 @@ function fixture({ parent = false, allowed = true, published = false } = {}) {
   };
   db.$transaction = async fn => fn(db);
   const exports = {};
-  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/community/certificate-publication.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: id => ({ 'server-only': {}, '@/lib/db': { db }, '@/lib/community/mum-certificate-points':sharesModule, '@/lib/teacher/recognition-permissions': { canAwardWeeklyCertificates: user => user.email === 'mehranraziq@gmail.com' && user.role === 'TEACHER' }, '@/lib/email/notifications': { sendParentRecognitionEmail: async x => emails.push(x), sendRecognitionEarnedEmail: async x => emails.push(x) } })[id] });
-  return { ...exports, award, student, links, ledger, notices, emails, locks, input: { userId: 'teacher', awardId: 'award', parent, isPublic: true } };
+  vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/community/certificate-publication.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, { exports, require: id => ({ 'server-only': {}, '@/lib/db': { db }, '@/lib/community/mum-certificate-points':sharesModule, '@/lib/teacher/recognition-permissions': permission, '@/lib/email/notifications': { sendParentRecognitionEmail: async x => emails.push(x), sendRecognitionEarnedEmail: async x => emails.push(x) } })[id] });
+  return { ...exports, award, student, actor: user, links, ledger, notices, emails, locks, input: { userId: 'teacher', awardId: 'award', parent, isPublic: true } };
 }
 
 for (const parent of [false, true]) {
@@ -126,4 +129,14 @@ test('joint publication requires both children and both Qabilas', async () => {
   f.links.push({ studentId: 'sibling', student: { ...f.student, id: 'sibling', houseMembership: null } });
   await assert.rejects(f.setCertificatePublication(f.input), /Assign.*Qabila/);
   assert.equal(f.ledger.size, 0); assert.equal(f.notices.length, 0);
+});
+
+for (const parent of [false, true]) test(`Maliha can publish/hide ${parent ? 'Mum' : 'child'} certificates; suspension immediately blocks publication`, async () => {
+  const f = fixture({ parent, delegate: true });
+  await f.setCertificatePublication(f.input);
+  assert.equal(f.award.isPublic, true); assert.equal(f.ledger.get('award').points, 150);
+  await f.setCertificatePublication({ ...f.input, isPublic: false });
+  assert.equal(f.ledger.size, 0);
+  f.actor.status = 'SUSPENDED';
+  await assert.rejects(f.setCertificatePublication(f.input), /cannot manage/);
 });

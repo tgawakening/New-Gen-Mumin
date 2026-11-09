@@ -1,3 +1,4 @@
+import { CommunicationsCertificateFrame } from "@/components/dashboard/communications/CommunicationsCertificateFrame";
 import { getWeeklyCertificateStudents } from "@/lib/teacher/weekly-certificate-students";
 import { qabilaProfile } from "@/lib/community/qabilas";
 import { CertificatePublicField, CertificatePublicationControl, HideWeeklyCertificates } from "@/components/dashboard/teacher/CertificatePublication";
@@ -36,16 +37,19 @@ type Props = { searchParams?: Promise<RosterAwardFilters & { awarded?: string; r
 export default async function TeacherRecognitionPage({ searchParams }: Props) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
-  if (session.user.role !== "TEACHER") redirect(getDashboardHome(session.user.role));
+  if (session.user.role !== "TEACHER" && !canAwardWeeklyCertificates(session.user)) redirect(getDashboardHome(session.user.role));
 
-  const dashboard = await getTeacherDashboardData(session.user.id);
-  if (!dashboard) redirect("/teacher-registration");
+  const communications = session.user.role === "COMMUNICATIONS";
+  const recognitionPath = communications ? "/communications/recognition" : "/teacher/recognition";
+  const DashboardFrame = communications ? CommunicationsCertificateFrame : TeacherDashboardFrame;
+  const dashboard = communications ? null : await getTeacherDashboardData(session.user.id);
+  if (!communications && !dashboard) redirect("/teacher-registration");
   const params = searchParams ? await searchParams : {};
   const canAwardCertificates = canAwardWeeklyCertificates(session.user);
-  const certificateTab = params.tab === "certificate" || Boolean(params.certificate);
+  const certificateTab = communications || params.tab === "certificate" || Boolean(params.certificate);
   if (certificateTab && !canAwardCertificates) redirect("/teacher/recognition?error=Weekly%20certificates%20are%20awarded%20by%20Sister%20Saba%20or%20Ustadh%20Mehran.");
   const selectedBadge = MANUAL.some((badge) => badge.key === params.badge) ? params.badge : "";
-  const students = certificateTab ? await getWeeklyCertificateStudents(session.user) : Array.from(new Map(dashboard.rosters.flatMap((roster) => roster.students).map((student) => [student.id, student])).values()).sort((a, b) => a.name.localeCompare(b.name));
+  const students = certificateTab ? await getWeeklyCertificateStudents(session.user) : Array.from(new Map((dashboard?.rosters ?? []).flatMap((roster) => roster.students).map((student) => [student.id, student])).values()).sort((a, b) => a.name.localeCompare(b.name));
   const recentAwards = await db.recognitionAward.findMany({
     where: { ...(certificateTab ? { badgeKey: WEEKLY_BADGE_KEY } : { awardedByUserId: session.user.id, sourceType: "TEACHER_NOMINATION", isPublic: true }), revokedAt: null },
     orderBy: { awardedAt: "desc" },
@@ -56,13 +60,14 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
   async function nominate(formData: FormData) {
     "use server";
     const current = await getCurrentSession();
-    if (!current || current.user.role !== "TEACHER") redirect("/auth/login");
-    const currentDashboard = await getTeacherDashboardData(current.user.id);
-    if (!currentDashboard) redirect("/teacher-registration");
+    if (!current || (current.user.role !== "TEACHER" && !canAwardWeeklyCertificates(current.user))) redirect("/auth/login");
+    const currentDashboard = current.user.role === "COMMUNICATIONS" ? null : await getTeacherDashboardData(current.user.id);
+    if (current.user.role !== "COMMUNICATIONS" && !currentDashboard) redirect("/teacher-registration");
 
     const studentId = String(formData.get("studentId") || "");
     const badgeKey = String(formData.get("badgeKey") || "");
     const certificateAward = formData.get("awardKind") === "certificate";
+    if (current.user.role === "COMMUNICATIONS" && !certificateAward) redirect("/communications/recognition");
     if (certificateAward && !canAwardWeeklyCertificates(current.user)) redirect("/teacher/recognition?error=You%20do%20not%20have%20permission%20to%20award%20weekly%20certificates.");
     const evidence = String(formData.get("evidence") || "").trim().slice(0, certificateAward ? 240 : 500);
     const recipientName = certificateAward ? String(formData.get("recipientName") || "").trim().replace(/\s+/g, " ").slice(0, 170) : undefined;
@@ -71,12 +76,12 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
     const requestedKind = String(formData.get("certificateKind") || "");
     const certificateKind = certificateAward && (requestedKind === "boy" || requestedKind === "girl") ? requestedKind : undefined;
     const weekly = certificateAward;
-    const errorBase = weekly ? "/teacher/recognition?tab=certificate&error=" : "/teacher/recognition?error=";
+    const errorBase = weekly ? recognitionPath + "?tab=certificate&error=" : recognitionPath + "?error=";
     const selectedWeek = String(formData.get("featuredWeek") || "");
     if (weekly && !validRecognitionWeek(selectedWeek)) redirect(errorBase + encodeURIComponent("Choose a valid current or past week."));
     const permittedBadges = new Set(weekly ? [WEEKLY_BADGE_KEY] : MANUAL.map((badge) => badge.key));
     const certificateStudents = weekly ? await getWeeklyCertificateStudents(current.user) : [];
-    const eligibleStudents = weekly ? certificateStudents : currentDashboard.rosters.flatMap(roster => roster.students);
+    const eligibleStudents = weekly ? certificateStudents : (currentDashboard?.rosters ?? []).flatMap(roster => roster.students);
     const eligible = new Set(eligibleStudents.map(student => student.id));
 
     if (!eligible.has(studentId) || (beneficiaryStudentId && !eligible.has(beneficiaryStudentId)) || !permittedBadges.has(badgeKey) || evidence.length < 12) {
@@ -118,34 +123,34 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
 
     if (weekly) await setCertificatePublication({ userId: current.user.id, awardId: award.id, parent: false, isPublic: formData.get("isPublic") === "on" });
     await refreshCertificatePortals();
-    revalidatePath("/teacher/recognition");
+    revalidatePath(recognitionPath);
     revalidatePath("/student/rewards");
     revalidatePath("/parent/rewards");
     revalidatePath(`/certificates/${award.certificateCode}`);
     revalidatePath(`/badges/${award.certificateCode}`);
     revalidatePath("/admin/rewards");
-    redirect(`/teacher/recognition?awarded=1${weekly ? `&certificate=${award.certificateCode}` : ""}`);
+    redirect(`${recognitionPath}?awarded=1${weekly ? `&certificate=${award.certificateCode}` : ""}`);
   }
 
   async function removeAward(formData: FormData) {
     "use server";
     const current = await getCurrentSession();
-    if (!current || current.user.role !== "TEACHER") redirect("/auth/login");
+    if (!current || (current.user.role !== "TEACHER" && !canAwardWeeklyCertificates(current.user))) redirect("/auth/login");
     const awardId = String(formData.get("awardId") || "");
-    const award = await db.recognitionAward.findFirst({ where: { id: awardId, awardedByUserId: current.user.id, sourceType: { in: ["WEEKLY_NOMINATION", "TEACHER_NOMINATION"] }, revokedAt: null } });
-    if (!award) redirect("/teacher/recognition?error=Award%20not%20found%20or%20you%20do%20not%20have%20permission%20to%20remove%20it.");
+    const award = await db.recognitionAward.findFirst({ where: { id: awardId, ...(current.user.role === "COMMUNICATIONS" ? { badgeKey: WEEKLY_BADGE_KEY } : {}), awardedByUserId: current.user.id, sourceType: { in: ["WEEKLY_NOMINATION", "TEACHER_NOMINATION"] }, revokedAt: null } });
+    if (!award) redirect(recognitionPath + "?error=Award%20not%20found%20or%20you%20do%20not%20have%20permission%20to%20remove%20it.");
     await db.$transaction(async (tx) => {
       await tx.notification.deleteMany({ where: { href: `/certificates/${award.certificateCode}` } });
       await tx.housePointLedger.deleteMany({ where: { sourceId: award.id, studentId: { in: [award.studentId, ...(award.secondStudentId ? [award.secondStudentId] : []), ...(award.beneficiaryStudentId ? [award.beneficiaryStudentId] : [])] } } });
       await tx.recognitionAward.delete({ where: { id: award.id } });
     });
-    revalidatePath("/teacher/recognition"); revalidatePath("/student"); revalidatePath("/student/rewards"); revalidatePath("/parent"); revalidatePath("/parent/rewards"); revalidatePath(`/certificates/${award.certificateCode}`);
-    redirect("/teacher/recognition?removed=1");
+    revalidatePath(recognitionPath); revalidatePath("/student"); revalidatePath("/student/rewards"); revalidatePath("/parent"); revalidatePath("/parent/rewards"); revalidatePath(`/certificates/${award.certificateCode}`);
+    redirect(recognitionPath + "?removed=1");
   }
   return (
-    <TeacherDashboardFrame title={canAwardCertificates ? "Badges, Certificates & Points" : "Badges & Live Points"} subtitle={canAwardCertificates ? "Award student badges, class points and weekly certificates." : "Recognise student character and award fair points during class."} navItems={getTeacherNavItems()}>
+    <DashboardFrame title={communications ? "Weekly child certificates" : canAwardCertificates ? "Badges, Certificates & Points" : "Badges & Live Points"} subtitle={communications ? "Create, preview and publish weekly student certificates." : canAwardCertificates ? "Award student badges, class points and weekly certificates." : "Recognise student character and award fair points during class."} navItems={getTeacherNavItems()}>
       <ActionToast message={params.awarded ? (certificateTab ? "Certificate saved. Its visibility is shown in the certificate history." : "Badge awarded. The learner can find it in their rewards.") : params.removed ? "Award, certificate, and its related House points removed." : params.error} tone={params.error ? "error" : "success"} />
-      <TeacherRewardWorkspaceTabs active={certificateTab ? "certificate" : "recognition"} canAwardCertificates={canAwardCertificates} />
+      <TeacherRewardWorkspaceTabs communications={communications} active={certificateTab ? "certificate" : "recognition"} canAwardCertificates={canAwardCertificates} />
       <TeacherMetricGrid metrics={[
         { label: certificateTab ? "All students" : "Roster students", value: String(students.length), hint: certificateTab ? "All student accounts, across every class." : "Unique eligible learners." },
         certificateTab ? { label: "Weekly Qabila bonus", value: "150 pts", hint: "Added only while the certificate is public." } : { label: "Character badges", value: String(MANUAL.length), hint: "Choose a badge for an action you observed." },
@@ -188,7 +193,7 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
         <AwardBadgeForm key={selectedBadge} action={nominate} students={students.map(student => ({ id: student.id, name: student.name }))} badges={MANUAL} bonuses={BONUS} initialBadge={selectedBadge ?? ""} />
       </TeacherSection>}
       {!certificateTab ? <TeacherBadgeOverview canAwardCertificates={canAwardCertificates} /> : null}
-      <RosterAwards students={students.map(({ id, name }) => ({ id, name }))} filters={params} />
+      {!communications ? <RosterAwards students={students.map(({ id, name }) => ({ id, name }))} filters={params} /> : null}
       {certificateTab ? <HideWeeklyCertificates /> : null}
       <TeacherSection eyebrow="Teacher award history" title={certificateTab ? "My recent weekly certificates" : "My recent student badges"}>
         <p className="mb-4 text-sm leading-6 text-[#617184]">You can remove an award you created while testing. Its certificate will be hidden and its awarded House points will be safely reversed.</p>
@@ -200,6 +205,6 @@ export default async function TeacherRecognitionPage({ searchParams }: Props) {
           {!recentAwards.length ? <p className="rounded-2xl bg-[#f8fafc] p-5 text-sm text-[#617184]">You have not assigned any certificates or badges yet.</p> : null}
         </div>
       </TeacherSection>
-    </TeacherDashboardFrame>
+    </DashboardFrame>
   );
 }

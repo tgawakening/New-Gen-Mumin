@@ -1,4 +1,4 @@
-import { canAwardWeeklyCertificates } from "@/lib/teacher/recognition-permissions";
+import { canAwardWeeklyCertificates, weeklyCertificateSignatory } from "@/lib/teacher/recognition-permissions";
 import { RecognitionCertificate } from "@/components/dashboard/RecognitionCertificate";
 import { recognitionWeekLabel } from "@/lib/community/recognition-week";
 import { notFound, redirect } from "next/navigation";
@@ -12,11 +12,12 @@ export default async function CertificatePage({ params }: Props) {
   const { code } = await params;
   const award = await db.recognitionAward.findUnique({ where: { certificateCode: code }, include: { secondStudent: { include: { user: true, parents: { include: { parent: true } } } }, student: { include: { user: true, parents: { include: { parent: true } }, houseMembership: true, registrationStudents: { orderBy: { createdAt: "desc" }, take: 1, select: { gender: true } } } } } });
   if (!award || (!award.isPublic && session.user.role !== "ADMIN" && !canAwardWeeklyCertificates(session.user)) || award.revokedAt) notFound();
+  if (session.user.role === "COMMUNICATIONS" && award.badgeKey !== "MUMIN_OF_WEEK") notFound();
   const recipients = [award.student, ...(award.secondStudent ? [award.secondStudent] : [])];
-  const allowed = session.user.role === "ADMIN" || session.user.role === "TEACHER" || recipients.some(student => student.userId === session.user.id || student.parents.some((link) => link.parent.userId === session.user.id)); if (!allowed) notFound();
-  const teacher = award.awardedByUserId ? await db.user.findUnique({ where: { id: award.awardedByUserId }, select: { firstName: true, lastName: true } }) : null;
+  const allowed = session.user.role === "ADMIN" || session.user.role === "TEACHER" || canAwardWeeklyCertificates(session.user) || recipients.some(student => student.userId === session.user.id || student.parents.some((link) => link.parent.userId === session.user.id)); if (!allowed) notFound();
+  const teacher = award.awardedByUserId ? await db.user.findUnique({ where: { id: award.awardedByUserId }, select: { firstName: true, lastName: true, email: true } }) : null;
   const name = award.recipientName?.trim() || recipients.map(student => student.displayName || `${student.user.firstName} ${student.user.lastName ?? ""}`.trim()).join(" & ");
-  const teacherName = teacher ? `${teacher.firstName} ${teacher.lastName ?? ""}`.trim() : "Gen-Mumin Faculty";
+  const teacherName = weeklyCertificateSignatory(teacher);
   const qabila = qabilaProfile(award.student.houseMembership?.qabilaGroup);
   const gender = award.student.registrationStudents[0]?.gender?.trim().toLowerCase() ?? "";
   const girl = ["girl", "female", "f"].includes(gender);
