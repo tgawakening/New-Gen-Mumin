@@ -101,3 +101,7 @@ In the Zoom web portal, configure these settings for the teacher users or lock t
 - Cloud recording: enable `Record active speaker with shared screen`, `Record gallery view with shared screen`, and `Record shared screen separately`.
 
 A teacher should use `Start as host` for a meeting assigned to their Zoom user. `Join as member` is only a participant fallback; it does not grant host controls and cannot overcome a meeting owned by another host who already has a meeting running.
+
+## Zoom-based duration attendance
+
+For reliable participant join/leave tracking, individual child/parent identity codes, durable report reconciliation, weekly programme completion and monthly reports, follow [the attendance rollout guide](zoom-attendance-rollout.md). It includes the additional participant/end events and scopes, required migration, dedicated worker and activation order. Do not activate the new Prisma attendance code before its migration.
