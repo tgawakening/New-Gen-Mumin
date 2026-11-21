@@ -1,3 +1,4 @@
+import { ZoomPresenceReport } from "@/components/dashboard/family/ZoomPresenceReport";
 import { AttendanceRecordStatus } from "@/components/dashboard/family/AttendanceRecordStatus";
 import { db } from "@/lib/db";
 import { AttendanceMonthlyReport } from "@/components/dashboard/family/AttendanceMonthlyReport";
@@ -13,7 +14,7 @@ import { getParentDashboardData } from "@/lib/dashboard/family";
 import { getParentNavItems } from "@/lib/dashboard/family-nav";
 import { listParentChildAttendance } from "@/lib/live-classes/attendance-reports";
 
-type PageProps = { searchParams?: Promise<{ child?: string }> };
+type PageProps = { searchParams?: Promise<{ child?: string; month?: string }> };
 export default async function ParentAttendancePage({ searchParams }: PageProps) {
   const session = await getCurrentSession();
   if (!session) redirect("/auth/login");
@@ -27,7 +28,7 @@ export default async function ParentAttendancePage({ searchParams }: PageProps) 
   const totals = attendanceTotals(history, reports);
   const attended = totals.present;
   const minutes = history.reduce((sum, item) => sum + (item.durationMinutes ?? 0), 0);
-  return <FamilyDashboardFrame roleLabel="Parent Dashboard" title="Attendance" subtitle="Review each child's session-by-session attendance and verified Zoom time." navItems={getParentNavItems(child.id)} pendingReason={dashboard.pendingReason}><SectionCard eyebrow="Learner" title="Choose a child"><ChildSelector learners={dashboard.children.map((item) => ({ id: item.id, name: item.name }))} selectedChildId={child.id} basePath="/parent/attendance" /></SectionCard><AttendanceRecordStatus records={history} reports={reports}/><MetricGrid metrics={[{ label: "Sessions", value: String(history.length), hint: "Recorded classes." }, { label: "Attended", value: String(attended), hint: "Joined the class." }, { label: "Class time", value: `${minutes} min`, hint: "Verified Zoom time." }, { label: "Confirmed attendance", value: totals.rate === null ? "Pending" : `${totals.rate}%`, hint: `${totals.pending} sessions still unconfirmed.` }]} /><Suspense fallback={<p role="status">Loading attendance corrections?</p>}><RecoverySection parentUserId={session.user.id} studentId={child.id} /></Suspense><AttendanceMonthlyReport records={history} reports={reports} /><SectionCard eyebrow="Session history" title={`${child.name}'s recent attendance`}><p className="mb-4 text-sm text-[#617184]">Seerah and Life Skills each count once per Pakistan calendar day. Attend either time slot; joining at any time counts as present. Connection time excludes recorded disconnect gaps.</p><AttendanceHistory records={history} /></SectionCard></FamilyDashboardFrame>;
+  return <FamilyDashboardFrame roleLabel="Parent Dashboard" title="Attendance" subtitle="Review each child's session-by-session attendance and verified Zoom time." navItems={getParentNavItems(child.id)} pendingReason={dashboard.pendingReason}><SectionCard eyebrow="Learner" title="Choose a child"><ChildSelector learners={dashboard.children.map((item) => ({ id: item.id, name: item.name }))} selectedChildId={child.id} basePath="/parent/attendance" /></SectionCard><ZoomPresenceReport user={session.user} studentId={child.id} month={params.month} basePath="/parent/attendance"/><AttendanceRecordStatus records={history} reports={reports}/><MetricGrid metrics={[{ label: "Sessions", value: String(history.length), hint: "Recorded classes." }, { label: "Attended", value: String(attended), hint: "Joined the class." }, { label: "Class time", value: `${minutes} min`, hint: "Verified Zoom time." }, { label: "Confirmed attendance", value: totals.rate === null ? "Pending" : `${totals.rate}%`, hint: `${totals.pending} sessions still unconfirmed.` }]} /><Suspense fallback={<p role="status">Loading attendance corrections?</p>}><RecoverySection parentUserId={session.user.id} studentId={child.id} /></Suspense><AttendanceMonthlyReport records={history} reports={reports} /><SectionCard eyebrow="Session history" title={`${child.name}'s recent attendance`}><p className="mb-4 text-sm text-[#617184]">Seerah and Life Skills each count once per Pakistan calendar day. Attend either time slot; joining at any time counts as present. Connection time excludes recorded disconnect gaps.</p><AttendanceHistory records={history} /></SectionCard></FamilyDashboardFrame>;
 }
 
 async function RecoverySection({ parentUserId, studentId }: { parentUserId: string; studentId: string }) {
