@@ -11,3 +11,8 @@ Parent and student task emails are sent when the task is live, with the child, p
 Student submissions queue a teacher notification and email linking to the specific teacher homework card. For newly created tasks the assigning teacher is recorded in the launch job; for older tasks, active programme teachers are filtered by student roster and programme permissions. Superseded submission revisions are discarded. Repeated delivery uses deterministic portal notification IDs and durable email keys. Provider failures, missing configuration and the existing global email quota defer delivery for retry; successful delivery is never assumed from a saved job alone.
 
 Previously created homework is visible in the new pages, but the worker does not send a retrospective launch-email campaign for old assignments. Existing student task URLs redirect to the new workspace.
+
+
+Homework file uploads support multiple parts. Parents and students can select up to 10 files per submission or upload more parts later; each upload appends to that learner's existing files for the selected homework. Previously submitted legacy files remain visible. All files appear in both family portals and the teacher review workspace, with the first submission date and one-time points preserved. Each teacher-created, published homework retains its own task card and submission form; teachers should create a new task for each new homework rather than reuse an older task.
+
+Deploy with the additive `20261121120000_homework_multiple_files` migration, which adds the nullable JSON `AssignmentSubmission.attachmentFiles` column. No existing files or rows are modified. The legacy `attachmentUrl` remains readable.

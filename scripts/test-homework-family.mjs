@@ -13,10 +13,12 @@ function load(file, deps) {
   vm.runInNewContext(ts.transpileModule(fs.readFileSync(file, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, { exports, Date, Intl, URL, URLSearchParams, File, console, require: name => name === 'server-only' ? {} : name in deps ? deps[name] : require(name) });
   return exports;
 }
+const attachments = load('src/lib/homework/attachments.ts', {});
+const submittedFiles = load('src/components/dashboard/family/HomeworkSubmittedFiles.tsx', { '@/lib/homework/attachments': attachments });
 const wrapper = ({ children }) => React.createElement('section', null, children);
 const link = ({ children, href }) => React.createElement('a', { href }, children);
 const task = (id, programTitle) => ({ id, title: `${id} homework`, programTitle, instructions: 'Read and answer clearly', teacherName: 'Teacher', dueDate: new Date('2026-12-01'), dueDateLabel: '1 December', weekLabel: 'Week 1', attachments: [{ id: 'file', name: 'Worksheet.pdf', url: 'https://example.com/work.pdf' }], resourceLinks: [], feedback: null, score: null, submissionTiming: 'Not submitted', familyNote: null });
-function pageFixture(role = 'STUDENT', { locked = false } = {}) {
+function pageFixture(role = 'STUDENT', { locked = false, submissions = [] } = {}) {
   const child = { id: 'child', name: 'Learner', accessLocked: locked, assignments: [task('older', 'Arabic'), task('newest', 'Seerah')] };
   const reads = [];
   const deps = {
@@ -32,7 +34,9 @@ function pageFixture(role = 'STUDENT', { locked = false } = {}) {
     '@/lib/homework/student-action': { submitStudentHomework: async () => {}, submitParentHomework: async () => {} },
     '@/lib/homework/parent-review': { markHomeworkReviewed: async () => {} },
     '@/lib/homework/timing': { homeworkTiming: () => 'Not submitted' },
-    '@/lib/db': { db: { assignment: { findMany: async () => { reads.push('assignments'); return [{ id: 'newest' }, { id: 'older' }]; } }, assignmentSubmission: { findMany: async () => [] }, notification: { findMany: async () => [{ id: 'alert', href: '/parent/homework?child=child&task=newest' }] } } },
+    '@/lib/homework/attachments': attachments,
+    '@/components/dashboard/family/HomeworkSubmittedFiles': submittedFiles,
+    '@/lib/db': { db: { assignment: { findMany: async () => { reads.push('assignments'); return [{ id: 'newest' }, { id: 'older' }]; } }, assignmentSubmission: { findMany: async () => submissions }, notification: { findMany: async () => [{ id: 'alert', href: '/parent/homework?child=child&task=newest' }] } } },
   };
   const file = role === 'PARENT' ? 'src/app/parent/homework/page.tsx' : 'src/app/student/homework/page.tsx';
   const Page = load(file, deps).default;
@@ -65,10 +69,12 @@ test('red homework navigation ignores deleted, future and hidden module tasks an
   const [item] = await service.getNavigationActivity('parent', [{ label: 'Homework & Tasks', href: '/parent/homework?child=child' }]);
   assert.equal(item.activity.count, 1); assert.equal(item.activity.ids[0], 'visible'); assert.equal(item.activity.persistent, true); assert.equal(queries[1].where.href.startsWith, '/parent/homework?child=child&');
 });
-function actionFixture({ locked = false, allowed = true, role = "STUDENT", childId = "child", file = false, failUpload = false } = {}) {
+function actionFixture({ locked = false, allowed = true, role = "STUDENT", childId = "child", file = false, failUpload = false, fileCount = 0, failAt = 0 } = {}) {
   const saved = [], points = [], afters = [], uploads = [];
-  const service = load('src/lib/homework/student-action.ts', { 'next/server': { after: fn => afters.push(fn) }, 'next/cache': { revalidatePath: () => {} }, 'next/navigation': { redirect: url => { throw Error(url); } }, '@/lib/auth/session': { getCurrentSession: async () => ({ user: { id: role === 'PARENT' ? 'parent' : 'student', role } }) }, '@/lib/dashboard/family': { getStudentDashboardData: async () => ({ child: { id: 'child', accessLocked: locked, assignments: allowed ? [{ id: 'task' }] : [] } }), getParentDashboardData: async () => ({ children: [{ id: 'child', accessLocked: locked, assignments: allowed ? [{ id: 'task' }] : [] }] }) }, '@/lib/db': { db: { notification: { updateMany: async () => ({ count: 1 }) }, assignment: { findUnique: async () => ({ id: 'task', title: 'Read', programId: 'program', program: { title: 'Seerah' } }) }, studentProfile: { findUnique: async () => ({ id: 'child', user: { firstName: 'Learner' } }) }, enrollment: { findFirst: async () => ({ id: 'enrollment' }) } } }, '@/lib/google-drive/materials': { uploadStudentSubmissionFile: async input => { uploads.push(input); if (failUpload) throw Error('Upload failed'); return { webViewLink: 'https://example.com/submitted-work' }; } }, '@/lib/homework/submission': { saveHomeworkSubmission: async input => { saved.push(input); return { id: 'submission' }; } }, '@/lib/community/point-awards': { HOUSE_POINT_RULES: { HOMEWORK_SUBMITTED: { points: 10, label: 'Homework submitted' } }, awardHousePointsOnce: async input => points.push(input) }, '@/lib/homework/notifications': { deliverHomeworkNotifications: async () => {} } });
+  const service = load('src/lib/homework/student-action.ts', { 'next/server': { after: fn => afters.push(fn) }, 'next/cache': { revalidatePath: () => {} }, 'next/navigation': { redirect: url => { throw Error(url); } }, '@/lib/auth/session': { getCurrentSession: async () => ({ user: { id: role === 'PARENT' ? 'parent' : 'student', role } }) }, '@/lib/dashboard/family': { getStudentDashboardData: async () => ({ child: { id: 'child', accessLocked: locked, assignments: allowed ? [{ id: 'task' }] : [] } }), getParentDashboardData: async () => ({ children: [{ id: 'child', accessLocked: locked, assignments: allowed ? [{ id: 'task' }] : [] }] }) }, '@/lib/db': { db: { notification: { updateMany: async () => ({ count: 1 }) }, assignment: { findUnique: async () => ({ id: 'task', title: 'Read', programId: 'program', program: { title: 'Seerah' } }) }, studentProfile: { findUnique: async () => ({ id: 'child', user: { firstName: 'Learner' } }) }, enrollment: { findFirst: async () => ({ id: 'enrollment' }) } } }, '@/lib/google-drive/materials': { uploadStudentSubmissionFile: async input => { uploads.push(input); if (failUpload || uploads.length === failAt) throw Error('Upload failed'); return { webViewLink: `https://example.com/submitted-work/${uploads.length}` }; } }, '@/lib/homework/submission': { saveHomeworkSubmission: async input => { saved.push(input); return { id: 'submission' }; } }, '@/lib/community/point-awards': { HOUSE_POINT_RULES: { HOMEWORK_SUBMITTED: { points: 10, label: 'Homework submitted' } }, awardHousePointsOnce: async input => points.push(input) }, '@/lib/homework/notifications': { deliverHomeworkNotifications: async () => {} } });
   const form = new FormData(); form.set('assignmentId', 'task'); form.set('submissionText', 'My completed work'); form.set('childId', childId); if (file) { form.set('submissionText', ''); form.set('submissionFile', new File(['My work'], 'homework.txt', { type: 'text/plain' })); }
+  if (fileCount) form.set("submissionText", "");
+  for (let i = 0; i < fileCount; i++) form.append("submissionFile", new File(["Part"], `part-${i + 1}.txt`, { type: "text/plain" }));
   return { saved, points, afters, uploads, submit: () => role === "PARENT" ? service.submitParentHomework(form) : service.submitStudentHomework(form) };
 }
 test('student submission saves their own answer, credits once and redirects to the exact homework', async () => {
@@ -81,5 +87,51 @@ test('forged hidden assignments and locked accounts cannot submit or award point
 test("parents submit only for their linked child, preserving child ownership, points and teacher alerts", async () => { const f = actionFixture({ role: "PARENT" }); await assert.rejects(f.submit(), /\/parent\/homework\?child=child&task=task&submitted=1/); assert.equal(f.saved[0].studentId, "child"); assert.equal(f.points[0].studentId, "child"); assert.equal(f.afters.length, 1); });
 test("parents cannot submit for another family, a locked child or an unavailable assignment", async () => { for (const options of [{ childId: "foreign-child" }, { locked: true }, { allowed: false }]) { const f = actionFixture({ role: "PARENT", ...options }); await assert.rejects(f.submit()); assert.equal(f.saved.length, 0); assert.equal(f.points.length, 0); } });
 
-test("parents can upload completed work to the linked child student folder without a typed answer", async () => { const f = actionFixture({ role: "PARENT", file: true }); await assert.rejects(f.submit(), /submitted=1/); assert.equal(f.uploads[0].studentId, "child"); assert.equal(f.uploads[0].assignmentId, "task"); assert.equal(f.saved[0].attachmentUrl, "https://example.com/submitted-work"); assert.equal(f.saved[0].submissionText, ""); });
+test("parents can upload completed work to the linked child student folder without a typed answer", async () => { const f = actionFixture({ role: "PARENT", file: true }); await assert.rejects(f.submit(), /submitted=1/); assert.equal(f.uploads[0].studentId, "child"); assert.equal(f.uploads[0].assignmentId, "task"); assert.equal(f.saved[0].attachmentFiles[0].url, "https://example.com/submitted-work/1"); assert.equal(f.saved[0].submissionText, ""); });
 test("failed parent uploads return to that child task without changing submissions or points", async () => { const f = actionFixture({ role: "PARENT", file: true, failUpload: true }); await assert.rejects(f.submit(), /\/parent\/homework\?child=child&task=task&error=upload/); assert.equal(f.saved.length, 0); assert.equal(f.points.length, 0); });
+
+test("both portals upload multiple parts to the same homework", async () => {
+  for (const role of ["PARENT", "STUDENT"]) {
+    const f = actionFixture({ role, fileCount: 2 });
+    await assert.rejects(f.submit(), /submitted=1/);
+    assert.equal(f.uploads.length, 2);
+    assert.deepEqual(Array.from(f.saved[0].attachmentFiles, file => file.name), ["part-1.txt", "part-2.txt"]);
+    assert.equal(f.saved[0].attachmentFiles[1].url, "https://example.com/submitted-work/2");
+    assert.equal(f.points.length, 1);
+  }
+});
+test("a failed second upload does not save an incomplete file list or award points", async () => {
+  const f = actionFixture({ role: "PARENT", fileCount: 2, failAt: 2 });
+  await assert.rejects(f.submit(), /error=upload/);
+  assert.equal(f.uploads.length, 2); assert.equal(f.saved.length, 0); assert.equal(f.points.length, 0);
+});
+test("oversized file batches are rejected before uploading", async () => {
+  const f = actionFixture({ fileCount: 11 });
+  await assert.rejects(f.submit(), /error=files/);
+  assert.equal(f.uploads.length, 0); assert.equal(f.saved.length, 0);
+});
+test("submitted files display together and unsafe links are excluded", () => {
+  const html = renderToStaticMarkup(React.createElement(submittedFiles.HomeworkSubmittedFiles, { submission: {
+    attachmentUrl: "https://example.com/old", attachmentFiles: [{ name: "Part two.pdf", url: "https://example.com/new" }, { name: "Unsafe", url: "javascript:alert(1)" }]
+  } }));
+  assert.match(html, /Submitted files \(2\)/); assert.match(html, /https:\/\/example.com\/old/); assert.match(html, /Part two.pdf/); assert.doesNotMatch(html, /javascript:|Unsafe/);
+});
+
+test("each homework keeps its own submission section and files in both family portals", async () => {
+  for (const role of ["PARENT", "STUDENT"]) {
+    const html = await pageFixture(role, { submissions: [{
+      id: "submission", assignmentId: "newest", attachmentUrl: "https://example.com/one", attachmentFiles: [{ name: "Part one.pdf", url: "https://example.com/one" }, { name: "Part two.pdf", url: "https://example.com/two" }], submittedAt: new Date(), submissionText: "", score: null, feedback: null
+    }] }).render();
+    assert.equal((html.match(/name="assignmentId"/g) || []).length, 2);
+    assert.match(html, /Submitted files \(2\)/);
+    const olderSection = html.split('id="homework-older"')[1];
+    assert.doesNotMatch(olderSection, /Part one.pdf|Part two.pdf/);
+  }
+});
+test("the file picker supports selecting several files and explains that earlier uploads are kept", () => {
+  const fields = load('src/components/dashboard/family/HomeworkSubmissionFields.tsx', {}).HomeworkSubmissionFields;
+  const html = renderToStaticMarkup(React.createElement(fields, { hasAttachment: true }));
+  assert.match(html, /type="file" multiple/);
+  assert.match(html, /previously submitted files stay attached/);
+  assert.doesNotMatch(html, /required=""/);
+});

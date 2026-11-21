@@ -1,3 +1,4 @@
+import { HomeworkSubmittedFiles } from "@/components/dashboard/family/HomeworkSubmittedFiles";
 import { after } from "next/server";
 import { createHomeworkWithNotification, deliverHomeworkNotifications } from "@/lib/homework/notifications";
 import { HomeworkDateFields } from "@/components/dashboard/HomeworkDateFields";
@@ -2307,7 +2308,7 @@ export function CourseBuilderWorkspace({
                             <p>Score: {submission.score ?? "Pending"} {submission.grade ? `- ${submission.grade}` : ""}</p>
                             <p className="font-semibold text-[#28634b]">Homework performance: {submission.homeworkPoints === null ? "Not awarded" : `${submission.homeworkPoints} Qabila points`}</p>
                             {submission.submissionText ? <p className="whitespace-pre-wrap break-words rounded-xl bg-[#f8fafc] p-3">{submission.submissionText}</p> : null}
-                            {submission.attachmentUrl ? <a href={submission.attachmentUrl} target="_blank" className="font-semibold text-[#2a76aa]">Open uploaded file</a> : null}
+                            <HomeworkSubmittedFiles submission={submission} />
                             {submission.feedback ? <p>Feedback: {submission.feedback}</p> : null}
                             {submission.canReview ? <form action={reviewSubmissionAction} className="mt-3 grid gap-2 rounded-2xl bg-[#fbf6ef] p-3">
                               <input type="hidden" name="submissionId" value={submission.id} />

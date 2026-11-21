@@ -134,6 +134,7 @@ export type TeacherDashboardData = {
       submittedAt: Date | null;
       feedback: string | null;
       attachmentUrl: string | null;
+      attachmentFiles?: unknown;
     }>;
   }>;
   reports: Array<{

@@ -130,6 +130,7 @@ type ChildAssignmentSummary = {
   dueDateLabel: string;
   submissionText: string | null;
   attachmentUrl: string | null;
+  attachmentFiles?: unknown;
   id: string;
   programTitle: string;
   title: string;
@@ -855,6 +856,7 @@ function mapAssignmentSummaries(enrollments: any[], submissions: any[]) {
         submissionTiming: homeworkTiming(submission?.submittedAt ?? null, assignment.dueDate),
         submissionText: submission?.submissionText ?? null,
         attachmentUrl: submission?.attachmentUrl ?? null,
+        attachmentFiles: submission?.attachmentFiles,
         status: submission?.status ?? "NOT_STARTED",
         grade: submission?.grade ?? null,
         score: submission?.score ?? null,

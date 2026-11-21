@@ -810,6 +810,7 @@ model AssignmentSubmission {
   status           SubmissionStatus @default(DRAFT)
   submissionText   String?
   attachmentUrl    String?
+  attachmentFiles  Json?
   grade            GradeLevel?
   score            Int?
   reviewedByUserId String?

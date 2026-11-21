@@ -59,7 +59,7 @@ function submissionFixture() {
     update: async ({ data }) => saved = { ...saved, ...data },
   } };
   tx.billingEmailJob = { upsert: async () => ({}) };
-  const service = load('src/lib/homework/submission.ts', { '@/lib/db': { db: { $transaction: fn => fn(tx) } } });
+  const service = load('src/lib/homework/submission.ts', { '@/lib/db': { db: { $transaction: fn => fn(tx) } }, '@/lib/homework/attachments': load('src/lib/homework/attachments.ts') });
   return { ...service, saved: () => saved, locks: () => locks };
 }
 const submission = { assignmentId: 'work', studentId: 'child', enrollmentId: 'enrollment', submissionText: 'My answer', attachmentUrl: 'https://example.com/file' };
@@ -126,4 +126,23 @@ test('award history remains scoped to roster IDs and applies bounded pagination 
   assert.equal(query.where.revokedAt, null);
   assert.equal(query.skip, 20);
   assert.equal(query.take, 10);
+});
+
+test('additional homework parts append to the first file without changing its date or feedback', async () => {
+  const f = submissionFixture();
+  const first = await f.saveHomeworkSubmission(submission);
+  first.submittedAt = new Date('2026-10-29T10:00:00Z');
+  first.feedback = 'Good start';
+  const updated = await f.saveHomeworkSubmission({ ...submission, attachmentUrl: null, attachmentFiles: [{ name: 'Part two.pdf', url: 'https://example.com/part-two' }] });
+  assert.equal(updated.attachmentUrl, submission.attachmentUrl);
+  assert.deepEqual(Array.from(updated.attachmentFiles, file => file.url), [submission.attachmentUrl, 'https://example.com/part-two']);
+  assert.equal(updated.submittedAt.toISOString(), '2026-10-29T10:00:00.000Z');
+  assert.equal(updated.feedback, 'Good start');
+  const retry = await f.saveHomeworkSubmission({ ...submission, attachmentFiles: [{ name: 'Part two.pdf', url: 'https://example.com/part-two' }] });
+  assert.equal(retry.attachmentFiles.length, 2);
+});
+test('new multipart homework accepts files without a typed answer', async () => {
+  const saved = await submissionFixture().saveHomeworkSubmission({ ...submission, submissionText: '', attachmentUrl: null, attachmentFiles: [{ name: 'Part one.pdf', url: 'https://example.com/one' }, { name: 'Part two.pdf', url: 'https://example.com/two' }] });
+  assert.equal(saved.attachmentFiles.length, 2);
+  assert.equal(saved.attachmentUrl, 'https://example.com/one');
 });

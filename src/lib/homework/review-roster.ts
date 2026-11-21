@@ -1,6 +1,6 @@
 import { homeworkTiming } from "@/lib/homework/timing";
 
-type Submission = { id: string; studentId: string; status: string; submittedAt: Date | null; submissionText: string | null; score: number | null; grade: string | null; feedback: string | null; attachmentUrl: string | null };
+type Submission = { id: string; studentId: string; status: string; submittedAt: Date | null; submissionText: string | null; score: number | null; grade: string | null; feedback: string | null; attachmentUrl: string | null; attachmentFiles?: unknown };
 
 export function homeworkReviewRows(assignmentId: string, students: Array<{ id: string; name: string }>, submissions: Submission[], awards: ReadonlyMap<string, number>, dueDate: Date | null) {
   return students.map((student) => {
@@ -18,6 +18,7 @@ export function homeworkReviewRows(assignmentId: string, students: Array<{ id: s
       submittedAt: submission?.submittedAt ?? null,
       feedback: submission?.feedback ?? null,
       attachmentUrl: submission?.attachmentUrl ?? null,
+      attachmentFiles: submission?.attachmentFiles,
     };
   });
 }

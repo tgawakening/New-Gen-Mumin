@@ -31,21 +31,23 @@ async function submitHomework(form: FormData, role: "PARENT" | "STUDENT") {
   const enrollment = await db.enrollment.findFirst({ where: { studentId: student.id, status: { in: ["ACTIVE", "CONFIRMED", "COMPLETED"] }, OR: [{ programId: assignment.programId }, { program: { slug: "full-bundle" } }] } });
   if (!enrollment) throw new Error("You are not enrolled in this programme.");
   const text = String(form.get("submissionText") || "").trim();
-  const file = form.get("submissionFile");
+  const files = form.getAll("submissionFile").filter((file): file is File => file instanceof File && file.size > 0);
+  if (files.length > 10) redirect(destination + "&error=files");
   const rawType = String(form.get("submissionType") || "homework");
   const submissionType = rawType === "assignment" || rawType === "task" ? rawType : "homework";
-  let attachmentUrl: string | null = null;
-  if (file instanceof File && file.size) {
+  const attachmentFiles: Array<{ name: string; url: string }> = [];
+  for (const file of files) {
     const uploaded = await uploadStudentSubmissionFile({ studentId: student.id, studentName: student.displayName || student.user.firstName, programId: assignment.programId, programTitle: assignment.program.title, assignmentId: assignment.id, assignmentTitle: assignment.title, submissionType, file }).catch(() => redirect(destination + "&error=upload"));
-    attachmentUrl = uploaded.webViewLink;
+    if (!uploaded.webViewLink) redirect(destination + "&error=upload");
+    attachmentFiles.push({ name: file.name, url: uploaded.webViewLink });
   }
-  const submission = await saveHomeworkSubmission({ assignmentId: assignment.id, studentId: student.id, enrollmentId: enrollment.id, submissionText: text, attachmentUrl }).catch(error => {
+  const submission = await saveHomeworkSubmission({ assignmentId: assignment.id, studentId: student.id, enrollmentId: enrollment.id, submissionText: text, attachmentFiles }).catch(error => {
     if (error instanceof Error && error.message === "Add an answer or upload a file before submitting.") redirect(destination + "&error=empty");
     throw error;
   });
   await awardHousePointsOnce({ studentId: student.id, points: HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.points, reason: `${HOUSE_POINT_RULES.HOMEWORK_SUBMITTED.label}: ${assignment.title}`, sourceType: "HOMEWORK_SUBMITTED", sourceId: assignment.id, notificationHref: `/student/homework?task=${encodeURIComponent(id)}` });
   if (role === "PARENT") await db.notification.updateMany({ where: { userId: session.user.id, readAt: null, href: `/parent/homework?child=${encodeURIComponent(child.id)}&task=${encodeURIComponent(id)}` }, data: { readAt: new Date() } });
   after(() => deliverHomeworkNotifications(1, submission.id));
-  for (const path of ["/student/homework", "/student/courses", "/parent", "/teacher/homework", "/teacher/course-builder"]) revalidatePath(path, "layout");
+  for (const path of ["/student/homework", "/student/courses", "/parent", "/parent/homework", "/teacher/homework", "/teacher/course-builder"]) revalidatePath(path, "layout");
   redirect(destination + "&submitted=1");
 }
