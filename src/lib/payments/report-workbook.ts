@@ -13,7 +13,7 @@ export async function buildPaymentsReportWorkbook(report: Report) {
     return page;
   };
   const entries = (totals: Map<string, number>) => [...totals].sort(([a], [b]) => a.localeCompare(b));
-  const byMethod = sheet("Received by method", ["Payment method", "Currency", "Amount"]);
+  const byMethod = sheet("Received by method", ["Method", "Currency", "Amount"]);
   for (const [method, totals] of [...report.methods].sort(([a], [b]) => a.localeCompare(b))) {
     for (const [currency, amount] of entries(totals)) byMethod.addRow([method.replaceAll("_", " "), currency, amount]);
   }
