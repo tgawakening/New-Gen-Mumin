@@ -13,7 +13,7 @@ export async function buildPaymentsReportWorkbook(report: Report) {
     return page;
   };
   const entries = (totals: Map<string, number>) => [...totals].sort(([a], [b]) => a.localeCompare(b));
-  const byMethod = sheet("Received by method", ["Payment method", "Currency", "Amount"]);
+  const byMethod = sheet("Received by method", ["Method", "Currency", "Amount"]);
   for (const [method, totals] of [...report.methods].sort(([a], [b]) => a.localeCompare(b))) {
     for (const [currency, amount] of entries(totals)) byMethod.addRow([method.replaceAll("_", " "), currency, amount]);
   }
@@ -21,7 +21,7 @@ export async function buildPaymentsReportWorkbook(report: Report) {
   byMethod.getColumn(3).numFmt = "0.00";
 
   const totalsSheet = sheet("Totals", ["Figure", "Currency", "Amount / date"]);
-  for (const [label, totals] of [["Total received", report.received], ["Total upcoming / outstanding", report.upcoming]] as const) {
+  for (const [label, totals] of [["Gross received (before any refunds)", report.received], ["Total upcoming / outstanding (current)", report.upcoming]] as const) {
     if (!totals.size) totalsSheet.addRow([label, "", "None recorded"]);
     for (const [currency, amount] of entries(totals)) totalsSheet.addRow([label, currency, amount]);
   }
@@ -35,5 +35,17 @@ export async function buildPaymentsReportWorkbook(report: Report) {
     for (const [currency, amount] of entries(group)) upcoming.addRow([label, currency, amount]);
   }
   upcoming.getColumn(3).numFmt = "0.00";
+  const byCourse = sheet("Received by programme", ["Programme", "Currency", "Amount"]);
+  for (const [course, totals] of [...report.courses].sort(([a], [b]) => a.localeCompare(b))) {
+    for (const [currency, amount] of entries(totals)) byCourse.addRow([course, currency, amount]);
+  }
+  if (!report.courses.size) byCourse.addRow(["None recorded"]);
+  byCourse.getColumn(3).numFmt = "0.00";
+  for (const page of workbook.worksheets) {
+    page.addRow([]);
+    page.addRow(["Received period", `${report.period.label} (Asia/Karachi)`]);
+    page.addRow(["Upcoming / outstanding", "Current, as of export"]);
+  }
+  totalsSheet.addRow(["Refunds", "", "Gross received does not deduct refunds; automatic net is not available."]);
   return workbook.xlsx.writeBuffer();
 }
