@@ -40,7 +40,7 @@ export function CurrencyCalculator({ currencies, received, upcoming }: { currenc
     try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch { /* The calculator still works when browser storage is unavailable. */ }
   }
   const others = currencies.filter((currency) => currency !== target);
-  const figures = [{ label: "Total received", amounts: received }, { label: "Total upcoming and outstanding", amounts: upcoming }];
+  const figures = [{ label: "Gross received (selected period)", amounts: received }, { label: "Total upcoming and outstanding (current)", amounts: upcoming }];
 
   return <section className="rounded-[28px] border border-[#dce4ed] bg-white p-5 shadow-sm sm:p-6" aria-labelledby="currency-calculator-title">
     <div className="flex flex-wrap items-start justify-between gap-4">
